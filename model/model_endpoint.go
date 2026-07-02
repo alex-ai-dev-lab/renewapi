@@ -8,6 +8,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"gorm.io/gorm"
 )
@@ -173,6 +174,14 @@ func InferChannelTypeFromModel(modelName string) (int, bool) {
 // the given channel + model. When no per-model override applies it returns the
 // channel's own type and base URL unchanged with overridden == false, letting
 // callers preserve the exact original behavior.
+//
+// Resolution order:
+//  1. Per-channel per-model row (model_endpoints): an explicit ChannelType wins;
+//     an "auto" row consults the global default, then name inference.
+//  2. When no row exists, the global model-endpoint default registry decides the
+//     protocol. This layer is protocol-only and never rewrites the base URL, so
+//     aggregator/relay channels keep their own host.
+//  3. Otherwise the channel's own type and base URL are used unchanged.
 func ResolveModelRoute(channel *Channel, modelName string) (channelType int, baseURL string, overridden bool) {
 	if channel == nil {
 		return 0, "", false
@@ -181,19 +190,31 @@ func ResolveModelRoute(channel *Channel, modelName string) (channelType int, bas
 	baseURL = channel.GetBaseURL()
 	ep := GetModelEndpoint(channel.Id, modelName)
 	if ep == nil {
+		// No per-channel override: consult the global model-endpoint default
+		// registry. It controls the upstream protocol/adaptor only and never
+		// changes the base URL, so the channel keeps its own host.
+		if gt, ok := operation_setting.ResolveModelDefaultChannelType(modelName); ok {
+			return gt, baseURL, gt != channel.Type
+		}
 		return channelType, baseURL, false
 	}
-	// Resolve protocol: explicit override wins, else infer, else keep channel type.
+	// A per-channel row exists. Protocol precedence: explicit per-model type >
+	// global default (for auto rows) > name inference > the channel's own type.
+	protocolFromGlobal := false
 	if ep.ChannelType != nil {
 		channelType = *ep.ChannelType
+	} else if gt, ok := operation_setting.ResolveModelDefaultChannelType(modelName); ok {
+		channelType = gt
+		protocolFromGlobal = true
 	} else if inferred, ok := InferChannelTypeFromModel(modelName); ok {
 		channelType = inferred
 	}
-	// Resolve base URL: explicit override wins, else the official base URL of the
-	// resolved type when the protocol changed, else the channel's own base URL.
+	// Resolve base URL: an explicit per-model override wins; else, when a
+	// name-inferred protocol change occurs, use that type's official base URL. A
+	// protocol chosen by the global default keeps the channel's own base URL.
 	if strings.TrimSpace(ep.BaseURL) != "" {
 		baseURL = strings.TrimSpace(ep.BaseURL)
-	} else if channelType != channel.Type {
+	} else if channelType != channel.Type && !protocolFromGlobal {
 		if channelType >= 0 && channelType < len(constant.ChannelBaseURLs) {
 			if official := constant.ChannelBaseURLs[channelType]; official != "" {
 				baseURL = official

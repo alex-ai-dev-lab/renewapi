@@ -255,10 +255,10 @@ function PriorityCell({ channel }: { channel: Channel }) {
           open={confirmOpen}
           onOpenChange={setConfirmOpen}
           title={t('Confirm Batch Update')}
-          desc={t('将把标签 "tag" 下 count 个渠道的优先级更新为 value，是否继续？', {
-            tag,
-            count: channelCount,
-            value: pendingValue,
+          desc={t('将把标签 "tagText" 下 channelNum 个渠道的优先级更新为 targetValue，是否继续？', {
+            tagText: tag,
+            channelNum: channelCount,
+            targetValue: pendingValue,
           })}
           confirmText={t('更新')}
           handleConfirm={() => {
@@ -314,10 +314,10 @@ function WeightCell({ channel }: { channel: Channel }) {
           open={confirmOpen}
           onOpenChange={setConfirmOpen}
           title={t('Confirm Batch Update')}
-          desc={t('将把标签 "tag" 下 count 个渠道的权重更新为 value，是否继续？', {
-            tag,
-            count: channelCount,
-            value: pendingValue,
+          desc={t('将把标签 "tagText" 下 channelNum 个渠道的权重更新为 targetValue，是否继续？', {
+            tagText: tag,
+            channelNum: channelCount,
+            targetValue: pendingValue,
           })}
           confirmText={t('更新')}
           handleConfirm={() => {
@@ -582,7 +582,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
               <div className='flex items-center gap-1.5'>
                 <span className='font-semibold'>{t('标签')}：{tag}</span>
                 <StatusBadge
-                  label={t('count 个渠道', { count: childrenCount })}
+                  label={t('channelNum 个渠道', { channelNum: childrenCount })}
                   variant='blue'
                   size='sm'
                   copyable={false}
@@ -833,7 +833,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
           if (hasEnabled) {
             return (
               <StatusBadge
-                label={t('启用（count）', { count: childrenCount })}
+                label={t('启用（channelNum）', { channelNum: childrenCount })}
                 variant='success'
                 size='sm'
                 copyable={false}
@@ -842,7 +842,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
           } else {
             return (
               <StatusBadge
-                label={t('停用（count）', { count: childrenCount })}
+                label={t('停用（channelNum）', { channelNum: childrenCount })}
                 variant='neutral'
                 size='sm'
                 copyable={false}

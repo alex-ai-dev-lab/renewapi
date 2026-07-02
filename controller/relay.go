@@ -66,6 +66,113 @@ func relayModeName(mode int) string {
 	return strconv.Itoa(mode)
 }
 
+func requestedEndpointTypeFromPath(path string) string {
+	switch relayconstant.Path2RelayMode(path) {
+	case relayconstant.RelayModeImagesGenerations:
+		return string(constant.EndpointTypeImageGeneration)
+	case relayconstant.RelayModeImagesEdits:
+		return string(constant.EndpointTypeImageEdits)
+	case relayconstant.RelayModeEmbeddings:
+		return string(constant.EndpointTypeEmbeddings)
+	case relayconstant.RelayModeAudioSpeech:
+		return string(constant.EndpointTypeAudioSpeech)
+	case relayconstant.RelayModeAudioTranscription:
+		return string(constant.EndpointTypeAudioTranscription)
+	case relayconstant.RelayModeAudioTranslation:
+		return string(constant.EndpointTypeAudioTranslation)
+	case relayconstant.RelayModeRerank:
+		return string(constant.EndpointTypeJinaRerank)
+	case relayconstant.RelayModeResponses:
+		return string(constant.EndpointTypeOpenAIResponse)
+	case relayconstant.RelayModeResponsesCompact:
+		return string(constant.EndpointTypeOpenAIResponseCompact)
+	case relayconstant.RelayModeGemini:
+		return string(constant.EndpointTypeGemini)
+	case relayconstant.RelayModeModerations:
+		return string(constant.EndpointTypeModerations)
+	}
+	if strings.HasPrefix(path, "/v1/messages") {
+		return string(constant.EndpointTypeAnthropic)
+	}
+	if strings.HasPrefix(path, "/v1/videos") || strings.HasPrefix(path, "/v1/video/generations") {
+		return string(constant.EndpointTypeOpenAIVideo)
+	}
+	if strings.HasPrefix(path, "/v1/chat/completions") || strings.HasPrefix(path, "/v1/completions") || strings.HasPrefix(path, "/pg/chat/completions") {
+		return string(constant.EndpointTypeOpenAI)
+	}
+	return ""
+}
+
+func endpointTypeToRelayMode(endpoint string, currentMode int) int {
+	switch strings.ToLower(strings.TrimSpace(endpoint)) {
+	case string(constant.EndpointTypeOpenAI):
+		return relayconstant.RelayModeChatCompletions
+	case string(constant.EndpointTypeOpenAIResponse):
+		return relayconstant.RelayModeResponses
+	case string(constant.EndpointTypeOpenAIResponseCompact):
+		return relayconstant.RelayModeResponsesCompact
+	case string(constant.EndpointTypeAnthropic):
+		// Keep using text relay mode; RelayFormat drives Claude request parsing,
+		// while the adaptor can still target /v1/messages based on RelayFormat.
+		return relayconstant.RelayModeChatCompletions
+	case string(constant.EndpointTypeGemini):
+		return relayconstant.RelayModeGemini
+	case string(constant.EndpointTypeEmbeddings):
+		return relayconstant.RelayModeEmbeddings
+	case string(constant.EndpointTypeImageGeneration):
+		return relayconstant.RelayModeImagesGenerations
+	case string(constant.EndpointTypeImageEdits):
+		return relayconstant.RelayModeImagesEdits
+	case string(constant.EndpointTypeAudioSpeech):
+		return relayconstant.RelayModeAudioSpeech
+	case string(constant.EndpointTypeAudioTranscription):
+		return relayconstant.RelayModeAudioTranscription
+	case string(constant.EndpointTypeAudioTranslation):
+		return relayconstant.RelayModeAudioTranslation
+	case string(constant.EndpointTypeJinaRerank):
+		return relayconstant.RelayModeRerank
+	case string(constant.EndpointTypeModerations):
+		return relayconstant.RelayModeModerations
+	case string(constant.EndpointTypeOpenAIVideo):
+		return relayconstant.RelayModeVideoSubmit
+	default:
+		return currentMode
+	}
+}
+
+func applyModelEndpointDecision(c *gin.Context) *types.NewAPIError {
+	if c == nil || c.Request == nil {
+		return nil
+	}
+	modelName := common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
+	if modelName == "" {
+		return nil
+	}
+	requested := requestedEndpointTypeFromPath(c.Request.URL.Path)
+	if requested == "" {
+		return nil
+	}
+	decision, ok := operation_setting.ResolveModelEndpointDecision(modelName, requested)
+	if !ok {
+		return nil
+	}
+	c.Header("X-NewAPI-Model-Default-Endpoint", decision.DefaultEndpoint)
+	if decision.AutoCorrected {
+		c.Header("X-NewAPI-Endpoint-Corrected", decision.RequestedEndpoint+" -> "+decision.EffectiveEndpoint)
+		c.Set("relay_mode", endpointTypeToRelayMode(decision.EffectiveEndpoint, relayconstant.Path2RelayMode(c.Request.URL.Path)))
+		return nil
+	}
+	if decision.Supported {
+		return nil
+	}
+	recommendedPath := decision.DefaultEndpoint
+	if info, found := common.GetDefaultEndpointInfo(constant.EndpointType(decision.EffectiveEndpoint)); found {
+		recommendedPath = info.Path
+	}
+	err := fmt.Errorf("model %s does not support endpoint %s; recommended endpoint: %s", modelName, decision.RequestedEndpoint, recommendedPath)
+	return types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+}
+
 func geminiRelayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
 	var err *types.NewAPIError
 	if strings.Contains(c.Request.URL.Path, "embed") {
@@ -122,6 +229,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			}
 		}
 	}()
+
+	if endpointErr := applyModelEndpointDecision(c); endpointErr != nil {
+		newAPIError = endpointErr
+		return
+	}
 
 	request, err := helper.GetAndValidateRequest(c, relayFormat)
 	if err != nil {

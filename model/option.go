@@ -611,6 +611,9 @@ func updateOptionMap(key string, value string) (err error) {
 		err = operation_setting.UpdateChannelTestSettingByJsonString(value)
 	case "ModelEndpointDefaults":
 		err = operation_setting.UpdateModelEndpointDefaultsByJsonString(value)
+		if err == nil {
+			common.OptionMap[key] = operation_setting.ModelEndpointDefaults2JsonString()
+		}
 	case "AutomaticDisableStatusCodes":
 		err = operation_setting.AutomaticDisableStatusCodesFromString(value)
 	case "AutomaticRetryStatusCodes":

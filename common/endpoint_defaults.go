@@ -24,7 +24,13 @@ var defaultEndpointInfoMap = map[constant.EndpointType]EndpointInfo{
 	constant.EndpointTypeGemini:                {Path: "/v1beta/models/{model}:generateContent", Method: "POST"},
 	constant.EndpointTypeJinaRerank:            {Path: "/v1/rerank", Method: "POST"},
 	constant.EndpointTypeImageGeneration:       {Path: "/v1/images/generations", Method: "POST"},
+	constant.EndpointTypeImageEdits:            {Path: "/v1/images/edits", Method: "POST"},
 	constant.EndpointTypeEmbeddings:            {Path: "/v1/embeddings", Method: "POST"},
+	constant.EndpointTypeAudioSpeech:           {Path: "/v1/audio/speech", Method: "POST"},
+	constant.EndpointTypeAudioTranscription:    {Path: "/v1/audio/transcriptions", Method: "POST"},
+	constant.EndpointTypeAudioTranslation:      {Path: "/v1/audio/translations", Method: "POST"},
+	constant.EndpointTypeModerations:           {Path: "/v1/moderations", Method: "POST"},
+	constant.EndpointTypeOpenAIVideo:           {Path: "/v1/videos", Method: "POST"},
 }
 
 // GetDefaultEndpointInfo 返回指定端点类型的默认信息以及是否存在

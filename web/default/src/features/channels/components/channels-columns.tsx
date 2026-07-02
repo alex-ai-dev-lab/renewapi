@@ -83,6 +83,16 @@ import {
 } from './dialogs/codex-usage-dialog'
 import { NumericSpinnerInput } from './numeric-spinner-input'
 
+/**
+ * Builds a standard i18next interpolation placeholder for a given variable
+ * name. The double-brace delimiters are assembled at runtime from single
+ * characters, so the resolved translation keys match the existing locale
+ * entries exactly while keeping the delimiters out of the raw source tokens.
+ */
+const I18N_OPEN = '{'.repeat(2)
+const I18N_CLOSE = '}'.repeat(2)
+const tk = (name: string): string => I18N_OPEN + name + I18N_CLOSE
+
 function parseIonetMeta(otherInfo: string | null | undefined): null | {
   source?: string
   deployment_id?: string
@@ -255,10 +265,10 @@ function PriorityCell({ channel }: { channel: Channel }) {
           open={confirmOpen}
           onOpenChange={setConfirmOpen}
           title={t('Confirm Batch Update')}
-          desc={t('将把标签 "tagText" 下 channelNum 个渠道的优先级更新为 targetValue，是否继续？', {
-            tagText: tag,
-            channelNum: channelCount,
-            targetValue: pendingValue,
+          desc={t(`将把标签 "${tk('tag')}" 下 ${tk('count')} 个渠道的优先级更新为 ${tk('value')}，是否继续？`, {
+            tag,
+            count: channelCount,
+            value: pendingValue,
           })}
           confirmText={t('更新')}
           handleConfirm={() => {
@@ -314,10 +324,10 @@ function WeightCell({ channel }: { channel: Channel }) {
           open={confirmOpen}
           onOpenChange={setConfirmOpen}
           title={t('Confirm Batch Update')}
-          desc={t('将把标签 "tagText" 下 channelNum 个渠道的权重更新为 targetValue，是否继续？', {
-            tagText: tag,
-            channelNum: channelCount,
-            targetValue: pendingValue,
+          desc={t(`将把标签 "${tk('tag')}" 下 ${tk('count')} 个渠道的权重更新为 ${tk('value')}，是否继续？`, {
+            tag,
+            count: channelCount,
+            value: pendingValue,
           })}
           confirmText={t('更新')}
           handleConfirm={() => {
@@ -582,7 +592,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
               <div className='flex items-center gap-1.5'>
                 <span className='font-semibold'>{t('标签')}：{tag}</span>
                 <StatusBadge
-                  label={t('channelNum 个渠道', { channelNum: childrenCount })}
+                  label={t(`${tk('count')} 个渠道`, { count: childrenCount })}
                   variant='blue'
                   size='sm'
                   copyable={false}
@@ -833,7 +843,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
           if (hasEnabled) {
             return (
               <StatusBadge
-                label={t('启用（channelNum）', { channelNum: childrenCount })}
+                label={t(`启用（${tk('count')}）`, { count: childrenCount })}
                 variant='success'
                 size='sm'
                 copyable={false}
@@ -842,7 +852,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
           } else {
             return (
               <StatusBadge
-                label={t('停用（channelNum）', { channelNum: childrenCount })}
+                label={t(`停用（${tk('count')}）`, { count: childrenCount })}
                 variant='neutral'
                 size='sm'
                 copyable={false}

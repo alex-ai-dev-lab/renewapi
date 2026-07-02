@@ -586,9 +586,13 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	if channel == nil {
 		return types.NewError(errors.New("channel is nil"), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
+	// Resolve the effective upstream type + base URL for this (channel, model).
+	// When no per-model override row exists this returns the channel's own type
+	// and base URL, so the context is populated exactly as before.
+	resolvedChannelType, resolvedBaseURL := resolveChannelRoute(channel, modelName)
 	common.SetContextKey(c, constant.ContextKeyChannelId, channel.Id)
 	common.SetContextKey(c, constant.ContextKeyChannelName, channel.Name)
-	common.SetContextKey(c, constant.ContextKeyChannelType, channel.Type)
+	common.SetContextKey(c, constant.ContextKeyChannelType, resolvedChannelType)
 	common.SetContextKey(c, constant.ContextKeyChannelCreateTime, channel.CreatedTime)
 	common.SetContextKey(c, constant.ContextKeyChannelSetting, channel.GetSetting())
 	common.SetContextKey(c, constant.ContextKeyChannelOtherSetting, channel.GetOtherSettings())
@@ -622,12 +626,15 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	}
 	// c.Request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", key))
 	common.SetContextKey(c, constant.ContextKeyChannelKey, key)
-	common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, resolveChannelBaseURL(channel, modelName))
+	common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, resolvedBaseURL)
 
 	common.SetContextKey(c, constant.ContextKeySystemPromptOverride, false)
 
 	// TODO: api_version统一
-	switch channel.Type {
+	// Use the resolved channel type so a per-model protocol override also selects
+	// the correct upstream-specific context (api_version, region, ...). With no
+	// override resolvedChannelType == channel.Type, preserving prior behavior.
+	switch resolvedChannelType {
 	case constant.ChannelTypeAzure:
 		c.Set("api_version", channel.Other)
 	case constant.ChannelTypeVertexAi:
@@ -648,14 +655,23 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	return nil
 }
 
-func resolveChannelBaseURL(channel *model.Channel, modelName string) string {
+// resolveChannelRoute returns the effective upstream channel type and base URL
+// for the given channel + model, applying any per-model endpoint override and
+// then the existing {model} placeholder substitution. When no override applies
+// it returns the channel's own type and base URL, matching prior behavior.
+func resolveChannelRoute(channel *model.Channel, modelName string) (int, string) {
 	if channel == nil {
-		return ""
+		return 0, ""
 	}
-	baseURL := channel.GetBaseURL()
+	channelType, baseURL, _ := model.ResolveModelRoute(channel, modelName)
 	if strings.Contains(baseURL, "{model}") {
 		baseURL = strings.ReplaceAll(baseURL, "{model}", modelName)
 	}
+	return channelType, baseURL
+}
+
+func resolveChannelBaseURL(channel *model.Channel, modelName string) string {
+	_, baseURL := resolveChannelRoute(channel, modelName)
 	return baseURL
 }
 

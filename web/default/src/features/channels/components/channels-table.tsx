@@ -82,9 +82,9 @@ export function ChannelsTable() {
   // Table state
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-    models: false,
+    models: true,
     tag: false,
-    priority: false,
+    priority: true,
     weight: false,
     test_time: false,
   })

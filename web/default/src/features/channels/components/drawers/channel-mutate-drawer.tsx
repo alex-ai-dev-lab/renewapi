@@ -163,6 +163,7 @@ import {
   ChannelAuthSection,
   ChannelBasicSection,
   ChannelEditorLoadingState,
+  ChannelModelEndpointsSection,
   ChannelModelsSection,
 } from './sections'
 
@@ -2517,6 +2518,12 @@ export function ChannelMutateDrawer({
                       </div>
                     </div>
                   </ChannelModelsSection>
+
+                  {/* ── Per-model Endpoints ── */}
+                  <ChannelModelEndpointsSection
+                    channelId={channelId ?? undefined}
+                    models={currentModels}
+                  />
 
                   <ChannelAdvancedSection
                     open={advancedSettingsOpen}

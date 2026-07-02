@@ -27,6 +27,7 @@ import { UpdateCheckerSection } from '../maintenance/update-checker-section'
 import type { OperationsSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ChannelTestSettingsSection } from './channel-test-settings-section'
+import { ModelEndpointDefaultsSection } from './model-endpoint-defaults-section'
 
 const OPERATIONS_SECTIONS = [
   {
@@ -88,6 +89,15 @@ const OPERATIONS_SECTIONS = [
     build: (settings: OperationsSettings) => (
       <ChannelTestSettingsSection
         defaultValue={settings.ChannelTestSetting}
+      />
+    ),
+  },
+  {
+    id: 'model-endpoint-defaults',
+    titleKey: 'Model Endpoint Defaults',
+    build: (settings: OperationsSettings) => (
+      <ModelEndpointDefaultsSection
+        defaultValue={settings.ModelEndpointDefaults}
       />
     ),
   },

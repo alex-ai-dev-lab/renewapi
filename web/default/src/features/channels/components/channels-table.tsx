@@ -84,6 +84,7 @@ export function ChannelsTable() {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     models: true,
     tag: false,
+    type: false,
     priority: true,
     weight: false,
     test_time: false,

@@ -38,6 +38,10 @@ const defaultOperationsSettings: OperationsSettings = {
     stream_mode: 'auto',
     timeout_seconds: 0,
   }),
+  ModelEndpointDefaults: JSON.stringify({
+    enabled: false,
+    entries: [],
+  }),
   ChannelDisableThreshold: '',
   QuotaRemindThreshold: '',
   AutomaticDisableChannelEnabled: false,

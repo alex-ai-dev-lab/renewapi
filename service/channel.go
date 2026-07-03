@@ -80,17 +80,27 @@ func ShouldDisableChannel(err *types.NewAPIError) bool {
 	if err == nil {
 		return false
 	}
+	monitorSetting := operation_setting.GetMonitorSetting()
 	if IsTLSVerificationError(err) {
-		return false
+		// TLS/certificate errors are usually caused by the local trust store rather
+		// than the upstream channel, so they are excluded by default. Admins can opt
+		// in via monitor_setting.count_tls_errors_for_disable.
+		return monitorSetting.CountTLSErrorsForDisable
 	}
 	if types.IsChannelError(err) {
 		return true
 	}
 	if types.IsSkipRetryError(err) {
-		return false
+		// "skip retry" errors are typically caused by the client request itself
+		// (e.g. a 400) and are excluded by default. Admins can opt in via
+		// monitor_setting.count_skip_retry_errors_for_disable.
+		return monitorSetting.CountSkipRetryErrorsForDisable
 	}
 	if IsModelScopedChannelFailureError(err) {
-		return false
+		// Model-scoped failures only affect a single model by default; enabling
+		// monitor_setting.count_model_scoped_errors_for_disable escalates them to
+		// disabling the whole channel.
+		return monitorSetting.CountModelScopedErrorsForDisable
 	}
 	if IsImmediateChannelDisableError(err) {
 		return true

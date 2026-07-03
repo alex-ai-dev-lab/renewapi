@@ -74,6 +74,7 @@ import {
 } from '../lib'
 import { parseUpstreamUpdateMeta } from '../lib/upstream-update-utils'
 import type { Channel } from '../types'
+import { ChannelModelIcons } from './channel-model-icons'
 import { useChannels } from './channels-provider'
 import { DataTableRowActions } from './data-table-row-actions'
 import { DataTableTagRowActions } from './data-table-tag-row-actions'
@@ -997,35 +998,9 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
           return <span className='text-muted-foreground text-xs'>-</span>
         }
 
-        const modelBadges = modelArray.map((model, idx) => (
-          <StatusBadge
-            key={idx}
-            label={model}
-            autoColor={model}
-            size='sm'
-            className='font-mono'
-          />
-        ))
-
-        return (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger render={<div />}>
-                {renderLimitedItems(modelBadges, 3)}
-              </TooltipTrigger>
-              {modelArray.length > 3 && (
-                <TooltipContent
-                  side='top'
-                  className='border-border bg-popover max-h-48 max-w-[320px] overflow-y-auto p-2'
-                >
-                  <div className='flex flex-wrap gap-1'>{modelBadges}</div>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-        )
+        return <ChannelModelIcons models={modelArray} />
       },
-      size: 200,
+      size: 180,
       enableSorting: false,
     },
 

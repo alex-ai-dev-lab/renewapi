@@ -1167,11 +1167,14 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			})
 		}
 	} else if service.ShouldDisableChannel(err) && channelError.AutoBan {
-		// Unified 3-strike disable: a single failure no longer hard-disables the
-		// channel. We only auto-disable once the same channel+model has failed with a
-		// disable-worthy error ChannelConsecutiveDisableThreshold times in a row.
+		// Unified consecutive-failure disable: a single failure no longer
+		// hard-disables the channel. We only auto-disable once the same
+		// channel+model has failed with a disable-worthy error the configured
+		// number of times in a row
+		// (monitor_setting.channel_consecutive_disable_threshold, default 3)
+		// within the configured failure window.
 		modelName := common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
-		if service.RecordChannelConsecutiveFailure(channelError.ChannelId, modelName) >= service.ChannelConsecutiveDisableThreshold {
+		if service.RecordChannelConsecutiveFailure(channelError.ChannelId, modelName) >= service.GetChannelConsecutiveDisableThreshold() {
 			gopool.Go(func() {
 				service.DisableChannel(channelError, err.ErrorWithStatusCode())
 			})

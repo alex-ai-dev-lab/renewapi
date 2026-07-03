@@ -103,43 +103,6 @@ func requestedEndpointTypeFromPath(path string) string {
 	return ""
 }
 
-func endpointTypeToRelayMode(endpoint string, currentMode int) int {
-	switch strings.ToLower(strings.TrimSpace(endpoint)) {
-	case string(constant.EndpointTypeOpenAI):
-		return relayconstant.RelayModeChatCompletions
-	case string(constant.EndpointTypeOpenAIResponse):
-		return relayconstant.RelayModeResponses
-	case string(constant.EndpointTypeOpenAIResponseCompact):
-		return relayconstant.RelayModeResponsesCompact
-	case string(constant.EndpointTypeAnthropic):
-		// Keep using text relay mode; RelayFormat drives Claude request parsing,
-		// while the adaptor can still target /v1/messages based on RelayFormat.
-		return relayconstant.RelayModeChatCompletions
-	case string(constant.EndpointTypeGemini):
-		return relayconstant.RelayModeGemini
-	case string(constant.EndpointTypeEmbeddings):
-		return relayconstant.RelayModeEmbeddings
-	case string(constant.EndpointTypeImageGeneration):
-		return relayconstant.RelayModeImagesGenerations
-	case string(constant.EndpointTypeImageEdits):
-		return relayconstant.RelayModeImagesEdits
-	case string(constant.EndpointTypeAudioSpeech):
-		return relayconstant.RelayModeAudioSpeech
-	case string(constant.EndpointTypeAudioTranscription):
-		return relayconstant.RelayModeAudioTranscription
-	case string(constant.EndpointTypeAudioTranslation):
-		return relayconstant.RelayModeAudioTranslation
-	case string(constant.EndpointTypeJinaRerank):
-		return relayconstant.RelayModeRerank
-	case string(constant.EndpointTypeModerations):
-		return relayconstant.RelayModeModerations
-	case string(constant.EndpointTypeOpenAIVideo):
-		return relayconstant.RelayModeVideoSubmit
-	default:
-		return currentMode
-	}
-}
-
 func applyModelEndpointDecision(c *gin.Context) *types.NewAPIError {
 	if c == nil || c.Request == nil {
 		return nil
@@ -159,7 +122,6 @@ func applyModelEndpointDecision(c *gin.Context) *types.NewAPIError {
 	c.Header("X-NewAPI-Model-Default-Endpoint", decision.DefaultEndpoint)
 	if decision.AutoCorrected {
 		c.Header("X-NewAPI-Endpoint-Corrected", decision.RequestedEndpoint+" -> "+decision.EffectiveEndpoint)
-		c.Set("relay_mode", endpointTypeToRelayMode(decision.EffectiveEndpoint, relayconstant.Path2RelayMode(c.Request.URL.Path)))
 		return nil
 	}
 	if decision.Supported {

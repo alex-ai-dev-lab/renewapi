@@ -107,17 +107,17 @@ func defaultModelEndpointDefaults() ModelEndpointDefaults {
 		constant.EndpointTypeOpenAIResponseCompact,
 	}
 	return ModelEndpointDefaults{
-		Enabled: true,
+		Enabled: false,
 		Entries: []ModelEndpointDefaultEntry{
 			// Image generation models must not be treated as chat models.
-			profile("prefix", "gpt-image", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration),
-			profile("prefix", "dall-e", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration),
-			profile("prefix", "imagen", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration),
-			profile("prefix", "flux", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration),
-			profile("prefix", "stable-diffusion", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration),
-			profile("prefix", "sd3", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration),
-			profile("prefix", "recraft", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration),
-			profile("prefix", "ideogram", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration),
+			profile("prefix", "gpt-image", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageEdits),
+			profile("prefix", "dall-e", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageEdits),
+			profile("prefix", "imagen", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageEdits),
+			profile("prefix", "flux", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageEdits),
+			profile("prefix", "stable-diffusion", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageEdits),
+			profile("prefix", "sd3", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageEdits),
+			profile("prefix", "recraft", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageEdits),
+			profile("prefix", "ideogram", 1, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageGeneration, constant.EndpointTypeImageEdits),
 
 			// Embeddings.
 			profile("prefix", "text-embedding", 1, constant.EndpointTypeEmbeddings, constant.EndpointTypeEmbeddings),
@@ -480,7 +480,7 @@ func inferDefaultEndpoint(modelName string, channelType int) string {
 func inferSupportedEndpoints(defaultEndpoint string, channelType int) []string {
 	switch defaultEndpoint {
 	case endpoint(constant.EndpointTypeImageGeneration):
-		return endpoints(constant.EndpointTypeImageGeneration)
+		return endpoints(constant.EndpointTypeImageGeneration, constant.EndpointTypeImageEdits)
 	case endpoint(constant.EndpointTypeEmbeddings):
 		return endpoints(constant.EndpointTypeEmbeddings)
 	case endpoint(constant.EndpointTypeAudioSpeech):

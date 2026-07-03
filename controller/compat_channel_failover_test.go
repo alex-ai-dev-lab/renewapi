@@ -29,11 +29,10 @@ func TestCompatUpstream5xxFailureThreshold(t *testing.T) {
 	if !shouldTrackCompatUpstream5xxFailure(err) {
 		t.Fatal("502 should be tracked as transient upstream failure")
 	}
-	if got := recordCompatChannelFailure(52, info); got != 1 {
-		t.Fatalf("first failure count = %d, want 1", got)
-	}
-	if got := recordCompatChannelFailure(52, info); got != compatUpstream5xxFailureThreshold {
-		t.Fatalf("second failure count = %d, want %d", got, compatUpstream5xxFailureThreshold)
+	for i := 1; i <= compatUpstream5xxFailureThreshold; i++ {
+		if got := recordCompatChannelFailure(52, info); got != i {
+			t.Fatalf("failure count after attempt %d = %d, want %d", i, got, i)
+		}
 	}
 }
 

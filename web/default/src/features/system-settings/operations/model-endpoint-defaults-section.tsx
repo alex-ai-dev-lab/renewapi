@@ -143,7 +143,7 @@ const defaultSupportedEndpointsByDefault: Record<EndpointType, EndpointType[]> =
   ],
   anthropic: ['anthropic', 'openai'],
   gemini: ['gemini', 'openai'],
-  'image-generation': ['image-generation'],
+  'image-generation': ['image-generation', 'image-edits'],
   'image-edits': ['image-edits'],
   embeddings: ['embeddings'],
   'audio-speech': ['audio-speech'],

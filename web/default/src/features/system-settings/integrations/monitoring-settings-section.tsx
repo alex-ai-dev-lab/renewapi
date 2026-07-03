@@ -346,4 +346,588 @@ export function MonitoringSettingsSection({
       })
     }
 
-    baselineRef.current =
+    baselineRef.current = normalized
+  }
+
+  const currentNormalizedValues = () =>
+    normalizeFormValues(monitoringSchema.parse(form.getValues()))
+
+  const exportConfig = async () => {
+    const values = currentNormalizedValues()
+    const payload = {
+      Monitoring: values,
+      ...values,
+    }
+    const text = JSON.stringify(payload, null, 2)
+    const blob = new Blob([text], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'renewapi-monitoring-alerts.json'
+    link.click()
+    URL.revokeObjectURL(url)
+
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success(t('Monitoring JSON exported and copied'))
+    } catch {
+      toast.success(t('Monitoring JSON exported'))
+    }
+  }
+
+  const openImportDialog = () => {
+    setImportText(
+      JSON.stringify(
+        {
+          Monitoring: currentNormalizedValues(),
+        },
+        null,
+        2
+      )
+    )
+    setImportOpen(true)
+  }
+
+  const importConfig = async () => {
+    try {
+      const raw = JSON.parse(importText) as MonitoringImportExportPayload
+      const source = raw.Monitoring ?? raw
+      const current = currentNormalizedValues()
+      const next = {
+        ...current,
+        ...source,
+      }
+      const parsed = monitoringSchema.parse({
+        ChannelDisableThreshold: String(
+          next.ChannelDisableThreshold ?? ''
+        ).trim(),
+        QuotaRemindThreshold: String(next.QuotaRemindThreshold ?? '').trim(),
+        AutomaticDisableChannelEnabled: next.AutomaticDisableChannelEnabled,
+        AutomaticEnableChannelEnabled: next.AutomaticEnableChannelEnabled,
+        AutomaticDisableKeywords: normalizeLineEndings(
+          String(next.AutomaticDisableKeywords ?? '')
+        ),
+        AutomaticDisableStatusCodes: String(
+          next.AutomaticDisableStatusCodes ?? ''
+        ),
+        AutomaticRetryStatusCodes: String(next.AutomaticRetryStatusCodes ?? ''),
+        monitor_setting: {
+          auto_test_channel_enabled:
+            next['monitor_setting.auto_test_channel_enabled'],
+          auto_test_channel_minutes: Number(
+            next['monitor_setting.auto_test_channel_minutes']
+          ),
+          channel_consecutive_disable_threshold: Number(
+            next['monitor_setting.channel_consecutive_disable_threshold']
+          ),
+          channel_failure_window_minutes: Number(
+            next['monitor_setting.channel_failure_window_minutes']
+          ),
+          count_tls_errors_for_disable: Boolean(
+            next['monitor_setting.count_tls_errors_for_disable']
+          ),
+          count_skip_retry_errors_for_disable: Boolean(
+            next['monitor_setting.count_skip_retry_errors_for_disable']
+          ),
+          count_model_scoped_errors_for_disable: Boolean(
+            next['monitor_setting.count_model_scoped_errors_for_disable']
+          ),
+        },
+      })
+
+      form.setValue('ChannelDisableThreshold', parsed.ChannelDisableThreshold, {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+      form.setValue('QuotaRemindThreshold', parsed.QuotaRemindThreshold, {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+      form.setValue(
+        'AutomaticDisableChannelEnabled',
+        parsed.AutomaticDisableChannelEnabled,
+        { shouldDirty: true, shouldValidate: true }
+      )
+      form.setValue(
+        'AutomaticEnableChannelEnabled',
+        parsed.AutomaticEnableChannelEnabled,
+        { shouldDirty: true, shouldValidate: true }
+      )
+      form.setValue(
+        'AutomaticDisableKeywords',
+        parsed.AutomaticDisableKeywords,
+        { shouldDirty: true, shouldValidate: true }
+      )
+      form.setValue(
+        'AutomaticDisableStatusCodes',
+        parseHttpStatusCodeRules(parsed.AutomaticDisableStatusCodes).normalized,
+        { shouldDirty: true, shouldValidate: true }
+      )
+      form.setValue(
+        'AutomaticRetryStatusCodes',
+        parseHttpStatusCodeRules(parsed.AutomaticRetryStatusCodes).normalized,
+        { shouldDirty: true, shouldValidate: true }
+      )
+      form.setValue(
+        'monitor_setting.auto_test_channel_enabled',
+        parsed.monitor_setting.auto_test_channel_enabled,
+        { shouldDirty: true, shouldValidate: true }
+      )
+      form.setValue(
+        'monitor_setting.auto_test_channel_minutes',
+        parsed.monitor_setting.auto_test_channel_minutes,
+        { shouldDirty: true, shouldValidate: true }
+      )
+      form.setValue(
+        'monitor_setting.channel_consecutive_disable_threshold',
+        parsed.monitor_setting.channel_consecutive_disable_threshold,
+        { shouldDirty: true, shouldValidate: true }
+      )
+      form.setValue(
+        'monitor_setting.channel_failure_window_minutes',
+        parsed.monitor_setting.channel_failure_window_minutes,
+        { shouldDirty: true, shouldValidate: true }
+      )
+      form.setValue(
+        'monitor_setting.count_tls_errors_for_disable',
+        parsed.monitor_setting.count_tls_errors_for_disable,
+        { shouldDirty: true, shouldValidate: true }
+      )
+      form.setValue(
+        'monitor_setting.count_skip_retry_errors_for_disable',
+        parsed.monitor_setting.count_skip_retry_errors_for_disable,
+        { shouldDirty: true, shouldValidate: true }
+      )
+      form.setValue(
+        'monitor_setting.count_model_scoped_errors_for_disable',
+        parsed.monitor_setting.count_model_scoped_errors_for_disable,
+        { shouldDirty: true, shouldValidate: true }
+      )
+      await form.trigger()
+      setImportOpen(false)
+      toast.success(t('Monitoring settings imported. Click Save to apply.'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Invalid monitoring JSON')
+      )
+    }
+  }
+
+  return (
+    <SettingsSection title={t('Monitoring & Alerts')}>
+      <Form {...form}>
+        <SettingsForm onSubmit={form.handleSubmit(onSubmit)}>
+          <SettingsPageActionsPortal>
+            <Button
+              type='button'
+              size='sm'
+              variant='outline'
+              onClick={exportConfig}
+            >
+              <Download data-icon='inline-start' />
+              <span>{t('Export JSON')}</span>
+            </Button>
+            <Button
+              type='button'
+              size='sm'
+              variant='outline'
+              onClick={openImportDialog}
+            >
+              <Upload data-icon='inline-start' />
+              <span>{t('Import JSON')}</span>
+            </Button>
+          </SettingsPageActionsPortal>
+          <SettingsPageFormActions
+            onSave={form.handleSubmit(onSubmit)}
+            isSaving={updateOption.isPending}
+            saveLabel='Save monitoring rules'
+          />
+          <div className='grid gap-6 md:grid-cols-2'>
+            <FormField
+              control={form.control}
+              name='monitor_setting.auto_test_channel_enabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('Scheduled channel tests')}</FormLabel>
+                    <FormDescription>
+                      {t('Automatically probe all channels in the background')}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </SettingsSwitchItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='monitor_setting.auto_test_channel_minutes'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Test interval (minutes)')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={1}
+                      step={1}
+                      {...safeNumberFieldProps(field)}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t('How frequently the system tests all channels')}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className='grid gap-6 md:grid-cols-2'>
+            <FormField
+              control={form.control}
+              name='ChannelDisableThreshold'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Disable threshold (seconds)')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={0}
+                      step={1}
+                      value={field.value}
+                      onChange={(event) => field.onChange(event.target.value)}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Automatically disable channels exceeding this response time'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='QuotaRemindThreshold'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Quota reminder (tokens)')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={0}
+                      step={1}
+                      value={field.value}
+                      onChange={(event) => field.onChange(event.target.value)}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t('Send email alerts when a user falls below this quota')}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className='grid gap-6 md:grid-cols-2'>
+            <FormField
+              control={form.control}
+              name='AutomaticDisableChannelEnabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('Disable on failure')}</FormLabel>
+                    <FormDescription>
+                      {t('Automatically disable channels when tests fail')}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </SettingsSwitchItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='AutomaticEnableChannelEnabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('Re-enable on success')}</FormLabel>
+                    <FormDescription>
+                      {t('Bring channels back online after successful checks')}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </SettingsSwitchItem>
+              )}
+            />
+          </div>
+
+          <div className='space-y-6 rounded-lg border p-4'>
+            <div className='space-y-1'>
+              <h3 className='text-sm font-medium'>
+                {t('Consecutive-failure disable policy')}
+              </h3>
+              <p className='text-sm text-muted-foreground'>
+                {t(
+                  'Unlike the response-time threshold above, this policy controls automatic disabling based on repeated hard errors. A channel is auto-disabled only after the same channel and model returns a disable-worthy error this many times in a row within the failure window. TLS/certificate errors, skip-retry client errors (such as 400 bad request), and model-scoped errors (such as not implemented or no available account/channel) are excluded by default and can be opted in below.'
+                )}
+              </p>
+            </div>
+            <div className='grid gap-6 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='monitor_setting.channel_consecutive_disable_threshold'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {t('Consecutive failures before disable')}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min={1}
+                        step={1}
+                        {...safeNumberFieldProps(field)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Number of consecutive disable-worthy failures on the same channel and model before it is auto-disabled.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='monitor_setting.channel_failure_window_minutes'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Failure window (minutes)')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min={1}
+                        step={1}
+                        {...safeNumberFieldProps(field)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Consecutive failures reset if no new failure occurs within this window.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className='grid gap-6 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='monitor_setting.count_tls_errors_for_disable'
+                render={({ field }) => (
+                  <SettingsSwitchItem>
+                    <SettingsSwitchContent>
+                      <FormLabel>
+                        {t('Count TLS / certificate errors')}
+                      </FormLabel>
+                      <FormDescription>
+                        {t(
+                          'When off, TLS and certificate errors never count toward auto-disable (recommended).'
+                        )}
+                      </FormDescription>
+                    </SettingsSwitchContent>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </SettingsSwitchItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='monitor_setting.count_skip_retry_errors_for_disable'
+                render={({ field }) => (
+                  <SettingsSwitchItem>
+                    <SettingsSwitchContent>
+                      <FormLabel>
+                        {t('Count skip-retry client errors')}
+                      </FormLabel>
+                      <FormDescription>
+                        {t(
+                          'When off, non-retryable client errors (such as 400 bad request) never count toward auto-disable (recommended).'
+                        )}
+                      </FormDescription>
+                    </SettingsSwitchContent>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </SettingsSwitchItem>
+                )}
+              />
+            </div>
+            <FormField
+              control={form.control}
+              name='monitor_setting.count_model_scoped_errors_for_disable'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('Count model-scoped errors')}</FormLabel>
+                    <FormDescription>
+                      {t(
+                        'When off, model-level failures (such as not implemented or no available account/channel) never count toward disabling the whole channel (recommended).'
+                      )}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </SettingsSwitchItem>
+              )}
+            />
+          </div>
+
+          <FormField
+            control={form.control}
+            name='AutomaticDisableKeywords'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Failure keywords')}</FormLabel>
+                <FormControl>
+                  <Textarea
+                    rows={6}
+                    placeholder={t('one keyword per line')}
+                    {...field}
+                    onChange={(event) => field.onChange(event.target.value)}
+                  />
+                </FormControl>
+                <FormDescription>
+                  {t(
+                    'If an upstream error contains any of these keywords (case insensitive), the channel will be disabled automatically.'
+                  )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className='grid gap-6 md:grid-cols-2'>
+            <FormField
+              control={form.control}
+              name='AutomaticDisableStatusCodes'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Auto-disable status codes')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder={t('e.g. 401, 403, 429, 500-599')}
+                      value={field.value}
+                      onChange={(event) => field.onChange(event.target.value)}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Accepts comma-separated status codes and inclusive ranges.'
+                    )}{' '}
+                    {autoDisableParsed.ok &&
+                      autoDisableParsed.normalized &&
+                      autoDisableParsed.normalized !== field.value.trim() && (
+                        <span className='text-muted-foreground'>
+                          {t('Normalized:')} {autoDisableParsed.normalized}
+                        </span>
+                      )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='AutomaticRetryStatusCodes'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Auto-retry status codes')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder={t('e.g. 401, 403, 429, 500-599')}
+                      value={field.value}
+                      onChange={(event) => field.onChange(event.target.value)}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Accepts comma-separated status codes and inclusive ranges.'
+                    )}{' '}
+                    {autoRetryParsed.ok &&
+                      autoRetryParsed.normalized &&
+                      autoRetryParsed.normalized !== field.value.trim() && (
+                        <span className='text-muted-foreground'>
+                          {t('Normalized:')} {autoRetryParsed.normalized}
+                        </span>
+                      )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        </SettingsForm>
+      </Form>
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className='max-w-2xl'>
+          <DialogHeader>
+            <DialogTitle>{t('Import monitoring JSON')}</DialogTitle>
+            <DialogDescription>
+              {t(
+                'Paste an exported monitoring JSON payload. Imported values stay local until you save settings.'
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={importText}
+            onChange={(event) => setImportText(event.target.value)}
+            className='min-h-80 font-mono text-xs'
+          />
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setImportOpen(false)}>
+              {t('Cancel')}
+            </Button>
+            <Button onClick={importConfig}>{t('Import JSON')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </SettingsSection>
+  )
+}

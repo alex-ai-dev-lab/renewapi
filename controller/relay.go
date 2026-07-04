@@ -1166,13 +1166,17 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 				service.DisableChannelForAntiPoisonRisk(channelError, err.ErrorWithStatusCode())
 			})
 		}
-	} else if service.ShouldDisableChannel(err) && channelError.AutoBan {
+	} else if service.ShouldCountChannelFailureForDisable(err) && channelError.AutoBan {
 		// Unified consecutive-failure disable: a single failure no longer
-		// hard-disables the channel. We only auto-disable once the same
-		// channel+model has failed with a disable-worthy error the configured
-		// number of times in a row
+		// hard-disables the channel. We only auto-disable once the same failure
+		// scope (channel+model by default, or the whole channel when
+		// monitor_setting.channel_failure_scope is "channel") has failed with a
+		// counted error the configured number of times in a row
 		// (monitor_setting.channel_consecutive_disable_threshold, default 3)
-		// within the configured failure window.
+		// within the configured failure window. By default only
+		// ShouldDisableChannel-worthy errors are counted; enabling
+		// monitor_setting.count_all_relay_errors_for_disable counts every relay
+		// error instead.
 		modelName := common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
 		if service.RecordChannelConsecutiveFailure(channelError.ChannelId, modelName) >= service.GetChannelConsecutiveDisableThreshold() {
 			gopool.Go(func() {

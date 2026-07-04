@@ -49,17 +49,10 @@ func GetIp() (ip string) {
 	for _, a := range ips {
 		if ipNet, ok := a.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
 			if ipNet.IP.To4() != nil {
-				ip = ipNet.IP.String()
-				if strings.HasPrefix(ip, "10") {
+				if ipNet.IP.IsPrivate() {
+					ip = ipNet.IP.String()
 					return
 				}
-				if strings.HasPrefix(ip, "172") {
-					return
-				}
-				if strings.HasPrefix(ip, "192.168") {
-					return
-				}
-				ip = ""
 			}
 		}
 	}
@@ -149,10 +142,10 @@ func Bytes2Size(num int64) string {
 		numStr = fmt.Sprintf("%.2f", float64(num)/float64(sizeGB))
 		unit = "GB"
 	} else if num/int64(sizeMB) > 1 {
-		numStr = fmt.Sprintf("%d", int(float64(num)/float64(sizeMB)))
+		numStr = fmt.Sprintf("%.2f", float64(num)/float64(sizeMB))
 		unit = "MB"
 	} else if num/int64(sizeKB) > 1 {
-		numStr = fmt.Sprintf("%d", int(float64(num)/float64(sizeKB)))
+		numStr = fmt.Sprintf("%.2f", float64(num)/float64(sizeKB))
 		unit = "KB"
 	} else {
 		numStr = fmt.Sprintf("%d", num)

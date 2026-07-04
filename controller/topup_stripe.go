@@ -160,7 +160,7 @@ func StripeWebhook(c *gin.Context) {
 	}
 
 	signature := c.GetHeader("Stripe-Signature")
-	logger.LogInfo(ctx, fmt.Sprintf("Stripe webhook 收到请求 path=%q client_ip=%s signature=%q body=%q", c.Request.RequestURI, c.ClientIP(), signature, string(payload)))
+	logger.LogInfo(ctx, fmt.Sprintf("Stripe webhook 收到请求 path=%q client_ip=%s payload_bytes=%d signature_present=%t", c.Request.RequestURI, c.ClientIP(), len(payload), signature != ""))
 	event, err := webhook.ConstructEventWithOptions(payload, signature, setting.StripeWebhookSecret, webhook.ConstructEventOptions{
 		IgnoreAPIVersionMismatch: true,
 	})
@@ -270,7 +270,13 @@ func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, c
 		"currency":     strings.ToUpper(event.GetObjectValue("currency")),
 		"event_type":   string(event.Type),
 	}
-	if err := model.CompleteSubscriptionOrder(referenceId, common.GetJsonString(payload), model.PaymentProviderStripe, ""); err == nil {
+	total, err := strconv.ParseFloat(event.GetObjectValue("amount_total"), 64)
+	if err != nil {
+		logger.LogWarn(ctx, fmt.Sprintf("Stripe 完成订单时缺少有效实付金额 trade_no=%s event_type=%s client_ip=%s amount_total=%q", referenceId, string(event.Type), callerIp, event.GetObjectValue("amount_total")))
+		return
+	}
+	paidAmount := total / 100
+	if err := model.CompleteSubscriptionOrderWithPaidAmount(referenceId, common.GetJsonString(payload), model.PaymentProviderStripe, "", paidAmount); err == nil {
 		logger.LogInfo(ctx, fmt.Sprintf("Stripe 订阅订单处理成功 trade_no=%s event_type=%s client_ip=%s", referenceId, string(event.Type), callerIp))
 		return
 	} else if err != nil && !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
@@ -278,13 +284,16 @@ func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, c
 		return
 	}
 
-	err := model.Recharge(referenceId, customerId, callerIp)
+	purchasedAmount := paidAmount
+	if setting.StripeUnitPrice > 0 {
+		purchasedAmount = paidAmount / setting.StripeUnitPrice
+	}
+	err = model.RechargeStripeWithPurchasedAmount(referenceId, customerId, callerIp, paidAmount, purchasedAmount)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("Stripe 充值处理失败 trade_no=%s event_type=%s client_ip=%s error=%q", referenceId, string(event.Type), callerIp, err.Error()))
 		return
 	}
 
-	total, _ := strconv.ParseFloat(event.GetObjectValue("amount_total"), 64)
 	currency := strings.ToUpper(event.GetObjectValue("currency"))
 	logger.LogInfo(ctx, fmt.Sprintf("Stripe 充值成功 trade_no=%s amount_total=%.2f currency=%s event_type=%s client_ip=%s", referenceId, total/100, currency, string(event.Type), callerIp))
 }

@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"crypto/hmac"
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
@@ -22,13 +24,18 @@ func providerParams(name string) map[string]any {
 // GenerateOAuthCode generates a state code for OAuth CSRF protection
 func GenerateOAuthCode(c *gin.Context) {
 	session := sessions.Default(c)
-	state := common.GetRandomString(12)
+	state, err := common.GenerateRandomCharsKey(32)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	affCode := c.Query("aff")
 	if affCode != "" {
 		session.Set("aff", affCode)
 	}
 	session.Set("oauth_state", state)
-	err := session.Save()
+	session.Set("oauth_state_created_at", time.Now().Unix())
+	err = session.Save()
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -56,7 +63,14 @@ func HandleOAuth(c *gin.Context) {
 
 	// 1. Validate state (CSRF protection)
 	state := c.Query("state")
-	if state == "" || session.Get("oauth_state") == nil || state != session.Get("oauth_state").(string) {
+	expectedState, _ := session.Get("oauth_state").(string)
+	createdAt, _ := session.Get("oauth_state_created_at").(int64)
+	if createdAt == 0 {
+		if createdAtInt, ok := session.Get("oauth_state_created_at").(int); ok {
+			createdAt = int64(createdAtInt)
+		}
+	}
+	if state == "" || expectedState == "" || time.Since(time.Unix(createdAt, 0)) > 10*time.Minute || !hmac.Equal([]byte(state), []byte(expectedState)) {
 		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,
 			"message": i18n.T(c, i18n.MsgOAuthStateInvalid),
@@ -124,6 +138,9 @@ func HandleOAuth(c *gin.Context) {
 	}
 
 	// 9. Setup login
+	session.Delete("oauth_state")
+	session.Delete("oauth_state_created_at")
+	_ = session.Save()
 	setupLogin(user, c)
 }
 
@@ -164,8 +181,15 @@ func handleOAuthBind(c *gin.Context, provider oauth.Provider) {
 
 	// Get current user from session
 	session := sessions.Default(c)
-	id := session.Get("id")
-	user := model.User{Id: id.(int)}
+	id, ok := session.Get("id").(int)
+	if !ok || id <= 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": "未登录",
+		})
+		return
+	}
+	user := model.User{Id: id}
 	err = user.FillUserById()
 	if err != nil {
 		common.ApiError(c, err)

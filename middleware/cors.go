@@ -56,6 +56,9 @@ func isTrustedCORSOrigin(origin string) bool {
 		return false
 	}
 	host := strings.ToLower(parsed.Hostname())
+	if !common.DebugEnabled && os.Getenv("GIN_MODE") != "debug" {
+		return false
+	}
 	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 

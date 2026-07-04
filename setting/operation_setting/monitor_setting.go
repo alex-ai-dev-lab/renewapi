@@ -71,17 +71,18 @@ var monitorSetting = MonitorSetting{
 }
 
 func init() {
-	// 注册到全局配置管理器
-	config.GlobalConfig.Register("monitor_setting", &monitorSetting)
-}
-
-func GetMonitorSetting() *MonitorSetting {
-	if os.Getenv("CHANNEL_TEST_FREQUENCY") != "" {
-		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_TEST_FREQUENCY"))
+	if v := os.Getenv("CHANNEL_TEST_FREQUENCY"); v != "" {
+		frequency, err := strconv.Atoi(v)
 		if err == nil && frequency > 0 {
 			monitorSetting.AutoTestChannelEnabled = true
 			monitorSetting.AutoTestChannelMinutes = float64(frequency)
 		}
 	}
+
+	// 注册到全局配置管理器
+	config.GlobalConfig.Register("monitor_setting", &monitorSetting)
+}
+
+func GetMonitorSetting() *MonitorSetting {
 	return &monitorSetting
 }

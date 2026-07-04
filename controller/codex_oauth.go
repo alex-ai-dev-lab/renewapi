@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"crypto/hmac"
 	"errors"
 	"fmt"
 	"net/http"
@@ -166,11 +167,21 @@ func completeCodexOAuthWithChannelID(c *gin.Context, channelID int) {
 	session := sessions.Default(c)
 	expectedState, _ := session.Get(codexOAuthSessionKey(channelID, "state")).(string)
 	verifier, _ := session.Get(codexOAuthSessionKey(channelID, "verifier")).(string)
+	createdAt, _ := session.Get(codexOAuthSessionKey(channelID, "created_at")).(int64)
+	if createdAt == 0 {
+		if createdAtInt, ok := session.Get(codexOAuthSessionKey(channelID, "created_at")).(int); ok {
+			createdAt = int64(createdAtInt)
+		}
+	}
 	if strings.TrimSpace(expectedState) == "" || strings.TrimSpace(verifier) == "" {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "oauth flow not started or session expired"})
 		return
 	}
-	if state != expectedState {
+	if createdAt == 0 || time.Since(time.Unix(createdAt, 0)) > 10*time.Minute {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "oauth flow expired"})
+		return
+	}
+	if !hmac.Equal([]byte(state), []byte(expectedState)) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "state mismatch"})
 		return
 	}

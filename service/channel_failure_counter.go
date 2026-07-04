@@ -52,6 +52,29 @@ var channelConsecutiveFailureTracker = struct {
 	items: make(map[string]channelConsecutiveFailureState),
 }
 
+func init() {
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			cleanupChannelConsecutiveFailureTracker()
+		}
+	}()
+}
+
+func cleanupChannelConsecutiveFailureTracker() {
+	ttl := getChannelConsecutiveFailureTTL()
+	now := time.Now()
+
+	channelConsecutiveFailureTracker.Lock()
+	defer channelConsecutiveFailureTracker.Unlock()
+	for key, state := range channelConsecutiveFailureTracker.items {
+		if state.lastFailure.IsZero() || now.Sub(state.lastFailure) > ttl {
+			delete(channelConsecutiveFailureTracker.items, key)
+		}
+	}
+}
+
 // channelConsecutiveFailureKey builds the tracker key for a channel+model. When
 // the operator selects ChannelFailureScopeChannel, all models on a channel share
 // a single counter so that any mix of failing models can trip the disable

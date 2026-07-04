@@ -18,6 +18,50 @@ type SubscriptionPlanDTO struct {
 	Plan model.SubscriptionPlan `json:"plan"`
 }
 
+type PublicSubscriptionPlanDTO struct {
+	Plan PublicSubscriptionPlan `json:"plan"`
+}
+
+type PublicSubscriptionPlan struct {
+	Id                      int     `json:"id"`
+	Title                   string  `json:"title"`
+	Subtitle                string  `json:"subtitle"`
+	PriceAmount             float64 `json:"price_amount"`
+	Currency                string  `json:"currency"`
+	DurationUnit            string  `json:"duration_unit"`
+	DurationValue           int     `json:"duration_value"`
+	CustomSeconds           int64   `json:"custom_seconds"`
+	Enabled                 bool    `json:"enabled"`
+	SortOrder               int     `json:"sort_order"`
+	MaxPurchasePerUser      int     `json:"max_purchase_per_user"`
+	TotalAmount             int64   `json:"total_amount"`
+	QuotaResetPeriod        string  `json:"quota_reset_period"`
+	QuotaResetCustomSeconds int64   `json:"quota_reset_custom_seconds"`
+	CreatedAt               int64   `json:"created_at"`
+	UpdatedAt               int64   `json:"updated_at"`
+}
+
+func toPublicSubscriptionPlan(p model.SubscriptionPlan) PublicSubscriptionPlan {
+	return PublicSubscriptionPlan{
+		Id:                      p.Id,
+		Title:                   p.Title,
+		Subtitle:                p.Subtitle,
+		PriceAmount:             p.PriceAmount,
+		Currency:                p.Currency,
+		DurationUnit:            p.DurationUnit,
+		DurationValue:           p.DurationValue,
+		CustomSeconds:           p.CustomSeconds,
+		Enabled:                 p.Enabled,
+		SortOrder:               p.SortOrder,
+		MaxPurchasePerUser:      p.MaxPurchasePerUser,
+		TotalAmount:             p.TotalAmount,
+		QuotaResetPeriod:        p.QuotaResetPeriod,
+		QuotaResetCustomSeconds: p.QuotaResetCustomSeconds,
+		CreatedAt:               p.CreatedAt,
+		UpdatedAt:               p.UpdatedAt,
+	}
+}
+
 type BillingPreferenceRequest struct {
 	BillingPreference string `json:"billing_preference"`
 }
@@ -30,7 +74,7 @@ type SubscriptionBalancePayRequest struct {
 
 func GetSubscriptionPlans(c *gin.Context) {
 	if !operation_setting.IsPaymentComplianceConfirmed() {
-		common.ApiSuccess(c, []SubscriptionPlanDTO{})
+		common.ApiSuccess(c, []PublicSubscriptionPlanDTO{})
 		return
 	}
 
@@ -39,10 +83,10 @@ func GetSubscriptionPlans(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	result := make([]SubscriptionPlanDTO, 0, len(plans))
+	result := make([]PublicSubscriptionPlanDTO, 0, len(plans))
 	for _, p := range plans {
-		result = append(result, SubscriptionPlanDTO{
-			Plan: p,
+		result = append(result, PublicSubscriptionPlanDTO{
+			Plan: toPublicSubscriptionPlan(p),
 		})
 	}
 	common.ApiSuccess(c, result)

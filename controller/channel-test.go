@@ -256,6 +256,22 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 		endpointType = strings.TrimSpace(cfg.EndpointType)
 	}
 	endpointType = normalizeChannelTestEndpoint(channel, testModel, endpointType)
+	switch constant.EndpointType(endpointType) {
+	case constant.EndpointTypeAudioSpeech,
+		constant.EndpointTypeAudioTranscription,
+		constant.EndpointTypeAudioTranslation:
+		err := fmt.Errorf("%s channel test is not supported because audio tests require endpoint-specific request bodies", endpointType)
+		return testResult{
+			localErr:    err,
+			newAPIError: types.NewError(err, types.ErrorCodeInvalidRequest),
+		}
+	case constant.EndpointTypeOpenAIVideo:
+		err := errors.New("openai-video channel test is not supported because video generation is asynchronous")
+		return testResult{
+			localErr:    err,
+			newAPIError: types.NewError(err, types.ErrorCodeInvalidRequest),
+		}
+	}
 
 	switch strings.ToLower(strings.TrimSpace(cfg.StreamMode)) {
 	case "on":
@@ -367,9 +383,9 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 			relayFormat = types.RelayFormatGemini
 		case constant.EndpointTypeJinaRerank:
 			relayFormat = types.RelayFormatRerank
-		case constant.EndpointTypeImageGeneration:
+		case constant.EndpointTypeImageGeneration, constant.EndpointTypeImageEdits:
 			relayFormat = types.RelayFormatOpenAIImage
-		case constant.EndpointTypeEmbeddings:
+		case constant.EndpointTypeEmbeddings, constant.EndpointTypeModerations:
 			relayFormat = types.RelayFormatEmbedding
 		default:
 			relayFormat = types.RelayFormatOpenAI
@@ -479,7 +495,7 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 	var convertedRequest any
 	// 根据 RelayMode 选择正确的转换函数
 	switch info.RelayMode {
-	case relayconstant.RelayModeEmbeddings:
+	case relayconstant.RelayModeEmbeddings, relayconstant.RelayModeModerations:
 		// Embedding 请求 - request 已经是正确的类型
 		if embeddingReq, ok := request.(*dto.EmbeddingRequest); ok {
 			convertedRequest, err = adaptor.ConvertEmbeddingRequest(c, info, *embeddingReq)
@@ -490,7 +506,7 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 				newAPIError: types.NewError(errors.New("invalid embedding request type"), types.ErrorCodeConvertRequestFailed),
 			}
 		}
-	case relayconstant.RelayModeImagesGenerations:
+	case relayconstant.RelayModeImagesGenerations, relayconstant.RelayModeImagesEdits:
 		// 图像生成请求 - request 已经是正确的类型
 		if imageReq, ok := request.(*dto.ImageRequest); ok {
 			convertedRequest, err = adaptor.ConvertImageRequest(c, info, *imageReq)
@@ -918,7 +934,13 @@ func channelTestRequestSupportsNonce(endpointType string, modelName string, chan
 	switch constant.EndpointType(normalized) {
 	case constant.EndpointTypeEmbeddings,
 		constant.EndpointTypeImageGeneration,
+		constant.EndpointTypeImageEdits,
 		constant.EndpointTypeJinaRerank,
+		constant.EndpointTypeModerations,
+		constant.EndpointTypeAudioSpeech,
+		constant.EndpointTypeAudioTranscription,
+		constant.EndpointTypeAudioTranslation,
+		constant.EndpointTypeOpenAIVideo,
 		constant.EndpointTypeOpenAIResponseCompact:
 		return false
 	default:
@@ -1099,7 +1121,12 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 				Model: model,
 				Input: []any{"hello world"},
 			}
-		case constant.EndpointTypeImageGeneration:
+		case constant.EndpointTypeModerations:
+			return &dto.EmbeddingRequest{
+				Model: model,
+				Input: []any{"hello world"},
+			}
+		case constant.EndpointTypeImageGeneration, constant.EndpointTypeImageEdits:
 			// 返回 ImageRequest
 			return &dto.ImageRequest{
 				Model:  model,

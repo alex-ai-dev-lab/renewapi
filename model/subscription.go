@@ -511,6 +511,10 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 // expectedPaymentProvider guards against cross-gateway callback attacks (empty skips the check).
 // actualPaymentMethod updates the order's PaymentMethod to reflect the real payment type used (empty skips update).
 func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedPaymentProvider string, actualPaymentMethod string) error {
+	return CompleteSubscriptionOrderWithPaidAmount(tradeNo, providerPayload, expectedPaymentProvider, actualPaymentMethod, -1)
+}
+
+func CompleteSubscriptionOrderWithPaidAmount(tradeNo string, providerPayload string, expectedPaymentProvider string, actualPaymentMethod string, paidAmount float64) error {
 	if tradeNo == "" {
 		return errors.New("tradeNo is empty")
 	}
@@ -536,6 +540,9 @@ func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedP
 		}
 		if order.Status != common.TopUpStatusPending {
 			return ErrSubscriptionOrderStatusInvalid
+		}
+		if paidAmount >= 0 && !paidAmountCoversOrder(paidAmount, order.Money) {
+			return fmt.Errorf("%w: paid=%.2f expected=%.2f", ErrTopUpUnderpaid, paidAmount, order.Money)
 		}
 		plan, err := GetSubscriptionPlanById(order.PlanId)
 		if err != nil {

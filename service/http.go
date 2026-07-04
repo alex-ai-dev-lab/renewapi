@@ -23,11 +23,24 @@ func CloseResponseBodyGracefully(httpResponse *http.Response) {
 	}
 }
 
+var allowedUpstreamResponseHeaders = map[string]struct{}{
+	"Cache-Control":       {},
+	"Content-Disposition": {},
+	"Content-Encoding":    {},
+	"Content-Language":    {},
+	"Content-Range":       {},
+	"Content-Type":        {},
+	"ETag":                {},
+	"Expires":             {},
+	"Last-Modified":       {},
+	"Retry-After":         {},
+}
+
 // ShouldCopyUpstreamHeader checks whether a given upstream response header
-// should be copied to the client response. It returns false for Content-Length
-// (managed separately) and X-Oneapi-Request-Id (to preserve the local instance
-// ID). When the upstream header is X-Oneapi-Request-Id, the value is captured
-// into the Gin context for later logging.
+// should be copied to the client response. Sensitive upstream headers such as
+// Set-Cookie, WWW-Authenticate and CORS policy are intentionally not forwarded.
+// When the upstream header is X-Oneapi-Request-Id, the value is captured into the
+// Gin context for later logging.
 func ShouldCopyUpstreamHeader(c *gin.Context, k string, v []string) bool {
 	if strings.EqualFold(k, "Content-Length") {
 		return false
@@ -38,7 +51,22 @@ func ShouldCopyUpstreamHeader(c *gin.Context, k string, v []string) bool {
 		}
 		return false
 	}
-	return true
+	_, ok := allowedUpstreamResponseHeaders[http.CanonicalHeaderKey(k)]
+	return ok
+}
+
+func CopyAllowedUpstreamHeaders(c *gin.Context, src http.Header) {
+	if c == nil || c.Writer == nil {
+		return
+	}
+	for k, values := range src {
+		if !ShouldCopyUpstreamHeader(c, k, values) {
+			continue
+		}
+		for _, value := range values {
+			c.Writer.Header().Add(k, value)
+		}
+	}
 }
 
 func IOCopyBytesGracefully(c *gin.Context, src *http.Response, data []byte) {
@@ -53,12 +81,7 @@ func IOCopyBytesGracefully(c *gin.Context, src *http.Response, data []byte) {
 	// So the httpClient will be confused by the response.
 	// For example, Postman will report error, and we cannot check the response at all.
 	if src != nil {
-		for k, v := range src.Header {
-			if !ShouldCopyUpstreamHeader(c, k, v) {
-				continue
-			}
-			c.Writer.Header().Set(k, v[0])
-		}
+		CopyAllowedUpstreamHeaders(c, src.Header)
 	}
 
 	// set Content-Length header manually BEFORE calling WriteHeader

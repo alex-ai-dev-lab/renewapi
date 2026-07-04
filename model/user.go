@@ -499,9 +499,37 @@ func (user *User) Update(updatePassword bool) error {
 			return err
 		}
 	}
-	newUser := *user
-	DB.First(&user, user.Id)
-	if err = DB.Model(user).Updates(newUser).Error; err != nil {
+	updates := map[string]interface{}{
+		"username":        user.Username,
+		"display_name":    user.DisplayName,
+		"role":            user.Role,
+		"status":          user.Status,
+		"email":           user.Email,
+		"github_id":       user.GitHubId,
+		"discord_id":      user.DiscordId,
+		"oidc_id":         user.OidcId,
+		"wechat_id":       user.WeChatId,
+		"telegram_id":     user.TelegramId,
+		"access_token":    user.AccessToken,
+		"group":           user.Group,
+		"aff_code":        user.AffCode,
+		"aff_count":       user.AffCount,
+		"aff_quota":       user.AffQuota,
+		"aff_history":     user.AffHistoryQuota,
+		"inviter_id":      user.InviterId,
+		"linux_do_id":     user.LinuxDOId,
+		"setting":         user.Setting,
+		"remark":          user.Remark,
+		"stripe_customer": user.StripeCustomer,
+		"last_login_at":   user.LastLoginAt,
+	}
+	if updatePassword {
+		updates["password"] = user.Password
+	}
+	if err = DB.Model(&User{}).Where("id = ?", user.Id).Updates(updates).Error; err != nil {
+		return err
+	}
+	if err = DB.First(user, "id = ?", user.Id).Error; err != nil {
 		return err
 	}
 
@@ -884,14 +912,15 @@ func IncreaseUserQuota(id int, quota int, db bool) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
-	gopool.Go(func() {
-		err := cacheIncrUserQuota(id, int64(quota))
-		if err != nil {
-			common.SysLog("failed to increase user quota: " + err.Error())
-		}
-	})
 	if !db && common.BatchUpdateEnabled {
 		addNewRecord(BatchUpdateTypeUserQuota, id, quota)
+		if common.RedisEnabled {
+			gopool.Go(func() {
+				if err := invalidateUserCache(id); err != nil {
+					common.SysLog("failed to invalidate user quota cache: " + err.Error())
+				}
+			})
+		}
 		return nil
 	}
 	return increaseUserQuota(id, quota)
@@ -902,32 +931,44 @@ func increaseUserQuota(id int, quota int) (err error) {
 	if err != nil {
 		return err
 	}
-	return err
+	if common.RedisEnabled {
+		gopool.Go(func() {
+			if err := cacheIncrUserQuota(id, int64(quota)); err != nil {
+				common.SysLog("failed to increase user quota cache: " + err.Error())
+			}
+		})
+	}
+	return nil
 }
 
 func DecreaseUserQuota(id int, quota int, db bool) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
-	gopool.Go(func() {
-		err := cacheDecrUserQuota(id, int64(quota))
-		if err != nil {
-			common.SysLog("failed to decrease user quota: " + err.Error())
-		}
-	})
-	if !db && common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeUserQuota, id, -quota)
-		return nil
-	}
 	return decreaseUserQuota(id, quota)
 }
 
 func decreaseUserQuota(id int, quota int) (err error) {
-	err = DB.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota - ?", quota)).Error
-	if err != nil {
-		return err
+	if quota == 0 {
+		return nil
 	}
-	return err
+	res := DB.Model(&User{}).
+		Where("id = ? AND quota >= ?", id, quota).
+		Update("quota", gorm.Expr("quota - ?", quota))
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrInsufficientQuota
+	}
+	if common.RedisEnabled {
+		gopool.Go(func() {
+			if err := cacheDecrUserQuota(id, int64(quota)); err != nil {
+				common.SysLog("failed to decrease user quota cache: " + err.Error())
+			}
+		})
+	}
+	return nil
 }
 
 func DeltaUpdateUserQuota(id int, delta int) (err error) {

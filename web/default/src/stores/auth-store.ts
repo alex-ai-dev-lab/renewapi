@@ -50,11 +50,40 @@ export interface AuthUser {
   permissions?: UserPermissions
 }
 
+type StoredAuthUser = Pick<
+  AuthUser,
+  | 'id'
+  | 'username'
+  | 'display_name'
+  | 'email'
+  | 'role'
+  | 'status'
+  | 'group'
+  | 'setting'
+  | 'sidebar_modules'
+  | 'permissions'
+>
+
 interface AuthState {
   auth: {
     user: AuthUser | null
     setUser: (user: AuthUser | null) => void
     reset: () => void
+  }
+}
+
+function sanitizeAuthUserForStorage(user: AuthUser): StoredAuthUser {
+  return {
+    id: user.id,
+    username: user.username,
+    display_name: user.display_name,
+    email: user.email,
+    role: user.role,
+    status: user.status,
+    group: user.group,
+    setting: user.setting,
+    sidebar_modules: user.sidebar_modules,
+    permissions: user.permissions,
   }
 }
 
@@ -83,7 +112,10 @@ export const useAuthStore = create<AuthState>()((set) => {
           // Persist user to localStorage
           if (typeof window !== 'undefined') {
             if (user) {
-              window.localStorage.setItem('user', JSON.stringify(user))
+              window.localStorage.setItem(
+                'user',
+                JSON.stringify(sanitizeAuthUserForStorage(user))
+              )
             } else {
               window.localStorage.removeItem('user')
             }

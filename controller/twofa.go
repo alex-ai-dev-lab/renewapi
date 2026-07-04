@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -27,6 +29,66 @@ type Setup2FAResponse struct {
 	Secret      string   `json:"secret"`
 	QRCodeData  string   `json:"qr_code_data"`
 	BackupCodes []string `json:"backup_codes"`
+}
+
+type twoFALoginAttemptState struct {
+	Count       int
+	LockedUntil time.Time
+	LastAttempt time.Time
+}
+
+var twoFALoginAttempts = struct {
+	sync.Mutex
+	items map[string]twoFALoginAttemptState
+}{items: map[string]twoFALoginAttemptState{}}
+
+const (
+	twoFALoginMaxFailures = 5
+	twoFALoginLockout     = 10 * time.Minute
+	twoFALoginAttemptTTL  = 10 * time.Minute
+)
+
+func twoFALoginAttemptKey(userId int, ip string) string {
+	return strconv.Itoa(userId) + ":" + ip
+}
+
+func isTwoFALoginLocked(userId int, ip string) bool {
+	key := twoFALoginAttemptKey(userId, ip)
+	now := time.Now()
+	twoFALoginAttempts.Lock()
+	defer twoFALoginAttempts.Unlock()
+	state := twoFALoginAttempts.items[key]
+	if !state.LockedUntil.IsZero() && now.Before(state.LockedUntil) {
+		return true
+	}
+	if !state.LastAttempt.IsZero() && now.Sub(state.LastAttempt) > twoFALoginAttemptTTL {
+		delete(twoFALoginAttempts.items, key)
+	}
+	return false
+}
+
+func recordTwoFALoginFailure(userId int, ip string) {
+	key := twoFALoginAttemptKey(userId, ip)
+	now := time.Now()
+	twoFALoginAttempts.Lock()
+	defer twoFALoginAttempts.Unlock()
+	state := twoFALoginAttempts.items[key]
+	if !state.LastAttempt.IsZero() && now.Sub(state.LastAttempt) > twoFALoginAttemptTTL {
+		state = twoFALoginAttemptState{}
+	}
+	state.Count++
+	state.LastAttempt = now
+	if state.Count >= twoFALoginMaxFailures {
+		state.LockedUntil = now.Add(twoFALoginLockout)
+	}
+	twoFALoginAttempts.items[key] = state
+}
+
+func clearTwoFALoginFailures(userId int, ip string) {
+	key := twoFALoginAttemptKey(userId, ip)
+	twoFALoginAttempts.Lock()
+	delete(twoFALoginAttempts.items, key)
+	twoFALoginAttempts.Unlock()
 }
 
 // Setup2FA 初始化2FA设置
@@ -423,6 +485,13 @@ func Verify2FALogin(c *gin.Context) {
 		})
 		return
 	}
+	if isTwoFALoginLocked(userId, c.ClientIP()) {
+		c.JSON(http.StatusTooManyRequests, gin.H{
+			"success": false,
+			"message": "验证失败次数过多，请稍后再试",
+		})
+		return
+	}
 	// 获取用户信息
 	user, err := model.GetUserById(userId, false)
 	if err != nil {
@@ -470,6 +539,7 @@ func Verify2FALogin(c *gin.Context) {
 	}
 
 	if !isValidTOTP && !isValidBackup {
+		recordTwoFALoginFailure(userId, c.ClientIP())
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "验证码或备用码错误，请重试",
@@ -481,6 +551,7 @@ func Verify2FALogin(c *gin.Context) {
 	session.Delete("pending_username")
 	session.Delete("pending_user_id")
 	session.Save()
+	clearTwoFALoginFailures(userId, c.ClientIP())
 
 	setupLogin(user, c)
 }

@@ -259,12 +259,19 @@ func CalcOpenRouterCacheCreateTokens(usage dto.Usage, priceData types.PriceData)
 	if priceData.CacheCreationRatio == 1 {
 		return 0
 	}
+	cost, ok := usage.Cost.(float64)
+	if !ok {
+		return -1
+	}
 	quotaPrice := priceData.ModelRatio / common.QuotaPerUnit
 	promptCacheCreatePrice := quotaPrice * priceData.CacheCreationRatio
 	promptCacheReadPrice := quotaPrice * priceData.CacheRatio
 	completionPrice := quotaPrice * priceData.CompletionRatio
+	denominator := promptCacheCreatePrice - quotaPrice
+	if denominator == 0 {
+		return -1
+	}
 
-	cost, _ := usage.Cost.(float64)
 	totalPromptTokens := float64(usage.PromptTokens)
 	completionTokens := float64(usage.CompletionTokens)
 	promptCacheReadTokens := float64(usage.PromptTokensDetails.CachedTokens)
@@ -272,8 +279,7 @@ func CalcOpenRouterCacheCreateTokens(usage dto.Usage, priceData types.PriceData)
 	return int(math.Round((cost -
 		totalPromptTokens*quotaPrice +
 		promptCacheReadTokens*(quotaPrice-promptCacheReadPrice) -
-		completionTokens*completionPrice) /
-		(promptCacheCreatePrice - quotaPrice)))
+		completionTokens*completionPrice) / denominator))
 }
 
 func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent string) {

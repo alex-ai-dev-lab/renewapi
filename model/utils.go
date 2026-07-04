@@ -76,14 +76,22 @@ func batchUpdate() {
 		for key, value := range store {
 			switch i {
 			case BatchUpdateTypeUserQuota:
-				err := increaseUserQuota(key, value)
-				if err != nil {
-					common.SysLog("failed to batch update user quota: " + err.Error())
+				if value >= 0 {
+					err := increaseUserQuota(key, value)
+					if err != nil {
+						common.SysLog("failed to batch update user quota: " + err.Error())
+					}
+				} else {
+					common.SysLog("skip unsafe negative user quota batch update")
 				}
 			case BatchUpdateTypeTokenQuota:
-				err := increaseTokenQuota(key, value)
-				if err != nil {
-					common.SysLog("failed to batch update token quota: " + err.Error())
+				if value >= 0 {
+					err := increaseTokenQuota(key, "", value)
+					if err != nil {
+						common.SysLog("failed to batch update token quota: " + err.Error())
+					}
+				} else {
+					common.SysLog("skip unsafe negative token quota batch update")
 				}
 			case BatchUpdateTypeUsedQuota:
 				updateUserUsedQuota(key, value)

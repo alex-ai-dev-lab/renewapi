@@ -127,7 +127,17 @@ func ShouldCountChannelFailureForDisable(err *types.NewAPIError) bool {
 	if !common.AutomaticDisableChannelEnabled || err == nil {
 		return false
 	}
-	if operation_setting.GetMonitorSetting().CountAllRelayErrorsForDisable {
+	monitorSetting := operation_setting.GetMonitorSetting()
+	if IsTLSVerificationError(err) {
+		return monitorSetting.CountTLSErrorsForDisable
+	}
+	if types.IsSkipRetryError(err) {
+		return monitorSetting.CountSkipRetryErrorsForDisable
+	}
+	if IsModelScopedChannelFailureError(err) {
+		return monitorSetting.CountModelScopedErrorsForDisable
+	}
+	if monitorSetting.CountAllRelayErrorsForDisable {
 		return true
 	}
 	return ShouldDisableChannel(err)

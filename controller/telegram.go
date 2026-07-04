@@ -31,7 +31,15 @@ func TelegramBind(c *gin.Context) {
 		})
 		return
 	}
-	telegramId := params["id"][0]
+	ids := params["id"]
+	if len(ids) == 0 || ids[0] == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "缺少 Telegram id",
+			"success": false,
+		})
+		return
+	}
+	telegramId := ids[0]
 	if model.IsTelegramIdAlreadyTaken(telegramId) {
 		c.JSON(200, gin.H{
 			"message": "该 Telegram 账户已被绑定",
@@ -41,8 +49,15 @@ func TelegramBind(c *gin.Context) {
 	}
 
 	session := sessions.Default(c)
-	id := session.Get("id")
-	user := model.User{Id: id.(int)}
+	id, ok := session.Get("id").(int)
+	if !ok || id <= 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": "未登录",
+			"success": false,
+		})
+		return
+	}
+	user := model.User{Id: id}
 	if err := user.FillUserById(); err != nil {
 		c.JSON(200, gin.H{
 			"message": err.Error(),
@@ -86,7 +101,15 @@ func TelegramLogin(c *gin.Context) {
 		return
 	}
 
-	telegramId := params["id"][0]
+	ids := params["id"]
+	if len(ids) == 0 || ids[0] == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "缺少 Telegram id",
+			"success": false,
+		})
+		return
+	}
+	telegramId := ids[0]
 	user := model.User{TelegramId: telegramId}
 	if err := user.FillUserByTelegramId(); err != nil {
 		c.JSON(200, gin.H{
@@ -102,6 +125,9 @@ func checkTelegramAuthorization(params map[string][]string, token string) bool {
 	strs := []string{}
 	var hash = ""
 	for k, v := range params {
+		if len(v) == 0 {
+			return false
+		}
 		if k == "hash" {
 			hash = v[0]
 			continue
@@ -121,5 +147,5 @@ func checkTelegramAuthorization(params map[string][]string, token string) bool {
 	hmachash := hmac.New(sha256.New, sha256hash.Sum(nil))
 	io.WriteString(hmachash, imploded)
 	ss := hex.EncodeToString(hmachash.Sum(nil))
-	return hash == ss
+	return hmac.Equal([]byte(hash), []byte(ss))
 }

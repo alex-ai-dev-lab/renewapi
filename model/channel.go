@@ -695,7 +695,36 @@ func (channel *Channel) Update() error {
 		}
 	}
 	var err error
-	err = DB.Model(channel).Updates(channel).Error
+	updates := map[string]interface{}{
+		"type":                 channel.Type,
+		"openai_organization":  channel.OpenAIOrganization,
+		"test_model":           channel.TestModel,
+		"status":               channel.Status,
+		"name":                 channel.Name,
+		"weight":               channel.Weight,
+		"base_url":             channel.BaseURL,
+		"other":                channel.Other,
+		"balance":              channel.Balance,
+		"balance_updated_time": channel.BalanceUpdatedTime,
+		"models":               channel.Models,
+		"group":                channel.Group,
+		"model_mapping":        channel.ModelMapping,
+		"status_code_mapping":  channel.StatusCodeMapping,
+		"priority":             channel.Priority,
+		"auto_ban":             channel.AutoBan,
+		"other_info":           channel.OtherInfo,
+		"tag":                  channel.Tag,
+		"setting":              channel.Setting,
+		"param_override":       channel.ParamOverride,
+		"header_override":      channel.HeaderOverride,
+		"remark":               channel.Remark,
+		"channel_info":         channel.ChannelInfo,
+		"settings":             channel.OtherSettings,
+	}
+	if channel.Key != "" {
+		updates["key"] = channel.Key
+	}
+	err = DB.Model(&Channel{}).Where("id = ?", channel.Id).Updates(updates).Error
 	if err != nil {
 		return err
 	}

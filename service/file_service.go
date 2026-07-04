@@ -2,8 +2,10 @@ package service
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -31,15 +33,12 @@ func getContextCacheKey(url string) string {
 }
 
 // getBase64ContextCacheKey 生成 base64 context 缓存的 key
-// 使用 length + MIME + 前 128 字符作为输入，避免对整个 base64 数据做 hash
 func getBase64ContextCacheKey(data string, mimeType string) string {
-	keyMaterial := fmt.Sprintf("%d:%s:", len(data), mimeType)
-	if len(data) > 128 {
-		keyMaterial += data[:128]
-	} else {
-		keyMaterial += data
-	}
-	return fmt.Sprintf("b64_cache_%s", common.GenerateHMAC(keyMaterial))
+	h := sha256.New()
+	_, _ = h.Write([]byte(mimeType))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write([]byte(data))
+	return fmt.Sprintf("b64_cache_%s", hex.EncodeToString(h.Sum(nil)))
 }
 
 // LoadFileSource 加载文件源数据

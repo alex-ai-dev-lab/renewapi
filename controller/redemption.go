@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"unicode/utf8"
@@ -81,6 +82,10 @@ func AddRedemption(c *gin.Context) {
 	}
 	if redemption.Count > 100 {
 		common.ApiErrorI18n(c, i18n.MsgRedemptionCountMax)
+		return
+	}
+	if redemption.Quota < 0 {
+		common.ApiError(c, fmt.Errorf("quota cannot be negative"))
 		return
 	}
 	if valid, msg := validateExpiredTime(c, redemption.ExpiredTime); !valid {

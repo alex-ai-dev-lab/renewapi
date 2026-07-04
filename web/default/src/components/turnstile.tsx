@@ -21,7 +21,11 @@ import { useEffect, useRef } from 'react'
 declare global {
   interface Window {
     turnstile?: {
-      render: (element: HTMLElement, options: Record<string, unknown>) => void
+      render: (
+        element: HTMLElement,
+        options: Record<string, unknown>
+      ) => string | undefined
+      remove?: (widgetId: string) => void
     }
   }
 }
@@ -40,37 +44,65 @@ export function Turnstile({
   className,
 }: TurnstileProps) {
   const ref = useRef<HTMLDivElement | null>(null)
+  const widgetIdRef = useRef<string | undefined>(undefined)
+  const onVerifyRef = useRef(onVerify)
+  const onExpireRef = useRef(onExpire)
 
   useEffect(() => {
+    onVerifyRef.current = onVerify
+    onExpireRef.current = onExpire
+  }, [onVerify, onExpire])
+
+  useEffect(() => {
+    let cancelled = false
     const render = () => {
-      if (!ref.current || !window.turnstile) return
+      if (cancelled || !ref.current || !window.turnstile || widgetIdRef.current)
+        return
       try {
-        window.turnstile.render(ref.current, {
+        widgetIdRef.current = window.turnstile.render(ref.current, {
           sitekey: siteKey,
-          callback: (token: string) => onVerify(token),
-          'error-callback': () => onExpire?.(),
-          'expired-callback': () => onExpire?.(),
+          callback: (token: string) => onVerifyRef.current(token),
+          'error-callback': () => onExpireRef.current?.(),
+          'expired-callback': () => onExpireRef.current?.(),
         })
       } catch {
         /* empty */
       }
     }
+    const cleanup = () => {
+      cancelled = true
+      if (widgetIdRef.current && window.turnstile?.remove) {
+        window.turnstile.remove(widgetIdRef.current)
+      }
+      widgetIdRef.current = undefined
+    }
 
     if (window.turnstile) {
       render()
-      return
+      return cleanup
     }
     const scriptId = 'cf-turnstile'
-    if (document.getElementById(scriptId)) return
+    const existingScript = document.getElementById(scriptId)
+    if (existingScript) {
+      existingScript.addEventListener('load', render)
+      return () => {
+        existingScript.removeEventListener('load', render)
+        cleanup()
+      }
+    }
     const s = document.createElement('script')
     s.id = scriptId
     s.src =
       'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
     s.async = true
     s.defer = true
-    s.onload = () => render()
+    s.addEventListener('load', render)
     document.head.appendChild(s)
-  }, [siteKey, onVerify, onExpire])
+    return () => {
+      s.removeEventListener('load', render)
+      cleanup()
+    }
+  }, [siteKey])
 
   return <div ref={ref} className={className} />
 }

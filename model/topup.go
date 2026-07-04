@@ -45,6 +45,7 @@ var (
 	ErrPaymentMethodMismatch = errors.New("payment method mismatch")
 	ErrTopUpNotFound         = errors.New("topup not found")
 	ErrTopUpStatusInvalid    = errors.New("topup status invalid")
+	ErrTopUpUnderpaid        = errors.New("topup underpaid")
 )
 
 func (topUp *TopUp) Insert() error {
@@ -106,7 +107,91 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 	})
 }
 
+func paidAmountCoversOrder(paidAmount float64, expectedAmount float64) bool {
+	if expectedAmount <= 0 {
+		return true
+	}
+	paid := decimal.NewFromFloat(paidAmount)
+	expected := decimal.NewFromFloat(expectedAmount)
+	return paid.Add(decimal.NewFromFloat(0.000001)).GreaterThanOrEqual(expected)
+}
+
+func CompleteEpayTopUpWithPaidAmount(tradeNo string, actualPaymentMethod string, paidAmount float64, callerIp string) error {
+	if tradeNo == "" {
+		return errors.New("未提供支付单号")
+	}
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+
+	var userId int
+	var quotaToAdd int
+	var payMoney float64
+	var paymentMethod string
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		topUp := &TopUp{}
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
+			return ErrTopUpNotFound
+		}
+		if topUp.PaymentProvider != PaymentProviderEpay {
+			return ErrPaymentMethodMismatch
+		}
+		if topUp.Status == common.TopUpStatusSuccess {
+			return nil
+		}
+		if topUp.Status != common.TopUpStatusPending {
+			return ErrTopUpStatusInvalid
+		}
+		if !paidAmountCoversOrder(paidAmount, topUp.Money) {
+			return fmt.Errorf("%w: paid=%.2f expected=%.2f", ErrTopUpUnderpaid, paidAmount, topUp.Money)
+		}
+
+		dAmount := decimal.NewFromInt(topUp.Amount)
+		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+		quotaToAdd = int(dAmount.Mul(dQuotaPerUnit).IntPart())
+		if quotaToAdd <= 0 {
+			return errors.New("无效的充值额度")
+		}
+		if actualPaymentMethod != "" && topUp.PaymentMethod != actualPaymentMethod {
+			topUp.PaymentMethod = actualPaymentMethod
+		}
+		topUp.CompleteTime = common.GetTimestamp()
+		topUp.Status = common.TopUpStatusSuccess
+		if err := tx.Save(topUp).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+			return err
+		}
+		userId = topUp.UserId
+		payMoney = topUp.Money
+		paymentMethod = topUp.PaymentMethod
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if userId > 0 {
+		RecordTopupLog(userId, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%f", logger.LogQuota(quotaToAdd), payMoney), callerIp, paymentMethod, "epay")
+	}
+	return nil
+}
+
 func Recharge(referenceId string, customerId string, callerIp string) (err error) {
+	return RechargeWithPaidAmount(referenceId, customerId, callerIp, -1)
+}
+
+func RechargeWithPaidAmount(referenceId string, customerId string, callerIp string, paidAmount float64) (err error) {
+	return rechargeWithPaidAmount(referenceId, customerId, callerIp, paidAmount, paidAmount)
+}
+
+func RechargeStripeWithPurchasedAmount(referenceId string, customerId string, callerIp string, paidAmount float64, purchasedAmount float64) (err error) {
+	return rechargeWithPaidAmount(referenceId, customerId, callerIp, paidAmount, purchasedAmount)
+}
+
+func rechargeWithPaidAmount(referenceId string, customerId string, callerIp string, paidAmount float64, purchasedAmount float64) (err error) {
 	if referenceId == "" {
 		return errors.New("未提供支付单号")
 	}
@@ -131,6 +216,9 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 
 		if topUp.Status != common.TopUpStatusPending {
 			return errors.New("充值订单状态错误")
+		}
+		if purchasedAmount >= 0 && !paidAmountCoversOrder(purchasedAmount, topUp.Money) {
+			return fmt.Errorf("%w: paid=%.2f purchased=%.6f expected=%.6f", ErrTopUpUnderpaid, paidAmount, purchasedAmount, topUp.Money)
 		}
 
 		topUp.CompleteTime = common.GetTimestamp()

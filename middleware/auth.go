@@ -60,7 +60,7 @@ func authHelper(c *gin.Context, minRole int) {
 					"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
 				})
 			} else {
-				c.JSON(http.StatusOK, gin.H{
+				c.JSON(http.StatusUnauthorized, gin.H{
 					"success": false,
 					"message": common.TranslateMessage(c, i18n.MsgAuthAccessTokenInvalid),
 				})
@@ -70,7 +70,7 @@ func authHelper(c *gin.Context, minRole int) {
 		}
 		if user != nil && user.Username != "" {
 			if !validUserInfo(user.Username, user.Role) {
-				c.JSON(http.StatusOK, gin.H{
+				c.JSON(http.StatusUnauthorized, gin.H{
 					"success": false,
 					"message": common.TranslateMessage(c, i18n.MsgAuthUserInfoInvalid),
 				})
@@ -84,7 +84,7 @@ func authHelper(c *gin.Context, minRole int) {
 			status = user.Status
 			useAccessToken = true
 		} else {
-			c.JSON(http.StatusOK, gin.H{
+			c.JSON(http.StatusUnauthorized, gin.H{
 				"success": false,
 				"message": common.TranslateMessage(c, i18n.MsgAuthAccessTokenInvalid),
 			})
@@ -132,7 +132,7 @@ func authHelper(c *gin.Context, minRole int) {
 		return
 	}
 	if statusInt == common.UserStatusDisabled {
-		c.JSON(http.StatusOK, gin.H{
+		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,
 			"message": common.TranslateMessage(c, i18n.MsgAuthUserBanned),
 		})
@@ -149,7 +149,7 @@ func authHelper(c *gin.Context, minRole int) {
 		return
 	}
 	if roleInt < minRole {
-		c.JSON(http.StatusOK, gin.H{
+		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,
 			"message": common.TranslateMessage(c, i18n.MsgAuthInsufficientPrivilege),
 		})
@@ -158,7 +158,7 @@ func authHelper(c *gin.Context, minRole int) {
 	}
 	usernameStr, usernameOk := username.(string)
 	if !usernameOk || !validUserInfo(usernameStr, roleInt) {
-		c.JSON(http.StatusOK, gin.H{
+		c.JSON(http.StatusUnauthorized, gin.H{
 			"success": false,
 			"message": common.TranslateMessage(c, i18n.MsgAuthUserInfoInvalid),
 		})

@@ -117,6 +117,22 @@ func ShouldDisableChannel(err *types.NewAPIError) bool {
 	return search
 }
 
+// ShouldCountChannelFailureForDisable decides whether the given relay error
+// should increment the channel's consecutive-failure counter. By default it
+// mirrors ShouldDisableChannel, but when
+// monitor_setting.count_all_relay_errors_for_disable is enabled every relay
+// error is counted. It never disables a channel on its own; the configured
+// threshold and failure window still gate the actual disable.
+func ShouldCountChannelFailureForDisable(err *types.NewAPIError) bool {
+	if !common.AutomaticDisableChannelEnabled || err == nil {
+		return false
+	}
+	if operation_setting.GetMonitorSetting().CountAllRelayErrorsForDisable {
+		return true
+	}
+	return ShouldDisableChannel(err)
+}
+
 func IsModelScopedChannelFailureError(err *types.NewAPIError) bool {
 	if err == nil || IsTLSVerificationError(err) {
 		return false

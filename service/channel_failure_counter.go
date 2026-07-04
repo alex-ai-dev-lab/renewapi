@@ -52,7 +52,16 @@ var channelConsecutiveFailureTracker = struct {
 	items: make(map[string]channelConsecutiveFailureState),
 }
 
+// channelConsecutiveFailureKey builds the tracker key for a channel+model. When
+// the operator selects ChannelFailureScopeChannel, all models on a channel share
+// a single counter so that any mix of failing models can trip the disable
+// threshold together; the default ChannelFailureScopeChannelModel keeps counters
+// isolated per model. Record/Peek/Clear all go through this helper, so failure
+// counting and success clearing always use the same scope.
 func channelConsecutiveFailureKey(channelID int, model string) string {
+	if operation_setting.GetMonitorSetting().ChannelFailureScope == operation_setting.ChannelFailureScopeChannel {
+		return strconv.Itoa(channelID)
+	}
 	return strconv.Itoa(channelID) + "|" + model
 }
 

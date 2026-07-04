@@ -7,6 +7,17 @@ import (
 	"github.com/QuantumNous/new-api/setting/config"
 )
 
+const (
+	// ChannelFailureScopeChannelModel counts consecutive failures separately for
+	// each channel+model pair. This is the default and preserves the original
+	// behavior.
+	ChannelFailureScopeChannelModel = "channel_model"
+	// ChannelFailureScopeChannel counts consecutive failures per channel across
+	// all models, so a mix of failing models on the same channel accumulates into
+	// a single counter.
+	ChannelFailureScopeChannel = "channel"
+)
+
 type MonitorSetting struct {
 	AutoTestChannelEnabled bool    `json:"auto_test_channel_enabled"`
 	AutoTestChannelMinutes float64 `json:"auto_test_channel_minutes"`
@@ -34,6 +45,16 @@ type MonitorSetting struct {
 	// disabling the whole channel. Excluded by default so only the affected
 	// channel+model is impacted.
 	CountModelScopedErrorsForDisable bool `json:"count_model_scoped_errors_for_disable"`
+	// ChannelFailureScope selects the granularity of the consecutive-failure
+	// counter: ChannelFailureScopeChannelModel (default) counts per channel+model,
+	// while ChannelFailureScopeChannel merges all models on a channel into a
+	// single counter so any mix of failing models can trip the threshold together.
+	ChannelFailureScope string `json:"channel_failure_scope"`
+	// CountAllRelayErrorsForDisable, when true, makes every relay error count
+	// toward the consecutive-failure threshold regardless of the per-error-class
+	// toggles above. This is an aggressive policy and is off by default so the
+	// existing ShouldDisableChannel semantics are preserved.
+	CountAllRelayErrorsForDisable bool `json:"count_all_relay_errors_for_disable"`
 }
 
 // 默认配置
@@ -45,6 +66,8 @@ var monitorSetting = MonitorSetting{
 	CountTLSErrorsForDisable:           false,
 	CountSkipRetryErrorsForDisable:     false,
 	CountModelScopedErrorsForDisable:   false,
+	ChannelFailureScope:                ChannelFailureScopeChannelModel,
+	CountAllRelayErrorsForDisable:      false,
 }
 
 func init() {

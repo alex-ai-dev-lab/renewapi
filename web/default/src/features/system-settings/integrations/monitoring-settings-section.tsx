@@ -91,6 +91,8 @@ const monitoringSchema = z
       count_tls_errors_for_disable: z.boolean(),
       count_skip_retry_errors_for_disable: z.boolean(),
       count_model_scoped_errors_for_disable: z.boolean(),
+      channel_failure_scope: z.string(),
+      count_all_relay_errors_for_disable: z.boolean(),
     }),
   })
   .superRefine((values, ctx) => {
@@ -141,13 +143,16 @@ type MonitoringSettingsSectionProps = {
 // These consecutive-failure keys are not part of the section-registry payload, so
 // they are loaded directly from the shared system-options cache and merged into
 // the form defaults. Defaults are backward-compatible (disable after 3 strikes
-// within a 10 minute window; TLS / skip-retry / model-scoped errors excluded).
+// within a 10 minute window; TLS / skip-retry / model-scoped errors excluded;
+// failures tracked per channel+model; only disable-worthy errors counted).
 const consecutiveDisableDefaults = {
   'monitor_setting.channel_consecutive_disable_threshold': 3,
   'monitor_setting.channel_failure_window_minutes': 10,
   'monitor_setting.count_tls_errors_for_disable': false,
   'monitor_setting.count_skip_retry_errors_for_disable': false,
   'monitor_setting.count_model_scoped_errors_for_disable': false,
+  'monitor_setting.channel_failure_scope': 'channel_model',
+  'monitor_setting.count_all_relay_errors_for_disable': false,
 }
 
 type MonitoringDefaults = MonitoringSettingsSectionProps['defaultValues'] & {
@@ -156,6 +161,8 @@ type MonitoringDefaults = MonitoringSettingsSectionProps['defaultValues'] & {
   'monitor_setting.count_tls_errors_for_disable': boolean
   'monitor_setting.count_skip_retry_errors_for_disable': boolean
   'monitor_setting.count_model_scoped_errors_for_disable': boolean
+  'monitor_setting.channel_failure_scope': string
+  'monitor_setting.count_all_relay_errors_for_disable': boolean
 }
 
 function normalizeLineEndings(value: string) {
@@ -177,6 +184,8 @@ type NormalizedMonitoringValues = {
   'monitor_setting.count_tls_errors_for_disable': boolean
   'monitor_setting.count_skip_retry_errors_for_disable': boolean
   'monitor_setting.count_model_scoped_errors_for_disable': boolean
+  'monitor_setting.channel_failure_scope': string
+  'monitor_setting.count_all_relay_errors_for_disable': boolean
 }
 
 type MonitoringImportExportPayload = {
@@ -210,6 +219,10 @@ const buildFormDefaults = (
       defaults['monitor_setting.count_skip_retry_errors_for_disable'],
     count_model_scoped_errors_for_disable:
       defaults['monitor_setting.count_model_scoped_errors_for_disable'],
+    channel_failure_scope:
+      defaults['monitor_setting.channel_failure_scope'],
+    count_all_relay_errors_for_disable:
+      defaults['monitor_setting.count_all_relay_errors_for_disable'],
   },
 })
 
@@ -243,6 +256,10 @@ const normalizeDefaults = (
     defaults['monitor_setting.count_skip_retry_errors_for_disable'],
   'monitor_setting.count_model_scoped_errors_for_disable':
     defaults['monitor_setting.count_model_scoped_errors_for_disable'],
+  'monitor_setting.channel_failure_scope':
+    defaults['monitor_setting.channel_failure_scope'],
+  'monitor_setting.count_all_relay_errors_for_disable':
+    defaults['monitor_setting.count_all_relay_errors_for_disable'],
 })
 
 const normalizeFormValues = (
@@ -275,6 +292,10 @@ const normalizeFormValues = (
     values.monitor_setting.count_skip_retry_errors_for_disable,
   'monitor_setting.count_model_scoped_errors_for_disable':
     values.monitor_setting.count_model_scoped_errors_for_disable,
+  'monitor_setting.channel_failure_scope':
+    values.monitor_setting.channel_failure_scope,
+  'monitor_setting.count_all_relay_errors_for_disable':
+    values.monitor_setting.count_all_relay_errors_for_disable,
 })
 
 export function MonitoringSettingsSection({
@@ -432,6 +453,12 @@ export function MonitoringSettingsSection({
           count_model_scoped_errors_for_disable: Boolean(
             next['monitor_setting.count_model_scoped_errors_for_disable']
           ),
+          channel_failure_scope: String(
+            next['monitor_setting.channel_failure_scope'] ?? 'channel_model'
+          ),
+          count_all_relay_errors_for_disable: Boolean(
+            next['monitor_setting.count_all_relay_errors_for_disable']
+          ),
         },
       })
 
@@ -501,6 +528,16 @@ export function MonitoringSettingsSection({
       form.setValue(
         'monitor_setting.count_model_scoped_errors_for_disable',
         parsed.monitor_setting.count_model_scoped_errors_for_disable,
+        { shouldDirty: true, shouldValidate: true }
+      )
+      form.setValue(
+        'monitor_setting.channel_failure_scope',
+        parsed.monitor_setting.channel_failure_scope,
+        { shouldDirty: true, shouldValidate: true }
+      )
+      form.setValue(
+        'monitor_setting.count_all_relay_errors_for_disable',
+        parsed.monitor_setting.count_all_relay_errors_for_disable,
         { shouldDirty: true, shouldValidate: true }
       )
       await form.trigger()
@@ -688,7 +725,7 @@ export function MonitoringSettingsSection({
               </h3>
               <p className='text-sm text-muted-foreground'>
                 {t(
-                  'Unlike the response-time threshold above, this policy controls automatic disabling based on repeated hard errors. A channel is auto-disabled only after the same channel and model returns a disable-worthy error this many times in a row within the failure window. TLS/certificate errors, skip-retry client errors (such as 400 bad request), and model-scoped errors (such as not implemented or no available account/channel) are excluded by default and can be opted in below.'
+                  'Unlike the response-time threshold above, this policy controls automatic disabling based on repeated hard errors. A channel is auto-disabled only after it returns a disable-worthy error this many times in a row within the failure window. By default failures are tracked separately per channel and model, and TLS/certificate errors, skip-retry client errors (such as 400 bad request), and model-scoped errors (such as not implemented or no available account/channel) are excluded. Every part of this policy can be tuned below.'
                 )}
               </p>
             </div>
@@ -711,7 +748,7 @@ export function MonitoringSettingsSection({
                     </FormControl>
                     <FormDescription>
                       {t(
-                        'Number of consecutive disable-worthy failures on the same channel and model before it is auto-disabled.'
+                        'Number of consecutive disable-worthy failures before the channel is auto-disabled.'
                       )}
                     </FormDescription>
                     <FormMessage />
@@ -740,6 +777,57 @@ export function MonitoringSettingsSection({
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
+                )}
+              />
+            </div>
+            <div className='grid gap-6 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='monitor_setting.channel_failure_scope'
+                render={({ field }) => (
+                  <SettingsSwitchItem>
+                    <SettingsSwitchContent>
+                      <FormLabel>
+                        {t('Count failures channel-wide (all models)')}
+                      </FormLabel>
+                      <FormDescription>
+                        {t(
+                          'When off, consecutive failures are tracked separately per channel and model (recommended). When on, failures from any model on the channel accumulate together, so mixed-model errors can disable the whole channel faster.'
+                        )}
+                      </FormDescription>
+                    </SettingsSwitchContent>
+                    <FormControl>
+                      <Switch
+                        checked={field.value === 'channel'}
+                        onCheckedChange={(checked) =>
+                          field.onChange(checked ? 'channel' : 'channel_model')
+                        }
+                      />
+                    </FormControl>
+                  </SettingsSwitchItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='monitor_setting.count_all_relay_errors_for_disable'
+                render={({ field }) => (
+                  <SettingsSwitchItem>
+                    <SettingsSwitchContent>
+                      <FormLabel>{t('Count all relay errors')}</FormLabel>
+                      <FormDescription>
+                        {t(
+                          'When off, only disable-worthy errors (matching the auto-disable status codes and the options above) count toward auto-disable (recommended). When on, every relay error on the channel counts, overriding the status-code list and the exclusions above. Use with caution.'
+                        )}
+                      </FormDescription>
+                    </SettingsSwitchContent>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </SettingsSwitchItem>
                 )}
               />
             </div>

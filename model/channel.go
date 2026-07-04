@@ -697,7 +697,7 @@ func (channel *Channel) Update() error {
 	var err error
 	updates := map[string]interface{}{
 		"type":                 channel.Type,
-		"openai_organization":  channel.OpenAIOrganization,
+		"open_ai_organization": channel.OpenAIOrganization,
 		"test_model":           channel.TestModel,
 		"status":               channel.Status,
 		"name":                 channel.Name,

@@ -138,7 +138,7 @@ Main checks:
 | `PUID` / `PGID` | Runtime user/group IDs for non-root execution. |
 | `TZ` | Runtime timezone. |
 | `ENABLE_PPROF` | Enables pprof on localhost only. |
-| `TLS_INSECURE_SKIP_VERIFY` | Global upstream TLS skip switch. Prefer per-channel TLS settings. |
+| `TLS_INSECURE_SKIP_VERIFY` | Global upstream TLS skip switch. Default `false`; prefer per-channel TLS settings. |
 | `OFFICIAL_PRICE_SYNC_ENABLED` | Enables scheduled official price sync from `https://models.dev/api.json` only. Default is on; set to `false` to disable. |
 
 For self-signed, expired, or private upstream certificates, prefer the channel-level "skip upstream TLS certificate verification" option instead of enabling the global TLS bypass.

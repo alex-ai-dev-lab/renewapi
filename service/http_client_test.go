@@ -63,6 +63,14 @@ func TestHTTPClientOptionsTLSInsecureSkipVerify(t *testing.T) {
 	}
 }
 
+func TestGlobalTLSInsecureSkipVerifyDefaultsToVerified(t *testing.T) {
+	resetHTTPClientTestState(t)
+
+	if common.TLSInsecureSkipVerify {
+		t.Fatal("TLS_INSECURE_SKIP_VERIFY must default to certificate verification")
+	}
+}
+
 func TestHTTPClientCacheKeyIncludesProxyAndTLS(t *testing.T) {
 	resetHTTPClientTestState(t)
 

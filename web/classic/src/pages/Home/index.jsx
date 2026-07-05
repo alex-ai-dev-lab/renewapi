@@ -40,6 +40,7 @@ import {
 } from '@douyinfe/semi-icons';
 import { Link } from 'react-router-dom';
 import NoticeModal from '../../components/layout/NoticeModal';
+import { sanitizeHtml } from '../../helpers/sanitizeHtml';
 import {
   Moonshot,
   OpenAI,
@@ -82,13 +83,18 @@ const Home = () => {
   const isChinese = i18n.language.startsWith('zh');
 
   const displayHomePageContent = async () => {
-    setHomePageContent(localStorage.getItem('home_page_content') || '');
+    const cachedContent = localStorage.getItem('home_page_content') || '';
+    setHomePageContent(
+      cachedContent.startsWith('https://')
+        ? cachedContent
+        : sanitizeHtml(cachedContent),
+    );
     const res = await API.get('/api/home_page_content');
     const { success, message, data } = res.data;
     if (success) {
       let content = data;
       if (!data.startsWith('https://')) {
-        content = marked.parse(data);
+        content = sanitizeHtml(marked.parse(data));
       }
       setHomePageContent(content);
       localStorage.setItem('home_page_content', content);

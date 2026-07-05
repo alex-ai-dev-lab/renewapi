@@ -26,6 +26,7 @@ import {
   IllustrationConstructionDark,
 } from '@douyinfe/semi-illustrations';
 import ScrollableContainer from '../common/ui/ScrollableContainer';
+import { sanitizeHtml } from '../../helpers/sanitizeHtml';
 
 const AnnouncementsPanel = ({
   announcementData,
@@ -80,7 +81,12 @@ const AnnouncementsPanel = ({
         {announcementData.length > 0 ? (
           <Timeline mode='left'>
             {announcementData.map((item, idx) => {
-              const htmlExtra = item.extra ? marked.parse(item.extra) : '';
+              const htmlExtra = item.extra
+                ? sanitizeHtml(marked.parse(item.extra))
+                : '';
+              const htmlContent = sanitizeHtml(
+                marked.parse(item.content || ''),
+              );
               return (
                 <Timeline.Item
                   key={idx}
@@ -98,7 +104,7 @@ const AnnouncementsPanel = ({
                   <div>
                     <div
                       dangerouslySetInnerHTML={{
-                        __html: marked.parse(item.content || ''),
+                        __html: htmlContent,
                       }}
                     />
                   </div>

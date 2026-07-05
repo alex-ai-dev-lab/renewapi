@@ -131,7 +131,7 @@ var MemoryCacheEnabled bool
 
 var LogConsumeEnabled = true
 
-var TLSInsecureSkipVerify = true
+var TLSInsecureSkipVerify = false
 var InsecureTLSConfig = &tls.Config{InsecureSkipVerify: true}
 
 var SMTPServer = ""

@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { Construction } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { sanitizeHtml } from '@/lib/sanitize-html'
 import { Markdown } from '@/components/ui/markdown'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PublicLayout } from '@/components/layout'
@@ -133,6 +134,7 @@ export function About() {
   const hasContent = rawContent.length > 0
   const isUrl = hasContent && isValidUrl(rawContent)
   const isHtml = hasContent && !isUrl && isLikelyHtml(rawContent)
+  const safeHtmlContent = isHtml ? sanitizeHtml(rawContent) : ''
 
   if (isLoading) {
     return (
@@ -173,7 +175,7 @@ export function About() {
         {isHtml ? (
           <div
             className='prose prose-neutral dark:prose-invert max-w-none'
-            dangerouslySetInnerHTML={{ __html: rawContent }}
+            dangerouslySetInnerHTML={{ __html: safeHtmlContent }}
           />
         ) : (
           <Markdown className='prose-neutral dark:prose-invert max-w-none'>

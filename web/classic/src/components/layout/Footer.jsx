@@ -22,10 +22,11 @@ import { useTranslation } from 'react-i18next';
 import { Typography } from '@douyinfe/semi-ui';
 import { getFooterHTML, getLogo, getSystemName } from '../../helpers';
 import { StatusContext } from '../../context/Status';
+import { sanitizeHtml } from '../../helpers/sanitizeHtml';
 
 const FooterBar = () => {
   const { t } = useTranslation();
-  const [footer, setFooter] = useState(getFooterHTML());
+  const [footer, setFooter] = useState(sanitizeHtml(getFooterHTML() || ''));
   const systemName = getSystemName();
   const logo = getLogo();
   const [statusState] = useContext(StatusContext);
@@ -34,7 +35,7 @@ const FooterBar = () => {
   const loadFooter = () => {
     let footer_html = localStorage.getItem('footer_html');
     if (footer_html) {
-      setFooter(footer_html);
+      setFooter(sanitizeHtml(footer_html));
     }
   };
 

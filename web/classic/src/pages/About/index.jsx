@@ -26,6 +26,7 @@ import {
   IllustrationConstructionDark,
 } from '@douyinfe/semi-illustrations';
 import { useTranslation } from 'react-i18next';
+import { sanitizeHtml } from '../../helpers/sanitizeHtml';
 
 const About = () => {
   const { t } = useTranslation();
@@ -34,13 +35,18 @@ const About = () => {
   const currentYear = new Date().getFullYear();
 
   const displayAbout = async () => {
-    setAbout(localStorage.getItem('about') || '');
+    const cachedAbout = localStorage.getItem('about') || '';
+    setAbout(
+      cachedAbout.startsWith('https://')
+        ? cachedAbout
+        : sanitizeHtml(cachedAbout),
+    );
     const res = await API.get('/api/about');
     const { success, message, data } = res.data;
     if (success) {
       let aboutContent = data;
       if (!data.startsWith('https://')) {
-        aboutContent = marked.parse(data);
+        aboutContent = sanitizeHtml(marked.parse(data));
       }
       setAbout(aboutContent);
       localStorage.setItem('about', aboutContent);

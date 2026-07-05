@@ -75,6 +75,10 @@ export const channelSchema = z.object({
 
 export type Channel = z.infer<typeof channelSchema>
 
+export type ChannelUpdatePayload = Partial<Channel> & {
+  key_mode?: 'append' | 'replace'
+}
+
 // ============================================================================
 // Channel Settings Types
 // ============================================================================
@@ -92,13 +96,31 @@ export interface ChannelSettings {
   normalize_upstream_errors?: boolean
   anti_poison_profile?: 'trusted' | 'unknown' | 'probation' | 'quarantine'
   anti_poison_enabled?: boolean
-  anti_poison_answer_envelope?: 'off' | 'auto' | 'required' | 'required_non_stream'
-  anti_poison_response_proof?: 'off' | 'warn' | 'auto' | 'required' | 'required_non_stream'
+  anti_poison_answer_envelope?:
+    | 'off'
+    | 'auto'
+    | 'required'
+    | 'required_non_stream'
+  anti_poison_response_proof?:
+    | 'off'
+    | 'warn'
+    | 'auto'
+    | 'required'
+    | 'required_non_stream'
   anti_poison_response_proof_enabled?: boolean
-  anti_poison_tool_call_guard?: 'off' | 'warn' | 'auto' | 'strict' | 'strict_when_tools'
+  anti_poison_tool_call_guard?:
+    | 'off'
+    | 'warn'
+    | 'auto'
+    | 'strict'
+    | 'strict_when_tools'
   anti_poison_opaque_scan?: 'off' | 'warn' | 'score' | 'score_strict'
   anti_poison_probe_before_every_request?: boolean
-  anti_poison_stream_mode?: 'direct_stream_light_scan' | 'preflight_probe_first_bytes_buffer' | 'aggregate_then_replay' | 'disabled'
+  anti_poison_stream_mode?:
+    | 'direct_stream_light_scan'
+    | 'preflight_probe_first_bytes_buffer'
+    | 'aggregate_then_replay'
+    | 'disabled'
   anti_poison_hard_failures_to_quarantine?: number
   anti_poison_soft_failures_to_degrade?: number
   anti_poison_failure_mode?: 'block' | 'warn'
@@ -393,15 +415,47 @@ export interface ChannelFormData {
   user_agent_id?: number
   user_agent_override?: string
   normalize_upstream_errors?: boolean
-  anti_poison_profile?: 'inherit' | 'trusted' | 'unknown' | 'probation' | 'quarantine'
+  anti_poison_profile?:
+    | 'inherit'
+    | 'trusted'
+    | 'unknown'
+    | 'probation'
+    | 'quarantine'
   anti_poison_enabled?: boolean
-  anti_poison_answer_envelope?: 'inherit' | 'off' | 'auto' | 'required' | 'required_non_stream'
-  anti_poison_response_proof?: 'inherit' | 'off' | 'warn' | 'auto' | 'required' | 'required_non_stream'
+  anti_poison_answer_envelope?:
+    | 'inherit'
+    | 'off'
+    | 'auto'
+    | 'required'
+    | 'required_non_stream'
+  anti_poison_response_proof?:
+    | 'inherit'
+    | 'off'
+    | 'warn'
+    | 'auto'
+    | 'required'
+    | 'required_non_stream'
   anti_poison_response_proof_enabled?: boolean
-  anti_poison_tool_call_guard?: 'inherit' | 'off' | 'warn' | 'auto' | 'strict' | 'strict_when_tools'
-  anti_poison_opaque_scan?: 'inherit' | 'off' | 'warn' | 'score' | 'score_strict'
+  anti_poison_tool_call_guard?:
+    | 'inherit'
+    | 'off'
+    | 'warn'
+    | 'auto'
+    | 'strict'
+    | 'strict_when_tools'
+  anti_poison_opaque_scan?:
+    | 'inherit'
+    | 'off'
+    | 'warn'
+    | 'score'
+    | 'score_strict'
   anti_poison_probe_before_every_request?: boolean
-  anti_poison_stream_mode?: 'inherit' | 'direct_stream_light_scan' | 'preflight_probe_first_bytes_buffer' | 'aggregate_then_replay' | 'disabled'
+  anti_poison_stream_mode?:
+    | 'inherit'
+    | 'direct_stream_light_scan'
+    | 'preflight_probe_first_bytes_buffer'
+    | 'aggregate_then_replay'
+    | 'disabled'
   anti_poison_hard_failures_to_quarantine?: number
   anti_poison_soft_failures_to_degrade?: number
   anti_poison_failure_mode?: 'inherit' | 'block' | 'warn'

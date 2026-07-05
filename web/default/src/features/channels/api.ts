@@ -23,6 +23,7 @@ import type {
   BatchDeleteParams,
   BatchSetTagParams,
   Channel,
+  ChannelUpdatePayload,
   ChannelBalanceResponse,
   ChannelModelStatusResponse,
   ChannelTestResponse,
@@ -137,7 +138,7 @@ export async function createChannel(
  */
 export async function updateChannel(
   id: number,
-  data: Partial<Channel>
+  data: ChannelUpdatePayload
 ): Promise<{ success: boolean; message?: string; data?: Channel }> {
   const res = await api.put(
     '/api/channel/',

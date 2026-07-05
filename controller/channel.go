@@ -540,22 +540,38 @@ func validateTwoFactorAuth(twoFA *model.TwoFA, code string) bool {
 
 // validateChannel 通用的渠道校验函数
 func validateChannel(channel *model.Channel, isAdd bool) error {
+	if channel == nil {
+		return fmt.Errorf("channel cannot be empty")
+	}
+
 	// 校验 channel settings
 	if err := channel.ValidateSettings(); err != nil {
 		return fmt.Errorf("渠道额外设置[channel setting] 格式错误：%s", err.Error())
 	}
 
-	// 如果是添加操作，检查 channel 和 key 是否为空
-	if isAdd {
-		if channel == nil || channel.Key == "" {
-			return fmt.Errorf("channel cannot be empty")
-		}
+	if isAdd && strings.TrimSpace(channel.Key) == "" {
+		return fmt.Errorf("channel cannot be empty")
+	}
 
-		// 检查模型名称长度是否超过 255
-		for _, m := range channel.GetModels() {
-			if len(m) > 255 {
-				return fmt.Errorf("模型名称过长: %s", m)
-			}
+	if strings.TrimSpace(channel.Name) == "" {
+		return fmt.Errorf("渠道名称不能为空")
+	}
+	if len(channel.GetModels()) == 0 {
+		return fmt.Errorf("模型不能为空")
+	}
+	if len(channel.GetGroups()) == 0 {
+		return fmt.Errorf("分组不能为空")
+	}
+
+	// abilities 表会将单个 model/group 作为主键字段，长度必须兼容所有数据库。
+	for _, m := range channel.GetModels() {
+		if len(m) > 255 {
+			return fmt.Errorf("模型名称过长: %s", m)
+		}
+	}
+	for _, group := range channel.GetGroups() {
+		if len(group) > 64 {
+			return fmt.Errorf("分组名称过长: %s", group)
 		}
 	}
 
@@ -653,7 +669,7 @@ func getVertexArrayKeys(keys string) ([]string, error) {
 		case string:
 			keyStr = strings.TrimSpace(v)
 		default:
-			bytes, err := json.Marshal(v)
+			bytes, err := common.Marshal(v)
 			if err != nil {
 				return nil, fmt.Errorf("Vertex AI key JSON 编码失败: %w", err)
 			}
@@ -742,10 +758,10 @@ func AddChannel(c *gin.Context) {
 
 	channels := make([]model.Channel, 0, len(keys))
 	for _, key := range keys {
-		if key == "" {
+		if strings.TrimSpace(key) == "" {
 			continue
 		}
-		localChannel := addChannelRequest.Channel
+		localChannel := *addChannelRequest.Channel
 		localChannel.Key = key
 		if addChannelRequest.BatchAddSetKeyPrefix2Name && len(keys) > 1 {
 			keyPrefix := localChannel.Key
@@ -754,7 +770,14 @@ func AddChannel(c *gin.Context) {
 			}
 			localChannel.Name = fmt.Sprintf("%s %s", localChannel.Name, keyPrefix)
 		}
-		channels = append(channels, *localChannel)
+		channels = append(channels, localChannel)
+	}
+	if len(channels) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "channel cannot be empty",
+		})
+		return
 	}
 	err = model.BatchInsertChannels(channels)
 	if err != nil {
@@ -1042,11 +1065,11 @@ func UpdateChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if err := json.Unmarshal(body, &channel); err != nil {
+	if err := common.Unmarshal(body, &channel); err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	if err := json.Unmarshal(body, &requestFields); err != nil {
+	if err := common.Unmarshal(body, &requestFields); err != nil {
 		common.ApiError(c, err)
 		return
 	}
@@ -1098,7 +1121,7 @@ func UpdateChannel(c *gin.Context) {
 				if strings.HasPrefix(strings.TrimSpace(originChannel.Key), "[") {
 					// JSON数组格式
 					var arr []json.RawMessage
-					if err := json.Unmarshal([]byte(strings.TrimSpace(originChannel.Key)), &arr); err == nil {
+					if err := common.Unmarshal([]byte(strings.TrimSpace(originChannel.Key)), &arr); err == nil {
 						existingKeys = make([]string, len(arr))
 						for i, v := range arr {
 							existingKeys[i] = string(v)

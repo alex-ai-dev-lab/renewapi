@@ -71,7 +71,7 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
           props.currentRow.id
         )
         const payloadWithKeyMode =
-          props.isMultiKeyChannel && data.key_mode
+          props.isMultiKeyChannel && data.key?.trim() && data.key_mode
             ? {
                 ...payload,
                 key_mode: data.key_mode,

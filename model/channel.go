@@ -385,21 +385,33 @@ func (channel *Channel) SaveChannelInfo() error {
 }
 
 func (channel *Channel) GetModels() []string {
-	if channel.Models == "" {
+	if channel == nil || channel.Models == "" {
 		return []string{}
 	}
-	return strings.Split(strings.Trim(channel.Models, ","), ",")
+	models := strings.Split(strings.Trim(channel.Models, ","), ",")
+	res := make([]string, 0, len(models))
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		if model != "" {
+			res = append(res, model)
+		}
+	}
+	return res
 }
 
 func (channel *Channel) GetGroups() []string {
-	if channel.Group == "" {
+	if channel == nil || channel.Group == "" {
 		return []string{}
 	}
 	groups := strings.Split(strings.Trim(channel.Group, ","), ",")
-	for i, group := range groups {
-		groups[i] = strings.TrimSpace(group)
+	res := make([]string, 0, len(groups))
+	for _, group := range groups {
+		group = strings.TrimSpace(group)
+		if group != "" {
+			res = append(res, group)
+		}
 	}
-	return groups
+	return res
 }
 
 func (channel *Channel) GetOtherInfo() map[string]interface{} {

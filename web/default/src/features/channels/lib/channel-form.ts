@@ -186,6 +186,7 @@ export const channelFormSchema = z
     user_agent_id: z.number().optional(),
     user_agent_override: z.string().optional(),
     normalize_upstream_errors: z.boolean().optional(),
+    allow_model_protocol_override: z.boolean().optional(),
     anti_poison_profile: z
       .enum(['inherit', 'trusted', 'unknown', 'probation', 'quarantine'])
       .optional(),
@@ -357,6 +358,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   user_agent_id: 0,
   user_agent_override: '',
   normalize_upstream_errors: true,
+  allow_model_protocol_override: false,
   anti_poison_profile: 'inherit',
   anti_poison_enabled: true,
   anti_poison_answer_envelope: 'inherit',
@@ -421,6 +423,7 @@ export function transformChannelToFormDefaults(
     | 'user_agent_id'
     | 'user_agent_override'
     | 'normalize_upstream_errors'
+    | 'allow_model_protocol_override'
     | 'anti_poison_profile'
     | 'anti_poison_enabled'
     | 'anti_poison_answer_envelope'
@@ -454,6 +457,7 @@ export function transformChannelToFormDefaults(
     user_agent_id: 0,
     user_agent_override: '',
     normalize_upstream_errors: true,
+    allow_model_protocol_override: false,
     anti_poison_profile: 'inherit',
     anti_poison_enabled: true,
     anti_poison_answer_envelope: 'inherit',
@@ -493,6 +497,8 @@ export function transformChannelToFormDefaults(
         user_agent_id: Number(parsed.user_agent_id || 0),
         user_agent_override: parsed.user_agent_override || '',
         normalize_upstream_errors: parsed.normalize_upstream_errors !== false,
+        allow_model_protocol_override:
+          parsed.allow_model_protocol_override === true,
         anti_poison_profile: parsed.anti_poison_profile || 'inherit',
         anti_poison_enabled: parsed.anti_poison_enabled !== false,
         anti_poison_answer_envelope:
@@ -649,6 +655,8 @@ function buildSettingJSON(formData: ChannelFormValues): string {
     user_agent_id: formData.user_agent_id ? Number(formData.user_agent_id) : undefined,
     user_agent_override: formData.user_agent_override || '',
     normalize_upstream_errors: formData.normalize_upstream_errors !== false,
+    allow_model_protocol_override:
+      formData.type !== 57 && formData.allow_model_protocol_override === true,
     anti_poison_enabled: formData.anti_poison_enabled !== false,
     anti_poison_shape_check_enabled:
       formData.anti_poison_shape_check_enabled === true,

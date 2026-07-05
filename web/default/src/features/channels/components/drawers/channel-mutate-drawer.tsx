@@ -4042,6 +4042,33 @@ export function ChannelMutateDrawer({
                           )}
                         />
 
+                        {currentType !== 57 && (
+                          <FormField
+                            control={form.control}
+                            name='allow_model_protocol_override'
+                            render={({ field }) => (
+                              <FormItem className='flex items-center justify-between px-4 py-3'>
+                                <div className='space-y-0.5'>
+                                  <FormLabel>
+                                    {t('Model Protocol Override')}
+                                  </FormLabel>
+                                  <FormDescription>
+                                    {t(
+                                      'Allow global model rules to switch the upstream adaptor/protocol for this channel. Use only for multi-protocol gateways.'
+                                    )}
+                                  </FormDescription>
+                                </div>
+                                <FormControl>
+                                  <Switch
+                                    checked={field.value === true}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        )}
+
                         <FormField
                           control={form.control}
                           name='tls_insecure_skip_verify'

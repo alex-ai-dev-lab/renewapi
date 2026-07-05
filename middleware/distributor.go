@@ -185,7 +185,10 @@ func Distribute() func(c *gin.Context) {
 			}
 		}
 		common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
-		SetupContextForSelectedChannel(c, channel, modelRequest.Model)
+		if newAPIError := SetupContextForSelectedChannel(c, channel, modelRequest.Model); newAPIError != nil {
+			abortWithOpenAiMessage(c, newAPIError.StatusCode, newAPIError.Error(), newAPIError.GetErrorCode())
+			return
+		}
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
 			service.RecordChannelAffinity(c, channel.Id)
@@ -590,6 +593,9 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	// When no per-model override row exists this returns the channel's own type
 	// and base URL, so the context is populated exactly as before.
 	resolvedChannelType, resolvedBaseURL := resolveChannelRoute(channel, modelName)
+	if err := validateResolvedChannelRoute(channel, resolvedChannelType); err != nil {
+		return types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+	}
 	common.SetContextKey(c, constant.ContextKeyChannelId, channel.Id)
 	common.SetContextKey(c, constant.ContextKeyChannelName, channel.Name)
 	common.SetContextKey(c, constant.ContextKeyChannelType, resolvedChannelType)
@@ -668,6 +674,16 @@ func resolveChannelRoute(channel *model.Channel, modelName string) (int, string)
 		baseURL = strings.ReplaceAll(baseURL, "{model}", modelName)
 	}
 	return channelType, baseURL
+}
+
+func validateResolvedChannelRoute(channel *model.Channel, resolvedChannelType int) error {
+	if channel == nil || channel.Type == resolvedChannelType {
+		return nil
+	}
+	if channel.Type == constant.ChannelTypeCodex {
+		return fmt.Errorf("model route protocol mismatch: codex channel #%d cannot be sent through channel type %d adaptor", channel.Id, resolvedChannelType)
+	}
+	return nil
 }
 
 func resolveChannelBaseURL(channel *model.Channel, modelName string) string {

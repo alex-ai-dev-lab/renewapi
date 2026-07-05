@@ -19,6 +19,11 @@ type ChannelSettings struct {
 	// Codex client identity support. When nil, infer from the upstream URL.
 	RequiresCodexIdentity *bool `json:"requires_codex_identity,omitempty"`
 
+	// Allows global model defaults to override the upstream protocol/adaptor for
+	// this channel. Off by default so native-protocol channels keep their own
+	// authentication and request format unless the admin opts in.
+	AllowModelProtocolOverride bool `json:"allow_model_protocol_override,omitempty"`
+
 	// Auto-test settings
 	AutoTestInterval        int    `json:"auto_test_interval,omitempty"`          // minutes, 0 = use global
 	AutoTestRetryCount      int    `json:"auto_test_retry_count,omitempty"`       // retry attempts per test

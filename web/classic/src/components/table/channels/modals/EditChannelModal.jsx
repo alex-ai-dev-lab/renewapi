@@ -191,6 +191,7 @@ const EditChannelModal = (props) => {
     // 渠道额外设置的默认值
     force_format: false,
     thinking_to_content: false,
+    allow_model_protocol_override: false,
     proxy: '',
     tls_insecure_skip_verify: false,
     pass_through_body_enabled: false,
@@ -516,6 +517,7 @@ const EditChannelModal = (props) => {
   const [channelSettings, setChannelSettings] = useState({
     force_format: false,
     thinking_to_content: false,
+    allow_model_protocol_override: false,
     proxy: '',
     tls_insecure_skip_verify: false,
     pass_through_body_enabled: false,
@@ -871,6 +873,8 @@ const EditChannelModal = (props) => {
           data.force_format = parsedSettings.force_format || false;
           data.thinking_to_content =
             parsedSettings.thinking_to_content || false;
+          data.allow_model_protocol_override =
+            parsedSettings.allow_model_protocol_override === true;
           data.proxy = parsedSettings.proxy || '';
           data.tls_insecure_skip_verify =
             parsedSettings.tls_insecure_skip_verify === true;
@@ -883,6 +887,7 @@ const EditChannelModal = (props) => {
           console.error('解析渠道设置失败:', error);
           data.force_format = false;
           data.thinking_to_content = false;
+          data.allow_model_protocol_override = false;
           data.proxy = '';
           data.tls_insecure_skip_verify = false;
           data.pass_through_body_enabled = false;
@@ -892,6 +897,7 @@ const EditChannelModal = (props) => {
       } else {
         data.force_format = false;
         data.thinking_to_content = false;
+        data.allow_model_protocol_override = false;
         data.proxy = '';
         data.tls_insecure_skip_verify = false;
         data.pass_through_body_enabled = false;
@@ -1006,6 +1012,7 @@ const EditChannelModal = (props) => {
       setChannelSettings({
         force_format: data.force_format,
         thinking_to_content: data.thinking_to_content,
+        allow_model_protocol_override: data.allow_model_protocol_override,
         proxy: data.proxy,
         tls_insecure_skip_verify: data.tls_insecure_skip_verify,
         pass_through_body_enabled: data.pass_through_body_enabled,
@@ -1051,6 +1058,7 @@ const EditChannelModal = (props) => {
         data.tls_insecure_skip_verify ||
         (data.system_prompt && data.system_prompt.trim()) ||
         data.thinking_to_content ||
+        data.allow_model_protocol_override ||
         data.pass_through_body_enabled ||
         data.force_format ||
         data.claude_beta_query ||
@@ -1402,6 +1410,7 @@ const EditChannelModal = (props) => {
     setChannelSettings({
       force_format: false,
       thinking_to_content: false,
+      allow_model_protocol_override: false,
       proxy: '',
       tls_insecure_skip_verify: false,
       pass_through_body_enabled: false,
@@ -1773,6 +1782,9 @@ const EditChannelModal = (props) => {
     const channelExtraSettings = {
       force_format: localInputs.force_format || false,
       thinking_to_content: localInputs.thinking_to_content || false,
+      allow_model_protocol_override:
+        localInputs.type !== 57 &&
+        localInputs.allow_model_protocol_override === true,
       proxy: localInputs.proxy || '',
       tls_insecure_skip_verify:
         localInputs.tls_insecure_skip_verify === true,
@@ -1858,6 +1870,7 @@ const EditChannelModal = (props) => {
     // 清理不需要发送到后端的字段
     delete localInputs.force_format;
     delete localInputs.thinking_to_content;
+    delete localInputs.allow_model_protocol_override;
     delete localInputs.proxy;
     delete localInputs.tls_insecure_skip_verify;
     delete localInputs.pass_through_body_enabled;
@@ -2554,6 +2567,9 @@ const EditChannelModal = (props) => {
 
                   <Form.Switch field='thinking_to_content' label={t('思考内容转换')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('thinking_to_content', value)} extraText={t('将 reasoning_content 转换为 <think> 标签拼接到内容中')} />
                   <Form.Switch field='pass_through_body_enabled' label={t('透传请求体')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('pass_through_body_enabled', value)} extraText={t('启用请求体透传功能')} />
+                  {inputs.type !== 57 && (
+                    <Form.Switch field='allow_model_protocol_override' label={t('按模型切换上游协议')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('allow_model_protocol_override', value)} extraText={t('允许全局模型规则覆盖该渠道的上游适配器/鉴权协议。仅用于多协议聚合网关。')} />
+                  )}
                   <Form.Switch field='tls_insecure_skip_verify' label={t('跳过上游 TLS 证书校验')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('tls_insecure_skip_verify', value)} extraText={t('仅用于兼容 IP:443、自签证书、证书过期、证书不受信任或 SAN 不匹配的上游。开启后会降低中间人攻击防护能力，请只对可信私有上游启用。')} />
                   <Form.Switch field='auto_test_and_recover_enabled' label={t('允许自动测试及恢复')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelOtherSettingsChange('auto_test_and_recover_enabled', value)} extraText={t('开启后，系统会按全局自动测试间隔检测该渠道，并在测试通过后自动启用；关闭后，即使全局自动测试开启，该渠道也会保持禁用，直到你手动启用。')} />
 

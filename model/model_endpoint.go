@@ -19,10 +19,10 @@ import (
 // that serves both claude-* via Anthropic and gpt-* via OpenAI) without forcing
 // every model onto the channel's single Type.
 //
-// The routing layer only consults this table when a row exists for the exact
-// (ChannelId, Model) pair of a request. Channels/models without a row keep the
-// original channel-type based routing byte-for-byte, so the feature is strictly
-// opt-in and backward compatible.
+// The routing layer always lets an exact per-(ChannelId, Model) row override the
+// upstream protocol. Global model defaults are applied only when the channel
+// explicitly opts into model-based protocol routing, so native-protocol channels
+// keep their own authentication and request format by default.
 type ModelEndpoint struct {
 	Id        int    `json:"id" gorm:"primaryKey"`
 	ChannelId int    `json:"channel_id" gorm:"uniqueIndex:idx_model_endpoint_channel_model,priority:1;not null"`
@@ -170,17 +170,31 @@ func InferChannelTypeFromModel(modelName string) (int, bool) {
 	}
 }
 
+// ChannelAllowsModelProtocolOverride reports whether the channel opted into
+// global model-name based protocol/adaptor overrides. Exact per-model endpoint
+// rows remain explicit admin overrides and do not require this flag.
+func ChannelAllowsModelProtocolOverride(channel *Channel) bool {
+	if channel == nil {
+		return false
+	}
+	if channel.Type == constant.ChannelTypeCodex {
+		return false
+	}
+	return channel.GetSetting().AllowModelProtocolOverride
+}
+
 // ResolveModelRoute returns the effective upstream channel type and base URL for
-// the given channel + model. When no per-model override applies it returns the
-// channel's own type and base URL unchanged with overridden == false, letting
-// callers preserve the exact original behavior.
+// the given channel + model. When no per-model override applies and the channel
+// has not opted into global protocol routing, it returns the channel's own type
+// and base URL unchanged with overridden == false.
 //
 // Resolution order:
 //  1. Per-channel per-model row (model_endpoints): an explicit ChannelType wins;
 //     an "auto" row consults the global default, then name inference.
-//  2. When no row exists, the global model-endpoint default registry decides the
-//     protocol. This layer is protocol-only and never rewrites the base URL, so
-//     aggregator/relay channels keep their own host.
+//  2. When no row exists and the channel opted into model protocol routing, the
+//     global model-endpoint default registry decides the protocol. This layer is
+//     protocol-only and never rewrites the base URL, so aggregator/relay
+//     channels keep their own host.
 //  3. Otherwise the channel's own type and base URL are used unchanged.
 func ResolveModelRoute(channel *Channel, modelName string) (channelType int, baseURL string, overridden bool) {
 	if channel == nil {
@@ -191,21 +205,27 @@ func ResolveModelRoute(channel *Channel, modelName string) (channelType int, bas
 	ep := GetModelEndpoint(channel.Id, modelName)
 	if ep == nil {
 		// No per-channel override: consult the global model-endpoint default
-		// registry. It controls the upstream protocol/adaptor only and never
-		// changes the base URL, so the channel keeps its own host.
-		if gt, ok := operation_setting.ResolveModelDefaultChannelType(modelName); ok {
-			return gt, baseURL, gt != channel.Type
+		// registry only when the channel explicitly opted into model-based
+		// protocol routing. It controls the upstream protocol/adaptor only and
+		// never changes the base URL, so the channel keeps its own host.
+		if ChannelAllowsModelProtocolOverride(channel) {
+			if gt, ok := operation_setting.ResolveModelDefaultChannelType(modelName); ok {
+				return gt, baseURL, gt != channel.Type
+			}
 		}
 		return channelType, baseURL, false
 	}
 	// A per-channel row exists. Protocol precedence: explicit per-model type >
-	// global default (for auto rows) > name inference > the channel's own type.
+	// global default for opted-in auto rows > name inference > the channel's own
+	// type.
 	protocolFromGlobal := false
 	if ep.ChannelType != nil {
 		channelType = *ep.ChannelType
-	} else if gt, ok := operation_setting.ResolveModelDefaultChannelType(modelName); ok {
-		channelType = gt
-		protocolFromGlobal = true
+	} else if ChannelAllowsModelProtocolOverride(channel) {
+		if gt, ok := operation_setting.ResolveModelDefaultChannelType(modelName); ok {
+			channelType = gt
+			protocolFromGlobal = true
+		}
 	} else if inferred, ok := InferChannelTypeFromModel(modelName); ok {
 		channelType = inferred
 	}

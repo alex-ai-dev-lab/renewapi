@@ -94,6 +94,7 @@ export interface ChannelSettings {
   user_agent_id?: number
   user_agent_override?: string
   normalize_upstream_errors?: boolean
+  allow_model_protocol_override?: boolean
   anti_poison_profile?: 'trusted' | 'unknown' | 'probation' | 'quarantine'
   anti_poison_enabled?: boolean
   anti_poison_answer_envelope?:

@@ -945,25 +945,131 @@ type PatchChannel struct {
 	KeyMode      *string `json:"key_mode"` // 多key模式下密钥覆盖或者追加
 }
 
+func mergePatchChannelWithOrigin(channel *PatchChannel, origin *model.Channel, present map[string]json.RawMessage) {
+	merged := *origin
+	if _, ok := present["type"]; ok {
+		merged.Type = channel.Type
+	}
+	if _, ok := present["key"]; ok {
+		merged.Key = channel.Key
+	}
+	if _, ok := present["openai_organization"]; ok {
+		merged.OpenAIOrganization = channel.OpenAIOrganization
+	}
+	if _, ok := present["test_model"]; ok {
+		merged.TestModel = channel.TestModel
+	}
+	if _, ok := present["status"]; ok {
+		merged.Status = channel.Status
+	}
+	if _, ok := present["name"]; ok {
+		merged.Name = channel.Name
+	}
+	if _, ok := present["weight"]; ok {
+		merged.Weight = channel.Weight
+	}
+	if _, ok := present["created_time"]; ok {
+		merged.CreatedTime = channel.CreatedTime
+	}
+	if _, ok := present["test_time"]; ok {
+		merged.TestTime = channel.TestTime
+	}
+	if _, ok := present["response_time"]; ok {
+		merged.ResponseTime = channel.ResponseTime
+	}
+	if _, ok := present["base_url"]; ok {
+		merged.BaseURL = channel.BaseURL
+	}
+	if _, ok := present["other"]; ok {
+		merged.Other = channel.Other
+	}
+	if _, ok := present["balance"]; ok {
+		merged.Balance = channel.Balance
+	}
+	if _, ok := present["balance_updated_time"]; ok {
+		merged.BalanceUpdatedTime = channel.BalanceUpdatedTime
+	}
+	if _, ok := present["models"]; ok {
+		merged.Models = channel.Models
+	}
+	if _, ok := present["group"]; ok {
+		merged.Group = channel.Group
+	}
+	if _, ok := present["used_quota"]; ok {
+		merged.UsedQuota = channel.UsedQuota
+	}
+	if _, ok := present["model_mapping"]; ok {
+		merged.ModelMapping = channel.ModelMapping
+	}
+	if _, ok := present["status_code_mapping"]; ok {
+		merged.StatusCodeMapping = channel.StatusCodeMapping
+	}
+	if _, ok := present["priority"]; ok {
+		merged.Priority = channel.Priority
+	}
+	if _, ok := present["auto_ban"]; ok {
+		merged.AutoBan = channel.AutoBan
+	}
+	if _, ok := present["other_info"]; ok {
+		merged.OtherInfo = channel.OtherInfo
+	}
+	if _, ok := present["tag"]; ok {
+		merged.Tag = channel.Tag
+	}
+	if _, ok := present["setting"]; ok {
+		merged.Setting = channel.Setting
+	}
+	if _, ok := present["param_override"]; ok {
+		merged.ParamOverride = channel.ParamOverride
+	}
+	if _, ok := present["header_override"]; ok {
+		merged.HeaderOverride = channel.HeaderOverride
+	}
+	if _, ok := present["remark"]; ok {
+		merged.Remark = channel.Remark
+	}
+	if _, ok := present["settings"]; ok {
+		merged.OtherSettings = channel.OtherSettings
+	}
+	channel.Channel = merged
+}
+
 func UpdateChannel(c *gin.Context) {
 	channel := PatchChannel{}
-	err := c.ShouldBindJSON(&channel)
+	requestFields := map[string]json.RawMessage{}
+	body, err := c.GetRawData()
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-
-	// 使用统一的校验函数
-	if err := validateChannel(&channel.Channel, false); err != nil {
+	if err := json.Unmarshal(body, &channel); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := json.Unmarshal(body, &requestFields); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	// Preserve existing ChannelInfo to ensure multi-key channels keep correct state even if the client does not send ChannelInfo in the request.
+	if channel.Id <= 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "invalid channel id",
+		})
+		return
+	}
+	originChannel, err := model.GetChannelById(channel.Id, true)
+	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
 		})
 		return
 	}
-	// Preserve existing ChannelInfo to ensure multi-key channels keep correct state even if the client does not send ChannelInfo in the request.
-	originChannel, err := model.GetChannelById(channel.Id, true)
-	if err != nil {
+	mergePatchChannelWithOrigin(&channel, originChannel, requestFields)
+
+	// 使用统一的校验函数
+	if err := validateChannel(&channel.Channel, false); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),

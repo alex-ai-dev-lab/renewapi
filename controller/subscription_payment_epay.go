@@ -160,7 +160,7 @@ func SubscriptionEpayNotify(c *gin.Context) {
 	LockOrder(verifyInfo.ServiceTradeNo)
 	defer UnlockOrder(verifyInfo.ServiceTradeNo)
 
-	paidAmount, ok := parsePaidAmount(params)
+	paidAmount, ok := extractEpayPaidAmount(params)
 	if !ok {
 		_, _ = c.Writer.Write([]byte("fail"))
 		return
@@ -215,7 +215,7 @@ func SubscriptionEpayReturn(c *gin.Context) {
 	if verifyInfo.TradeStatus == epay.StatusTradeSuccess {
 		LockOrder(verifyInfo.ServiceTradeNo)
 		defer UnlockOrder(verifyInfo.ServiceTradeNo)
-		paidAmount, ok := parsePaidAmount(params)
+		paidAmount, ok := extractEpayPaidAmount(params)
 		if !ok {
 			c.Redirect(http.StatusFound, paymentReturnPath("/console/topup?pay=fail"))
 			return

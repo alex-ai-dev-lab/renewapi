@@ -3,7 +3,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -134,6 +137,16 @@ func PreflightCodexCredential(c *gin.Context) {
 	if baseURL == "" {
 		baseURL = "https://chatgpt.com"
 	}
+	normalizedBaseURL, err := validateCodexPreflightBaseURL(baseURL)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	baseURL = normalizedBaseURL
+	if err := validateCodexPreflightProxy(proxyURL); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 
 	candidate, err := selectCodexCredentialCandidate(input, req.CandidateIndex, true)
 	if err != nil {
@@ -256,4 +269,71 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func validateCodexPreflightBaseURL(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", fmt.Errorf("empty Codex preflight base_url")
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("invalid Codex preflight base_url")
+	}
+	if parsed.Scheme != "https" {
+		return "", fmt.Errorf("Codex preflight base_url must use https")
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "" || host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return "", fmt.Errorf("Codex preflight base_url host is not allowed")
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return "", fmt.Errorf("Codex preflight base_url must use an allowed domain name")
+	}
+	if !isAllowedCodexPreflightHost(host) {
+		return "", fmt.Errorf("Codex preflight base_url host is not allowed")
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func isAllowedCodexPreflightHost(host string) bool {
+	for _, allowed := range codexPreflightAllowedHosts() {
+		if host == allowed || strings.HasSuffix(host, "."+allowed) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexPreflightAllowedHosts() []string {
+	hosts := []string{"chatgpt.com", "chat.openai.com"}
+	if extra := strings.TrimSpace(os.Getenv("CODEX_PREFLIGHT_ALLOWED_HOSTS")); extra != "" {
+		for _, part := range strings.Split(extra, ",") {
+			host := strings.ToLower(strings.TrimSpace(part))
+			if host != "" {
+				hosts = append(hosts, host)
+			}
+		}
+	}
+	return hosts
+}
+
+func validateCodexPreflightProxy(raw string) error {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("invalid Codex preflight proxy")
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https", "socks5", "socks5h":
+		return nil
+	default:
+		return fmt.Errorf("unsupported Codex preflight proxy scheme")
+	}
 }

@@ -17,7 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-const BLOCKED_TAGS = new Set([
+import DOMPurify from 'dompurify';
+
+const BLOCKED_TAGS = [
   'base',
   'embed',
   'form',
@@ -28,96 +30,40 @@ const BLOCKED_TAGS = new Set([
   'script',
   'style',
   'template',
-]);
+];
 
-const URL_ATTRS = new Set([
-  'action',
-  'formaction',
-  'href',
-  'poster',
-  'src',
-  'xlink:href',
-]);
-
-const SAFE_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:']);
-const SAFE_DATA_IMAGE_RE =
-  /^data:image\/(?:gif|jpeg|jpg|png|webp);base64,[a-z0-9+/]+=*$/i;
-
-function isSafeUrl(value) {
-  const trimmed = String(value || '').trim();
-  if (!trimmed) return true;
-  if (
-    trimmed.startsWith('#') ||
-    trimmed.startsWith('/') ||
-    trimmed.startsWith('./') ||
-    trimmed.startsWith('../') ||
-    trimmed.startsWith('?')
-  ) {
-    return true;
-  }
-  if (SAFE_DATA_IMAGE_RE.test(trimmed)) {
-    return true;
-  }
-
-  try {
-    const parsed = new URL(trimmed, window.location.origin);
-    return SAFE_PROTOCOLS.has(parsed.protocol);
-  } catch {
-    return false;
-  }
-}
+const SAFE_STYLE_BLOCKLIST = ['expression(', 'url(', '@import', '-moz-binding'];
 
 function isSafeStyle(value) {
   const normalized = String(value || '').toLowerCase();
-  return !(
-    normalized.includes('expression(') ||
-    normalized.includes('url(') ||
-    normalized.includes('@import') ||
-    normalized.includes('-moz-binding')
-  );
+  return !SAFE_STYLE_BLOCKLIST.some((item) => normalized.includes(item));
 }
 
-function sanitizeElement(element) {
-  const tagName = element.tagName.toLowerCase();
-  if (BLOCKED_TAGS.has(tagName)) {
-    element.remove();
-    return;
-  }
-
-  for (const attr of Array.from(element.attributes)) {
-    const name = attr.name.toLowerCase();
-    const value = attr.value;
-    if (
-      name.startsWith('on') ||
-      name === 'srcdoc' ||
-      (URL_ATTRS.has(name) && !isSafeUrl(value)) ||
-      (name === 'style' && !isSafeStyle(value))
-    ) {
-      element.removeAttribute(attr.name);
+if (typeof window !== 'undefined') {
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (!(node instanceof Element)) return;
+    const style = node.getAttribute('style');
+    if (style && !isSafeStyle(style)) {
+      node.removeAttribute('style');
     }
-  }
-
-  if (
-    element instanceof HTMLAnchorElement &&
-    element.target.toLowerCase() === '_blank'
-  ) {
-    element.rel = 'noopener noreferrer';
-  }
-
-  for (const child of Array.from(element.children)) {
-    sanitizeElement(child);
-  }
+    if (
+      node instanceof HTMLAnchorElement &&
+      node.target.toLowerCase() === '_blank'
+    ) {
+      node.rel = 'noopener noreferrer';
+    }
+  });
 }
 
 export function sanitizeHtml(html) {
-  if (!html || typeof document === 'undefined') {
+  if (!html || typeof window === 'undefined') {
     return html || '';
   }
 
-  const template = document.createElement('template');
-  template.innerHTML = html;
-  for (const child of Array.from(template.content.children)) {
-    sanitizeElement(child);
-  }
-  return template.innerHTML;
+  return DOMPurify.sanitize(html, {
+    FORBID_TAGS: BLOCKED_TAGS,
+    FORBID_ATTR: ['srcdoc'],
+    ALLOWED_URI_REGEXP:
+      /^(?:(?:(?:f|ht)tps?|mailto|tel):|data:image\/(?:gif|jpeg|jpg|png|webp);base64,|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
+  });
 }

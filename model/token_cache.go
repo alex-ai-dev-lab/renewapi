@@ -29,7 +29,7 @@ func cacheDeleteToken(key string) error {
 
 func cacheIncrTokenQuota(key string, increment int64) error {
 	key = common.GenerateHMAC(key)
-	err := common.RedisHIncrBy(fmt.Sprintf("token:%s", key), constant.TokenFiledRemainQuota, increment)
+	err := common.RedisHIncrByExisting(fmt.Sprintf("token:%s", key), constant.TokenFiledRemainQuota, increment, "Id", "UserId", "Status")
 	if err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func cacheDecrTokenQuota(key string, decrement int64) error {
 
 func cacheSetTokenField(key string, field string, value string) error {
 	key = common.GenerateHMAC(key)
-	err := common.RedisHSetField(fmt.Sprintf("token:%s", key), field, value)
+	err := common.RedisHSetFieldExisting(fmt.Sprintf("token:%s", key), field, value, "Id", "UserId", "Status")
 	if err != nil {
 		return err
 	}
@@ -59,6 +59,9 @@ func cacheGetTokenByKey(key string) (*Token, error) {
 	err := common.RedisHGetObj(fmt.Sprintf("token:%s", hmacKey), &token)
 	if err != nil {
 		return nil, err
+	}
+	if token.Id == 0 || token.UserId == 0 || token.Status == 0 {
+		return nil, fmt.Errorf("incomplete token cache for key %s", hmacKey)
 	}
 	token.Key = key
 	return &token, nil

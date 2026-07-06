@@ -239,11 +239,15 @@ func RedisHGetObj(key string, obj interface{}) error {
 
 // RedisIncr Add this function to handle atomic increments
 func RedisIncr(key string, delta int64) error {
+	_, err := RedisIncrWithTTL(key, delta, RedisKeyCacheSeconds())
+	return err
+}
+
+func RedisIncrWithTTL(key string, delta int64, ttlSeconds int) (int64, error) {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis INCR: key=%s, delta=%d", key, delta))
 	}
 	ctx := context.Background()
-	ttlSeconds := RedisKeyCacheSeconds()
 	if ttlSeconds <= 0 {
 		ttlSeconds = 60
 	}
@@ -254,7 +258,7 @@ if redis.call('TTL', KEYS[1]) < 0 then
 end
 return n
 `)
-	return script.Run(ctx, RDB, []string{key}, delta, ttlSeconds).Err()
+	return script.Run(ctx, RDB, []string{key}, delta, ttlSeconds).Int64()
 }
 
 func RedisHIncrBy(key, field string, delta int64) error {
@@ -276,6 +280,37 @@ return n
 	return script.Run(ctx, RDB, []string{key}, field, delta, ttlSeconds).Err()
 }
 
+func RedisHIncrByExisting(key, field string, delta int64, requiredFields ...string) error {
+	if DebugEnabled {
+		SysLog(fmt.Sprintf("Redis HINCRBY existing: key=%s, field=%s, delta=%d", key, field, delta))
+	}
+	ctx := context.Background()
+	ttlSeconds := RedisKeyCacheSeconds()
+	if ttlSeconds <= 0 {
+		ttlSeconds = 60
+	}
+	args := []interface{}{field, delta, ttlSeconds}
+	for _, requiredField := range requiredFields {
+		args = append(args, requiredField)
+	}
+	script := redis.NewScript(`
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  return 0
+end
+for i = 4, #ARGV do
+  if redis.call('HEXISTS', KEYS[1], ARGV[i]) == 0 then
+    return 0
+  end
+end
+redis.call('HINCRBY', KEYS[1], ARGV[1], ARGV[2])
+if redis.call('TTL', KEYS[1]) < 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[3])
+end
+return 1
+`)
+	return script.Run(ctx, RDB, []string{key}, args...).Err()
+}
+
 func RedisHSetField(key, field string, value interface{}) error {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis HSET field: key=%s, field=%s, value=%v", key, field, value))
@@ -293,4 +328,35 @@ end
 return n
 `)
 	return script.Run(ctx, RDB, []string{key}, field, value, ttlSeconds).Err()
+}
+
+func RedisHSetFieldExisting(key, field string, value interface{}, requiredFields ...string) error {
+	if DebugEnabled {
+		SysLog(fmt.Sprintf("Redis HSET existing field: key=%s, field=%s, value=%v", key, field, value))
+	}
+	ctx := context.Background()
+	ttlSeconds := RedisKeyCacheSeconds()
+	if ttlSeconds <= 0 {
+		ttlSeconds = 60
+	}
+	args := []interface{}{field, value, ttlSeconds}
+	for _, requiredField := range requiredFields {
+		args = append(args, requiredField)
+	}
+	script := redis.NewScript(`
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  return 0
+end
+for i = 4, #ARGV do
+  if redis.call('HEXISTS', KEYS[1], ARGV[i]) == 0 then
+    return 0
+  end
+end
+redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
+if redis.call('TTL', KEYS[1]) < 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[3])
+end
+return 1
+`)
+	return script.Run(ctx, RDB, []string{key}, args...).Err()
 }

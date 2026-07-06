@@ -18,19 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import ReactMarkdown from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 
 interface MarkdownProps {
   children: string
   className?: string
-}
-
-type HastNode = {
-  type?: string
-  tagName?: string
-  properties?: Record<string, unknown>
-  children?: HastNode[]
 }
 
 const BLOCKED_TAGS = new Set([
@@ -46,102 +40,21 @@ const BLOCKED_TAGS = new Set([
   'template',
 ])
 
-const URL_PROPS = new Set([
-  'action',
-  'formaction',
-  'href',
-  'poster',
-  'src',
-  'xlinkhref',
-])
-
-const SAFE_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:'])
-const SAFE_DATA_IMAGE_RE =
-  /^data:image\/(?:gif|jpeg|jpg|png|webp);base64,[a-z0-9+/]+=*$/i
-
-function isSafeUrl(value: string) {
-  const trimmed = value.trim()
-  if (trimmed === '') return true
-  if (
-    trimmed.startsWith('#') ||
-    trimmed.startsWith('/') ||
-    trimmed.startsWith('./') ||
-    trimmed.startsWith('../') ||
-    trimmed.startsWith('?')
-  ) {
-    return true
-  }
-  if (SAFE_DATA_IMAGE_RE.test(trimmed)) {
-    return true
-  }
-
-  try {
-    const origin =
-      typeof window === 'undefined'
-        ? 'http://localhost'
-        : window.location.origin
-    const parsed = new URL(trimmed, origin)
-    return SAFE_PROTOCOLS.has(parsed.protocol)
-  } catch {
-    return false
-  }
-}
-
-function isSafeStyle(value: string) {
-  const normalized = value.toLowerCase()
-  return !(
-    normalized.includes('expression(') ||
-    normalized.includes('url(') ||
-    normalized.includes('@import') ||
-    normalized.includes('-moz-binding')
-  )
-}
-
-function propertyToString(value: unknown) {
-  if (Array.isArray(value)) {
-    return value.join(' ')
-  }
-  return typeof value === 'string' ? value : ''
-}
-
-function sanitizeHastNode(node: HastNode) {
-  if (node.type === 'element') {
-    const props = node.properties ?? {}
-    for (const key of Object.keys(props)) {
-      const value = props[key]
-      const keyLower = key.toLowerCase()
-      if (
-        keyLower.startsWith('on') ||
-        keyLower === 'srcdoc' ||
-        (URL_PROPS.has(keyLower) && !isSafeUrl(propertyToString(value))) ||
-        (keyLower === 'style' && !isSafeStyle(propertyToString(value)))
-      ) {
-        delete props[key]
-      }
-    }
-    if (node.tagName === 'a' && props.target === '_blank') {
-      props.rel = 'noopener noreferrer'
-    }
-    node.properties = props
-  }
-
-  if (!node.children) return
-  node.children = node.children.filter((child) => {
-    return !(
-      child.type === 'element' &&
-      child.tagName &&
-      BLOCKED_TAGS.has(child.tagName)
-    )
-  })
-  for (const child of node.children) {
-    sanitizeHastNode(child)
-  }
-}
-
-function rehypeSanitizeUserHtml() {
-  return (tree: HastNode) => {
-    sanitizeHastNode(tree)
-  }
+const sanitizeSchema = {
+  ...defaultSchema,
+  tagNames: (defaultSchema.tagNames || []).filter(
+    (tagName) => !BLOCKED_TAGS.has(tagName)
+  ),
+  attributes: {
+    ...defaultSchema.attributes,
+    a: [
+      ...(Array.isArray(defaultSchema.attributes?.a)
+        ? defaultSchema.attributes.a
+        : []),
+      'target',
+      'rel',
+    ],
+  },
 }
 
 export function Markdown({ children, className }: MarkdownProps) {
@@ -167,10 +80,9 @@ export function Markdown({ children, className }: MarkdownProps) {
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw, rehypeSanitizeUserHtml]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
         components={{
-          // 自定义组件渲染（可选）
-          a: ({ node, ...props }) => (
+          a: ({ node: _node, ...props }) => (
             <a {...props} target='_blank' rel='noopener noreferrer' />
           ),
         }}

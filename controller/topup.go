@@ -22,18 +22,16 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-func parsePaidAmount(params map[string]string) (float64, bool) {
-	for _, key := range []string{"money", "amount", "amount_total", "total_amount"} {
-		raw := params[key]
-		if raw == "" {
-			continue
-		}
-		amount, err := strconv.ParseFloat(raw, 64)
-		if err == nil && !math.IsNaN(amount) && !math.IsInf(amount, 0) {
-			return amount, true
-		}
+func extractEpayPaidAmount(params map[string]string) (float64, bool) {
+	raw := params["money"]
+	if raw == "" {
+		return 0, false
 	}
-	return 0, false
+	amount, err := strconv.ParseFloat(raw, 64)
+	if err != nil || math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return 0, false
+	}
+	return amount, true
 }
 
 func GetTopUpInfo(c *gin.Context) {
@@ -388,7 +386,7 @@ func EpayNotify(c *gin.Context) {
 	if verifyInfo.TradeStatus == epay.StatusTradeSuccess {
 		LockOrder(verifyInfo.ServiceTradeNo)
 		defer UnlockOrder(verifyInfo.ServiceTradeNo)
-		paidAmount, ok := parsePaidAmount(params)
+		paidAmount, ok := extractEpayPaidAmount(params)
 		if !ok {
 			logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 回调缺少实付金额 trade_no=%s callback_type=%s client_ip=%s", verifyInfo.ServiceTradeNo, verifyInfo.Type, c.ClientIP()))
 			return

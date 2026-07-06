@@ -78,7 +78,7 @@ func checkRedisLimit(userId int, notifyType string) (bool, error) {
 	}
 
 	// Only increment if under limit
-	err = common.RedisIncr(key, 1)
+	_, err = common.RedisIncrWithTTL(key, 1, int(getDuration().Seconds()))
 	if err != nil {
 		return false, fmt.Errorf("failed to increment notification count: %w", err)
 	}

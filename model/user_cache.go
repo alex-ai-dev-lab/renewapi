@@ -128,6 +128,9 @@ func cacheGetUserBase(userId int) (*UserBase, error) {
 	if err != nil {
 		return nil, err
 	}
+	if userCache.Id != userId || userCache.Status == 0 || userCache.Group == "" {
+		return nil, fmt.Errorf("incomplete user cache for user %d", userId)
+	}
 	return &userCache, nil
 }
 
@@ -136,7 +139,7 @@ func cacheIncrUserQuota(userId int, delta int64) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return common.RedisHIncrBy(getUserCacheKey(userId), "Quota", delta)
+	return common.RedisHIncrByExisting(getUserCacheKey(userId), "Quota", delta, "Id", "Group", "Status")
 }
 
 func cacheDecrUserQuota(userId int, delta int64) error {
@@ -193,21 +196,21 @@ func updateUserStatusCache(userId int, status bool) error {
 	if !status {
 		statusInt = common.UserStatusDisabled
 	}
-	return common.RedisHSetField(getUserCacheKey(userId), "Status", fmt.Sprintf("%d", statusInt))
+	return common.RedisHSetFieldExisting(getUserCacheKey(userId), "Status", fmt.Sprintf("%d", statusInt), "Id", "Group", "Status")
 }
 
 func updateUserQuotaCache(userId int, quota int) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return common.RedisHSetField(getUserCacheKey(userId), "Quota", fmt.Sprintf("%d", quota))
+	return common.RedisHSetFieldExisting(getUserCacheKey(userId), "Quota", fmt.Sprintf("%d", quota), "Id", "Group", "Status")
 }
 
 func updateUserGroupCache(userId int, group string) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return common.RedisHSetField(getUserCacheKey(userId), "Group", group)
+	return common.RedisHSetFieldExisting(getUserCacheKey(userId), "Group", group, "Id", "Group", "Status")
 }
 
 func UpdateUserGroupCache(userId int, group string) error {
@@ -218,14 +221,14 @@ func updateUserNameCache(userId int, username string) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return common.RedisHSetField(getUserCacheKey(userId), "Username", username)
+	return common.RedisHSetFieldExisting(getUserCacheKey(userId), "Username", username, "Id", "Group", "Status")
 }
 
 func updateUserSettingCache(userId int, setting string) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	return common.RedisHSetField(getUserCacheKey(userId), "Setting", setting)
+	return common.RedisHSetFieldExisting(getUserCacheKey(userId), "Setting", setting, "Id", "Group", "Status")
 }
 
 // GetUserLanguage returns the user's language preference from cache

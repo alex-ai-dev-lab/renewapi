@@ -43,16 +43,56 @@ var twoFALoginAttempts = struct {
 }{items: map[string]twoFALoginAttemptState{}}
 
 const (
-	twoFALoginMaxFailures = 5
-	twoFALoginLockout     = 10 * time.Minute
-	twoFALoginAttemptTTL  = 10 * time.Minute
+	twoFALoginMaxFailures       = 5
+	twoFALoginGlobalMaxFailures = 10
+	twoFALoginLockout           = 10 * time.Minute
+	twoFALoginAttemptTTL        = 10 * time.Minute
 )
 
 func twoFALoginAttemptKey(userId int, ip string) string {
 	return strconv.Itoa(userId) + ":" + ip
 }
 
+func twoFALoginRedisIPKey(userId int, ip string) string {
+	return "2fa:login:ip:" + strconv.Itoa(userId) + ":" + ip
+}
+
+func twoFALoginRedisUserKey(userId int) string {
+	return "2fa:login:user:" + strconv.Itoa(userId)
+}
+
+func isRedisNil(err error) bool {
+	return err != nil && err.Error() == "redis: nil"
+}
+
 func isTwoFALoginLocked(userId int, ip string) bool {
+	if common.RedisEnabled {
+		ipCount, ipErr := redisCounterValue(twoFALoginRedisIPKey(userId, ip))
+		userCount, userErr := redisCounterValue(twoFALoginRedisUserKey(userId))
+		if ipErr == nil && userErr == nil {
+			return ipCount >= twoFALoginMaxFailures || userCount >= twoFALoginGlobalMaxFailures
+		}
+		common.SysLog("failed to read 2FA login lock from Redis, falling back to memory")
+	}
+	return isTwoFALoginLockedMemory(userId, ip)
+}
+
+func redisCounterValue(key string) (int, error) {
+	value, err := common.RedisGet(key)
+	if isRedisNil(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	count, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func isTwoFALoginLockedMemory(userId int, ip string) bool {
 	key := twoFALoginAttemptKey(userId, ip)
 	now := time.Now()
 	twoFALoginAttempts.Lock()
@@ -68,6 +108,23 @@ func isTwoFALoginLocked(userId int, ip string) bool {
 }
 
 func recordTwoFALoginFailure(userId int, ip string) {
+	if common.RedisEnabled {
+		ttlSeconds := int(twoFALoginAttemptTTL.Seconds())
+		if _, err := common.RedisIncrWithTTL(twoFALoginRedisIPKey(userId, ip), 1, ttlSeconds); err != nil {
+			common.SysLog("failed to record 2FA IP login failure in Redis, falling back to memory")
+			recordTwoFALoginFailureMemory(userId, ip)
+			return
+		}
+		if _, err := common.RedisIncrWithTTL(twoFALoginRedisUserKey(userId), 1, ttlSeconds); err != nil {
+			common.SysLog("failed to record 2FA user login failure in Redis, falling back to memory")
+			recordTwoFALoginFailureMemory(userId, ip)
+		}
+		return
+	}
+	recordTwoFALoginFailureMemory(userId, ip)
+}
+
+func recordTwoFALoginFailureMemory(userId int, ip string) {
 	key := twoFALoginAttemptKey(userId, ip)
 	now := time.Now()
 	twoFALoginAttempts.Lock()
@@ -85,6 +142,14 @@ func recordTwoFALoginFailure(userId int, ip string) {
 }
 
 func clearTwoFALoginFailures(userId int, ip string) {
+	if common.RedisEnabled {
+		if err := common.RedisDelKey(twoFALoginRedisIPKey(userId, ip)); err != nil {
+			common.SysLog("failed to clear 2FA IP login failures in Redis: " + err.Error())
+		}
+		if err := common.RedisDelKey(twoFALoginRedisUserKey(userId)); err != nil {
+			common.SysLog("failed to clear 2FA user login failures in Redis: " + err.Error())
+		}
+	}
 	key := twoFALoginAttemptKey(userId, ip)
 	twoFALoginAttempts.Lock()
 	delete(twoFALoginAttempts.items, key)

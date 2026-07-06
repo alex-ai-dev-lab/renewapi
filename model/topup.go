@@ -515,6 +515,10 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 	return nil
 }
 func RechargeCreem(referenceId string, customerEmail string, customerName string, callerIp string) (err error) {
+	return RechargeCreemWithPaidAmount(referenceId, customerEmail, customerName, callerIp, -1)
+}
+
+func RechargeCreemWithPaidAmount(referenceId string, customerEmail string, customerName string, callerIp string, paidAmount float64) (err error) {
 	if referenceId == "" {
 		return errors.New("未提供支付单号")
 	}
@@ -539,6 +543,9 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 
 		if topUp.Status != common.TopUpStatusPending {
 			return errors.New("充值订单状态错误")
+		}
+		if paidAmount >= 0 && !paidAmountCoversOrder(paidAmount, topUp.Money) {
+			return fmt.Errorf("%w: paid=%.2f expected=%.2f", ErrTopUpUnderpaid, paidAmount, topUp.Money)
 		}
 
 		topUp.CompleteTime = common.GetTimestamp()
@@ -653,6 +660,10 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 }
 
 func RechargeWaffoPancake(tradeNo string) (err error) {
+	return RechargeWaffoPancakeWithPaidAmount(tradeNo, -1)
+}
+
+func RechargeWaffoPancakeWithPaidAmount(tradeNo string, paidAmount float64) (err error) {
 	if tradeNo == "" {
 		return errors.New("未提供支付单号")
 	}
@@ -681,6 +692,9 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 
 		if topUp.Status != common.TopUpStatusPending {
 			return errors.New("充值订单状态错误")
+		}
+		if paidAmount >= 0 && !paidAmountCoversOrder(paidAmount, topUp.Money) {
+			return fmt.Errorf("%w: paid=%.2f expected=%.2f", ErrTopUpUnderpaid, paidAmount, topUp.Money)
 		}
 
 		quotaToAdd = int(decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).IntPart())

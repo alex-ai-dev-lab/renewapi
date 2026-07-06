@@ -49,10 +49,10 @@ const isHtmlContent = (content) => {
 
 // Parse HTML content and sanitize administrator-provided markup.
 const prepareHtmlContent = (html) => {
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = html;
+  const template = document.createElement('template');
+  template.innerHTML = html;
 
-  const bodyContent = tempDiv.querySelector('body');
+  const bodyContent = template.content.querySelector('body');
   return sanitizeHtml(bodyContent ? bodyContent.innerHTML : html);
 };
 

@@ -90,6 +90,45 @@ export type CodexCredentialRefreshResponse = {
   }
 }
 
+export type CodexCredentialCandidate = {
+  index: number
+  source_type: string
+  confidence: number
+  label?: string
+  key: string
+  account_id?: string
+  account_id_source?: string
+  email?: string
+  expires_at?: string
+  last_refresh?: string
+  has_refresh_token: boolean
+  has_id_token: boolean
+  non_refreshable: boolean
+  warnings?: string[]
+}
+
+export type CodexCredentialNormalizeResponse = {
+  success: boolean
+  message?: string
+  data?: {
+    candidates: CodexCredentialCandidate[]
+  }
+}
+
+export type CodexCredentialPreflightResponse = {
+  success: boolean
+  message?: string
+  data?: {
+    category?: string
+    upstream_status?: number
+    candidate?: CodexCredentialCandidate
+    base_url?: string
+    proxy?: string
+    usage?: Record<string, unknown> | string
+    error?: string
+  }
+}
+
 // ============================================================================
 // Base Channel CRUD Operations
 // ============================================================================
@@ -369,6 +408,33 @@ export async function getCodexUsage(
 ): Promise<CodexUsageResponse> {
   const res = await api.get(
     `/api/channel/${channelId}/codex/usage`,
+    channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
+export async function normalizeCodexCredential(
+  input: string
+): Promise<CodexCredentialNormalizeResponse> {
+  const res = await api.post(
+    '/api/channel/codex/credential/normalize',
+    { input },
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function preflightCodexCredential(data: {
+  input?: string
+  candidate_index?: number
+  channel_id?: number
+  base_url?: string
+  proxy?: string
+  tls_insecure_skip_verify?: boolean
+}): Promise<CodexCredentialPreflightResponse> {
+  const res = await api.post(
+    '/api/channel/codex/credential/preflight',
+    data,
     channelActionConfig({ disableDuplicate: true })
   )
   return res.data

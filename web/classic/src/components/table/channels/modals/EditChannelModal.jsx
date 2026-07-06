@@ -154,11 +154,19 @@ function type2secretPrompt(type) {
     case 51:
       return '按照如下格式输入: AccessKey|SecretAccessKey';
     case 57:
-      return '请输入 JSON 格式的 OAuth 凭据（必须包含 access_token 和 account_id）';
+      return '可粘贴 CPA、sub2api、Cockpit、9router、Codex auth.json、AxonHub、Codex-Manager 或 ChatGPT session JSON';
     default:
       return '请输入渠道对应的鉴权密钥';
   }
 }
+
+const prettyJson = (value) => {
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
+  }
+};
 
 const EditChannelModal = (props) => {
   const { t } = useTranslation();
@@ -387,6 +395,17 @@ const EditChannelModal = (props) => {
   const [codexOAuthModalVisible, setCodexOAuthModalVisible] = useState(false);
   const [codexCredentialRefreshing, setCodexCredentialRefreshing] =
     useState(false);
+  const [codexCredentialCandidates, setCodexCredentialCandidates] = useState(
+    [],
+  );
+  const [selectedCodexCredentialIndex, setSelectedCodexCredentialIndex] =
+    useState(0);
+  const [codexCredentialNormalizing, setCodexCredentialNormalizing] =
+    useState(false);
+  const [codexCredentialPreflighting, setCodexCredentialPreflighting] =
+    useState(false);
+  const [codexCredentialPreflight, setCodexCredentialPreflight] =
+    useState(null);
   const [paramOverrideEditorVisible, setParamOverrideEditorVisible] =
     useState(false);
 
@@ -1262,6 +1281,96 @@ const EditChannelModal = (props) => {
     formatJsonField('key');
   };
 
+  const applyCodexCredentialCandidate = (candidate) => {
+    if (!candidate?.key) return;
+    const normalizedKey = prettyJson(candidate.key);
+    handleInputChange('key', normalizedKey);
+    setSelectedCodexCredentialIndex(candidate.index || 0);
+    setCodexCredentialPreflight(null);
+    showSuccess(t('Codex 凭据已转换'));
+  };
+
+  const normalizeCodexCredentialInput = async ({ applySingle = true } = {}) => {
+    const formValues = formApiRef.current?.getValues?.() || {};
+    const input = String(formValues.key ?? inputs.key ?? '').trim();
+    if (!input) {
+      showInfo(t('请先粘贴 Codex 凭据'));
+      return null;
+    }
+
+    setCodexCredentialNormalizing(true);
+    setCodexCredentialPreflight(null);
+    try {
+      const res = await API.post(
+        '/api/channel/codex/credential/normalize',
+        { input },
+        { skipErrorHandler: true },
+      );
+      if (!res?.data?.success) {
+        throw new Error(res?.data?.message || t('识别 Codex 凭据失败'));
+      }
+      const candidates = res.data?.data?.candidates || [];
+      if (candidates.length === 0) {
+        throw new Error(t('未识别到支持的 Codex 凭据'));
+      }
+      setCodexCredentialCandidates(candidates);
+      setSelectedCodexCredentialIndex(candidates[0]?.index || 0);
+      if (applySingle && candidates.length === 1) {
+        applyCodexCredentialCandidate(candidates[0]);
+      } else if (candidates.length > 1) {
+        showSuccess(
+          t('已识别 {{count}} 个 Codex 凭据，请选择要使用的账号', {
+            count: candidates.length,
+          }),
+        );
+      }
+      return candidates;
+    } catch (error) {
+      showError(error.message || t('识别 Codex 凭据失败'));
+      return null;
+    } finally {
+      setCodexCredentialNormalizing(false);
+    }
+  };
+
+  const preflightCodexCredentialInput = async () => {
+    const formValues = formApiRef.current?.getValues?.() || {};
+    const input = String(formValues.key ?? inputs.key ?? '').trim();
+    if (!input && !isEdit) {
+      showInfo(t('请先粘贴 Codex 凭据'));
+      return;
+    }
+
+    setCodexCredentialPreflighting(true);
+    try {
+      const res = await API.post(
+        '/api/channel/codex/credential/preflight',
+        {
+          input,
+          candidate_index:
+            codexCredentialCandidates.length > 1
+              ? selectedCodexCredentialIndex
+              : undefined,
+          channel_id: isEdit ? Number(channelId) : undefined,
+          base_url: inputs.base_url || '',
+          proxy: inputs.proxy || '',
+          tls_insecure_skip_verify: inputs.tls_insecure_skip_verify === true,
+        },
+        { skipErrorHandler: true },
+      );
+      setCodexCredentialPreflight(res?.data || null);
+      if (res?.data?.success) {
+        showSuccess(t('Codex 凭据预检通过'));
+      } else {
+        showError(res?.data?.message || t('Codex 凭据预检失败'));
+      }
+    } catch (error) {
+      showError(error.message || t('Codex 凭据预检失败'));
+    } finally {
+      setCodexCredentialPreflighting(false);
+    }
+  };
+
   const handleRefreshCodexCredential = async () => {
     if (!isEdit) return;
 
@@ -1287,6 +1396,14 @@ const EditChannelModal = (props) => {
     if (inputs.type !== 45) {
       doubaoApiClickCountRef.current = 0;
       setDoubaoApiEditUnlocked(false);
+    }
+  }, [inputs.type]);
+
+  useEffect(() => {
+    if (inputs.type !== 57) {
+      setCodexCredentialCandidates([]);
+      setSelectedCodexCredentialIndex(0);
+      setCodexCredentialPreflight(null);
     }
   }, [inputs.type]);
 
@@ -1437,6 +1554,9 @@ const EditChannelModal = (props) => {
     resetKeyDisplayState();
     // 重置剪贴板检测状态
     setClipboardConfig(null);
+    setCodexCredentialCandidates([]);
+    setSelectedCodexCredentialIndex(0);
+    setCodexCredentialPreflight(null);
   };
 
   const handleVertexUploadChange = ({ fileList }) => {
@@ -1591,31 +1711,18 @@ const EditChannelModal = (props) => {
       }
 
       if (rawKey !== '') {
-        if (!verifyJSON(rawKey)) {
-          showInfo(t('密钥必须是合法的 JSON 格式！'));
+        const candidates = await normalizeCodexCredentialInput({
+          applySingle: false,
+        });
+        if (!candidates) {
           return;
         }
-        try {
-          const parsed = JSON.parse(rawKey);
-          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            showInfo(t('密钥必须是 JSON 对象'));
-            return;
-          }
-          const accessToken = String(parsed.access_token || '').trim();
-          const accountId = String(parsed.account_id || '').trim();
-          if (!accessToken) {
-            showInfo(t('密钥 JSON 必须包含 access_token'));
-            return;
-          }
-          if (!accountId) {
-            showInfo(t('密钥 JSON 必须包含 account_id'));
-            return;
-          }
-          localInputs.key = JSON.stringify(parsed);
-        } catch (error) {
-          showInfo(t('密钥必须是合法的 JSON 格式！'));
+        if (candidates.length !== 1) {
+          showInfo(t('检测到多个 Codex 凭据，请先选择一个账号再提交'));
           return;
         }
+        localInputs.key = candidates[0].key;
+        handleInputChange('key', prettyJson(candidates[0].key));
       }
     }
 
@@ -2868,7 +2975,7 @@ const EditChannelModal = (props) => {
                                   : t('密钥')
                               }
                               placeholder={t(
-                                '请输入 JSON 格式的 OAuth 凭据，例如：\n{\n  "access_token": "...",\n  "account_id": "..." \n}',
+                                '可粘贴 CPA、sub2api、Cockpit、9router、Codex auth.json、AxonHub、Codex-Manager 或 ChatGPT session JSON',
                               )}
                               rules={
                                 isEdit
@@ -2886,14 +2993,42 @@ const EditChannelModal = (props) => {
                               }
                               disabled={isIonetLocked}
                               extraText={
-                                <div className='flex flex-col gap-2'>
+                                <div className='flex flex-col gap-3'>
                                   <Text type='tertiary' size='small'>
                                     {t(
-                                      '仅支持 JSON 对象，必须包含 access_token 与 account_id',
+                                      '系统会自动识别并转换为 New API 使用的 Codex OAuth JSON；包含 refresh_token 的凭据后续可刷新。',
                                     )}
                                   </Text>
 
                                   <Space wrap spacing='tight'>
+                                    <Button
+                                      size='small'
+                                      type='primary'
+                                      theme='outline'
+                                      onClick={() =>
+                                        normalizeCodexCredentialInput()
+                                      }
+                                      loading={codexCredentialNormalizing}
+                                      disabled={
+                                        isIonetLocked ||
+                                        codexCredentialPreflighting
+                                      }
+                                    >
+                                      {t('智能识别并转换')}
+                                    </Button>
+                                    <Button
+                                      size='small'
+                                      type='primary'
+                                      theme='outline'
+                                      onClick={preflightCodexCredentialInput}
+                                      loading={codexCredentialPreflighting}
+                                      disabled={
+                                        isIonetLocked ||
+                                        codexCredentialNormalizing
+                                      }
+                                    >
+                                      {t('预检凭据')}
+                                    </Button>
                                     <Button
                                       size='small'
                                       type='primary'
@@ -2939,6 +3074,150 @@ const EditChannelModal = (props) => {
                                     )}
                                     {batchExtra}
                                   </Space>
+
+                                  {codexCredentialCandidates.length > 0 && (
+                                    <div className='flex flex-col gap-2'>
+                                      {codexCredentialCandidates.map(
+                                        (candidate) => (
+                                          <Card
+                                            key={`${candidate.index}-${candidate.account_id || candidate.label || candidate.source_type}`}
+                                            shadows='hover'
+                                            bodyStyle={{ padding: 12 }}
+                                          >
+                                            <div className='flex flex-col gap-2'>
+                                              <div className='flex items-center justify-between gap-2 flex-wrap'>
+                                                <Space spacing='tight' wrap>
+                                                  <Tag color='blue' size='small'>
+                                                    {candidate.source_type}
+                                                  </Tag>
+                                                  <Text strong size='small'>
+                                                    {candidate.label ||
+                                                      candidate.email ||
+                                                      candidate.account_id ||
+                                                      t('Codex 凭据')}
+                                                  </Text>
+                                                  <Tag
+                                                    color={
+                                                      candidate.has_refresh_token
+                                                        ? 'green'
+                                                        : 'orange'
+                                                    }
+                                                    size='small'
+                                                  >
+                                                    {candidate.has_refresh_token
+                                                      ? t('可刷新')
+                                                      : t('无 refresh_token')}
+                                                  </Tag>
+                                                </Space>
+                                                <Button
+                                                  size='small'
+                                                  type='primary'
+                                                  theme={
+                                                    selectedCodexCredentialIndex ===
+                                                    candidate.index
+                                                      ? 'solid'
+                                                      : 'outline'
+                                                  }
+                                                  onClick={() =>
+                                                    applyCodexCredentialCandidate(
+                                                      candidate,
+                                                    )
+                                                  }
+                                                  disabled={isIonetLocked}
+                                                >
+                                                  {t('使用此凭据')}
+                                                </Button>
+                                              </div>
+                                              <div className='grid grid-cols-1 md:grid-cols-2 gap-1'>
+                                                <Text
+                                                  type='tertiary'
+                                                  size='small'
+                                                >
+                                                  {t('账号')}:{' '}
+                                                  {candidate.account_id || '-'}
+                                                </Text>
+                                                <Text
+                                                  type='tertiary'
+                                                  size='small'
+                                                >
+                                                  {t('邮箱')}:{' '}
+                                                  {candidate.email || '-'}
+                                                </Text>
+                                                <Text
+                                                  type='tertiary'
+                                                  size='small'
+                                                >
+                                                  {t('过期时间')}:{' '}
+                                                  {candidate.expires_at || '-'}
+                                                </Text>
+                                                <Text
+                                                  type='tertiary'
+                                                  size='small'
+                                                >
+                                                  {t('识别置信度')}:{' '}
+                                                  {candidate.confidence}
+                                                </Text>
+                                              </div>
+                                              {candidate.warnings?.length >
+                                                0 && (
+                                                <Text
+                                                  type='warning'
+                                                  size='small'
+                                                >
+                                                  {candidate.warnings.join(
+                                                    ' / ',
+                                                  )}
+                                                </Text>
+                                              )}
+                                            </div>
+                                          </Card>
+                                        ),
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {codexCredentialPreflight && (
+                                    <Banner
+                                      type={
+                                        codexCredentialPreflight.success
+                                          ? 'success'
+                                          : 'warning'
+                                      }
+                                      description={
+                                        <div className='flex flex-col gap-1'>
+                                          <Text size='small'>
+                                            {codexCredentialPreflight.success
+                                              ? t('Codex 凭据预检通过')
+                                              : t('Codex 凭据预检失败')}
+                                          </Text>
+                                          <Text
+                                            type='tertiary'
+                                            size='small'
+                                          >
+                                            {t('分类')}:{' '}
+                                            {codexCredentialPreflight.data
+                                              ?.category || '-'}{' '}
+                                            · {t('状态')}:{' '}
+                                            {codexCredentialPreflight.data
+                                              ?.upstream_status || '-'}
+                                          </Text>
+                                          {codexCredentialPreflight.data
+                                            ?.proxy && (
+                                            <Text
+                                              type='tertiary'
+                                              size='small'
+                                            >
+                                              {t('代理')}:{' '}
+                                              {
+                                                codexCredentialPreflight.data
+                                                  .proxy
+                                              }
+                                            </Text>
+                                          )}
+                                        </div>
+                                      }
+                                    />
+                                  )}
                                 </div>
                               }
                               autosize

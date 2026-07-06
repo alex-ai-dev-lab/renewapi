@@ -692,6 +692,22 @@ func AddChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if addChannelRequest.Channel == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "channel cannot be empty",
+		})
+		return
+	}
+
+	codexPreparedKeys, err := prepareCodexChannelKeysForAdd(addChannelRequest.Channel, addChannelRequest.Mode)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
 
 	// 使用统一的校验函数
 	if err := validateChannel(addChannelRequest.Channel, true); err != nil {
@@ -733,7 +749,9 @@ func AddChannel(c *gin.Context) {
 		}
 		keys = []string{addChannelRequest.Channel.Key}
 	case "batch":
-		if addChannelRequest.Channel.Type == constant.ChannelTypeVertexAi && addChannelRequest.Channel.GetOtherSettings().VertexKeyType != dto.VertexKeyTypeAPIKey {
+		if len(codexPreparedKeys) > 0 {
+			keys = codexPreparedKeys
+		} else if addChannelRequest.Channel.Type == constant.ChannelTypeVertexAi && addChannelRequest.Channel.GetOtherSettings().VertexKeyType != dto.VertexKeyTypeAPIKey {
 			// multi json
 			keys, err = getVertexArrayKeys(addChannelRequest.Channel.Key)
 			if err != nil {
@@ -790,6 +808,32 @@ func AddChannel(c *gin.Context) {
 		"message": "",
 	})
 	return
+}
+
+func prepareCodexChannelKeysForAdd(channel *model.Channel, mode string) ([]string, error) {
+	if channel == nil || channel.Type != constant.ChannelTypeCodex {
+		return nil, nil
+	}
+	result, err := service.NormalizeCodexCredential(channel.Key)
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Candidates) == 0 {
+		return nil, fmt.Errorf("no Codex credential found")
+	}
+	keys := make([]string, 0, len(result.Candidates))
+	for _, candidate := range result.Candidates {
+		keys = append(keys, candidate.Key)
+	}
+	if mode == "batch" {
+		channel.Key = keys[0]
+		return keys, nil
+	}
+	if len(keys) > 1 {
+		return nil, fmt.Errorf("detected %d Codex credentials; use batch mode or choose one credential", len(keys))
+	}
+	channel.Key = keys[0]
+	return nil, nil
 }
 
 func DeleteChannel(c *gin.Context) {
@@ -1090,6 +1134,27 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 	mergePatchChannelWithOrigin(&channel, originChannel, requestFields)
+
+	if channel.Type == constant.ChannelTypeCodex {
+		if _, ok := requestFields["key"]; ok && strings.TrimSpace(channel.Key) != "" {
+			result, err := service.NormalizeCodexCredential(channel.Key)
+			if err != nil {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"message": err.Error(),
+				})
+				return
+			}
+			if len(result.Candidates) != 1 {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"message": fmt.Sprintf("detected %d Codex credentials; choose one credential before updating", len(result.Candidates)),
+				})
+				return
+			}
+			channel.Key = result.Candidates[0].Key
+		}
+	}
 
 	// 使用统一的校验函数
 	if err := validateChannel(&channel.Channel, false); err != nil {

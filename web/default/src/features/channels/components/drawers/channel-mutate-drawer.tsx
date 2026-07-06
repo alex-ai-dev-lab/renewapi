@@ -113,7 +113,11 @@ import {
   getGroups,
   getPrefillGroups,
   getUserAgents,
+  normalizeCodexCredential,
+  preflightCodexCredential,
   refreshCodexCredential,
+  type CodexCredentialCandidate,
+  type CodexCredentialPreflightResponse,
 } from '../../api'
 import {
   ADD_MODE_OPTIONS,
@@ -302,6 +306,14 @@ function SubHeading({ title, icon }: { title: string; icon?: ReactNode }) {
   )
 }
 
+function prettyJson(value: string) {
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2)
+  } catch {
+    return value
+  }
+}
+
 export function ChannelMutateDrawer({
   open,
   onOpenChange,
@@ -316,6 +328,17 @@ export function ChannelMutateDrawer({
   const [codexOAuthDialogOpen, setCodexOAuthDialogOpen] = useState(false)
   const [isCodexCredentialRefreshing, setIsCodexCredentialRefreshing] =
     useState(false)
+  const [codexCredentialCandidates, setCodexCredentialCandidates] = useState<
+    CodexCredentialCandidate[]
+  >([])
+  const [selectedCodexCredentialIndex, setSelectedCodexCredentialIndex] =
+    useState(0)
+  const [isCodexCredentialNormalizing, setIsCodexCredentialNormalizing] =
+    useState(false)
+  const [isCodexCredentialPreflighting, setIsCodexCredentialPreflighting] =
+    useState(false)
+  const [codexCredentialPreflight, setCodexCredentialPreflight] =
+    useState<CodexCredentialPreflightResponse | null>(null)
   const initialModelsRef = useRef<string[]>([])
   const initialModelMappingRef = useRef<string>('')
   const initialStatusCodeMappingRef = useRef<string>('')
@@ -662,6 +685,14 @@ export function ChannelMutateDrawer({
     }
   }, [isEditing, channelData, form])
 
+  useEffect(() => {
+    if (currentType !== 57) {
+      setCodexCredentialCandidates([])
+      setSelectedCodexCredentialIndex(0)
+      setCodexCredentialPreflight(null)
+    }
+  }, [currentType])
+
   // Handle type change - set default values for specific types
   useEffect(() => {
     if (isEditing) return // Don't auto-set defaults when editing
@@ -784,6 +815,99 @@ export function ChannelMutateDrawer({
       setIsCodexCredentialRefreshing(false)
     }
   }, [channelId, queryClient, t])
+
+  const applyCodexCredentialCandidate = useCallback(
+    (candidate: CodexCredentialCandidate) => {
+      form.setValue('key', prettyJson(candidate.key), {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+      setSelectedCodexCredentialIndex(candidate.index)
+      setCodexCredentialPreflight(null)
+      toast.success(t('Codex credential converted'))
+    },
+    [form, t]
+  )
+
+  const handleNormalizeCodexCredential = useCallback(async () => {
+    const input = form.getValues('key')?.trim()
+    if (!input) {
+      toast.info(t('Please paste a Codex credential first'))
+      return
+    }
+    setIsCodexCredentialNormalizing(true)
+    setCodexCredentialPreflight(null)
+    try {
+      const res = await normalizeCodexCredential(input)
+      if (!res.success) {
+        throw new Error(res.message || t('Failed to recognize credential'))
+      }
+      const candidates = res.data?.candidates || []
+      if (candidates.length === 0) {
+        throw new Error(t('No supported Codex credential found'))
+      }
+      setCodexCredentialCandidates(candidates)
+      setSelectedCodexCredentialIndex(candidates[0]?.index ?? 0)
+      if (candidates.length === 1) {
+        applyCodexCredentialCandidate(candidates[0])
+      } else {
+        toast.success(
+          t('Detected {{count}} Codex credentials', {
+            count: candidates.length,
+          })
+        )
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Credential recognition failed')
+      )
+    } finally {
+      setIsCodexCredentialNormalizing(false)
+    }
+  }, [applyCodexCredentialCandidate, form, t])
+
+  const handlePreflightCodexCredential = useCallback(async () => {
+    const input = form.getValues('key')?.trim() || ''
+    if (!input && !channelId) {
+      toast.info(t('Please paste a Codex credential first'))
+      return
+    }
+    setIsCodexCredentialPreflighting(true)
+    try {
+      const res = await preflightCodexCredential({
+        input,
+        candidate_index:
+          codexCredentialCandidates.length > 1
+            ? selectedCodexCredentialIndex
+            : undefined,
+        channel_id: channelId || undefined,
+        base_url: form.getValues('base_url') || '',
+        proxy: form.getValues('proxy') || '',
+        tls_insecure_skip_verify:
+          form.getValues('tls_insecure_skip_verify') === true,
+      })
+      setCodexCredentialPreflight(res)
+      if (res.success) {
+        toast.success(t('Codex credential preflight passed'))
+      } else {
+        toast.error(res.message || t('Codex credential preflight failed'))
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Preflight failed')
+      )
+    } finally {
+      setIsCodexCredentialPreflighting(false)
+    }
+  }, [
+    channelId,
+    codexCredentialCandidates.length,
+    form,
+    selectedCodexCredentialIndex,
+    t,
+  ])
 
   // Unified function to update models
   const updateModels = useCallback(
@@ -996,6 +1120,41 @@ export function ChannelMutateDrawer({
         return
       }
 
+      if (data.type === 57 && data.key?.trim()) {
+        try {
+          const res = await normalizeCodexCredential(data.key.trim())
+          if (!res.success) {
+            throw new Error(res.message || t('Failed to recognize credential'))
+          }
+          const candidates = res.data?.candidates || []
+          if (candidates.length !== 1) {
+            setCodexCredentialCandidates(candidates)
+            setSelectedCodexCredentialIndex(candidates[0]?.index ?? 0)
+            setCodexCredentialPreflight(null)
+            toast.info(
+              t(
+                'Detected multiple Codex credentials. Choose one before saving.'
+              )
+            )
+            return
+          }
+          data.key = candidates[0].key
+          form.setValue('key', prettyJson(candidates[0].key), {
+            shouldDirty: true,
+            shouldValidate: true,
+          })
+          setCodexCredentialCandidates(candidates)
+          setSelectedCodexCredentialIndex(candidates[0].index)
+        } catch (error) {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : t('Failed to recognize credential')
+          )
+          return
+        }
+      }
+
       // Validate status_code_mapping entries
       if (data.status_code_mapping?.trim()) {
         const invalidEntries = collectInvalidStatusCodeEntries(
@@ -1088,6 +1247,9 @@ export function ChannelMutateDrawer({
       if (!v) {
         form.reset(CHANNEL_FORM_DEFAULT_VALUES)
         setAdvancedSettingsOpen(false)
+        setCodexCredentialCandidates([])
+        setSelectedCodexCredentialIndex(0)
+        setCodexCredentialPreflight(null)
       }
     },
     [onOpenChange, form]
@@ -1999,6 +2161,171 @@ export function ChannelMutateDrawer({
                                   )}
                                 </div>
                               </FormDescription>
+                              {currentType === 57 && (
+                                <div className='border-border/60 bg-muted/10 mt-4 flex flex-col gap-3 rounded-md border p-3'>
+                                  <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+                                    <div className='space-y-0.5'>
+                                      <p className='text-sm font-medium'>
+                                        {t('Smart Codex credential import')}
+                                      </p>
+                                      <p className='text-muted-foreground text-xs'>
+                                        {t(
+                                          'Paste CPA, sub2api, Cockpit, 9router, Codex auth.json, AxonHub, Codex-Manager, or ChatGPT session JSON.'
+                                        )}
+                                      </p>
+                                    </div>
+                                    <div className='flex flex-wrap gap-2'>
+                                      <Button
+                                        type='button'
+                                        variant='outline'
+                                        size='sm'
+                                        onClick={handleNormalizeCodexCredential}
+                                        disabled={
+                                          isCodexCredentialNormalizing ||
+                                          isCodexCredentialPreflighting
+                                        }
+                                      >
+                                        {isCodexCredentialNormalizing ? (
+                                          <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                                        ) : (
+                                          <Wand2 className='mr-2 h-4 w-4' />
+                                        )}
+                                        {t('Recognize & convert')}
+                                      </Button>
+                                      <Button
+                                        type='button'
+                                        variant='outline'
+                                        size='sm'
+                                        onClick={handlePreflightCodexCredential}
+                                        disabled={
+                                          isCodexCredentialPreflighting ||
+                                          isCodexCredentialNormalizing
+                                        }
+                                      >
+                                        {isCodexCredentialPreflighting ? (
+                                          <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                                        ) : (
+                                          <Route className='mr-2 h-4 w-4' />
+                                        )}
+                                        {t('Preflight')}
+                                      </Button>
+                                    </div>
+                                  </div>
+
+                                  {codexCredentialCandidates.length > 0 && (
+                                    <div className='flex flex-col gap-2'>
+                                      {codexCredentialCandidates.map(
+                                        (candidate) => (
+                                          <div
+                                            key={`${candidate.index}-${candidate.account_id || candidate.label}`}
+                                            className='border-border/60 bg-background flex flex-col gap-2 rounded-md border p-3'
+                                          >
+                                            <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+                                              <div className='flex flex-wrap items-center gap-2'>
+                                                <Badge variant='outline'>
+                                                  {candidate.source_type}
+                                                </Badge>
+                                                <span className='text-sm font-medium'>
+                                                  {candidate.label ||
+                                                    candidate.email ||
+                                                    candidate.account_id ||
+                                                    t('Codex credential')}
+                                                </span>
+                                                {candidate.has_refresh_token ? (
+                                                  <Badge variant='secondary'>
+                                                    {t('Refreshable')}
+                                                  </Badge>
+                                                ) : (
+                                                  <Badge variant='destructive'>
+                                                    {t('No refresh token')}
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                              <Button
+                                                type='button'
+                                                variant={
+                                                  selectedCodexCredentialIndex ===
+                                                  candidate.index
+                                                    ? 'default'
+                                                    : 'outline'
+                                                }
+                                                size='sm'
+                                                onClick={() =>
+                                                  applyCodexCredentialCandidate(
+                                                    candidate
+                                                  )
+                                                }
+                                              >
+                                                {t('Use this credential')}
+                                              </Button>
+                                            </div>
+                                            <div className='text-muted-foreground grid gap-1 text-xs md:grid-cols-2'>
+                                              <span>
+                                                {t('Account')}:{' '}
+                                                {candidate.account_id || '-'}
+                                              </span>
+                                              <span>
+                                                {t('Email')}:{' '}
+                                                {candidate.email || '-'}
+                                              </span>
+                                              <span>
+                                                {t('Expires')}:{' '}
+                                                {candidate.expires_at || '-'}
+                                              </span>
+                                              <span>
+                                                {t('Confidence')}:{' '}
+                                                {candidate.confidence}
+                                              </span>
+                                            </div>
+                                            {candidate.warnings?.length ? (
+                                              <div className='text-warning text-xs'>
+                                                {candidate.warnings.join(' / ')}
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                        )
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {codexCredentialPreflight && (
+                                    <Alert
+                                      className={
+                                        codexCredentialPreflight.success
+                                          ? 'border-success/30 bg-success/10'
+                                          : 'border-warning/30 bg-warning/10'
+                                      }
+                                    >
+                                      <AlertDescription className='text-xs'>
+                                        <div className='font-medium'>
+                                          {codexCredentialPreflight.success
+                                            ? t('Preflight passed')
+                                            : t('Preflight failed')}
+                                        </div>
+                                        <div>
+                                          {t('Category')}:{' '}
+                                          {codexCredentialPreflight.data
+                                            ?.category || '-'}
+                                          {' · '}
+                                          {t('Status')}:{' '}
+                                          {codexCredentialPreflight.data
+                                            ?.upstream_status || '-'}
+                                        </div>
+                                        {codexCredentialPreflight.data
+                                          ?.proxy && (
+                                          <div>
+                                            {t('Proxy')}:{' '}
+                                            {
+                                              codexCredentialPreflight.data
+                                                .proxy
+                                            }
+                                          </div>
+                                        )}
+                                      </AlertDescription>
+                                    </Alert>
+                                  )}
+                                </div>
+                              )}
                               {isEditing && (
                                 <div className='border-border/60 mt-4 flex flex-col gap-3 border-y border-dashed py-4'>
                                   <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>

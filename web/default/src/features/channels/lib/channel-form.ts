@@ -187,6 +187,9 @@ export const channelFormSchema = z
     user_agent_override: z.string().optional(),
     normalize_upstream_errors: z.boolean().optional(),
     allow_model_protocol_override: z.boolean().optional(),
+    responses_function_call_arguments_format: z
+      .enum(['auto', 'string', 'object'])
+      .optional(),
     anti_poison_profile: z
       .enum(['inherit', 'trusted', 'unknown', 'probation', 'quarantine'])
       .optional(),
@@ -195,7 +198,14 @@ export const channelFormSchema = z
       .enum(['inherit', 'off', 'auto', 'required', 'required_non_stream'])
       .optional(),
     anti_poison_response_proof: z
-      .enum(['inherit', 'off', 'warn', 'auto', 'required', 'required_non_stream'])
+      .enum([
+        'inherit',
+        'off',
+        'warn',
+        'auto',
+        'required',
+        'required_non_stream',
+      ])
       .optional(),
     anti_poison_response_proof_enabled: z.boolean().optional(),
     anti_poison_tool_call_guard: z
@@ -220,9 +230,7 @@ export const channelFormSchema = z
     anti_poison_canary_echo_enabled: z.boolean().optional(),
     anti_poison_shape_check_enabled: z.boolean().optional(),
     requires_codex_identity: z.enum(['auto', 'true', 'false']).optional(),
-    supports_claude_thinking: z
-      .enum(['auto', 'true', 'false'])
-      .optional(),
+    supports_claude_thinking: z.enum(['auto', 'true', 'false']).optional(),
     auto_test_interval: z.number().optional(),
     auto_test_retry_count: z.number().optional(),
     auto_test_retry_threshold: z.number().optional(),
@@ -316,6 +324,9 @@ type ClaudeThinkingSupportMode = NonNullable<
 type CodexIdentityMode = NonNullable<
   ChannelFormValues['requires_codex_identity']
 >
+type ResponsesFunctionCallArgumentsFormat = NonNullable<
+  ChannelFormValues['responses_function_call_arguments_format']
+>
 
 // ============================================================================
 // Default Form Values
@@ -359,6 +370,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   user_agent_override: '',
   normalize_upstream_errors: true,
   allow_model_protocol_override: false,
+  responses_function_call_arguments_format: 'auto',
   anti_poison_profile: 'inherit',
   anti_poison_enabled: true,
   anti_poison_answer_envelope: 'inherit',
@@ -424,6 +436,7 @@ export function transformChannelToFormDefaults(
     | 'user_agent_override'
     | 'normalize_upstream_errors'
     | 'allow_model_protocol_override'
+    | 'responses_function_call_arguments_format'
     | 'anti_poison_profile'
     | 'anti_poison_enabled'
     | 'anti_poison_answer_envelope'
@@ -458,6 +471,7 @@ export function transformChannelToFormDefaults(
     user_agent_override: '',
     normalize_upstream_errors: true,
     allow_model_protocol_override: false,
+    responses_function_call_arguments_format: 'auto',
     anti_poison_profile: 'inherit',
     anti_poison_enabled: true,
     anti_poison_answer_envelope: 'inherit',
@@ -489,8 +503,7 @@ export function transformChannelToFormDefaults(
         force_format: parsed.force_format || false,
         thinking_to_content: parsed.thinking_to_content || false,
         proxy: parsed.proxy || '',
-        tls_insecure_skip_verify:
-          parsed.tls_insecure_skip_verify === true,
+        tls_insecure_skip_verify: parsed.tls_insecure_skip_verify === true,
         pass_through_body_enabled: parsed.pass_through_body_enabled || false,
         system_prompt: parsed.system_prompt || '',
         system_prompt_override: parsed.system_prompt_override || false,
@@ -499,6 +512,11 @@ export function transformChannelToFormDefaults(
         normalize_upstream_errors: parsed.normalize_upstream_errors !== false,
         allow_model_protocol_override:
           parsed.allow_model_protocol_override === true,
+        responses_function_call_arguments_format:
+          parsed.responses_function_call_arguments_format === 'string' ||
+          parsed.responses_function_call_arguments_format === 'object'
+            ? (parsed.responses_function_call_arguments_format as ResponsesFunctionCallArgumentsFormat)
+            : 'auto',
         anti_poison_profile: parsed.anti_poison_profile || 'inherit',
         anti_poison_enabled: parsed.anti_poison_enabled !== false,
         anti_poison_answer_envelope:
@@ -530,12 +548,17 @@ export function transformChannelToFormDefaults(
             : 'auto',
         supports_claude_thinking:
           typeof parsed.supports_claude_thinking === 'boolean'
-            ? (String(parsed.supports_claude_thinking) as ClaudeThinkingSupportMode)
+            ? (String(
+                parsed.supports_claude_thinking
+              ) as ClaudeThinkingSupportMode)
             : 'auto',
         auto_test_interval: Number(parsed.auto_test_interval || 0),
         auto_test_retry_count: Number(parsed.auto_test_retry_count || 2),
-        auto_test_retry_threshold: Number(parsed.auto_test_retry_threshold || 2),
-        auto_test_time_window_start: parsed.auto_test_time_window_start || '08:00',
+        auto_test_retry_threshold: Number(
+          parsed.auto_test_retry_threshold || 2
+        ),
+        auto_test_time_window_start:
+          parsed.auto_test_time_window_start || '08:00',
         auto_test_time_window_end: parsed.auto_test_time_window_end || '18:00',
         auto_test_timezone: parsed.auto_test_timezone || 'Asia/Taipei',
       }
@@ -576,8 +599,7 @@ export function transformChannelToFormDefaults(
       allowInferenceGeo = parsed.allow_inference_geo === true
       allowSpeed = parsed.allow_speed === true
       claudeBetaQuery = parsed.claude_beta_query === true
-      autoTestAndRecoverEnabled =
-        parsed.auto_test_and_recover_disabled !== true
+      autoTestAndRecoverEnabled = parsed.auto_test_and_recover_disabled !== true
       upstreamModelUpdateCheckEnabled =
         parsed.upstream_model_update_check_enabled === true
       upstreamModelUpdateAutoSyncEnabled =
@@ -652,18 +674,23 @@ function buildSettingJSON(formData: ChannelFormValues): string {
     pass_through_body_enabled: formData.pass_through_body_enabled || false,
     system_prompt: formData.system_prompt || '',
     system_prompt_override: formData.system_prompt_override || false,
-    user_agent_id: formData.user_agent_id ? Number(formData.user_agent_id) : undefined,
+    user_agent_id: formData.user_agent_id
+      ? Number(formData.user_agent_id)
+      : undefined,
     user_agent_override: formData.user_agent_override || '',
     normalize_upstream_errors: formData.normalize_upstream_errors !== false,
     allow_model_protocol_override:
       formData.type !== 57 && formData.allow_model_protocol_override === true,
+    responses_function_call_arguments_format:
+      formData.responses_function_call_arguments_format || 'auto',
     anti_poison_enabled: formData.anti_poison_enabled !== false,
     anti_poison_shape_check_enabled:
       formData.anti_poison_shape_check_enabled === true,
     auto_test_interval: Number(formData.auto_test_interval || 0),
     auto_test_retry_count: Number(formData.auto_test_retry_count || 2),
     auto_test_retry_threshold: Number(formData.auto_test_retry_threshold || 2),
-    auto_test_time_window_start: formData.auto_test_time_window_start || '08:00',
+    auto_test_time_window_start:
+      formData.auto_test_time_window_start || '08:00',
     auto_test_time_window_end: formData.auto_test_time_window_end || '18:00',
     auto_test_timezone: formData.auto_test_timezone || 'Asia/Taipei',
   }
@@ -683,7 +710,10 @@ function buildSettingJSON(formData: ChannelFormValues): string {
   if (formData.anti_poison_canary_echo_enabled === true) {
     settingObj.anti_poison_canary_echo_enabled = true
   }
-  if (formData.anti_poison_profile && formData.anti_poison_profile !== 'inherit') {
+  if (
+    formData.anti_poison_profile &&
+    formData.anti_poison_profile !== 'inherit'
+  ) {
     settingObj.anti_poison_profile = formData.anti_poison_profile
   }
   if (
@@ -697,8 +727,7 @@ function buildSettingJSON(formData: ChannelFormValues): string {
     formData.anti_poison_response_proof &&
     formData.anti_poison_response_proof !== 'inherit'
   ) {
-    settingObj.anti_poison_response_proof =
-      formData.anti_poison_response_proof
+    settingObj.anti_poison_response_proof = formData.anti_poison_response_proof
   }
   if (
     formData.anti_poison_tool_call_guard &&

@@ -327,6 +327,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				newAPIError = channelErr
 				break
 			}
+			resetResponsesFunctionCallArgumentsRetryIfChannelChanged(retryParam, channel)
+			relayInfo.ForceResponsesFunctionCallArgumentsObject = retryParam.ForceResponsesFunctionCallArgumentsObject
 
 			addUsedChannel(c, channel.Id)
 			recordTriedMultiKeyIndex(c, retryParam, channel)
@@ -392,6 +394,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 			newAPIError = service.NormalizeViolationFeeError(newAPIError)
 			relayInfo.LastError = newAPIError
+			if maybeRetryResponsesFunctionCallArgumentsAsObject(c, relayInfo, retryParam, channel, newAPIError) {
+				continue
+			}
 			service.RecordRouterCooldownFailure(channel.Id, relayInfo, newAPIError)
 			service.RecordChannelModelFailure(service.ChannelModelFailureParams{
 				ChannelId: channel.Id,
@@ -975,6 +980,9 @@ func shouldCompatRetryByError(openaiErr *types.NewAPIError) bool {
 	if openaiErr == nil {
 		return false
 	}
+	if service.IsResponsesFunctionCallArgumentsObjectTypeError(openaiErr) {
+		return true
+	}
 	if service.ShouldFallbackEncryptedReasoningError(openaiErr) {
 		return true
 	}
@@ -995,6 +1003,48 @@ func shouldCompatRetryByError(openaiErr *types.NewAPIError) bool {
 		}
 		return false
 	}
+}
+
+func maybeRetryResponsesFunctionCallArgumentsAsObject(c *gin.Context, relayInfo *relaycommon.RelayInfo, retryParam *service.RetryParam, channel *model.Channel, openaiErr *types.NewAPIError) bool {
+	if retryParam == nil || channel == nil || openaiErr == nil {
+		return false
+	}
+	if retryParam.ForceResponsesFunctionCallArgumentsObject {
+		return false
+	}
+	if !service.IsResponsesFunctionCallArgumentsObjectTypeError(openaiErr) {
+		return false
+	}
+	retryParam.ForceResponsesFunctionCallArgumentsObject = true
+	retryParam.PreferredChannelId = channel.Id
+	if retryParam.ExcludedChannelIds == nil {
+		retryParam.ExcludedChannelIds = make(map[int]bool)
+	}
+	delete(retryParam.ExcludedChannelIds, channel.Id)
+	retryParam.ResetRetryNextTry()
+	if relayInfo != nil {
+		relayInfo.ForceResponsesFunctionCallArgumentsObject = true
+	}
+	logger.LogWarn(c, fmt.Sprintf(
+		"responses function_call.arguments compatibility retry: channel=%d format=object reason=%s",
+		channel.Id,
+		common.LocalLogPreview(openaiErr.MaskSensitiveErrorWithStatusCode()),
+	))
+	return true
+}
+
+func resetResponsesFunctionCallArgumentsRetryIfChannelChanged(retryParam *service.RetryParam, channel *model.Channel) {
+	if retryParam == nil || channel == nil {
+		return
+	}
+	if !retryParam.ForceResponsesFunctionCallArgumentsObject || retryParam.PreferredChannelId <= 0 {
+		return
+	}
+	if retryParam.PreferredChannelId == channel.Id {
+		return
+	}
+	retryParam.ForceResponsesFunctionCallArgumentsObject = false
+	retryParam.PreferredChannelId = 0
 }
 
 func disableChannelForCompatRetry(c *gin.Context, channel *model.Channel, relayInfo *relaycommon.RelayInfo, openaiErr *types.NewAPIError, remainingRetries int) {

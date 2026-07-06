@@ -14,18 +14,19 @@ import (
 )
 
 type RetryParam struct {
-	Ctx                           *gin.Context
-	TokenGroup                    string
-	ModelName                     string
-	Retry                         *int
-	resetNextTry                  bool
-	ExcludedChannelIds            map[int]bool
-	TriedMultiKeyIndexes          map[int]map[int]bool
-	PreferredChannelId            int
-	RequireClaudeThinkingSupport  bool
-	RequireOpenAIResponsesSupport bool
-	LastSelectedChannelId         int
-	ProviderRoutingPolicy         *ProviderRoutingPolicy
+	Ctx                                       *gin.Context
+	TokenGroup                                string
+	ModelName                                 string
+	Retry                                     *int
+	resetNextTry                              bool
+	ExcludedChannelIds                        map[int]bool
+	TriedMultiKeyIndexes                      map[int]map[int]bool
+	PreferredChannelId                        int
+	RequireClaudeThinkingSupport              bool
+	RequireOpenAIResponsesSupport             bool
+	ForceResponsesFunctionCallArgumentsObject bool
+	LastSelectedChannelId                     int
+	ProviderRoutingPolicy                     *ProviderRoutingPolicy
 }
 
 func (p *RetryParam) GetRetry() int {

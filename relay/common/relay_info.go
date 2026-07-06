@@ -146,23 +146,24 @@ type RelayInfo struct {
 	// RequestId is used for idempotent pre-consume/refund
 	RequestId string
 	// SubscriptionAmountTotal / SubscriptionAmountUsedAfterPreConsume are used to compute remaining in logs.
-	SubscriptionAmountTotal               int64
-	SubscriptionAmountUsedAfterPreConsume int64
-	IsClaudeBetaQuery                     bool // /v1/messages?beta=true
-	IsChannelTest                         bool // channel test request
-	RetryIndex                            int
-	LastError                             *types.NewAPIError
-	RuntimeHeadersOverride                map[string]interface{}
-	UseRuntimeHeadersOverride             bool
-	ParamOverrideAudit                    []string
-	EncryptedReasoningAffinityEnabled     bool
-	EncryptedReasoningScrubFallback       bool
-	EncryptedReasoningAffinityChannelId   int
-	EncryptedReasoningOriginalChannelId   int
-	EncryptedReasoningFallbackCount       int
-	ClaudeThinkingDetected                bool
-	ClaudeThinkingPreferSupportedChannel  bool
-	ClaudeThinkingSanitizedFallback       bool
+	SubscriptionAmountTotal                   int64
+	SubscriptionAmountUsedAfterPreConsume     int64
+	IsClaudeBetaQuery                         bool // /v1/messages?beta=true
+	IsChannelTest                             bool // channel test request
+	RetryIndex                                int
+	LastError                                 *types.NewAPIError
+	RuntimeHeadersOverride                    map[string]interface{}
+	UseRuntimeHeadersOverride                 bool
+	ParamOverrideAudit                        []string
+	EncryptedReasoningAffinityEnabled         bool
+	EncryptedReasoningScrubFallback           bool
+	EncryptedReasoningAffinityChannelId       int
+	EncryptedReasoningOriginalChannelId       int
+	EncryptedReasoningFallbackCount           int
+	ClaudeThinkingDetected                    bool
+	ClaudeThinkingPreferSupportedChannel      bool
+	ClaudeThinkingSanitizedFallback           bool
+	ForceResponsesFunctionCallArgumentsObject bool
 
 	// AntiPoisonGuardPrefix is retained for older patch compatibility. The
 	// current upstream-error normalization path does not inject guard prompts.

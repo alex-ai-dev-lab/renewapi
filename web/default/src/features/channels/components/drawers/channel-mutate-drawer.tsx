@@ -225,6 +225,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.thinking_to_content ||
     values.pass_through_body_enabled ||
     values.system_prompt_override ||
+    (values.responses_function_call_arguments_format || 'auto') !== 'auto' ||
     values.anti_poison_profile !== 'inherit' ||
     values.anti_poison_enabled === false ||
     values.anti_poison_answer_envelope !== 'inherit' ||
@@ -4365,6 +4366,48 @@ export function ChannelMutateDrawer({
                                   onCheckedChange={field.onChange}
                                 />
                               </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name='responses_function_call_arguments_format'
+                          render={({ field }) => (
+                            <FormItem className='flex items-center justify-between gap-4 px-4 py-3'>
+                              <div className='space-y-0.5'>
+                                <FormLabel>
+                                  {t('Responses Arguments Format')}
+                                </FormLabel>
+                                <FormDescription>
+                                  {t(
+                                    'Controls Responses function_call.arguments sent upstream'
+                                  )}
+                                </FormDescription>
+                              </div>
+                              <Select
+                                value={field.value || 'auto'}
+                                onValueChange={field.onChange}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className='w-[180px]'>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent alignItemWithTrigger={false}>
+                                  <SelectGroup>
+                                    <SelectItem value='auto'>
+                                      {t('Auto')}
+                                    </SelectItem>
+                                    <SelectItem value='string'>
+                                      {t('JSON string')}
+                                    </SelectItem>
+                                    <SelectItem value='object'>
+                                      {t('JSON object')}
+                                    </SelectItem>
+                                  </SelectGroup>
+                                </SelectContent>
+                              </Select>
                             </FormItem>
                           )}
                         />

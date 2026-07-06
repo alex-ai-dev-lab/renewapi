@@ -1,5 +1,13 @@
 package dto
 
+type ResponsesFunctionCallArgumentsFormat string
+
+const (
+	ResponsesFunctionCallArgumentsFormatAuto   ResponsesFunctionCallArgumentsFormat = "auto"
+	ResponsesFunctionCallArgumentsFormatString ResponsesFunctionCallArgumentsFormat = "string"
+	ResponsesFunctionCallArgumentsFormatObject ResponsesFunctionCallArgumentsFormat = "object"
+)
+
 type ChannelSettings struct {
 	ForceFormat            bool   `json:"force_format,omitempty"`
 	ThinkingToContent      bool   `json:"thinking_to_content,omitempty"`
@@ -23,6 +31,11 @@ type ChannelSettings struct {
 	// this channel. Off by default so native-protocol channels keep their own
 	// authentication and request format unless the admin opts in.
 	AllowModelProtocolOverride bool `json:"allow_model_protocol_override,omitempty"`
+
+	// Controls the upstream OpenAI Responses function_call.arguments shape.
+	// auto keeps the official string format, except Codex and runtime fallback
+	// retries that require a JSON object.
+	ResponsesFunctionCallArgumentsFormat ResponsesFunctionCallArgumentsFormat `json:"responses_function_call_arguments_format,omitempty"`
 
 	// Auto-test settings
 	AutoTestInterval        int    `json:"auto_test_interval,omitempty"`          // minutes, 0 = use global

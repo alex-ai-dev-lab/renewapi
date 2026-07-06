@@ -27,6 +27,16 @@ func TestShouldCompatRetryByError_InvalidEncryptedContent(t *testing.T) {
 	assert.False(t, shouldCompatDisableChannel(err))
 }
 
+func TestShouldCompatRetryByError_ResponsesFunctionCallArgumentsObject(t *testing.T) {
+	err := types.NewOpenAIError(
+		errors.New("Invalid type for 'input[8].arguments': expected an object, but got a string instead."),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusBadRequest,
+	)
+
+	assert.True(t, shouldCompatRetryByError(err))
+}
+
 func TestCompatStreamRetryError_PreFirstChunkHandlerStop(t *testing.T) {
 	status := relaycommon.NewStreamStatus()
 	status.RecordError("invalid_encrypted_content")

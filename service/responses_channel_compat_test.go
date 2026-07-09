@@ -26,3 +26,34 @@ func TestChannelMatchesRetryRequirementsRequiresOpenAIResponsesSupport(t *testin
 		BaseURL: common.GetPointer("https://example.test/codex"),
 	}))
 }
+
+func TestChannelMatchesRetryRequirementsAllowsOptedInDefaultTextEndpoint(t *testing.T) {
+	param := &RetryParam{
+		RequireOpenAIResponsesSupport: true,
+		ModelDefaultEndpoint:          string(constant.EndpointTypeAnthropic),
+	}
+
+	require.True(t, channelMatchesRetryRequirements(param, &model.Channel{
+		Type:    constant.ChannelTypeAnthropic,
+		Setting: common.GetPointer(`{"allow_model_protocol_override":true}`),
+	}))
+	require.False(t, channelMatchesRetryRequirements(param, &model.Channel{
+		Type: constant.ChannelTypeAnthropic,
+	}))
+}
+
+func TestChannelMatchesRetryRequirementsStillRequiresResponsesForOptedInResponsesDefault(t *testing.T) {
+	param := &RetryParam{
+		RequireOpenAIResponsesSupport: true,
+		ModelDefaultEndpoint:          string(constant.EndpointTypeOpenAIResponse),
+	}
+
+	require.False(t, channelMatchesRetryRequirements(param, &model.Channel{
+		Type:    constant.ChannelTypeAnthropic,
+		Setting: common.GetPointer(`{"allow_model_protocol_override":true}`),
+	}))
+	require.True(t, channelMatchesRetryRequirements(param, &model.Channel{
+		Type:    constant.ChannelTypeOpenAI,
+		Setting: common.GetPointer(`{"allow_model_protocol_override":true}`),
+	}))
+}

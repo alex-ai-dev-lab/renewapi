@@ -62,6 +62,35 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		return types.NewError(fmt.Errorf("failed to copy request to GeneralOpenAIRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
 	}
 
+	if endpoint, ok := service.ShouldUseModelDefaultTextEndpointForResponses(info); ok {
+		if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
+			return types.NewErrorWithStatusCode(
+				fmt.Errorf("model default endpoint rewrite to %s requires request conversion, but pass-through body is enabled", endpoint),
+				types.ErrorCodeInvalidRequest,
+				http.StatusBadRequest,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+		chatReq, convErr := service.ResponsesRequestToChatCompletionsRequest(request)
+		if convErr != nil {
+			return types.NewErrorWithStatusCode(convErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		chatInfo := *info
+		chatInfo.Request = chatReq
+		chatInfo.RelayFormat = types.RelayFormatOpenAI
+		chatInfo.RelayMode = relayconstant.RelayModeChatCompletions
+		chatInfo.RequestURLPath = "/v1/chat/completions"
+		chatInfo.FinalRequestRelayFormat = ""
+		chatInfo.RequestConversionChain = append(append([]types.RelayFormat(nil), info.RequestConversionChain...), types.RelayFormatOpenAI)
+		logger.LogInfo(c, fmt.Sprintf(
+			"channel #%d model default endpoint rewrite: responses -> %s (model=%s)",
+			info.ChannelId,
+			endpoint,
+			info.OriginModelName,
+		))
+		return TextHelper(c, &chatInfo)
+	}
+
 	if info.ChannelType == appconstant.ChannelTypeCodex && !info.IsStream && info.RelayMode != relayconstant.RelayModeResponsesCompact {
 		request.Stream = common.GetPointer(true)
 		c.Set("responses_upstream_stream", true)

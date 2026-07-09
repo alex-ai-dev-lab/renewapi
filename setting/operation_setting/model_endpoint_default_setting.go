@@ -296,6 +296,17 @@ func ResolveModelDefaultProfile(modelName string) (ModelEndpointRouteProfile, bo
 	return ModelEndpointRouteProfile{}, false
 }
 
+// ForceModelDefaultEndpoint returns the configured default endpoint for a model.
+// It is used by opted-in channels that intentionally ignore the client endpoint
+// and force the upstream request family from the global model rules.
+func ForceModelDefaultEndpoint(modelName string) (string, bool) {
+	profile, ok := ResolveModelDefaultProfile(modelName)
+	if !ok || profile.DefaultEndpoint == "" {
+		return "", false
+	}
+	return profile.DefaultEndpoint, true
+}
+
 // ResolveModelDefaultChannelType keeps the legacy protocol-only API for callers
 // that do not need endpoint information.
 func ResolveModelDefaultChannelType(modelName string) (int, bool) {

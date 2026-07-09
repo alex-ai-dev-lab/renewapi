@@ -192,11 +192,6 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 	}()
 
-	if endpointErr := applyModelEndpointDecision(c); endpointErr != nil {
-		newAPIError = endpointErr
-		return
-	}
-
 	request, err := helper.GetAndValidateRequest(c, relayFormat)
 	if err != nil {
 		// Map "request body too large" to 413 so clients can handle it correctly
@@ -285,6 +280,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 	}()
 
+	modelDefaultEndpoint, _ := operation_setting.ForceModelDefaultEndpoint(relayInfo.OriginModelName)
 	retryParam := &service.RetryParam{
 		Ctx:                           c,
 		TokenGroup:                    relayInfo.TokenGroup,
@@ -294,6 +290,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		PreferredChannelId:            relayInfo.EncryptedReasoningAffinityChannelId,
 		RequireClaudeThinkingSupport:  relayInfo.ClaudeThinkingPreferSupportedChannel,
 		RequireOpenAIResponsesSupport: relayFormat == types.RelayFormatOpenAIResponses || relayFormat == types.RelayFormatOpenAIResponsesCompaction,
+		ModelDefaultEndpoint:          modelDefaultEndpoint,
 		ProviderRoutingPolicy:         getProviderRoutingPolicy(c),
 	}
 	relayInfo.RetryIndex = 0
@@ -923,6 +920,7 @@ func switchRelayFallbackModel(c *gin.Context, info *relaycommon.RelayInfo, retry
 	}
 	common.SetContextKey(c, constant.ContextKeyOriginalModel, modelName)
 	retryParam.ModelName = modelName
+	retryParam.ModelDefaultEndpoint, _ = operation_setting.ForceModelDefaultEndpoint(modelName)
 	retryParam.SetRetry(0)
 	retryParam.ExcludedChannelIds = make(map[int]bool)
 	retryParam.PreferredChannelId = 0

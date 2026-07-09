@@ -82,7 +82,9 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	if info.RelayMode == relayconstant.RelayModeChatCompletions &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		(info.ChannelType == constant.ChannelTypeCodex || service.ShouldChatCompletionsUseResponsesForChannel(info.ChannelId, info.ChannelType, info.ChannelBaseUrl, info.OriginModelName)) {
+		(info.ChannelType == constant.ChannelTypeCodex ||
+			service.ShouldChatCompletionsUseResponsesForChannel(info.ChannelId, info.ChannelType, info.ChannelBaseUrl, info.OriginModelName) ||
+			service.ShouldUseModelDefaultResponsesForRelay(info)) {
 		applySystemPromptIfNeeded(c, info, request)
 		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, request)
 		if newApiErr != nil {

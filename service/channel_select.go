@@ -24,6 +24,7 @@ type RetryParam struct {
 	PreferredChannelId                        int
 	RequireClaudeThinkingSupport              bool
 	RequireOpenAIResponsesSupport             bool
+	ModelDefaultEndpoint                      string
 	ForceResponsesFunctionCallArgumentsObject bool
 	LastSelectedChannelId                     int
 	ProviderRoutingPolicy                     *ProviderRoutingPolicy
@@ -209,7 +210,7 @@ func channelMatchesRetryRequirements(param *RetryParam, channel *model.Channel) 
 	if param.RequireClaudeThinkingSupport && !ChannelSupportsClaudeThinking(channel) {
 		return false
 	}
-	if param.RequireOpenAIResponsesSupport && !ChannelSupportsOpenAIResponses(channel) {
+	if retryRequirementNeedsOpenAIResponsesSupport(param, channel) && !ChannelSupportsOpenAIResponses(channel) {
 		return false
 	}
 	if !antipoison.ProductionRoutingAllowed(channel.Id, channel.GetSetting()) {
@@ -217,6 +218,21 @@ func channelMatchesRetryRequirements(param *RetryParam, channel *model.Channel) 
 	}
 	if !ChannelAntiPoisonCircuitAllowsProduction(channel.Id, channel.GetSetting()) {
 		return false
+	}
+	return true
+}
+
+func retryRequirementNeedsOpenAIResponsesSupport(param *RetryParam, channel *model.Channel) bool {
+	if param == nil || !param.RequireOpenAIResponsesSupport {
+		return false
+	}
+	if channel != nil && channel.GetSetting().AllowModelProtocolOverride {
+		switch constant.EndpointType(strings.TrimSpace(param.ModelDefaultEndpoint)) {
+		case constant.EndpointTypeOpenAI, constant.EndpointTypeAnthropic:
+			return false
+		case constant.EndpointTypeOpenAIResponse, constant.EndpointTypeOpenAIResponseCompact:
+			return true
+		}
 	}
 	return true
 }

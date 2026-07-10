@@ -2,8 +2,10 @@
 
 Audited-Upstream-Ref: 4e570389dd433a717373ce9c9b822b59f5ed3d5d
 
-Upstream tag at audit time: `v1.0.0-rc.20`  
-Audit date: `2026-07-10`  
+Upstream tag at audit time: `v1.0.0-rc.20`
+
+Audit date: `2026-07-10`
+
 Fork review base: `origin/main` at `f79053d8ee0b`
 
 The fork and `QuantumNous/new-api` have no common Git ancestor. "Audited" means every upstream commit through the ref above was reviewed; it does not mean every feature was copied. Updates are ported as behavior-focused local commits so fork security, compatibility, and branding remain intact.

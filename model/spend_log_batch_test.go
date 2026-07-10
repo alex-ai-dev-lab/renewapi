@@ -16,18 +16,18 @@ func TestRecordConsumeLogBatchWritesLogs(t *testing.T) {
 	oldBatchEnabled := os.Getenv("SPEND_LOG_BATCH_ENABLED")
 	oldBatchSize := os.Getenv("SPEND_LOG_BATCH_SIZE")
 	oldBatchInterval := os.Getenv("SPEND_LOG_BATCH_INTERVAL_MS")
-	oldDataExport := common.DataExportEnabled
+	oldDataExport := common.IsDataExportEnabled()
 	t.Cleanup(func() {
 		_ = os.Setenv("SPEND_LOG_BATCH_ENABLED", oldBatchEnabled)
 		_ = os.Setenv("SPEND_LOG_BATCH_SIZE", oldBatchSize)
 		_ = os.Setenv("SPEND_LOG_BATCH_INTERVAL_MS", oldBatchInterval)
-		common.DataExportEnabled = oldDataExport
+		common.SetDataExportEnabled(oldDataExport)
 		ResetSpendLogBatchForTest()
 	})
 	require.NoError(t, os.Setenv("SPEND_LOG_BATCH_ENABLED", "true"))
 	require.NoError(t, os.Setenv("SPEND_LOG_BATCH_SIZE", "2"))
 	require.NoError(t, os.Setenv("SPEND_LOG_BATCH_INTERVAL_MS", "20"))
-	common.DataExportEnabled = false
+	common.SetDataExportEnabled(false)
 	ResetSpendLogBatchForTest()
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

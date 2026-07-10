@@ -137,7 +137,7 @@ func (b *consumeLogBatcher) flush(items []consumeLogBatchItem) {
 }
 
 func exportConsumeLog(export consumeLogExport) {
-	if !common.DataExportEnabled {
+	if !common.IsDataExportEnabled() {
 		return
 	}
 	gopool.Go(func() {

@@ -272,7 +272,7 @@ func main() {
 	if common.BatchUpdateEnabled {
 		model.FlushBatchUpdates()
 	}
-	if common.DataExportEnabled {
+	if common.IsDataExportEnabled() {
 		model.SaveQuotaDataCache()
 	}
 	common.SysLog("server exited")

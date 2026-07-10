@@ -23,7 +23,7 @@ type QuotaData struct {
 
 func UpdateQuotaData() {
 	for {
-		if common.DataExportEnabled {
+		if common.IsDataExportEnabled() {
 			common.SysLog("正在更新数据看板数据...")
 			SaveQuotaDataCache()
 		}

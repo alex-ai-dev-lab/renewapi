@@ -104,7 +104,7 @@ func GetStatus(c *gin.Context) {
 		"enable_batch_update":                 common.BatchUpdateEnabled,
 		"enable_drawing":                      common.DrawingEnabled,
 		"enable_task":                         common.TaskEnabled,
-		"enable_data_export":                  common.DataExportEnabled,
+		"enable_data_export":                  common.IsDataExportEnabled(),
 		"data_export_default_time":            common.DataExportDefaultTime,
 		"dashboard_default_time_range":        common.DashboardDefaultTimeRange,
 		"dashboard_auto_refresh":              common.DashboardAutoRefreshEnabled,

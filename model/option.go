@@ -52,7 +52,7 @@ func InitOptionMap() {
 	common.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(common.DisplayTokenStatEnabled)
 	common.OptionMap["DrawingEnabled"] = strconv.FormatBool(common.DrawingEnabled)
 	common.OptionMap["TaskEnabled"] = strconv.FormatBool(common.TaskEnabled)
-	common.OptionMap["DataExportEnabled"] = strconv.FormatBool(common.DataExportEnabled)
+	common.OptionMap["DataExportEnabled"] = strconv.FormatBool(common.IsDataExportEnabled())
 	common.OptionMap["ChannelDisableThreshold"] = strconv.FormatFloat(common.ChannelDisableThreshold, 'f', -1, 64)
 	common.OptionMap["EmailDomainRestrictionEnabled"] = strconv.FormatBool(common.EmailDomainRestrictionEnabled)
 	common.OptionMap["EmailAliasRestrictionEnabled"] = strconv.FormatBool(common.EmailAliasRestrictionEnabled)
@@ -342,7 +342,7 @@ func updateOptionMap(key string, value string) (err error) {
 		case "TaskEnabled":
 			common.TaskEnabled = boolValue
 		case "DataExportEnabled":
-			common.DataExportEnabled = boolValue
+			common.SetDataExportEnabled(boolValue)
 		case "DashboardAutoRefreshEnabled":
 			common.DashboardAutoRefreshEnabled = boolValue
 		case "DefaultCollapseSidebar":

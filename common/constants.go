@@ -23,6 +23,7 @@ var themeValue atomic.Value // stores string; safe for concurrent read/write
 
 func init() {
 	themeValue.Store("classic")
+	dataExportEnabled.Store(true)
 }
 
 func GetTheme() string {
@@ -65,7 +66,16 @@ var DisplayInCurrencyEnabled = true
 var DisplayTokenStatEnabled = true
 var DrawingEnabled = true
 var TaskEnabled = true
-var DataExportEnabled = true
+var dataExportEnabled atomic.Bool
+
+func IsDataExportEnabled() bool {
+	return dataExportEnabled.Load()
+}
+
+func SetDataExportEnabled(enabled bool) {
+	dataExportEnabled.Store(enabled)
+}
+
 var DataExportInterval = 5         // unit: minute
 var DataExportDefaultTime = "hour" // unit: minute
 var DashboardDefaultTimeRange = "7d"

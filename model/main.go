@@ -302,6 +302,9 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	if err := ensureLogCreatedAtIDIndex(DB); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -379,6 +382,9 @@ func migrateDBFast() error {
 			return err
 		}
 	}
+	if err := ensureLogCreatedAtIDIndex(DB); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -393,11 +399,10 @@ func migrateDBFast() error {
 }
 
 func migrateLOGDB() error {
-	var err error
-	if err = LOG_DB.AutoMigrate(&Log{}); err != nil {
+	if err := LOG_DB.AutoMigrate(&Log{}); err != nil {
 		return err
 	}
-	return nil
+	return ensureLogCreatedAtIDIndex(LOG_DB)
 }
 
 type sqliteColumnDef struct {

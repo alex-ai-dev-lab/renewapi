@@ -199,6 +199,8 @@ type RelayInfo struct {
 	UpstreamRequestBodySize int64
 
 	PriceData types.PriceData
+	// QuotaClamp records the first saturated quota conversion for audit logging.
+	QuotaClamp *common.QuotaClamp
 
 	// TieredBillingSnapshot is a frozen snapshot of tiered billing rules
 	// captured at pre-consume time. Non-nil only when billing mode is "tiered_expr".

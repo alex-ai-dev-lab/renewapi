@@ -2,17 +2,43 @@ package service
 
 import (
 	"encoding/base64"
+	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 )
+
+func attachQuotaSaturationToOther(other map[string]interface{}, clamp *common.QuotaClamp) {
+	if other == nil || clamp == nil {
+		return
+	}
+	adminInfo, ok := other["admin_info"].(map[string]interface{})
+	if !ok || adminInfo == nil {
+		adminInfo = map[string]interface{}{}
+		other["admin_info"] = adminInfo
+	}
+	adminInfo["quota_saturation"] = clamp.AuditMap()
+}
+
+func attachQuotaSaturation(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
+	if relayInfo == nil || relayInfo.QuotaClamp == nil {
+		return
+	}
+	attachQuotaSaturationToOther(other, relayInfo.QuotaClamp)
+	logger.LogWarn(ctx, fmt.Sprintf(
+		"quota saturation: op=%s kind=%s original=%g clamped=%d user=%d model=%s",
+		relayInfo.QuotaClamp.Op, relayInfo.QuotaClamp.Kind, relayInfo.QuotaClamp.Original,
+		relayInfo.QuotaClamp.Clamped, relayInfo.UserId, relayInfo.OriginModelName,
+	))
+}
 
 func appendRequestPath(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
 	if other == nil {

@@ -121,14 +121,14 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 			if seconds <= 0 {
 				seconds = 4
 			}
-			sizeStr, _ := taskData["size"].(string)
-			if info.PriceData.OtherRatios == nil {
-				info.PriceData.OtherRatios = map[string]float64{}
+			if seconds > relaycommon.MaxTaskDurationSeconds {
+				seconds = relaycommon.MaxTaskDurationSeconds
 			}
-			info.PriceData.OtherRatios["seconds"] = float64(seconds)
-			info.PriceData.OtherRatios["size"] = 1
+			sizeStr, _ := taskData["size"].(string)
+			info.PriceData.AddOtherRatio("seconds", float64(seconds))
+			info.PriceData.AddOtherRatio("size", 1)
 			if sizeStr == "1792x1024" || sizeStr == "1024x1792" {
-				info.PriceData.OtherRatios["size"] = 1.666667
+				info.PriceData.AddOtherRatio("size", 1.666667)
 			}
 		}
 	}
@@ -195,11 +195,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 
 	// 6. 将 OtherRatios 应用到基础额度
 	if !common.StringsContains(constant.TaskPricePatches, modelName) {
-		for _, ra := range info.PriceData.OtherRatios {
-			if ra != 1.0 {
-				info.PriceData.Quota = int(float64(info.PriceData.Quota) * ra)
-			}
-		}
+		quota, clamp := common.QuotaFromFloatChecked(info.PriceData.ApplyOtherRatiosToFloat(float64(info.PriceData.Quota)))
+		info.PriceData.Quota = quota
+		noteTaskQuotaClamp(info, clamp)
 	}
 
 	// 7. 预扣费（仅首次 — 重试时 info.Billing 已存在，跳过）
@@ -245,7 +243,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if adjustedRatios := adaptor.AdjustBillingOnSubmit(info, taskData); len(adjustedRatios) > 0 {
 		// 基于调整后的 ratios 重新计算 quota
 		finalQuota = recalcQuotaFromRatios(info, adjustedRatios)
-		info.PriceData.OtherRatios = adjustedRatios
+		info.PriceData.ReplaceOtherRatios(adjustedRatios)
 		info.PriceData.Quota = finalQuota
 	}
 
@@ -261,21 +259,18 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 // 公式: baseQuota × ∏(ratio) — 其中 baseQuota 是不含 OtherRatios 的基础额度。
 func recalcQuotaFromRatios(info *relaycommon.RelayInfo, ratios map[string]float64) int {
 	// 从 PriceData 获取不含 OtherRatios 的基础价格
-	baseQuota := info.PriceData.Quota
-	// 先除掉原有的 OtherRatios 恢复基础额度
-	for _, ra := range info.PriceData.OtherRatios {
-		if ra != 1.0 && ra > 0 {
-			baseQuota = int(float64(baseQuota) / ra)
-		}
+	baseQuota := info.PriceData.RemoveOtherRatiosFromFloat(float64(info.PriceData.Quota))
+	priceData := info.PriceData
+	priceData.ReplaceOtherRatios(ratios)
+	quota, clamp := common.QuotaFromFloatChecked(priceData.ApplyOtherRatiosToFloat(baseQuota))
+	noteTaskQuotaClamp(info, clamp)
+	return quota
+}
+
+func noteTaskQuotaClamp(info *relaycommon.RelayInfo, clamp *common.QuotaClamp) {
+	if info != nil && clamp != nil && info.QuotaClamp == nil {
+		info.QuotaClamp = clamp
 	}
-	// 应用新的 ratios
-	result := float64(baseQuota)
-	for _, ra := range ratios {
-		if ra != 1.0 {
-			result *= ra
-		}
-	}
-	return int(result)
 }
 
 var fetchRespBuilders = map[int]func(c *gin.Context) (respBody []byte, taskResp *dto.TaskError){

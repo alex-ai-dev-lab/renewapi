@@ -161,6 +161,38 @@ export async function getChannel(id: number): Promise<GetChannelResponse> {
   return res.data
 }
 
+export type ChannelModelRoutePreview = {
+  success: boolean
+  message?: string
+  data?: {
+    model: string
+    client_endpoint: string
+    route: {
+      endpoint: string
+      source: string
+      matched_pattern?: string
+      reason: string
+    }
+    capability: {
+      supported: boolean
+      lossy: boolean
+      bridge?: string
+      reason: string
+    }
+  }
+}
+
+export async function getChannelModelRoutePreview(
+  id: number,
+  model: string,
+  clientEndpoint: string
+): Promise<ChannelModelRoutePreview> {
+  const res = await api.get(`/api/channel/${id}/model_route_preview`, {
+    params: { model, client_endpoint: clientEndpoint },
+  })
+  return res.data
+}
+
 /**
  * Create new channel(s)
  * Supports single, batch, and multi-key modes

@@ -100,14 +100,9 @@ func chatCompletionsViaResponses(c *gin.Context, info *relaycommon.RelayInfo, ad
 	if info.ChannelType == constant.ChannelTypeCodex {
 		responsesReq.Stream = common.GetPointer(true)
 	}
+	attemptSnapshot := info.SnapshotAttempt()
+	defer info.RestoreAttempt(attemptSnapshot)
 	info.AppendRequestConversion(types.RelayFormatOpenAIResponses)
-
-	savedRelayMode := info.RelayMode
-	savedRequestURLPath := info.RequestURLPath
-	defer func() {
-		info.RelayMode = savedRelayMode
-		info.RequestURLPath = savedRequestURLPath
-	}()
 
 	info.RelayMode = relayconstant.RelayModeResponses
 	info.RequestURLPath = "/v1/responses"

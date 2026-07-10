@@ -17,7 +17,9 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relay/reasonmap"
+	"github.com/QuantumNous/new-api/relay/responsebridge"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/openaicompat"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/reasoning"
@@ -904,6 +906,14 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		if err != nil {
 			logger.LogError(c, "send_stream_response_failed: "+err.Error())
 		}
+	} else if info.RelayFormat == types.RelayFormatOpenAIResponses {
+		response := StreamResponseClaude2OpenAI(&claudeResponse)
+		if !FormatClaudeResponseInfo(&claudeResponse, response, claudeInfo) {
+			return nil
+		}
+		if err := responsebridge.EmitChatChunk(c, info, response); err != nil {
+			return types.NewError(err, types.ErrorCodeBadResponseBody)
+		}
 	}
 	return nil
 }
@@ -965,6 +975,10 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 			}
 		}
 		helper.Done(c)
+	} else if info.RelayFormat == types.RelayFormatOpenAIResponses {
+		if err := responsebridge.CompleteChatStream(c, info, claudeInfo.Usage, stopReasonClaude2OpenAI(claudeInfo.StopReason)); err != nil {
+			common.SysLog("send final Responses event failed: " + err.Error())
+		}
 	}
 }
 
@@ -1133,6 +1147,12 @@ func claudeAggregateStreamThenReplay(c *gin.Context, resp *http.Response, info *
 	}
 	if info.RelayFormat == types.RelayFormatOpenAI {
 		replayClaudeAsOpenAIStream(c, info, finalResp, claudeInfo)
+	} else if info.RelayFormat == types.RelayFormatOpenAIResponses {
+		openaiResponse := ResponseClaude2OpenAI(&finalResp)
+		openaiResponse.Usage = buildOpenAIStyleUsageFromClaudeUsage(claudeInfo.Usage)
+		if emitErr := responsebridge.EmitChatResponseAsStream(c, info, openaiResponse); emitErr != nil {
+			return nil, types.NewError(emitErr, types.ErrorCodeBadResponseBody)
+		}
 	} else {
 		replayClaudeStream(c, finalResp, claudeInfo)
 	}
@@ -1402,6 +1422,17 @@ func prepareClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, clau
 		}
 	case types.RelayFormatClaude:
 		responseData = data
+	case types.RelayFormatOpenAIResponses:
+		openaiResponse := ResponseClaude2OpenAI(&claudeResponse)
+		openaiResponse.Usage = buildOpenAIStyleUsageFromClaudeUsage(claudeInfo.Usage)
+		responsesResponse, convErr := openaicompat.ChatResponseToResponses(openaiResponse)
+		if convErr != nil {
+			return nil, nil, types.NewError(convErr, types.ErrorCodeBadResponseBody)
+		}
+		responseData, err = common.Marshal(responsesResponse)
+		if err != nil {
+			return nil, nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+		}
 	}
 
 	if claudeResponse.Usage != nil && claudeResponse.Usage.ServerToolUse != nil && claudeResponse.Usage.ServerToolUse.WebSearchRequests > 0 {

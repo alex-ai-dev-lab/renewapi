@@ -55,7 +55,7 @@ func TestResolveModelRoute_GlobalDefaultsDoNotOverrideCodexEvenWhenEnabled(t *te
 		Id:      151,
 		Type:    constant.ChannelTypeCodex,
 		BaseURL: common.GetPointer(""),
-		Setting: common.GetPointer(`{"allow_model_protocol_override":true}`),
+		Setting: common.GetPointer(`{"allow_model_protocol_override":true,"model_protocol_override_targets":["openai"]}`),
 	}
 
 	channelType, _, overridden := ResolveModelRoute(channel, "gpt-5.5")
@@ -71,7 +71,7 @@ func TestResolveModelRoute_GlobalDefaultsRequireChannelOptIn(t *testing.T) {
 		Id:      2,
 		Type:    constant.ChannelTypeOpenAI,
 		BaseURL: common.GetPointer(""),
-		Setting: common.GetPointer(`{"allow_model_protocol_override":true}`),
+		Setting: common.GetPointer(`{"allow_model_protocol_override":true,"model_protocol_override_targets":["anthropic"]}`),
 	}
 
 	channelType, _, overridden := ResolveModelRoute(disabled, "claude-sonnet-4")
@@ -81,6 +81,37 @@ func TestResolveModelRoute_GlobalDefaultsRequireChannelOptIn(t *testing.T) {
 	channelType, _, overridden = ResolveModelRoute(enabled, "claude-sonnet-4")
 	require.Equal(t, constant.ChannelTypeAnthropic, channelType)
 	require.True(t, overridden)
+}
+
+func TestResolveModelRoute_GlobalDefaultsRequireTargetAllowlist(t *testing.T) {
+	configureModelEndpointRouteTest(t, map[int]map[string]*ModelEndpoint{})
+	channel := &Channel{
+		Id:      3,
+		Type:    constant.ChannelTypeOpenAI,
+		BaseURL: common.GetPointer("https://gateway.example"),
+		Setting: common.GetPointer(`{"allow_model_protocol_override":true}`),
+	}
+
+	decision := ResolveModelRouteDecision(channel, "claude-sonnet-4")
+	require.Equal(t, ModelRouteSourceNative, decision.Source)
+	require.Equal(t, constant.ChannelTypeOpenAI, decision.ChannelType)
+	require.False(t, decision.Overridden)
+}
+
+func TestResolveModelRouteDecisionKeepsGatewayBaseURL(t *testing.T) {
+	configureModelEndpointRouteTest(t, map[int]map[string]*ModelEndpoint{})
+	channel := &Channel{
+		Id:      4,
+		Type:    constant.ChannelTypeAnthropic,
+		BaseURL: common.GetPointer("https://gateway.example"),
+		Setting: common.GetPointer(`{"allow_model_protocol_override":true,"model_protocol_override_targets":["openai"]}`),
+	}
+
+	decision := ResolveModelRouteDecision(channel, "gpt-4.1")
+	require.Equal(t, ModelRouteSourceGlobal, decision.Source)
+	require.Equal(t, constant.EndpointTypeOpenAI, decision.Endpoint)
+	require.Equal(t, "https://gateway.example", decision.BaseURL)
+	require.True(t, decision.Overridden)
 }
 
 func TestResolveModelRoute_ExplicitModelEndpointCanOverrideWithoutChannelOptIn(t *testing.T) {

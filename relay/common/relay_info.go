@@ -78,6 +78,9 @@ type ChannelMeta struct {
 	ChannelSetting       dto.ChannelSettings
 	ChannelOtherSettings dto.ChannelOtherSettings
 	UpstreamModelName    string
+	RouteEndpoint        constant.EndpointType
+	RouteSource          string
+	RouteOverridden      bool
 	IsModelMapped        bool
 	SupportStreamOptions bool // 是否支持流式选项
 }
@@ -243,6 +246,9 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 		ParamOverride:        paramOverride,
 		HeadersOverride:      headerOverride,
 		UpstreamModelName:    common.GetContextKeyString(c, constant.ContextKeyOriginalModel),
+		RouteEndpoint:        constant.EndpointType(common.GetContextKeyString(c, constant.ContextKeyChannelRouteEndpoint)),
+		RouteSource:          common.GetContextKeyString(c, constant.ContextKeyChannelRouteSource),
+		RouteOverridden:      common.GetContextKeyBool(c, constant.ContextKeyChannelRouteOverridden),
 		IsModelMapped:        false,
 		SupportStreamOptions: false,
 	}

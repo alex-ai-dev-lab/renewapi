@@ -9,6 +9,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/relay/responsebridge"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/types"
 
@@ -28,6 +29,12 @@ func HandleStreamFormat(c *gin.Context, info *relaycommon.RelayInfo, data string
 		return handleClaudeFormat(c, data, info)
 	case types.RelayFormatGemini:
 		return handleGeminiFormat(c, data, info)
+	case types.RelayFormatOpenAIResponses:
+		var streamResponse dto.ChatCompletionsStreamResponse
+		if err := common.UnmarshalJsonStr(data, &streamResponse); err != nil {
+			return err
+		}
+		return responsebridge.EmitChatChunk(c, info, &streamResponse)
 	}
 	return nil
 }
@@ -199,6 +206,16 @@ func HandleFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, lastStream
 		// 发送最终的 Gemini 响应
 		c.Render(-1, common.CustomEvent{Data: "data: " + string(geminiResponseStr)})
 		_ = helper.FlushWriter(c)
+
+	case types.RelayFormatOpenAIResponses:
+		finishReason := ""
+		var streamResponse dto.ChatCompletionsStreamResponse
+		if err := common.Unmarshal(common.StringToByteSlice(lastStreamData), &streamResponse); err == nil && len(streamResponse.Choices) > 0 && streamResponse.Choices[0].FinishReason != nil {
+			finishReason = *streamResponse.Choices[0].FinishReason
+		}
+		if err := responsebridge.CompleteChatStream(c, info, usage, finishReason); err != nil {
+			common.SysLog("send final Responses event failed: " + err.Error())
+		}
 	}
 }
 

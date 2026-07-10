@@ -156,12 +156,19 @@ func Distribute() func(c *gin.Context) {
 				}
 
 				if channel == nil {
+					requiresResponses := strings.HasPrefix(c.Request.URL.Path, "/v1/responses")
+					clientFormat := types.RelayFormatOpenAI
+					if requiresResponses {
+						clientFormat = types.RelayFormatOpenAIResponses
+					}
 					channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
-						Ctx:                   c,
-						ModelName:             modelRequest.Model,
-						TokenGroup:            usingGroup,
-						Retry:                 common.GetPointer(0),
-						ProviderRoutingPolicy: modelRequest.ProviderPolicy,
+						Ctx:                           c,
+						ModelName:                     modelRequest.Model,
+						TokenGroup:                    usingGroup,
+						Retry:                         common.GetPointer(0),
+						RequireOpenAIResponsesSupport: requiresResponses,
+						ClientRelayFormat:             clientFormat,
+						ProviderRoutingPolicy:         modelRequest.ProviderPolicy,
 					})
 					if err != nil {
 						showGroup := usingGroup
@@ -592,13 +599,20 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	// Resolve the effective upstream type + base URL for this (channel, model).
 	// When no per-model override row exists this returns the channel's own type
 	// and base URL, so the context is populated exactly as before.
-	resolvedChannelType, resolvedBaseURL := resolveChannelRoute(channel, modelName)
+	routeDecision := model.ResolveModelRouteDecision(channel, modelName)
+	resolvedChannelType, resolvedBaseURL := routeDecision.ChannelType, routeDecision.BaseURL
+	if strings.Contains(resolvedBaseURL, "{model}") {
+		resolvedBaseURL = strings.ReplaceAll(resolvedBaseURL, "{model}", modelName)
+	}
 	if err := validateResolvedChannelRoute(channel, resolvedChannelType); err != nil {
 		return types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 	}
 	common.SetContextKey(c, constant.ContextKeyChannelId, channel.Id)
 	common.SetContextKey(c, constant.ContextKeyChannelName, channel.Name)
 	common.SetContextKey(c, constant.ContextKeyChannelType, resolvedChannelType)
+	common.SetContextKey(c, constant.ContextKeyChannelRouteEndpoint, string(routeDecision.Endpoint))
+	common.SetContextKey(c, constant.ContextKeyChannelRouteSource, string(routeDecision.Source))
+	common.SetContextKey(c, constant.ContextKeyChannelRouteOverridden, routeDecision.Overridden)
 	common.SetContextKey(c, constant.ContextKeyChannelCreateTime, channel.CreatedTime)
 	common.SetContextKey(c, constant.ContextKeyChannelSetting, channel.GetSetting())
 	common.SetContextKey(c, constant.ContextKeyChannelOtherSetting, channel.GetOtherSettings())

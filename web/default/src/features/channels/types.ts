@@ -95,6 +95,9 @@ export interface ChannelSettings {
   user_agent_override?: string
   normalize_upstream_errors?: boolean
   allow_model_protocol_override?: boolean
+  model_protocol_override_targets?: Array<
+    'openai' | 'openai-response' | 'anthropic'
+  >
   responses_function_call_arguments_format?: 'auto' | 'string' | 'object'
   anti_poison_profile?: 'trusted' | 'unknown' | 'probation' | 'quarantine'
   anti_poison_enabled?: boolean

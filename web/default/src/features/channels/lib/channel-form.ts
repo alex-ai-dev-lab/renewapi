@@ -187,6 +187,9 @@ export const channelFormSchema = z
     user_agent_override: z.string().optional(),
     normalize_upstream_errors: z.boolean().optional(),
     allow_model_protocol_override: z.boolean().optional(),
+    model_protocol_override_targets: z
+      .array(z.enum(['openai', 'openai-response', 'anthropic']))
+      .optional(),
     responses_function_call_arguments_format: z
       .enum(['auto', 'string', 'object'])
       .optional(),
@@ -370,6 +373,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   user_agent_override: '',
   normalize_upstream_errors: true,
   allow_model_protocol_override: false,
+  model_protocol_override_targets: [],
   responses_function_call_arguments_format: 'auto',
   anti_poison_profile: 'inherit',
   anti_poison_enabled: true,
@@ -436,6 +440,7 @@ export function transformChannelToFormDefaults(
     | 'user_agent_override'
     | 'normalize_upstream_errors'
     | 'allow_model_protocol_override'
+    | 'model_protocol_override_targets'
     | 'responses_function_call_arguments_format'
     | 'anti_poison_profile'
     | 'anti_poison_enabled'
@@ -471,6 +476,7 @@ export function transformChannelToFormDefaults(
     user_agent_override: '',
     normalize_upstream_errors: true,
     allow_model_protocol_override: false,
+    model_protocol_override_targets: [],
     responses_function_call_arguments_format: 'auto',
     anti_poison_profile: 'inherit',
     anti_poison_enabled: true,
@@ -512,6 +518,16 @@ export function transformChannelToFormDefaults(
         normalize_upstream_errors: parsed.normalize_upstream_errors !== false,
         allow_model_protocol_override:
           parsed.allow_model_protocol_override === true,
+        model_protocol_override_targets: Array.isArray(
+          parsed.model_protocol_override_targets
+        )
+          ? parsed.model_protocol_override_targets.filter(
+              (target: unknown) =>
+                target === 'openai' ||
+                target === 'openai-response' ||
+                target === 'anthropic'
+            )
+          : [],
         responses_function_call_arguments_format:
           parsed.responses_function_call_arguments_format === 'string' ||
           parsed.responses_function_call_arguments_format === 'object'
@@ -681,6 +697,10 @@ function buildSettingJSON(formData: ChannelFormValues): string {
     normalize_upstream_errors: formData.normalize_upstream_errors !== false,
     allow_model_protocol_override:
       formData.type !== 57 && formData.allow_model_protocol_override === true,
+    model_protocol_override_targets:
+      formData.type !== 57 && formData.allow_model_protocol_override === true
+        ? formData.model_protocol_override_targets || []
+        : [],
     responses_function_call_arguments_format:
       formData.responses_function_call_arguments_format || 'auto',
     anti_poison_enabled: formData.anti_poison_enabled !== false,

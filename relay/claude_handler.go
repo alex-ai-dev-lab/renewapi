@@ -143,6 +143,18 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		(info.ChannelType == constant.ChannelTypeCodex ||
 			service.ShouldChatCompletionsUseResponsesForChannel(info.ChannelId, info.ChannelType, info.ChannelBaseUrl, info.OriginModelName) ||
 			service.ShouldUseModelDefaultResponsesForRelay(info)) {
+		if service.ShouldUseModelDefaultResponsesForRelay(info) {
+			if capabilityErr := service.ValidateClaudeTextBridgeRequest(request); capabilityErr != nil {
+				return types.NewErrorWithStatusCode(capabilityErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			}
+			logger.LogInfo(c, fmt.Sprintf(
+				"channel #%d protocol bridge: client_format=%s upstream_endpoint=%s bridge=claude->responses lossy=false model=%s",
+				info.ChannelId,
+				info.RelayFormat,
+				info.RouteEndpoint,
+				info.OriginModelName,
+			))
+		}
 		openAIRequest, convErr := service.ClaudeToOpenAIRequest(*request, info)
 		if convErr != nil {
 			return types.NewError(convErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())

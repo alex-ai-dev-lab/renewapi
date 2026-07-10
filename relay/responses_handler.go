@@ -63,6 +63,17 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	}
 
 	if endpoint, ok := service.ShouldUseModelDefaultTextEndpointForResponses(info); ok {
+		if info.RelayMode == relayconstant.RelayModeResponsesCompact {
+			return types.NewErrorWithStatusCode(
+				fmt.Errorf("Responses compact cannot be bridged to %s", endpoint),
+				types.ErrorCodeInvalidRequest,
+				http.StatusBadRequest,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+		if capabilityErr := service.ValidateResponsesTextBridgeRequest(request); capabilityErr != nil {
+			return types.NewErrorWithStatusCode(capabilityErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
 		if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
 			return types.NewErrorWithStatusCode(
 				fmt.Errorf("model default endpoint rewrite to %s requires request conversion, but pass-through body is enabled", endpoint),
@@ -77,14 +88,15 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		}
 		chatInfo := *info
 		chatInfo.Request = chatReq
-		chatInfo.RelayFormat = types.RelayFormatOpenAI
 		chatInfo.RelayMode = relayconstant.RelayModeChatCompletions
 		chatInfo.RequestURLPath = "/v1/chat/completions"
 		chatInfo.FinalRequestRelayFormat = ""
 		chatInfo.RequestConversionChain = append(append([]types.RelayFormat(nil), info.RequestConversionChain...), types.RelayFormatOpenAI)
 		logger.LogInfo(c, fmt.Sprintf(
-			"channel #%d model default endpoint rewrite: responses -> %s (model=%s)",
+			"channel #%d protocol bridge: client_format=%s upstream_endpoint=%s bridge=responses->%s lossy=false model=%s",
 			info.ChannelId,
+			info.RelayFormat,
+			endpoint,
 			endpoint,
 			info.OriginModelName,
 		))

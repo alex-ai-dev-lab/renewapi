@@ -44,6 +44,9 @@ const (
 	ContextKeyChannelPreferredMultiKeyChannelId ContextKey = "channel_preferred_multi_key_channel_id"
 	ContextKeyChannelPreferredMultiKeyIndex     ContextKey = "channel_preferred_multi_key_index"
 	ContextKeyChannelKey                        ContextKey = "channel_key"
+	ContextKeyChannelRouteEndpoint              ContextKey = "channel_route_endpoint"
+	ContextKeyChannelRouteSource                ContextKey = "channel_route_source"
+	ContextKeyChannelRouteOverridden            ContextKey = "channel_route_overridden"
 	ContextKeyProviderRoutingPolicy             ContextKey = "provider_routing_policy"
 
 	ContextKeyAutoGroup           ContextKey = "auto_group"

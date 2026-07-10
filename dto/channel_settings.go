@@ -31,6 +31,9 @@ type ChannelSettings struct {
 	// this channel. Off by default so native-protocol channels keep their own
 	// authentication and request format unless the admin opts in.
 	AllowModelProtocolOverride bool `json:"allow_model_protocol_override,omitempty"`
+	// Restricts global model protocol overrides to explicitly declared upstream
+	// endpoint families. An empty list is fail-closed.
+	ModelProtocolOverrideTargets []string `json:"model_protocol_override_targets,omitempty"`
 
 	// Controls the upstream OpenAI Responses function_call.arguments shape.
 	// auto keeps the official string format, except Codex and runtime fallback

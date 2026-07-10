@@ -15,7 +15,9 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/openrouter"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/relay/responsebridge"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/openaicompat"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/QuantumNous/new-api/types"
@@ -334,8 +336,8 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			}
 		}
 	}
-	if canaryBuffer == nil && info.RelayFormat == types.RelayFormatOpenAI {
-		if shouldSendLastResp {
+	if canaryBuffer == nil && (info.RelayFormat == types.RelayFormatOpenAI || info.RelayFormat == types.RelayFormatOpenAIResponses) {
+		if shouldSendLastResp || info.RelayFormat == types.RelayFormatOpenAIResponses {
 			if responseProof != nil && !responseProof.Verified() && openAIStreamChunkHasVisibleText(lastStreamData) {
 				pendingStreamData = append(pendingStreamData, lastStreamData)
 			} else {
@@ -616,6 +618,12 @@ func oaiAggregateStreamThenReplay(c *gin.Context, info *relaycommon.RelayInfo, r
 		return nil, types.NewError(antipoison.OpaqueScanError(result), types.ErrorCodeAntiPoisonValidationFailed)
 	} else {
 		antipoison.RecordOpaqueResult(c, result)
+	}
+	if info.RelayFormat == types.RelayFormatOpenAIResponses {
+		if err := responsebridge.EmitChatResponseAsStream(c, info, &simpleResponse); err != nil {
+			return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+		}
+		return usage, nil
 	}
 
 	helper.SetEventStreamHeaders(c)
@@ -898,6 +906,15 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 			return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 		}
 		responseBody = geminiRespStr
+	case types.RelayFormatOpenAIResponses:
+		responsesResp, convErr := openaicompat.ChatResponseToResponses(&simpleResponse)
+		if convErr != nil {
+			return nil, types.NewError(convErr, types.ErrorCodeBadResponseBody)
+		}
+		responseBody, err = common.Marshal(responsesResp)
+		if err != nil {
+			return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+		}
 	}
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)

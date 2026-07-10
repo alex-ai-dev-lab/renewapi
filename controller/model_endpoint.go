@@ -4,7 +4,10 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,6 +19,45 @@ type modelEndpointPayload struct {
 	Model       string `json:"model"`
 	BaseURL     string `json:"base_url"`
 	ChannelType *int   `json:"channel_type"`
+}
+
+// PreviewChannelModelRoute shows the same route and bridge decision used by
+// production channel selection without sending an upstream request.
+func PreviewChannelModelRoute(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的渠道 ID"})
+		return
+	}
+	modelName := c.Query("model")
+	if modelName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "model is required"})
+		return
+	}
+	channel, err := model.GetChannelById(id, true)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	clientEndpoint := constant.EndpointType(c.DefaultQuery("client_endpoint", string(constant.EndpointTypeOpenAIResponse)))
+	var clientFormat types.RelayFormat = types.RelayFormatOpenAIResponses
+	switch clientEndpoint {
+	case constant.EndpointTypeOpenAI:
+		clientFormat = types.RelayFormatOpenAI
+	case constant.EndpointTypeAnthropic:
+		clientFormat = types.RelayFormatClaude
+	}
+	decision := model.ResolveModelRouteDecision(channel, modelName)
+	capability := service.EvaluateChannelProtocolCapability(channel, modelName, clientFormat, nil)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"model":           modelName,
+			"client_endpoint": clientEndpoint,
+			"route":           decision,
+			"capability":      capability,
+		},
+	})
 }
 
 // GetChannelModelEndpoints returns the per-model endpoint overrides for a channel.

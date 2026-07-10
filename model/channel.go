@@ -1284,6 +1284,19 @@ func (channel *Channel) ValidateSettings() error {
 			return err
 		}
 	}
+	seenTargets := make(map[string]struct{}, len(channelParams.ModelProtocolOverrideTargets))
+	for _, target := range channelParams.ModelProtocolOverrideTargets {
+		target = strings.TrimSpace(target)
+		switch constant.EndpointType(target) {
+		case constant.EndpointTypeOpenAI, constant.EndpointTypeOpenAIResponse, constant.EndpointTypeAnthropic:
+		default:
+			return fmt.Errorf("unsupported model protocol override target %q", target)
+		}
+		if _, exists := seenTargets[target]; exists {
+			return fmt.Errorf("duplicate model protocol override target %q", target)
+		}
+		seenTargets[target] = struct{}{}
+	}
 	return nil
 }
 

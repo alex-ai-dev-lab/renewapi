@@ -291,6 +291,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		RequireClaudeThinkingSupport:  relayInfo.ClaudeThinkingPreferSupportedChannel,
 		RequireOpenAIResponsesSupport: relayFormat == types.RelayFormatOpenAIResponses || relayFormat == types.RelayFormatOpenAIResponsesCompaction,
 		ModelDefaultEndpoint:          modelDefaultEndpoint,
+		ClientRelayFormat:             relayFormat,
+		Request:                       relayInfo.Request,
 		ProviderRoutingPolicy:         getProviderRoutingPolicy(c),
 	}
 	relayInfo.RetryIndex = 0

@@ -109,6 +109,7 @@ import {
   fetchModels,
   getAllModels,
   getChannel,
+  getChannelModelRoutePreview,
   getChannelKey,
   getGroups,
   getPrefillGroups,
@@ -118,6 +119,7 @@ import {
   refreshCodexCredential,
   type CodexCredentialCandidate,
   type CodexCredentialPreflightResponse,
+  type ChannelModelRoutePreview,
 } from '../../api'
 import {
   ADD_MODE_OPTIONS,
@@ -356,6 +358,12 @@ export function ChannelMutateDrawer({
     ((action: MissingModelsAction) => void) | null
   >(null)
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false)
+  const [routePreviewModel, setRoutePreviewModel] = useState('')
+  const [routePreviewEndpoint, setRoutePreviewEndpoint] =
+    useState('openai-response')
+  const [routePreviewLoading, setRoutePreviewLoading] = useState(false)
+  const [routePreview, setRoutePreview] =
+    useState<ChannelModelRoutePreview['data']>()
   const [paramOverrideEditorOpen, setParamOverrideEditorOpen] = useState(false)
 
   const isEditing = Boolean(currentRow)
@@ -434,6 +442,11 @@ export function ChannelMutateDrawer({
   const keyMode = form.watch('key_mode')
   const currentGroups = form.watch('group')
   const currentType = form.watch('type')
+  const modelProtocolOverrideEnabled = form.watch(
+    'allow_model_protocol_override'
+  )
+  const modelProtocolOverrideTargets =
+    form.watch('model_protocol_override_targets') || []
   const currentBaseUrl = form.watch('base_url')
   const currentModels = form.watch('models')
   const currentName = form.watch('name')
@@ -443,6 +456,31 @@ export function ChannelMutateDrawer({
     'upstream_model_update_check_enabled'
   )
   const currentSettings = form.watch('settings')
+
+  const previewModelRoute = useCallback(async () => {
+    if (!channelId || !routePreviewModel.trim()) return
+    setRoutePreviewLoading(true)
+    try {
+      const result = await getChannelModelRoutePreview(
+        channelId,
+        routePreviewModel.trim(),
+        routePreviewEndpoint
+      )
+      if (!result.success || !result.data) {
+        toast.error(result.message || t('Failed to preview model route'))
+        return
+      }
+      setRoutePreview(result.data)
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to preview model route')
+      )
+    } finally {
+      setRoutePreviewLoading(false)
+    }
+  }, [channelId, routePreviewEndpoint, routePreviewModel, t])
   const {
     unlocked: doubaoApiEditUnlocked,
     handleClick: handleApiConfigSecretClick,
@@ -4413,30 +4451,151 @@ export function ChannelMutateDrawer({
                         />
 
                         {currentType !== 57 && (
-                          <FormField
-                            control={form.control}
-                            name='allow_model_protocol_override'
-                            render={({ field }) => (
-                              <FormItem className='flex items-center justify-between px-4 py-3'>
-                                <div className='space-y-0.5'>
-                                  <FormLabel>
-                                    {t('Model Protocol Override')}
-                                  </FormLabel>
-                                  <FormDescription>
-                                    {t(
-                                      'Allow global model rules to switch the upstream adaptor/protocol for this channel. Use only for multi-protocol gateways.'
-                                    )}
-                                  </FormDescription>
-                                </div>
-                                <FormControl>
-                                  <Switch
-                                    checked={field.value === true}
-                                    onCheckedChange={field.onChange}
-                                  />
-                                </FormControl>
-                              </FormItem>
+                          <>
+                            <FormField
+                              control={form.control}
+                              name='allow_model_protocol_override'
+                              render={({ field }) => (
+                                <FormItem className='flex items-center justify-between px-4 py-3'>
+                                  <div className='space-y-0.5'>
+                                    <FormLabel>
+                                      {t('Model Protocol Override')}
+                                    </FormLabel>
+                                    <FormDescription>
+                                      {t(
+                                        'Allow global model rules to switch the upstream adaptor/protocol for this channel. A target protocol must also be selected.'
+                                      )}
+                                    </FormDescription>
+                                  </div>
+                                  <FormControl>
+                                    <Switch
+                                      checked={field.value === true}
+                                      onCheckedChange={field.onChange}
+                                    />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                            {modelProtocolOverrideEnabled && (
+                              <FormField
+                                control={form.control}
+                                name='model_protocol_override_targets'
+                                render={() => (
+                                  <FormItem className='space-y-2 px-4 py-3'>
+                                    <FormLabel>
+                                      {t('Allowed upstream protocols')}
+                                    </FormLabel>
+                                    <FormDescription>
+                                      {t(
+                                        'Only selected targets may be chosen by global model rules. Empty means no protocol override.'
+                                      )}
+                                    </FormDescription>
+                                    <FormControl>
+                                      <MultiSelect
+                                        options={[
+                                          {
+                                            label: 'OpenAI Chat Completions',
+                                            value: 'openai',
+                                          },
+                                          {
+                                            label: 'OpenAI Responses',
+                                            value: 'openai-response',
+                                          },
+                                          {
+                                            label: 'Anthropic Messages',
+                                            value: 'anthropic',
+                                          },
+                                        ]}
+                                        selected={modelProtocolOverrideTargets}
+                                        onChange={(values) =>
+                                          form.setValue(
+                                            'model_protocol_override_targets',
+                                            values as Array<
+                                              | 'openai'
+                                              | 'openai-response'
+                                              | 'anthropic'
+                                            >,
+                                            { shouldDirty: true }
+                                          )
+                                        }
+                                        placeholder={t(
+                                          'Select upstream protocols'
+                                        )}
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
                             )}
-                          />
+                            {modelProtocolOverrideEnabled && channelId && (
+                              <div className='space-y-3 px-4 py-3'>
+                                <div className='grid gap-2 sm:grid-cols-[1fr_190px_auto]'>
+                                  <Input
+                                    value={routePreviewModel}
+                                    onChange={(event) =>
+                                      setRoutePreviewModel(event.target.value)
+                                    }
+                                    placeholder={t('Model name to preview')}
+                                  />
+                                  <Select
+                                    value={routePreviewEndpoint}
+                                    onValueChange={(value) => {
+                                      if (value) setRoutePreviewEndpoint(value)
+                                    }}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value='openai-response'>
+                                        OpenAI Responses
+                                      </SelectItem>
+                                      <SelectItem value='openai'>
+                                        OpenAI Chat
+                                      </SelectItem>
+                                      <SelectItem value='anthropic'>
+                                        Anthropic Messages
+                                      </SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <Button
+                                    type='button'
+                                    variant='outline'
+                                    onClick={previewModelRoute}
+                                    disabled={
+                                      routePreviewLoading ||
+                                      routePreviewModel.trim() === ''
+                                    }
+                                  >
+                                    {routePreviewLoading ? (
+                                      <Loader2 className='size-4 animate-spin' />
+                                    ) : (
+                                      <Route className='size-4' />
+                                    )}
+                                    {t('Preview')}
+                                  </Button>
+                                </div>
+                                {routePreview && (
+                                  <Alert
+                                    className={
+                                      routePreview.capability.supported
+                                        ? 'border-emerald-500/30 bg-emerald-500/5'
+                                        : 'border-destructive/30 bg-destructive/5'
+                                    }
+                                  >
+                                    <AlertDescription>
+                                      {routePreview.route.source} →{' '}
+                                      {routePreview.route.endpoint}
+                                      {routePreview.capability.bridge
+                                        ? ` (${routePreview.capability.bridge})`
+                                        : ''}
+                                      : {routePreview.capability.reason}
+                                    </AlertDescription>
+                                  </Alert>
+                                )}
+                              </div>
+                            )}
+                          </>
                         )}
 
                         <FormField

@@ -6,10 +6,12 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/antipoison"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
 
@@ -25,6 +27,8 @@ type RetryParam struct {
 	RequireClaudeThinkingSupport              bool
 	RequireOpenAIResponsesSupport             bool
 	ModelDefaultEndpoint                      string
+	ClientRelayFormat                         types.RelayFormat
+	Request                                   dto.Request
 	ForceResponsesFunctionCallArgumentsObject bool
 	LastSelectedChannelId                     int
 	ProviderRoutingPolicy                     *ProviderRoutingPolicy
@@ -210,29 +214,17 @@ func channelMatchesRetryRequirements(param *RetryParam, channel *model.Channel) 
 	if param.RequireClaudeThinkingSupport && !ChannelSupportsClaudeThinking(channel) {
 		return false
 	}
-	if retryRequirementNeedsOpenAIResponsesSupport(param, channel) && !ChannelSupportsOpenAIResponses(channel) {
-		return false
+	if param.RequireOpenAIResponsesSupport {
+		capability := EvaluateChannelProtocolCapability(channel, param.ModelName, types.RelayFormatOpenAIResponses, param.Request)
+		if !capability.Supported || capability.Lossy {
+			return false
+		}
 	}
 	if !antipoison.ProductionRoutingAllowed(channel.Id, channel.GetSetting()) {
 		return false
 	}
 	if !ChannelAntiPoisonCircuitAllowsProduction(channel.Id, channel.GetSetting()) {
 		return false
-	}
-	return true
-}
-
-func retryRequirementNeedsOpenAIResponsesSupport(param *RetryParam, channel *model.Channel) bool {
-	if param == nil || !param.RequireOpenAIResponsesSupport {
-		return false
-	}
-	if channel != nil && channel.GetSetting().AllowModelProtocolOverride {
-		switch constant.EndpointType(strings.TrimSpace(param.ModelDefaultEndpoint)) {
-		case constant.EndpointTypeOpenAI, constant.EndpointTypeAnthropic:
-			return false
-		case constant.EndpointTypeOpenAIResponse, constant.EndpointTypeOpenAIResponseCompact:
-			return true
-		}
 	}
 	return true
 }

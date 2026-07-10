@@ -27,13 +27,21 @@ func TestShouldUseModelDefaultResponsesForRelayRequiresChannelOptIn(t *testing.T
 	}
 	enabled := &relaycommon.RelayInfo{
 		OriginModelName: "gpt5.5",
-		ChannelMeta: &relaycommon.ChannelMeta{ChannelSetting: dto.ChannelSettings{
-			AllowModelProtocolOverride: true,
-		}},
+		ChannelMeta: &relaycommon.ChannelMeta{
+			RouteEndpoint:   constant.EndpointTypeOpenAIResponse,
+			RouteOverridden: true,
+			ChannelSetting: dto.ChannelSettings{
+				AllowModelProtocolOverride:   true,
+				ModelProtocolOverrideTargets: []string{string(constant.EndpointTypeOpenAIResponse)},
+			},
+		},
 	}
 
 	require.False(t, ShouldUseModelDefaultResponsesForRelay(disabled))
 	require.True(t, ShouldUseModelDefaultResponsesForRelay(enabled))
+	disabled.ChannelMeta.RouteEndpoint = constant.EndpointTypeOpenAIResponse
+	disabled.ChannelMeta.RouteOverridden = true
+	require.False(t, ShouldUseModelDefaultResponsesForRelay(disabled))
 }
 
 func TestShouldUseModelDefaultTextEndpointForResponses(t *testing.T) {
@@ -49,9 +57,14 @@ func TestShouldUseModelDefaultTextEndpointForResponses(t *testing.T) {
 
 	info := &relaycommon.RelayInfo{
 		OriginModelName: "claude-opus-4-8",
-		ChannelMeta: &relaycommon.ChannelMeta{ChannelSetting: dto.ChannelSettings{
-			AllowModelProtocolOverride: true,
-		}},
+		ChannelMeta: &relaycommon.ChannelMeta{
+			RouteEndpoint:   constant.EndpointTypeAnthropic,
+			RouteOverridden: true,
+			ChannelSetting: dto.ChannelSettings{
+				AllowModelProtocolOverride:   true,
+				ModelProtocolOverrideTargets: []string{string(constant.EndpointTypeAnthropic)},
+			},
+		},
 	}
 
 	endpoint, ok := ShouldUseModelDefaultTextEndpointForResponses(info)

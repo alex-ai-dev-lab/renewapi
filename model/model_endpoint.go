@@ -183,6 +183,122 @@ func ChannelAllowsModelProtocolOverride(channel *Channel) bool {
 	return channel.GetSetting().AllowModelProtocolOverride
 }
 
+type ModelRouteSource string
+
+const (
+	ModelRouteSourceNative   ModelRouteSource = "native"
+	ModelRouteSourceExplicit ModelRouteSource = "explicit"
+	ModelRouteSourceGlobal   ModelRouteSource = "global"
+)
+
+// ModelRouteDecision is the single source of truth for the effective upstream
+// adaptor and endpoint selected for a channel/model pair.
+type ModelRouteDecision struct {
+	ChannelType    int                   `json:"channel_type"`
+	BaseURL        string                `json:"base_url"`
+	Endpoint       constant.EndpointType `json:"endpoint"`
+	Source         ModelRouteSource      `json:"source"`
+	MatchedType    string                `json:"matched_type,omitempty"`
+	MatchedPattern string                `json:"matched_pattern,omitempty"`
+	Overridden     bool                  `json:"overridden"`
+	Reason         string                `json:"reason"`
+}
+
+func EndpointTypeForChannelType(channelType int) constant.EndpointType {
+	switch channelType {
+	case constant.ChannelTypeAnthropic:
+		return constant.EndpointTypeAnthropic
+	case constant.ChannelTypeGemini:
+		return constant.EndpointTypeGemini
+	case constant.ChannelTypeCodex:
+		return constant.EndpointTypeOpenAIResponse
+	default:
+		return constant.EndpointTypeOpenAI
+	}
+}
+
+func ChannelAllowsModelProtocolOverrideTarget(channel *Channel, target constant.EndpointType) bool {
+	if !ChannelAllowsModelProtocolOverride(channel) || target == "" {
+		return false
+	}
+	for _, configured := range channel.GetSetting().ModelProtocolOverrideTargets {
+		if constant.EndpointType(strings.TrimSpace(configured)) == target {
+			return true
+		}
+	}
+	return false
+}
+
+func globalRouteProfile(channel *Channel, modelName string) (operation_setting.ModelEndpointRouteProfile, bool) {
+	profile, ok := operation_setting.ResolveModelDefaultProfile(modelName)
+	if !ok {
+		return operation_setting.ModelEndpointRouteProfile{}, false
+	}
+	target := constant.EndpointType(strings.TrimSpace(profile.DefaultEndpoint))
+	if !ChannelAllowsModelProtocolOverrideTarget(channel, target) {
+		return operation_setting.ModelEndpointRouteProfile{}, false
+	}
+	return profile, true
+}
+
+// ResolveModelRouteDecision applies explicit per-model rows first, then an
+// allowlisted global model rule, and finally the channel's native protocol.
+func ResolveModelRouteDecision(channel *Channel, modelName string) ModelRouteDecision {
+	if channel == nil {
+		return ModelRouteDecision{Source: ModelRouteSourceNative, Reason: "channel is nil"}
+	}
+	decision := ModelRouteDecision{
+		ChannelType: channel.Type,
+		BaseURL:     channel.GetBaseURL(),
+		Endpoint:    EndpointTypeForChannelType(channel.Type),
+		Source:      ModelRouteSourceNative,
+		Reason:      "channel native protocol",
+	}
+
+	ep := GetModelEndpoint(channel.Id, modelName)
+	if ep == nil {
+		if profile, ok := globalRouteProfile(channel, modelName); ok {
+			decision.ChannelType = profile.ChannelType
+			decision.Endpoint = constant.EndpointType(profile.DefaultEndpoint)
+			decision.Source = ModelRouteSourceGlobal
+			decision.MatchedType = profile.MatchType
+			decision.MatchedPattern = profile.Pattern
+			decision.Overridden = true
+			decision.Reason = "allowlisted global model rule"
+		}
+		return decision
+	}
+
+	decision.Source = ModelRouteSourceExplicit
+	decision.Overridden = true
+	decision.Reason = "explicit channel model endpoint"
+	protocolFromGlobal := false
+	if ep.ChannelType != nil {
+		decision.ChannelType = *ep.ChannelType
+		decision.Endpoint = EndpointTypeForChannelType(decision.ChannelType)
+	} else if profile, ok := globalRouteProfile(channel, modelName); ok {
+		decision.ChannelType = profile.ChannelType
+		decision.Endpoint = constant.EndpointType(profile.DefaultEndpoint)
+		decision.MatchedType = profile.MatchType
+		decision.MatchedPattern = profile.Pattern
+		protocolFromGlobal = true
+	} else if inferred, ok := InferChannelTypeFromModel(modelName); ok {
+		decision.ChannelType = inferred
+		decision.Endpoint = EndpointTypeForChannelType(inferred)
+	}
+
+	if strings.TrimSpace(ep.BaseURL) != "" {
+		decision.BaseURL = strings.TrimSpace(ep.BaseURL)
+	} else if decision.ChannelType != channel.Type && !protocolFromGlobal {
+		if decision.ChannelType >= 0 && decision.ChannelType < len(constant.ChannelBaseURLs) {
+			if official := constant.ChannelBaseURLs[decision.ChannelType]; official != "" {
+				decision.BaseURL = official
+			}
+		}
+	}
+	return decision
+}
+
 // ResolveModelRoute returns the effective upstream channel type and base URL for
 // the given channel + model. When no per-model override applies and the channel
 // has not opted into global protocol routing, it returns the channel's own type
@@ -197,51 +313,8 @@ func ChannelAllowsModelProtocolOverride(channel *Channel) bool {
 //     channels keep their own host.
 //  3. Otherwise the channel's own type and base URL are used unchanged.
 func ResolveModelRoute(channel *Channel, modelName string) (channelType int, baseURL string, overridden bool) {
-	if channel == nil {
-		return 0, "", false
-	}
-	channelType = channel.Type
-	baseURL = channel.GetBaseURL()
-	ep := GetModelEndpoint(channel.Id, modelName)
-	if ep == nil {
-		// No per-channel override: consult the global model-endpoint default
-		// registry only when the channel explicitly opted into model-based
-		// protocol routing. It controls the upstream protocol/adaptor only and
-		// never changes the base URL, so the channel keeps its own host.
-		if ChannelAllowsModelProtocolOverride(channel) {
-			if gt, ok := operation_setting.ResolveModelDefaultChannelType(modelName); ok {
-				return gt, baseURL, gt != channel.Type
-			}
-		}
-		return channelType, baseURL, false
-	}
-	// A per-channel row exists. Protocol precedence: explicit per-model type >
-	// global default for opted-in auto rows > name inference > the channel's own
-	// type.
-	protocolFromGlobal := false
-	if ep.ChannelType != nil {
-		channelType = *ep.ChannelType
-	} else if ChannelAllowsModelProtocolOverride(channel) {
-		if gt, ok := operation_setting.ResolveModelDefaultChannelType(modelName); ok {
-			channelType = gt
-			protocolFromGlobal = true
-		}
-	} else if inferred, ok := InferChannelTypeFromModel(modelName); ok {
-		channelType = inferred
-	}
-	// Resolve base URL: an explicit per-model override wins; else, when a
-	// name-inferred protocol change occurs, use that type's official base URL. A
-	// protocol chosen by the global default keeps the channel's own base URL.
-	if strings.TrimSpace(ep.BaseURL) != "" {
-		baseURL = strings.TrimSpace(ep.BaseURL)
-	} else if channelType != channel.Type && !protocolFromGlobal {
-		if channelType >= 0 && channelType < len(constant.ChannelBaseURLs) {
-			if official := constant.ChannelBaseURLs[channelType]; official != "" {
-				baseURL = official
-			}
-		}
-	}
-	return channelType, baseURL, true
+	decision := ResolveModelRouteDecision(channel, modelName)
+	return decision.ChannelType, decision.BaseURL, decision.Overridden
 }
 
 // GetChannelModelEndpoints returns all override rows for a channel, ordered by

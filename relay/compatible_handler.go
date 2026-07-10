@@ -85,6 +85,18 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		(info.ChannelType == constant.ChannelTypeCodex ||
 			service.ShouldChatCompletionsUseResponsesForChannel(info.ChannelId, info.ChannelType, info.ChannelBaseUrl, info.OriginModelName) ||
 			service.ShouldUseModelDefaultResponsesForRelay(info)) {
+		if service.ShouldUseModelDefaultResponsesForRelay(info) {
+			if capabilityErr := service.ValidateChatTextBridgeRequest(request); capabilityErr != nil {
+				return types.NewErrorWithStatusCode(capabilityErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			}
+			logger.LogInfo(c, fmt.Sprintf(
+				"channel #%d protocol bridge: client_format=%s upstream_endpoint=%s bridge=openai->responses lossy=false model=%s",
+				info.ChannelId,
+				info.RelayFormat,
+				info.RouteEndpoint,
+				info.OriginModelName,
+			))
+		}
 		applySystemPromptIfNeeded(c, info, request)
 		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, request)
 		if newApiErr != nil {

@@ -46,6 +46,7 @@ import {
   Col,
   Highlight,
   Input,
+  Select,
   Tooltip,
   Collapse,
   Dropdown,
@@ -200,6 +201,7 @@ const EditChannelModal = (props) => {
     force_format: false,
     thinking_to_content: false,
     allow_model_protocol_override: false,
+    model_protocol_override_targets: [],
     proxy: '',
     tls_insecure_skip_verify: false,
     pass_through_body_enabled: false,
@@ -537,11 +539,16 @@ const EditChannelModal = (props) => {
     force_format: false,
     thinking_to_content: false,
     allow_model_protocol_override: false,
+    model_protocol_override_targets: [],
     proxy: '',
     tls_insecure_skip_verify: false,
     pass_through_body_enabled: false,
     system_prompt: '',
   });
+  const [routePreviewModel, setRoutePreviewModel] = useState('');
+  const [routePreviewEndpoint, setRoutePreviewEndpoint] = useState('openai-response');
+  const [routePreviewLoading, setRoutePreviewLoading] = useState(false);
+  const [routePreview, setRoutePreview] = useState(null);
   const showApiConfigCard = true; // 控制是否显示 API 配置卡片
   const getInitValues = () => ({ ...originInputs });
 
@@ -562,6 +569,25 @@ const EditChannelModal = (props) => {
     const newSettings = { ...channelSettings, [key]: value };
     const settingsJson = JSON.stringify(newSettings);
     handleInputChange('setting', settingsJson);
+  };
+
+  const previewModelRoute = async () => {
+    if (!isEdit || !routePreviewModel.trim()) return;
+    setRoutePreviewLoading(true);
+    try {
+      const response = await API.get(`/api/channel/${channelId}/model_route_preview`, {
+        params: { model: routePreviewModel.trim(), client_endpoint: routePreviewEndpoint },
+      });
+      if (!response.data?.success || !response.data?.data) {
+        showError(response.data?.message || t('路由预览失败'));
+        return;
+      }
+      setRoutePreview(response.data.data);
+    } catch (error) {
+      showError(error.message || t('路由预览失败'));
+    } finally {
+      setRoutePreviewLoading(false);
+    }
   };
 
   const handleChannelOtherSettingsChange = (key, value) => {
@@ -894,6 +920,9 @@ const EditChannelModal = (props) => {
             parsedSettings.thinking_to_content || false;
           data.allow_model_protocol_override =
             parsedSettings.allow_model_protocol_override === true;
+          data.model_protocol_override_targets = Array.isArray(parsedSettings.model_protocol_override_targets)
+            ? parsedSettings.model_protocol_override_targets.filter((target) => ['openai', 'openai-response', 'anthropic'].includes(target))
+            : [];
           data.proxy = parsedSettings.proxy || '';
           data.tls_insecure_skip_verify =
             parsedSettings.tls_insecure_skip_verify === true;
@@ -907,6 +936,7 @@ const EditChannelModal = (props) => {
           data.force_format = false;
           data.thinking_to_content = false;
           data.allow_model_protocol_override = false;
+          data.model_protocol_override_targets = [];
           data.proxy = '';
           data.tls_insecure_skip_verify = false;
           data.pass_through_body_enabled = false;
@@ -917,6 +947,7 @@ const EditChannelModal = (props) => {
         data.force_format = false;
         data.thinking_to_content = false;
         data.allow_model_protocol_override = false;
+        data.model_protocol_override_targets = [];
         data.proxy = '';
         data.tls_insecure_skip_verify = false;
         data.pass_through_body_enabled = false;
@@ -1032,6 +1063,7 @@ const EditChannelModal = (props) => {
         force_format: data.force_format,
         thinking_to_content: data.thinking_to_content,
         allow_model_protocol_override: data.allow_model_protocol_override,
+        model_protocol_override_targets: data.model_protocol_override_targets || [],
         proxy: data.proxy,
         tls_insecure_skip_verify: data.tls_insecure_skip_verify,
         pass_through_body_enabled: data.pass_through_body_enabled,
@@ -1528,6 +1560,7 @@ const EditChannelModal = (props) => {
       force_format: false,
       thinking_to_content: false,
       allow_model_protocol_override: false,
+      model_protocol_override_targets: [],
       proxy: '',
       tls_insecure_skip_verify: false,
       pass_through_body_enabled: false,
@@ -1892,6 +1925,10 @@ const EditChannelModal = (props) => {
       allow_model_protocol_override:
         localInputs.type !== 57 &&
         localInputs.allow_model_protocol_override === true,
+      model_protocol_override_targets:
+        localInputs.type !== 57 && localInputs.allow_model_protocol_override === true
+          ? localInputs.model_protocol_override_targets || []
+          : [],
       proxy: localInputs.proxy || '',
       tls_insecure_skip_verify:
         localInputs.tls_insecure_skip_verify === true,
@@ -1978,6 +2015,7 @@ const EditChannelModal = (props) => {
     delete localInputs.force_format;
     delete localInputs.thinking_to_content;
     delete localInputs.allow_model_protocol_override;
+    delete localInputs.model_protocol_override_targets;
     delete localInputs.proxy;
     delete localInputs.tls_insecure_skip_verify;
     delete localInputs.pass_through_body_enabled;
@@ -2675,7 +2713,24 @@ const EditChannelModal = (props) => {
                   <Form.Switch field='thinking_to_content' label={t('思考内容转换')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('thinking_to_content', value)} extraText={t('将 reasoning_content 转换为 <think> 标签拼接到内容中')} />
                   <Form.Switch field='pass_through_body_enabled' label={t('透传请求体')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('pass_through_body_enabled', value)} extraText={t('启用请求体透传功能')} />
                   {inputs.type !== 57 && (
-                    <Form.Switch field='allow_model_protocol_override' label={t('按模型切换上游协议')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('allow_model_protocol_override', value)} extraText={t('允许全局模型规则覆盖该渠道的上游适配器/鉴权协议。仅用于多协议聚合网关。')} />
+                    <>
+                      <Form.Switch field='allow_model_protocol_override' label={t('按模型切换上游协议')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('allow_model_protocol_override', value)} extraText={t('允许全局模型规则覆盖该渠道的上游适配器/鉴权协议；还必须选择允许的目标协议。')} />
+                      {inputs.allow_model_protocol_override === true && (
+                        <>
+                          <Form.Select field='model_protocol_override_targets' label={t('允许的上游协议')} multiple optionList={[{ label: 'OpenAI Chat Completions', value: 'openai' }, { label: 'OpenAI Responses', value: 'openai-response' }, { label: 'Anthropic Messages', value: 'anthropic' }]} onChange={(value) => handleChannelSettingsChange('model_protocol_override_targets', value || [])} extraText={t('只有选中的协议可被全局模型规则使用；空列表表示不允许改写。')} />
+                          {isEdit && (
+                            <div className='mb-3'>
+                              <Space wrap>
+                                <Input value={routePreviewModel} onChange={setRoutePreviewModel} placeholder={t('输入要预览的模型名')} style={{ width: 240 }} />
+                                <Select value={routePreviewEndpoint} onChange={setRoutePreviewEndpoint} style={{ width: 190 }} optionList={[{ label: 'OpenAI Responses', value: 'openai-response' }, { label: 'OpenAI Chat', value: 'openai' }, { label: 'Anthropic Messages', value: 'anthropic' }]} />
+                                <Button icon={<IconSearch />} loading={routePreviewLoading} disabled={!routePreviewModel.trim()} onClick={previewModelRoute}>{t('预览路由')}</Button>
+                              </Space>
+                              {routePreview && <Banner className='mt-2' type={routePreview.capability.supported ? 'success' : 'danger'} description={`${routePreview.route.source} → ${routePreview.route.endpoint}${routePreview.capability.bridge ? ` (${routePreview.capability.bridge})` : ''}: ${routePreview.capability.reason}`} />}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </>
                   )}
                   <Form.Switch field='tls_insecure_skip_verify' label={t('跳过上游 TLS 证书校验')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('tls_insecure_skip_verify', value)} extraText={t('仅用于兼容 IP:443、自签证书、证书过期、证书不受信任或 SAN 不匹配的上游。开启后会降低中间人攻击防护能力，请只对可信私有上游启用。')} />
                   <Form.Switch field='auto_test_and_recover_enabled' label={t('允许自动测试及恢复')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelOtherSettingsChange('auto_test_and_recover_enabled', value)} extraText={t('开启后，系统会按全局自动测试间隔检测该渠道，并在测试通过后自动启用；关闭后，即使全局自动测试开启，该渠道也会保持禁用，直到你手动启用。')} />

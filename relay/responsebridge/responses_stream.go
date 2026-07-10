@@ -349,6 +349,5 @@ func (e *ResponsesStreamEmitter) send(c *gin.Context, eventType string, fields m
 	if err != nil {
 		return err
 	}
-	helper.ResponseChunkData(c, dto.ResponsesStreamResponse{Type: eventType}, string(data))
-	return nil
+	return helper.ResponseChunkData(c, dto.ResponsesStreamResponse{Type: eventType}, string(data))
 }

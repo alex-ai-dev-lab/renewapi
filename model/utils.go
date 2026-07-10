@@ -105,6 +105,12 @@ func batchUpdate() {
 	common.SysLog("batch update finished")
 }
 
+// FlushBatchUpdates persists pending in-memory quota and request counters.
+// It is safe to call while the periodic updater is running.
+func FlushBatchUpdates() {
+	batchUpdate()
+}
+
 func RecordExist(err error) (bool, error) {
 	if err == nil {
 		return true, nil

@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -22,9 +25,9 @@ import (
 	"github.com/QuantumNous/new-api/oauth"
 	"github.com/QuantumNous/new-api/pkg/compat"
 	"github.com/QuantumNous/new-api/pkg/compat/errornorm"
-	"github.com/QuantumNous/new-api/pkg/compat/toolschema"
 	"github.com/QuantumNous/new-api/pkg/compat/pricesync"
 	"github.com/QuantumNous/new-api/pkg/compat/scheduler"
+	"github.com/QuantumNous/new-api/pkg/compat/toolschema"
 	"github.com/QuantumNous/new-api/pkg/compat/ua"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/QuantumNous/new-api/relay"
@@ -231,10 +234,48 @@ func main() {
 	// Log startup success message
 	common.LogStartupSuccess(startTime, port)
 
-	err = server.Run(":" + port)
-	if err != nil {
-		common.FatalLog("failed to start HTTP server: " + err.Error())
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: server,
 	}
+	serverErr := make(chan error, 1)
+	go func() {
+		serverErr <- srv.ListenAndServe()
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(quit)
+	select {
+	case sig := <-quit:
+		common.SysLog(fmt.Sprintf("received signal: %v, shutting down...", sig))
+	case listenErr := <-serverErr:
+		if listenErr != nil && !errors.Is(listenErr, http.ErrServerClosed) {
+			common.FatalLog("failed to start HTTP server: " + listenErr.Error())
+		}
+		return
+	}
+
+	shutdownSeconds := common.GetEnvOrDefault("SHUTDOWN_TIMEOUT_SECONDS", 120)
+	if shutdownSeconds <= 0 {
+		shutdownSeconds = 120
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(shutdownSeconds)*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		common.SysError(fmt.Sprintf("graceful shutdown timed out: %v", err))
+		if closeErr := srv.Close(); closeErr != nil {
+			common.SysError(fmt.Sprintf("forced server close failed: %v", closeErr))
+		}
+	}
+
+	if common.BatchUpdateEnabled {
+		model.FlushBatchUpdates()
+	}
+	if common.DataExportEnabled {
+		model.SaveQuotaDataCache()
+	}
+	common.SysLog("server exited")
 }
 
 func InjectUmamiAnalytics() {

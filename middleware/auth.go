@@ -229,8 +229,7 @@ func TokenOrUserAuth() func(c *gin.Context) {
 }
 
 // TokenAuthReadOnly 宽松版本的令牌认证中间件，用于只读查询接口。
-// 只验证令牌 key 是否存在，不检查令牌状态、过期时间和额度。
-// 即使令牌已过期、已耗尽或已禁用，也允许访问。
+// 允许已过期或已耗尽的令牌查询历史数据，但显式禁用的令牌会被拒绝。
 // 仍然检查用户是否被封禁。
 func TokenAuthReadOnly() func(c *gin.Context) {
 	return func(c *gin.Context) {
@@ -268,6 +267,15 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 			return
 		}
 
+		if !tokenStatusAllowsReadOnly(token.Status) {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgTokenStatusUnavailable),
+			})
+			c.Abort()
+			return
+		}
+
 		userCache, err := model.GetUserCache(token.UserId)
 		if err != nil {
 			common.SysLog(fmt.Sprintf("TokenAuthReadOnly GetUserCache error for user %d: %v", token.UserId, err))
@@ -292,6 +300,10 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 		c.Set("token_key", token.Key)
 		c.Next()
 	}
+}
+
+func tokenStatusAllowsReadOnly(status int) bool {
+	return status != common.TokenStatusDisabled
 }
 
 func TokenAuth() func(c *gin.Context) {

@@ -25,6 +25,9 @@ concurrency:
   group: newapi-source-image-package
   cancel-in-progress: false
 
+env:
+  UPSTREAM_REF: 4e570389dd433a717373ce9c9b822b59f5ed3d5d
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -86,7 +89,7 @@ jobs:
             VERSION=${{ steps.meta.outputs.tag }}
             COMMIT_SHA=${{ github.sha }}
             BUILD_DATE=${{ steps.meta.outputs.created }}
-            UPSTREAM_REF=v1.0.0-rc.11
+            UPSTREAM_REF=${{ env.UPSTREAM_REF }}
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.image }}:sha-${{ steps.meta.outputs.short }}
@@ -111,7 +114,7 @@ jobs:
             --build-arg "VERSION=$TAG" \
             --build-arg "COMMIT_SHA=$GITHUB_SHA" \
             --build-arg "BUILD_DATE=$CREATED" \
-            --build-arg "UPSTREAM_REF=v1.0.0-rc.11" \
+            --build-arg "UPSTREAM_REF=$UPSTREAM_REF" \
             -t "$IMAGE:$TAG-amd64-package" \
             .
           docker save "$IMAGE:$TAG-amd64-package" | gzip -9 > "release-assets/$TARBALL"
@@ -132,7 +135,7 @@ jobs:
           Image: ${IMAGE}:${TAG}
           Digest: ${DIGEST}
           Source commit: ${GITHUB_SHA}
-          Upstream tag baseline: v1.0.0-rc.11
+          Audited upstream ref: ${UPSTREAM_REF}
 
           This package is built directly from the source fork.
           EOF

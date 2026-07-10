@@ -1,37 +1,21 @@
 # Upstream
 
-- Upstream repository: `QuantumNous/new-api`
-- Baseline tag: `v1.0.0-rc.11`
-- Baseline commit: `74985fa877b4a85decdf31044b2435cf688af395`
-- Sync strategy for `main`: merge upstream, do not long-term rebase production history.
+- Repository: `QuantumNous/new-api`
+- Last fully audited ref: `4e570389dd433a717373ce9c9b822b59f5ed3d5d`
+- Tag at audit time: `v1.0.0-rc.20`
+- Audit ledger: `UPSTREAM_PORTS.md`
+- Sync strategy: selective manual ports; merge/rebase is refused because no common ancestor exists.
 
 ## Fork Scope
 
-This fork keeps NewAPI upstream layout and adds compatibility/security work mainly in:
-
-- `relay/antipoison/`
-- `pkg/compat/`
-- `service/*compat*`
-- `controller/*compat*`
-- `web/default/src/features/system-settings/`
-- `scripts/`
-- `.github/workflows/`
-
-## Likely Conflict Areas
+The main fork-owned surfaces are compatibility bridges, security controls, billing hardening, deployment tooling, and Interface Zero frontend metadata. High-conflict areas include:
 
 - `relay/channel/openai/*`
-- `relay/compatible_handler.go`
-- `relay/responses_handler.go`
-- `relay/claude_handler.go`
-- `service/channel_select.go`
-- `dto/channel_settings.go`
-- `setting/operation_setting/*`
+- `relay/helper/*`
+- `service/*compat*` and quota settlement
+- `controller/*compat*` and authentication
+- `model/*` migrations and locking
 - `web/default/src/features/system-settings/*`
+- `scripts/` and `.github/workflows/`
 
-## Diff Commands
-
-```bash
-git fetch upstream --tags
-git diff --stat "$(git merge-base HEAD upstream/main)"..HEAD -- . ':!legacy/patches/**'
-git diff --name-only "$(git merge-base HEAD upstream/main)"..HEAD -- . ':!legacy/patches/**'
-```
+Use the check scripts to enumerate upstream commits after the audited ref. Do not use `git diff $(git merge-base ...)` unless the script reports `shared-history`.

@@ -1,6 +1,6 @@
 # renewapi
 
-`renewapi` is a source fork of [QuantumNous/new-api](https://github.com/QuantumNous/new-api), currently based on upstream `v1.0.0-rc.11`.
+`renewapi` is a source fork of [QuantumNous/new-api](https://github.com/QuantumNous/new-api). Its independent history has been manually audited through upstream `v1.0.0-rc.20` (`4e570389`); imported and deferred changes are recorded in `UPSTREAM_PORTS.md`.
 
 It keeps the upstream API surface and data model compatible while adding a compatibility layer, profile-based anti-poison controls, hardened runtime defaults, and a source-first Docker build workflow.
 
@@ -168,7 +168,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
   --build-arg VERSION=dev \
   --build-arg COMMIT_SHA="$(git rev-parse HEAD)" \
   --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  --build-arg UPSTREAM_REF=v1.0.0-rc.11 \
+  --build-arg UPSTREAM_REF=4e570389dd433a717373ce9c9b822b59f5ed3d5d \
   -t ghcr.io/alex-ai-dev-lab/newapi-compat-image:dev .
 ```
 
@@ -199,23 +199,21 @@ Use `-DryRun` on deployment scripts when checking generated commands before swit
 
 ## Upstream Sync
 
-`main` should use merge commits for upstream sync so production releases remain traceable. Feature branches may use rebase.
+The fork and upstream have no common Git ancestor, so updates are reviewed and ported selectively. The sync helpers refuse unsafe merge/rebase operations and use `UPSTREAM_PORTS.md` as the audit checkpoint.
 
 ```bash
 bash scripts/check-upstream.sh
-bash scripts/sync-upstream.sh --merge --dry-run
-bash scripts/sync-upstream.sh --merge
+bash scripts/sync-upstream.sh --port
 ```
 
 PowerShell equivalents:
 
 ```powershell
 .\scripts\check-upstream.ps1
-.\scripts\sync-upstream.ps1 -Mode merge -DryRun
-.\scripts\sync-upstream.ps1 -Mode merge
+.\scripts\sync-upstream.ps1 -Mode port
 ```
 
-When conflicts occur, prefer upstream behavior unless fork compatibility or security behavior must be preserved. Run at least:
+Port changes in focused commits, preserve fork compatibility/security behavior, and record the decision in the ledger. Run at least:
 
 ```bash
 go test ./relay/antipoison ./service ./model ./controller

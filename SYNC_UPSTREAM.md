@@ -1,30 +1,25 @@
 # Sync Upstream
 
-Use merge mode on `main` so production releases can be traced to explicit upstream merge commits.
+This repository and `QuantumNous/new-api` have unrelated Git histories. The supported strategy is selective manual porting recorded in `UPSTREAM_PORTS.md`; direct merge or rebase is intentionally refused.
 
 ```bash
 bash scripts/check-upstream.sh
-bash scripts/sync-upstream.sh --merge --dry-run
-bash scripts/sync-upstream.sh --merge
+bash scripts/sync-upstream.sh --port
 ```
 
 PowerShell:
 
 ```powershell
 .\scripts\check-upstream.ps1
-.\scripts\sync-upstream.ps1 -Mode merge -DryRun
-.\scripts\sync-upstream.ps1 -Mode merge
+.\scripts\sync-upstream.ps1 -Mode port
 ```
 
-Feature branches can use rebase:
+The check script fetches upstream, reads `Audited-Upstream-Ref` from the ledger, and lists only commits still awaiting review. Port updates in small behavior-focused commits, preserve fork-specific compatibility/security behavior, and add focused tests.
+
+If a future repository rewrite establishes a genuine common ancestor, `--merge`/`--rebase` (or `-Mode merge`/`-Mode rebase`) become available again. Use dry-run first and run at least:
 
 ```bash
-bash scripts/sync-upstream.sh --rebase
+go test ./relay/antipoison ./service ./model ./controller
 ```
 
-If conflicts occur:
-
-- Resolve files listed by Git.
-- Prefer upstream behavior unless fork compatibility/security behavior is explicitly required.
-- Run at least `go test ./relay/antipoison ./service ./model ./controller`.
-- Rebuild frontend assets before Docker release.
+Rebuild both frontends before publishing a Docker image.

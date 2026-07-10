@@ -24,21 +24,45 @@ type HTTPClientOptions struct {
 }
 
 var (
-	httpClient      *http.Client
-	proxyClientLock sync.Mutex
-	proxyClients    = make(map[HTTPClientOptions]*http.Client)
+	httpClient              *http.Client
+	ssrfProtectedHTTPClient *http.Client
+	proxyClientLock         sync.Mutex
+	proxyClients            = make(map[HTTPClientOptions]*http.Client)
+	protectedFetchClients   = make(map[HTTPClientOptions]*http.Client)
 )
 
 func checkRedirect(req *http.Request, via []*http.Request) error {
-	fetchSetting := system_setting.GetFetchSetting()
 	urlStr := req.URL.String()
-	if err := common.ValidateURLWithFetchSetting(urlStr, fetchSetting.EnableSSRFProtection, fetchSetting.AllowPrivateIp, fetchSetting.DomainFilterMode, fetchSetting.IpFilterMode, fetchSetting.DomainList, fetchSetting.IpList, fetchSetting.AllowedPorts, fetchSetting.ApplyIPFilterForDomain); err != nil {
+	if err := validateURLWithCurrentFetchSetting(urlStr, true); err != nil {
 		return fmt.Errorf("redirect to %s blocked: %v", urlStr, err)
 	}
 	if len(via) >= 10 {
 		return fmt.Errorf("stopped after 10 redirects")
 	}
 	return nil
+}
+
+func checkProtectedFetchRedirect(req *http.Request, via []*http.Request) error {
+	urlStr := req.URL.String()
+	if err := ValidateSSRFProtectedFetchURL(urlStr); err != nil {
+		return fmt.Errorf("redirect to %s blocked: %v", urlStr, err)
+	}
+	if len(via) >= 10 {
+		return fmt.Errorf("stopped after 10 redirects")
+	}
+	return nil
+}
+
+func validateURLWithCurrentFetchSetting(urlStr string, applyDomainIPFilter bool) error {
+	fetchSetting := system_setting.GetFetchSetting()
+	if fetchSetting == nil {
+		return nil
+	}
+	return common.ValidateURLWithFetchSetting(urlStr, fetchSetting.EnableSSRFProtection, fetchSetting.AllowPrivateIp, fetchSetting.DomainFilterMode, fetchSetting.IpFilterMode, fetchSetting.DomainList, fetchSetting.IpList, fetchSetting.AllowedPorts, applyDomainIPFilter && fetchSetting.ApplyIPFilterForDomain)
+}
+
+func ValidateSSRFProtectedFetchURL(urlStr string) error {
+	return validateURLWithCurrentFetchSetting(urlStr, true)
 }
 
 func InitHttpClient() {
@@ -48,15 +72,53 @@ func InitHttpClient() {
 		return
 	}
 	if httpClient != nil {
-		if transport, ok := httpClient.Transport.(*http.Transport); ok && transport != nil {
-			transport.CloseIdleConnections()
-		}
+		closeHTTPClientIdleConnections(httpClient)
 	}
 	httpClient = client
+	if ssrfProtectedHTTPClient != nil {
+		closeHTTPClientIdleConnections(ssrfProtectedHTTPClient)
+	}
+	ssrfProtectedHTTPClient = newProtectedFetchHTTPClient()
 }
 
+// GetHttpClient is the general provider client. User-controlled URLs must use
+// GetSSRFProtectedHTTPClient or GetSSRFProtectedHTTPClientWithOptions.
 func GetHttpClient() *http.Client {
 	return httpClient
+}
+
+func GetSSRFProtectedHTTPClient() *http.Client {
+	client, err := GetSSRFProtectedHTTPClientWithOptions(HTTPClientOptions{})
+	if err != nil {
+		return ssrfProtectedHTTPClient
+	}
+	return client
+}
+
+func GetSSRFProtectedHTTPClientWithOptions(options HTTPClientOptions) (*http.Client, error) {
+	if fetchSetting := system_setting.GetFetchSetting(); fetchSetting == nil || !fetchSetting.EnableSSRFProtection {
+		return GetHttpClientWithOptions(options)
+	}
+	options = normalizeHTTPClientOptions(options)
+	if options == (HTTPClientOptions{}) && ssrfProtectedHTTPClient != nil {
+		return ssrfProtectedHTTPClient, nil
+	}
+
+	proxyClientLock.Lock()
+	if client, ok := protectedFetchClients[options]; ok {
+		proxyClientLock.Unlock()
+		return client, nil
+	}
+	proxyClientLock.Unlock()
+
+	client, err := newProtectedFetchHTTPClientWithOptions(options)
+	if err != nil {
+		return nil, err
+	}
+	proxyClientLock.Lock()
+	protectedFetchClients[options] = client
+	proxyClientLock.Unlock()
+	return client, nil
 }
 
 func NewHttpClient() *http.Client {
@@ -103,18 +165,31 @@ func ResetProxyClientCache() {
 	proxyClientLock.Lock()
 	defer proxyClientLock.Unlock()
 	if httpClient != nil {
-		if transport, ok := httpClient.Transport.(*http.Transport); ok && transport != nil {
-			transport.CloseIdleConnections()
-		}
+		closeHTTPClientIdleConnections(httpClient)
 		httpClient = nil
 	}
+	if ssrfProtectedHTTPClient != nil {
+		closeHTTPClientIdleConnections(ssrfProtectedHTTPClient)
+		ssrfProtectedHTTPClient = nil
+	}
 	for _, client := range proxyClients {
-		if transport, ok := client.Transport.(*http.Transport); ok && transport != nil {
-			transport.CloseIdleConnections()
-		}
+		closeHTTPClientIdleConnections(client)
+	}
+	for _, client := range protectedFetchClients {
+		closeHTTPClientIdleConnections(client)
 	}
 	proxyClients = make(map[HTTPClientOptions]*http.Client)
+	protectedFetchClients = make(map[HTTPClientOptions]*http.Client)
 	InitHttpClient()
+}
+
+func closeHTTPClientIdleConnections(client *http.Client) {
+	if client == nil || client.Transport == nil {
+		return
+	}
+	if closer, ok := client.Transport.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
 }
 
 // NewProxyHttpClient 创建支持代理的 HTTP 客户端

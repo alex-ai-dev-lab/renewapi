@@ -29,6 +29,23 @@ var DefaultSSRFProtection = &SSRFProtection{
 	AllowedPorts:     []int{},
 }
 
+// NewSSRFProtectionFromFetchSetting builds protection from persisted settings.
+func NewSSRFProtectionFromFetchSetting(allowPrivateIp bool, domainFilterMode bool, ipFilterMode bool, domainList, ipList, allowedPorts []string, applyIPFilterForDomain bool) (*SSRFProtection, error) {
+	allowedPortInts, err := parsePortRanges(allowedPorts)
+	if err != nil {
+		return nil, fmt.Errorf("request reject - invalid port configuration: %v", err)
+	}
+	return &SSRFProtection{
+		AllowPrivateIp:         allowPrivateIp,
+		DomainFilterMode:       domainFilterMode,
+		DomainList:             domainList,
+		IpFilterMode:           ipFilterMode,
+		IpList:                 ipList,
+		AllowedPorts:           allowedPortInts,
+		ApplyIPFilterForDomain: applyIPFilterForDomain,
+	}, nil
+}
+
 // privateIPv4Nets IPv4 私有/保留/特殊用途网段
 // 参考 IANA IPv4 Special-Purpose Address Registry
 // https://www.iana.org/assignments/iana-ipv4-special-registry/
@@ -248,6 +265,55 @@ func (p *SSRFProtection) IsIPAccessAllowed(ip net.IP) bool {
 	return !listed
 }
 
+func (p *SSRFProtection) ipAccessError(host string, ip net.IP) error {
+	prefix := ip.String()
+	if host != "" {
+		prefix = fmt.Sprintf("%s resolves to %s", host, ip.String())
+	}
+	if isPrivateIP(ip) && !p.AllowPrivateIp {
+		return fmt.Errorf("private IP address not allowed: %s", prefix)
+	}
+	if p.IpFilterMode {
+		return fmt.Errorf("ip not in whitelist: %s", prefix)
+	}
+	return fmt.Errorf("ip in blacklist: %s", prefix)
+}
+
+// ValidateNetworkTarget validates a host and port before a connection attempt.
+func (p *SSRFProtection) ValidateNetworkTarget(host string, port int) error {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return fmt.Errorf("invalid host")
+	}
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("invalid port: %d", port)
+	}
+	if !p.isAllowedPort(port) {
+		return fmt.Errorf("port %d is not allowed", port)
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if !p.IsIPAccessAllowed(ip) {
+			return p.ipAccessError("", ip)
+		}
+		return nil
+	}
+	if !p.isDomainAllowed(host) {
+		if p.DomainFilterMode {
+			return fmt.Errorf("domain not in whitelist: %s", host)
+		}
+		return fmt.Errorf("domain in blacklist: %s", host)
+	}
+	return nil
+}
+
+// ValidateResolvedIP validates the address selected immediately before dialing.
+func (p *SSRFProtection) ValidateResolvedIP(host string, ip net.IP) error {
+	if !p.IsIPAccessAllowed(ip) {
+		return p.ipAccessError(host, ip)
+	}
+	return nil
+}
+
 // ValidateURL 验证URL是否安全
 func (p *SSRFProtection) ValidateURL(urlStr string) error {
 	// 解析URL
@@ -279,34 +345,11 @@ func (p *SSRFProtection) ValidateURL(urlStr string) error {
 		return fmt.Errorf("invalid port: %s", portStr)
 	}
 
-	if !p.isAllowedPort(port) {
-		return fmt.Errorf("port %d is not allowed", port)
+	if err := p.ValidateNetworkTarget(host, port); err != nil {
+		return err
 	}
 
-	// 如果 host 是 IP，则跳过域名检查
-	if ip := net.ParseIP(host); ip != nil {
-		if !p.IsIPAccessAllowed(ip) {
-			if isPrivateIP(ip) {
-				return fmt.Errorf("private IP address not allowed: %s", ip.String())
-			}
-			if p.IpFilterMode {
-				return fmt.Errorf("ip not in whitelist: %s", ip.String())
-			}
-			return fmt.Errorf("ip in blacklist: %s", ip.String())
-		}
-		return nil
-	}
-
-	// 先进行域名过滤
-	if !p.isDomainAllowed(host) {
-		if p.DomainFilterMode {
-			return fmt.Errorf("domain not in whitelist: %s", host)
-		}
-		return fmt.Errorf("domain in blacklist: %s", host)
-	}
-
-	// 若未启用对域名应用IP过滤，则到此通过
-	if !p.ApplyIPFilterForDomain {
+	if net.ParseIP(host) != nil || !p.ApplyIPFilterForDomain {
 		return nil
 	}
 
@@ -316,14 +359,8 @@ func (p *SSRFProtection) ValidateURL(urlStr string) error {
 		return fmt.Errorf("DNS resolution failed for %s: %v", host, err)
 	}
 	for _, ip := range ips {
-		if !p.IsIPAccessAllowed(ip) {
-			if isPrivateIP(ip) && !p.AllowPrivateIp {
-				return fmt.Errorf("private IP address not allowed: %s resolves to %s", host, ip.String())
-			}
-			if p.IpFilterMode {
-				return fmt.Errorf("ip not in whitelist: %s resolves to %s", host, ip.String())
-			}
-			return fmt.Errorf("ip in blacklist: %s resolves to %s", host, ip.String())
+		if err := p.ValidateResolvedIP(host, ip); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -336,20 +373,9 @@ func ValidateURLWithFetchSetting(urlStr string, enableSSRFProtection, allowPriva
 		return nil
 	}
 
-	// 解析端口范围配置
-	allowedPortInts, err := parsePortRanges(allowedPorts)
+	protection, err := NewSSRFProtectionFromFetchSetting(allowPrivateIp, domainFilterMode, ipFilterMode, domainList, ipList, allowedPorts, applyIPFilterForDomain)
 	if err != nil {
-		return fmt.Errorf("request reject - invalid port configuration: %v", err)
-	}
-
-	protection := &SSRFProtection{
-		AllowPrivateIp:         allowPrivateIp,
-		DomainFilterMode:       domainFilterMode,
-		DomainList:             domainList,
-		IpFilterMode:           ipFilterMode,
-		IpList:                 ipList,
-		AllowedPorts:           allowedPortInts,
-		ApplyIPFilterForDomain: applyIPFilterForDomain,
+		return err
 	}
 	return protection.ValidateURL(urlStr)
 }

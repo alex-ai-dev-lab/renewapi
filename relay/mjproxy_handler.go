@@ -36,12 +36,19 @@ func RelayMidjourneyImage(c *gin.Context) {
 		return
 	}
 	var httpClient *http.Client
+	var proxyURL string
 	if channel, err := model.CacheGetChannel(midjourneyTask.ChannelId); err == nil {
 		setting := channel.GetSetting()
-		httpClient, err = service.GetHttpClientWithOptions(service.HTTPClientOptions{
+		proxyURL = setting.Proxy
+		clientOptions := service.HTTPClientOptions{
 			Proxy:                 setting.Proxy,
 			TLSInsecureSkipVerify: setting.TLSInsecureSkipVerify,
-		})
+		}
+		if proxyURL == "" {
+			httpClient, err = service.GetSSRFProtectedHTTPClientWithOptions(clientOptions)
+		} else {
+			httpClient, err = service.GetHttpClientWithOptions(clientOptions)
+		}
 		if err != nil {
 			c.JSON(400, gin.H{
 				"error": "proxy_url_invalid",
@@ -50,12 +57,18 @@ func RelayMidjourneyImage(c *gin.Context) {
 		}
 	}
 	if httpClient == nil {
-		httpClient = service.GetHttpClient()
+		httpClient = service.GetSSRFProtectedHTTPClient()
 	}
-	fetchSetting := system_setting.GetFetchSetting()
-	if err := common.ValidateURLWithFetchSetting(midjourneyTask.ImageUrl, fetchSetting.EnableSSRFProtection, fetchSetting.AllowPrivateIp, fetchSetting.DomainFilterMode, fetchSetting.IpFilterMode, fetchSetting.DomainList, fetchSetting.IpList, fetchSetting.AllowedPorts, fetchSetting.ApplyIPFilterForDomain); err != nil {
+	var validateErr error
+	if proxyURL == "" {
+		validateErr = service.ValidateSSRFProtectedFetchURL(midjourneyTask.ImageUrl)
+	} else {
+		fetchSetting := system_setting.GetFetchSetting()
+		validateErr = common.ValidateURLWithFetchSetting(midjourneyTask.ImageUrl, fetchSetting.EnableSSRFProtection, fetchSetting.AllowPrivateIp, fetchSetting.DomainFilterMode, fetchSetting.IpFilterMode, fetchSetting.DomainList, fetchSetting.IpList, fetchSetting.AllowedPorts, fetchSetting.ApplyIPFilterForDomain)
+	}
+	if validateErr != nil {
 		c.JSON(http.StatusForbidden, gin.H{
-			"error": fmt.Sprintf("request blocked: %v", err),
+			"error": fmt.Sprintf("request blocked: %v", validateErr),
 		})
 		return
 	}

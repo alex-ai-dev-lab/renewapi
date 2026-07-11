@@ -2,6 +2,7 @@ package openai
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,6 +19,8 @@ import (
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 type responsesPendingStreamData struct {
@@ -33,6 +36,12 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
+	}
+	if info != nil && info.ResponsesRequestKind == dto.ResponsesCompactionTrigger {
+		if err := service.ValidateCompactionResponse(responseBody); err != nil {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+		}
+		service.CaptureCompactionResponseAffinity(c, responseBody)
 	}
 	err = common.Unmarshal(responseBody, &responsesResponse)
 	if err != nil {
@@ -136,6 +145,16 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 }
 
 func OaiResponsesStreamToResponseHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
+	if info != nil && info.ResponsesRequestKind != dto.ResponsesNormal {
+		responseBody, usage, err := aggregateCompactionResponsesStreamRaw(resp)
+		if err != nil {
+			return nil, err
+		}
+		c.Header("Content-Type", "application/json; charset=utf-8")
+		service.CaptureCompactionResponseAffinity(c, responseBody)
+		service.IOCopyBytesGracefully(c, resp, responseBody)
+		return usage, nil
+	}
 	finalResp, usage, err := aggregateResponsesStreamToResponse(c, info, resp)
 	if err != nil {
 		return nil, err
@@ -147,6 +166,98 @@ func OaiResponsesStreamToResponseHandler(c *gin.Context, info *relaycommon.Relay
 	c.Header("Content-Type", "application/json; charset=utf-8")
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 	return usage, nil
+}
+
+func aggregateCompactionResponsesStreamRaw(resp *http.Response) ([]byte, *dto.Usage, *types.NewAPIError) {
+	if resp == nil || resp.Body == nil {
+		return nil, nil, types.NewOpenAIError(fmt.Errorf("invalid response"), types.ErrorCodeBadResponse, http.StatusInternalServerError)
+	}
+	defer service.CloseResponseBodyGracefully(resp)
+	const maxItems = 64
+	const maxItemBytes = 8 * 1024 * 1024
+	const maxTotalBytes = 16 * 1024 * 1024
+	items := make(map[int][]byte)
+	totalBytes := 0
+	var completed []byte
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, helper.InitialScannerBufferSize), helper.DefaultMaxScannerBufferSize)
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if !bytes.HasPrefix(line, []byte("data:")) {
+			continue
+		}
+		data := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
+		if len(data) == 0 || bytes.Equal(data, []byte("[DONE]")) {
+			continue
+		}
+		if !gjson.ValidBytes(data) {
+			return nil, nil, types.NewOpenAIError(fmt.Errorf("invalid responses SSE JSON"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+		}
+		typ := gjson.GetBytes(data, "type").String()
+		switch typ {
+		case dto.ResponsesOutputTypeItemAdded, dto.ResponsesOutputTypeItemDone:
+			indexResult := gjson.GetBytes(data, "output_index")
+			item := gjson.GetBytes(data, "item")
+			if !indexResult.Exists() || !item.IsObject() {
+				continue
+			}
+			index := int(indexResult.Int())
+			if index < 0 || index >= maxItems || len(item.Raw) > maxItemBytes {
+				return nil, nil, types.NewOpenAIError(fmt.Errorf("responses raw output ledger limit exceeded"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+			}
+			if old, exists := items[index]; exists {
+				totalBytes -= len(old)
+			}
+			items[index] = append([]byte(nil), item.Raw...)
+			totalBytes += len(item.Raw)
+			if totalBytes > maxTotalBytes {
+				return nil, nil, types.NewOpenAIError(fmt.Errorf("responses raw output ledger total limit exceeded"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+			}
+		case "response.completed":
+			response := gjson.GetBytes(data, "response")
+			if response.IsObject() {
+				completed = append([]byte(nil), response.Raw...)
+			}
+		case "response.failed", "response.error":
+			return nil, nil, types.NewOpenAIError(fmt.Errorf("responses stream failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
+	}
+	if len(completed) == 0 {
+		return nil, nil, types.NewOpenAIError(fmt.Errorf("responses stream missing response.completed"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+	}
+	if len(gjson.GetBytes(completed, "output").Array()) == 0 && len(items) > 0 {
+		var output bytes.Buffer
+		output.WriteByte('[')
+		for i := 0; i < maxItems; i++ {
+			item, ok := items[i]
+			if !ok {
+				continue
+			}
+			if output.Len() > 1 {
+				output.WriteByte(',')
+			}
+			output.Write(item)
+		}
+		output.WriteByte(']')
+		var err error
+		completed, err = sjson.SetRawBytes(completed, "output", output.Bytes())
+		if err != nil {
+			return nil, nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+		}
+	}
+	if err := service.ValidateCompactionResponse(completed); err != nil {
+		return nil, nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+	}
+	usage := &dto.Usage{
+		PromptTokens:     int(gjson.GetBytes(completed, "usage.input_tokens").Int()),
+		CompletionTokens: int(gjson.GetBytes(completed, "usage.output_tokens").Int()),
+		TotalTokens:      int(gjson.GetBytes(completed, "usage.total_tokens").Int()),
+	}
+	usage.PromptTokensDetails.CachedTokens = int(gjson.GetBytes(completed, "usage.input_tokens_details.cached_tokens").Int())
+	return completed, usage, nil
 }
 
 func aggregateResponsesStreamToResponse(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.OpenAIResponsesResponse, *dto.Usage, *types.NewAPIError) {
@@ -377,6 +488,8 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	var responseProof *antipoison.ProofStreamValidator
 	preflightBuffer := antipoison.NewStreamPreflightBuffer(antipoison.ResponseGuardConfig(info))
 	var pendingResponsesData []responsesPendingStreamData
+	compactionItemSeen := false
+	compactionCompleted := false
 	if info.AntiPoisonResponseProofNonce != "" && antipoison.ResponseProofEnabled(info) {
 		responseProof = antipoison.NewProofStreamValidator(info.AntiPoisonResponseProofNonce, antipoison.ResponseGuardConfig(info))
 	}
@@ -389,6 +502,30 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			logger.LogError(c, "failed to unmarshal stream response: "+err.Error())
 			sr.Error(err)
 			return
+		}
+		if info != nil && info.ResponsesRequestKind == dto.ResponsesCompactionTrigger {
+			raw := []byte(data)
+			switch streamResponse.Type {
+			case dto.ResponsesOutputTypeItemDone:
+				item := gjson.GetBytes(raw, "item")
+				typ := item.Get("type").String()
+				encrypted := item.Get("encrypted_content")
+				if typ == "compaction" || typ == "context_compaction" || typ == "compaction_summary" {
+					if encrypted.Type != gjson.String || encrypted.String() == "" || len(encrypted.String()) > common.GetEnvOrDefault("RESPONSES_COMPACTION_MAX_ENCRYPTED_BYTES", 8*1024*1024) {
+						sr.Stop(fmt.Errorf("invalid compaction_summary.encrypted_content"))
+						return
+					}
+					compactionItemSeen = true
+					service.CaptureCompactionItemAffinity(c, []byte(item.Raw))
+				}
+			case "response.completed":
+				response := gjson.GetBytes(raw, "response")
+				if response.Get("object").String() != "response.compaction" || !response.Get("usage").IsObject() {
+					sr.Stop(fmt.Errorf("invalid response.compaction completed event"))
+					return
+				}
+				compactionCompleted = true
+			}
 		}
 		if info.AntiPoisonGuardPrefix != "" {
 			switch streamResponse.Type {
@@ -527,6 +664,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	})
 	if streamErr != nil {
 		return nil, streamErr
+	}
+	if info != nil && info.ResponsesRequestKind == dto.ResponsesCompactionTrigger && (!compactionItemSeen || !compactionCompleted) {
+		return nil, types.NewOpenAIError(fmt.Errorf("incomplete responses compaction stream"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 	}
 	if responseProof != nil {
 		if err := responseProof.Finalize(); err != nil {

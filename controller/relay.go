@@ -59,6 +59,13 @@ func relayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIErro
 	return err
 }
 
+func responsesRequirementForRelay(info *relaycommon.RelayInfo) *service.ResponsesRoutingRequirement {
+	if info == nil || (info.RelayMode != relayconstant.RelayModeResponses && info.RelayMode != relayconstant.RelayModeResponsesCompact) {
+		return nil
+	}
+	return &service.ResponsesRoutingRequirement{Kind: info.ResponsesRequestKind, ClientStream: info.IsStream}
+}
+
 func relayModeName(mode int) string {
 	if mode == 0 {
 		return ""
@@ -239,6 +246,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = types.NewError(err, types.ErrorCodeCountTokenFailed)
 		return
 	}
+	if relayInfo.ResponsesRequestKind != dto.ResponsesNormal {
+		floor := common.GetEnvOrDefault("RESPONSES_COMPACTION_PRECONSUME_FLOOR", 4096)
+		if tokens < floor {
+			tokens = floor
+		}
+	}
 	if !checkTokenTPMLimit(c, tokens) {
 		newAPIError = types.NewErrorWithStatusCode(
 			fmt.Errorf("token TPM limit exceeded"),
@@ -294,6 +307,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		ClientRelayFormat:             relayFormat,
 		Request:                       relayInfo.Request,
 		ProviderRoutingPolicy:         getProviderRoutingPolicy(c),
+		ResponsesRequirement:          responsesRequirementForRelay(relayInfo),
 	}
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil

@@ -61,6 +61,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	if err != nil {
 		return types.NewError(fmt.Errorf("failed to copy request to GeneralOpenAIRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
 	}
+	isCompactionRelated := info.ResponsesRequestKind != dto.ResponsesNormal
 
 	if endpoint, ok := service.ShouldUseModelDefaultTextEndpointForResponses(info); ok {
 		if info.RelayMode == relayconstant.RelayModeResponsesCompact {
@@ -107,16 +108,20 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		request.Stream = common.GetPointer(true)
 		c.Set("responses_upstream_stream", true)
 	}
-	antipoison.ApplyResponsesResponseProof(info, request)
-	antipoison.ApplyResponsesAnswerEnvelope(info, request)
+	if !isCompactionRelated {
+		antipoison.ApplyResponsesResponseProof(info, request)
+		antipoison.ApplyResponsesAnswerEnvelope(info, request)
+		antipoison.ApplyResponsesRequestGuard(info, request)
+		antipoison.ApplyResponsesCanaryRequest(info, request)
+	}
 	antipoison.CaptureResponsesToolPolicy(info, request)
-	antipoison.ApplyResponsesRequestGuard(info, request)
-	antipoison.ApplyResponsesCanaryRequest(info, request)
-	if result := service.SanitizeResponsesReasoningContent(request); result.Changed {
-		logger.LogInfo(c, fmt.Sprintf(
-			"responses reasoning content sanitized: removed_reasoning_content=%d",
-			result.RemovedReasoningContent,
-		))
+	if !isCompactionRelated {
+		if result := service.SanitizeResponsesReasoningContent(request); result.Changed {
+			logger.LogInfo(c, fmt.Sprintf(
+				"responses reasoning content sanitized: removed_reasoning_content=%d",
+				result.RemovedReasoningContent,
+			))
+		}
 	}
 
 	err = helper.ModelMappedHelper(c, info, request)
@@ -141,7 +146,37 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		info.ForceResponsesFunctionCallArgumentsObject,
 	)
 	passThroughEnabled := (model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled) && !enforceArgsFormat
-	if passThroughEnabled {
+	if isCompactionRelated {
+		storage, err := common.GetBodyStorage(c)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
+		}
+		rawBody, err := storage.Bytes()
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
+		}
+		record := service.ResponsesCompactionRecordFromSettings(info.ChannelSetting, info.OriginModelName)
+		plan, err := service.PlanResponsesExecution(info.ResponsesRequestKind, record, request.Model, info.IsStream)
+		if err != nil {
+			return types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		jsonData, err := service.BuildResponsesCompactionRequestBody(rawBody, plan)
+		if err != nil {
+			return types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		if plan.UpstreamPath == "/v1/responses/compact" {
+			info.RelayMode = relayconstant.RelayModeResponsesCompact
+			c.Set("responses_legacy_bridge_sse", plan.BridgeJSONToSSE)
+		}
+		c.Set("responses_upstream_stream", plan.UpstreamStream)
+		body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+		defer closer.Close()
+		info.UpstreamRequestBodySize = size
+		requestBody = body
+	} else if passThroughEnabled {
 		storage, err := common.GetBodyStorage(c)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
@@ -187,7 +222,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		requestBody = body
 	}
 
-	if !passThroughEnabled {
+	if !passThroughEnabled && !isCompactionRelated {
 		if probeErr := maybeRunResponsesProbe(c, info, adaptor,
 			func(pc *gin.Context, pi *relaycommon.RelayInfo, req dto.OpenAIResponsesRequest) (any, error) {
 				return adaptor.ConvertOpenAIResponsesRequest(pc, pi, req)

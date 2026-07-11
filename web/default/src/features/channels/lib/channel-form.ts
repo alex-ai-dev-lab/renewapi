@@ -193,6 +193,19 @@ export const channelFormSchema = z
     responses_function_call_arguments_format: z
       .enum(['auto', 'string', 'object'])
       .optional(),
+    responses_compaction_capability: z
+      .enum([
+        'unknown',
+        'disabled',
+        'native_v2',
+        'legacy',
+        'native_v2_and_legacy',
+      ])
+      .optional(),
+    responses_compaction_native_stream: z.boolean().optional(),
+    responses_compaction_continuation: z.boolean().optional(),
+    responses_compaction_route_fingerprint: z.string().optional(),
+    responses_compaction_model_capabilities: z.record(z.string(), z.unknown()).optional(),
     anti_poison_profile: z
       .enum(['inherit', 'trusted', 'unknown', 'probation', 'quarantine'])
       .optional(),
@@ -375,6 +388,11 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   allow_model_protocol_override: false,
   model_protocol_override_targets: [],
   responses_function_call_arguments_format: 'auto',
+  responses_compaction_capability: 'unknown',
+  responses_compaction_native_stream: false,
+  responses_compaction_continuation: false,
+  responses_compaction_route_fingerprint: '',
+  responses_compaction_model_capabilities: {},
   anti_poison_profile: 'inherit',
   anti_poison_enabled: true,
   anti_poison_answer_envelope: 'inherit',
@@ -442,6 +460,11 @@ export function transformChannelToFormDefaults(
     | 'allow_model_protocol_override'
     | 'model_protocol_override_targets'
     | 'responses_function_call_arguments_format'
+    | 'responses_compaction_capability'
+    | 'responses_compaction_native_stream'
+    | 'responses_compaction_continuation'
+    | 'responses_compaction_route_fingerprint'
+    | 'responses_compaction_model_capabilities'
     | 'anti_poison_profile'
     | 'anti_poison_enabled'
     | 'anti_poison_answer_envelope'
@@ -478,6 +501,11 @@ export function transformChannelToFormDefaults(
     allow_model_protocol_override: false,
     model_protocol_override_targets: [],
     responses_function_call_arguments_format: 'auto',
+    responses_compaction_capability: 'unknown',
+    responses_compaction_native_stream: false,
+    responses_compaction_continuation: false,
+    responses_compaction_route_fingerprint: '',
+    responses_compaction_model_capabilities: {},
     anti_poison_profile: 'inherit',
     anti_poison_enabled: true,
     anti_poison_answer_envelope: 'inherit',
@@ -533,6 +561,26 @@ export function transformChannelToFormDefaults(
           parsed.responses_function_call_arguments_format === 'object'
             ? (parsed.responses_function_call_arguments_format as ResponsesFunctionCallArgumentsFormat)
             : 'auto',
+        responses_compaction_capability: [
+          'unknown',
+          'disabled',
+          'native_v2',
+          'legacy',
+          'native_v2_and_legacy',
+        ].includes(parsed.responses_compaction?.default_capability?.capability)
+          ? parsed.responses_compaction.default_capability.capability
+          : 'unknown',
+        responses_compaction_native_stream:
+          parsed.responses_compaction?.default_capability?.native_stream === true,
+        responses_compaction_continuation:
+          parsed.responses_compaction?.default_capability?.continuation === true,
+        responses_compaction_route_fingerprint:
+          parsed.responses_compaction?.default_capability?.route_fingerprint || '',
+        responses_compaction_model_capabilities:
+          parsed.responses_compaction?.model_capabilities &&
+          typeof parsed.responses_compaction.model_capabilities === 'object'
+            ? parsed.responses_compaction.model_capabilities
+            : {},
         anti_poison_profile: parsed.anti_poison_profile || 'inherit',
         anti_poison_enabled: parsed.anti_poison_enabled !== false,
         anti_poison_answer_envelope:
@@ -703,6 +751,18 @@ function buildSettingJSON(formData: ChannelFormValues): string {
         : [],
     responses_function_call_arguments_format:
       formData.responses_function_call_arguments_format || 'auto',
+    responses_compaction: {
+      default_capability: {
+        capability: formData.responses_compaction_capability || 'unknown',
+        native_stream:
+          formData.responses_compaction_native_stream === true,
+        continuation: formData.responses_compaction_continuation === true,
+        route_fingerprint:
+          formData.responses_compaction_route_fingerprint?.trim() || undefined,
+      },
+      model_capabilities:
+        formData.responses_compaction_model_capabilities || {},
+    },
     anti_poison_enabled: formData.anti_poison_enabled !== false,
     anti_poison_shape_check_enabled:
       formData.anti_poison_shape_check_enabled === true,

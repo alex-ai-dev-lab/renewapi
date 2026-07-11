@@ -27,11 +27,103 @@ const (
 	ginKeyChannelAffinityMeta       = "channel_affinity_meta"
 	ginKeyChannelAffinityLogInfo    = "channel_affinity_log_info"
 	ginKeyChannelAffinitySkipRetry  = "channel_affinity_skip_retry_on_failure"
+	ginKeyCompactionResponseHashes  = "responses_compaction_response_hashes"
 
 	channelAffinityCacheNamespace           = "new-api:channel_affinity:v1"
 	channelAffinityMultiKeyIndexNamespace   = "new-api:channel_affinity_multi_key_index:v1"
 	channelAffinityUsageCacheStatsNamespace = "new-api:channel_affinity_usage_cache_stats:v1"
 )
+
+func compactionAffinitySuffix(c *gin.Context, modelName, usingGroup, contentHash string) string {
+	tenant := fmt.Sprintf("token:%d:user:%d", common.GetContextKeyInt(c, constant.ContextKeyTokenId), common.GetContextKeyInt(c, constant.ContextKeyUserId))
+	message := strings.Join([]string{tenant, usingGroup, strings.TrimSuffix(modelName, "-openai-compact"), contentHash}, "\n")
+	return "compaction:" + common.HmacSha256(message, common.CryptoSecret)
+}
+
+func GetPreferredChannelByCompactionAffinity(c *gin.Context, modelName, usingGroup string) (int, bool) {
+	value, ok := c.Get(ContextKeyResponsesCompactedHashes)
+	if !ok {
+		return 0, false
+	}
+	hashes, ok := value.([]string)
+	if !ok {
+		return 0, false
+	}
+	for _, contentHash := range hashes {
+		suffix := compactionAffinitySuffix(c, modelName, usingGroup, contentHash)
+		channelID, found, err := getChannelAffinityCache().Get(suffix)
+		if err != nil {
+			common.SysError(fmt.Sprintf("compaction affinity cache get failed: err=%v", err))
+			return 0, false
+		}
+		if found {
+			if multiKeyIndex, indexFound := getChannelAffinityPreferredMultiKeyIndex(suffix); indexFound {
+				common.SetContextKey(c, constant.ContextKeyChannelPreferredMultiKeyChannelId, channelID)
+				common.SetContextKey(c, constant.ContextKeyChannelPreferredMultiKeyIndex, multiKeyIndex)
+			}
+			return channelID, true
+		}
+	}
+	return 0, false
+}
+
+func CaptureCompactionResponseAffinity(c *gin.Context, body []byte) {
+	if c == nil {
+		return
+	}
+	hashes := CompactionResponseContentHashes(body)
+	if len(hashes) > 0 {
+		c.Set(ginKeyCompactionResponseHashes, hashes)
+	}
+}
+
+func CaptureCompactionItemAffinity(c *gin.Context, item []byte) {
+	if c == nil || !gjson.ValidBytes(item) {
+		return
+	}
+	typ := gjson.GetBytes(item, "type").String()
+	if typ != "compaction" && typ != "context_compaction" && typ != "compaction_summary" {
+		return
+	}
+	encrypted := gjson.GetBytes(item, "encrypted_content")
+	if encrypted.Type != gjson.String || encrypted.String() == "" {
+		return
+	}
+	sum := common.Sha256Raw([]byte(encrypted.String()))
+	c.Set(ginKeyCompactionResponseHashes, []string{fmt.Sprintf("%x", sum)})
+}
+
+func RecordCompactionResponseAffinity(c *gin.Context, channelID int, modelName, usingGroup string) {
+	if c == nil || channelID <= 0 {
+		return
+	}
+	value, ok := c.Get(ginKeyCompactionResponseHashes)
+	if !ok {
+		return
+	}
+	hashes, ok := value.([]string)
+	if !ok {
+		return
+	}
+	ttl := 3600
+	if setting := operation_setting.GetChannelAffinitySetting(); setting != nil && setting.DefaultTTLSeconds > 0 {
+		ttl = setting.DefaultTTLSeconds
+	}
+	for _, contentHash := range hashes {
+		suffix := compactionAffinitySuffix(c, modelName, usingGroup, contentHash)
+		if err := getChannelAffinityCache().SetWithTTL(suffix, channelID, time.Duration(ttl)*time.Second); err != nil {
+			common.SysError(fmt.Sprintf("compaction affinity cache set failed: err=%v", err))
+		}
+		if common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey) {
+			index := common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
+			if index >= 0 {
+				if err := getChannelAffinityMultiKeyIndexCache().SetWithTTL(suffix, index, time.Duration(ttl)*time.Second); err != nil {
+					common.SysError(fmt.Sprintf("compaction affinity multi-key index set failed: err=%v", err))
+				}
+			}
+		}
+	}
+}
 
 var (
 	channelAffinityCacheOnce sync.Once

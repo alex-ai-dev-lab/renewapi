@@ -859,7 +859,8 @@ type modelsDevProvider struct {
 }
 
 type modelsDevModel struct {
-	Cost modelsDevCost `json:"cost"`
+	Cost   modelsDevCost `json:"cost"`
+	Family string        `json:"family"`
 }
 
 type modelsDevCost struct {
@@ -880,30 +881,32 @@ type modelsDevCandidate struct {
 
 type modelsDevOwnerRule struct {
 	Prefixes  []string
+	Families  []string
 	Providers []string
 }
 
 var modelsDevOwnerRules = []modelsDevOwnerRule{
-	{Prefixes: []string{"gpt-", "chatgpt-", "o1", "o3", "o4", "codex-", "text-embedding-", "dall-e-", "tts-", "whisper-", "omni-moderation-", "computer-use-", "sora-"}, Providers: []string{"openai"}},
-	{Prefixes: []string{"claude-"}, Providers: []string{"anthropic"}},
-	{Prefixes: []string{"gemini-", "imagen-", "veo-", "chirp-"}, Providers: []string{"google"}},
-	{Prefixes: []string{"glm-", "cogview-", "cogvideo", "charglm-"}, Providers: []string{"zai", "zhipuai"}},
-	{Prefixes: []string{"qwen", "qwq", "qvq", "wan", "paraformer"}, Providers: []string{"alibaba", "alibaba-cn"}},
-	{Prefixes: []string{"deepseek-"}, Providers: []string{"deepseek"}},
-	{Prefixes: []string{"grok-"}, Providers: []string{"xai"}},
-	{Prefixes: []string{"kimi-", "moonshot-"}, Providers: []string{"moonshotai", "moonshotai-cn"}},
-	{Prefixes: []string{"minimax-", "abab"}, Providers: []string{"minimax", "minimax-cn"}},
-	{Prefixes: []string{"mistral-", "codestral-", "ministral-", "pixtral-", "devstral-", "magistral-"}, Providers: []string{"mistral"}},
-	{Prefixes: []string{"command-", "rerank-", "embed-english", "embed-multilingual"}, Providers: []string{"cohere"}},
-	{Prefixes: []string{"sonar-"}, Providers: []string{"perplexity"}},
-	{Prefixes: []string{"step-"}, Providers: []string{"stepfun", "stepfun-ai"}},
-	{Prefixes: []string{"solar-"}, Providers: []string{"upstage"}},
-	{Prefixes: []string{"mercury"}, Providers: []string{"inception"}},
-	{Prefixes: []string{"poolside"}, Providers: []string{"poolside"}},
+	{Prefixes: []string{"gpt-", "chatgpt-", "o1", "o3", "o4", "codex-", "text-embedding-", "dall-e-", "tts-", "whisper-", "omni-moderation-", "computer-use-", "sora-"}, Families: []string{"gpt", "gpt-codex", "gpt-codex-spark", "gpt-image", "gpt-mini", "gpt-nano", "gpt-pro", "o", "o-mini", "o-pro", "text-embedding"}, Providers: []string{"openai"}},
+	{Prefixes: []string{"claude-"}, Families: []string{"claude-fable", "claude-haiku", "claude-opus", "claude-sonnet"}, Providers: []string{"anthropic"}},
+	{Prefixes: []string{"gemini-", "imagen-", "veo-", "chirp-", "gemma-"}, Families: []string{"gemini", "gemini-flash", "gemini-flash-lite", "gemini-pro", "gemma"}, Providers: []string{"google"}},
+	{Prefixes: []string{"glm-", "cogview-", "cogvideo", "charglm-"}, Families: []string{"glm", "glm-air", "glm-flash"}, Providers: []string{"zai", "zhipuai"}},
+	{Prefixes: []string{"qwen", "qwq", "qvq", "wan", "paraformer"}, Families: []string{"qwen", "qwen3.6", "qvq"}, Providers: []string{"alibaba", "alibaba-cn"}},
+	{Prefixes: []string{"deepseek-"}, Families: []string{"deepseek", "deepseek-flash", "deepseek-thinking"}, Providers: []string{"deepseek"}},
+	{Prefixes: []string{"grok-"}, Families: []string{"grok", "grok-build"}, Providers: []string{"xai"}},
+	{Prefixes: []string{"kimi-", "moonshot-"}, Families: []string{"kimi-k2", "kimi-thinking"}, Providers: []string{"moonshotai", "moonshotai-cn"}},
+	{Prefixes: []string{"minimax-", "abab"}, Families: []string{"minimax"}, Providers: []string{"minimax", "minimax-cn"}},
+	{Prefixes: []string{"mistral-", "codestral-", "ministral-", "pixtral-", "devstral-", "magistral-"}, Families: []string{"codestral", "devstral", "magistral-medium", "magistral-small", "ministral", "mistral", "mistral-embed", "mistral-large", "mistral-medium", "mistral-nemo", "mistral-small", "mixtral", "pixtral"}, Providers: []string{"mistral"}},
+	{Prefixes: []string{"command-", "rerank-", "embed-english", "embed-multilingual"}, Families: []string{"command-a", "command-r", "north"}, Providers: []string{"cohere"}},
+	{Prefixes: []string{"sonar-"}, Families: []string{"sonar", "sonar-pro", "sonar-reasoning"}, Providers: []string{"perplexity"}},
+	{Prefixes: []string{"step-"}, Families: []string{"step"}, Providers: []string{"stepfun", "stepfun-ai"}},
+	{Prefixes: []string{"solar-"}, Families: []string{"solar-mini", "solar-pro"}, Providers: []string{"upstage"}},
+	{Prefixes: []string{"mercury"}, Families: []string{"mercury"}, Providers: []string{"inception"}},
+	{Prefixes: []string{"poolside"}, Families: []string{"laguna"}, Providers: []string{"poolside"}},
 }
 
-func modelsDevOwnerProviderRank(modelName, provider string) (int, bool) {
+func modelsDevOwnerProviderRank(modelName, family, provider string) (int, bool) {
 	modelName = strings.ToLower(strings.TrimSpace(modelName))
+	family = strings.ToLower(strings.TrimSpace(family))
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	for _, rule := range modelsDevOwnerRules {
 		matched := false
@@ -911,6 +914,14 @@ func modelsDevOwnerProviderRank(modelName, provider string) (int, bool) {
 			if strings.HasPrefix(modelName, prefix) {
 				matched = true
 				break
+			}
+		}
+		if !matched && family != "" {
+			for _, candidateFamily := range rule.Families {
+				if family == candidateFamily {
+					matched = true
+					break
+				}
 			}
 		}
 		if !matched {
@@ -1037,7 +1048,7 @@ func convertModelsDevToRatioData(reader io.Reader) (map[string]any, error) {
 			if !isOfficialModelsDevModelName(modelName) {
 				continue
 			}
-			ownerRank, owned := modelsDevOwnerProviderRank(modelName, provider)
+			ownerRank, owned := modelsDevOwnerProviderRank(modelName, providerData.Models[modelName].Family, provider)
 			if !owned {
 				continue
 			}

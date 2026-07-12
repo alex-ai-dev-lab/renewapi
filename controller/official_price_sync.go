@@ -144,8 +144,10 @@ func updateFloatOption(key string, values map[string]float64, updater func(strin
 	return updater(string(jsonStr))
 }
 
-// applyOfficialPricing aligns enabled models with models.dev author pricing.
-// Inactive/legacy model entries are intentionally frozen.
+// applyOfficialPricing aligns locally configured models with models.dev author
+// pricing. syncModels is deliberately broader than enabled routing models: old
+// pricing entries must continue receiving corrected author prices even when no
+// enabled channel currently exposes them.
 func applyOfficialPricing(converted map[string]any, syncModels map[string]bool) (int, error) {
 	officialModels := officialModelSet(converted)
 	if len(officialModels) == 0 {
@@ -197,6 +199,28 @@ func applyOfficialPricing(converted map[string]any, syncModels map[string]bool) 
 	}
 
 	return changedTotal, nil
+}
+
+func buildOfficialSyncModelSet(routingModels []string) map[string]bool {
+	syncModels := make(map[string]bool)
+	for _, modelName := range routingModels {
+		if modelName != "" {
+			syncModels[modelName] = true
+		}
+	}
+	for modelName := range ratio_setting.GetModelRatioCopy() {
+		syncModels[modelName] = true
+	}
+	for modelName := range ratio_setting.GetCompletionRatioCopy() {
+		syncModels[modelName] = true
+	}
+	for modelName := range ratio_setting.GetCacheRatioCopy() {
+		syncModels[modelName] = true
+	}
+	for modelName := range ratio_setting.GetCreateCacheRatioCopy() {
+		syncModels[modelName] = true
+	}
+	return syncModels
 }
 
 func toFloat(v any) (float64, bool) {
@@ -253,10 +277,11 @@ func RunOfficialPriceSync() (int, error) {
 		officialSyncState.LastError = enabledErr.Error()
 		return 0, enabledErr
 	}
-	syncModels := make(map[string]bool, len(enabledModels))
-	for _, modelName := range enabledModels {
-		syncModels[modelName] = true
-	}
+	// Enabled routing models cover newly introduced models that do not have a
+	// price yet. Existing price-map keys cover disabled and legacy models. The
+	// author-provider filter in convertModelsDevToRatioData is what prevents a
+	// reseller or regional host from overwriting the canonical price.
+	syncModels := buildOfficialSyncModelSet(enabledModels)
 	merged, err := applyOfficialPricing(converted, syncModels)
 	officialSyncState.LastRunUnix = time.Now().Unix()
 	if err != nil {

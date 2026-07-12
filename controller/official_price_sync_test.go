@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +46,8 @@ func TestConvertModelsDevToRatioDataUsesOnlyOfficialProviders(t *testing.T) {
 					"cost": {"input": 1.1, "output": 3.851, "cache_read": 0.275}
 				},
 				"qwen3-max": {
-					"cost": {"input": 1.2, "output": 6, "cache_read": 0.12}
+					"family": "qwen",
+					"cost": {"input": 0.861, "output": 3.441, "cache_read": 0.0861}
 				},
 				"qwen-zero": {
 					"cost": {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
@@ -54,6 +57,18 @@ func TestConvertModelsDevToRatioDataUsesOnlyOfficialProviders(t *testing.T) {
 				},
 				"MiniMax/MiniMax-M2.7": {
 					"cost": {"input": 0.2, "output": 0.4, "cache_read": 0.02}
+				},
+				"future-qwen-codename": {
+					"family": "qwen",
+					"cost": {"input": 0.8, "output": 3.2}
+				}
+			}
+		},
+		"alibaba": {
+			"models": {
+				"qwen3-max": {
+					"family": "qwen",
+					"cost": {"input": 1.2, "output": 6, "cache_read": 0.12}
 				}
 			}
 		},
@@ -103,6 +118,8 @@ func TestConvertModelsDevToRatioDataUsesOnlyOfficialProviders(t *testing.T) {
 	require.Equal(t, 0.0, createCacheRatios["qwen-zero"])
 	require.NotContains(t, modelRatios, "siliconflow/deepseek-v3.2")
 	require.NotContains(t, modelRatios, "MiniMax/MiniMax-M2.7")
+	require.Equal(t, 0.4, modelRatios["future-qwen-codename"])
+	require.Equal(t, 4.0, completionRatios["future-qwen-codename"])
 	require.Equal(t, 0.7, modelRatios["glm-5.2"])
 	require.InDelta(t, 4.4/1.4, completionRatios["glm-5.2"], 1e-12)
 	require.InDelta(t, 0.26/1.4, cacheRatios["glm-5.2"], 1e-12)
@@ -157,6 +174,35 @@ func TestReplaceOfficialRatioFieldPreservesInactiveOfficialModels(t *testing.T) 
 	require.Equal(t, 1, changed)
 	require.Equal(t, 1.5, merged["active"])
 	require.Equal(t, 7.0, merged["inactive"])
+}
+
+func TestBuildOfficialSyncModelSetIncludesExistingLegacyPrices(t *testing.T) {
+	modelRatios := ratio_setting.GetModelRatioCopy()
+	completionRatios := ratio_setting.GetCompletionRatioCopy()
+	cacheRatios := ratio_setting.GetCacheRatioCopy()
+	createCacheRatios := ratio_setting.GetCreateCacheRatioCopy()
+
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"legacy-model":1}`))
+	require.NoError(t, ratio_setting.UpdateCompletionRatioByJSONString(`{"legacy-output-model":2}`))
+	require.NoError(t, ratio_setting.UpdateCacheRatioByJSONString(`{"legacy-cache-model":0.1}`))
+	require.NoError(t, ratio_setting.UpdateCreateCacheRatioByJSONString(`{"legacy-create-cache-model":1.25}`))
+	t.Cleanup(func() {
+		modelJSON, _ := json.Marshal(modelRatios)
+		completionJSON, _ := json.Marshal(completionRatios)
+		cacheJSON, _ := json.Marshal(cacheRatios)
+		createCacheJSON, _ := json.Marshal(createCacheRatios)
+		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(string(modelJSON)))
+		require.NoError(t, ratio_setting.UpdateCompletionRatioByJSONString(string(completionJSON)))
+		require.NoError(t, ratio_setting.UpdateCacheRatioByJSONString(string(cacheJSON)))
+		require.NoError(t, ratio_setting.UpdateCreateCacheRatioByJSONString(string(createCacheJSON)))
+	})
+
+	models := buildOfficialSyncModelSet([]string{"new-enabled-model"})
+	require.True(t, models["new-enabled-model"])
+	require.True(t, models["legacy-model"])
+	require.True(t, models["legacy-output-model"])
+	require.True(t, models["legacy-cache-model"])
+	require.True(t, models["legacy-create-cache-model"])
 }
 
 func TestNextOfficialSyncTimeUsesSevenAMLocalTime(t *testing.T) {

@@ -54,6 +54,16 @@ func GetEnabledModels() []string {
 	return models
 }
 
+func GetEnabledModelsOnEnabledChannels() ([]string, error) {
+	var models []string
+	err := DB.Table("abilities").
+		Joins("JOIN channels ON abilities.channel_id = channels.id").
+		Where("abilities.enabled = ? AND channels.status = ?", true, common.ChannelStatusEnabled).
+		Distinct("abilities.model").
+		Pluck("abilities.model", &models).Error
+	return models, err
+}
+
 func GetAllEnableAbilities() []Ability {
 	var abilities []Ability
 	DB.Find(&abilities, "enabled = ?", true)
@@ -294,7 +304,7 @@ func abilityPriority(ability Ability) int64 {
 }
 
 func (channel *Channel) AddAbilities(tx *gorm.DB) error {
-	models_ := channel.GetModels()
+	models_ := channel.GetRoutingModels()
 	groups_ := channel.GetGroups()
 	abilitySet := make(map[string]struct{})
 	abilities := make([]Ability, 0, len(models_))
@@ -366,7 +376,7 @@ func (channel *Channel) UpdateAbilities(tx *gorm.DB) error {
 	}
 
 	// Then add new abilities
-	models_ := channel.GetModels()
+	models_ := channel.GetRoutingModels()
 	groups_ := channel.GetGroups()
 	abilitySet := make(map[string]struct{})
 	abilities := make([]Ability, 0, len(models_))

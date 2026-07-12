@@ -51,7 +51,13 @@ function isOptionalModelMapping(value: string | undefined): boolean {
     const parsed = parseOptionalJson(value)
     if (parsed === undefined) return true
     if (!isJsonObjectValue(parsed)) return false
-    return Object.values(parsed).every((item) => typeof item === 'string')
+    return Object.values(parsed).every(
+      (item) =>
+        typeof item === 'string' ||
+        (Array.isArray(item) &&
+          item.length > 0 &&
+          item.every((candidate) => typeof candidate === 'string'))
+    )
   } catch {
     return false
   }
@@ -134,7 +140,7 @@ export const channelFormSchema = z
       .optional()
       .refine(
         isOptionalModelMapping,
-        'Model mapping must be a JSON object with string values'
+        'Model mapping must be a JSON object with string or string-array values'
       ),
     priority: z.number().optional(),
     weight: z.number().optional(),

@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"math/rand"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -397,6 +398,46 @@ func (channel *Channel) GetModels() []string {
 		}
 	}
 	return res
+}
+
+// GetRoutingModels returns the client-visible models used to build routing
+// abilities. Mapping sources are virtual client models; mapping targets are
+// upstream-only candidates and are hidden unless they are also a source.
+func (channel *Channel) GetRoutingModels() []string {
+	models := channel.GetModels()
+	mapping, err := common.ParseModelMapping(channel.GetModelMapping())
+	if err != nil || len(mapping) == 0 {
+		return models
+	}
+	sources := make(map[string]struct{}, len(mapping))
+	targets := make(map[string]struct{})
+	for source, candidates := range mapping {
+		sources[source] = struct{}{}
+		for _, candidate := range candidates {
+			targets[candidate] = struct{}{}
+		}
+	}
+	result := make([]string, 0, len(models)+len(sources))
+	seen := make(map[string]struct{}, len(models)+len(sources))
+	for _, modelName := range models {
+		if _, upstreamOnly := targets[modelName]; upstreamOnly {
+			if _, clientSource := sources[modelName]; !clientSource {
+				continue
+			}
+		}
+		if _, exists := seen[modelName]; !exists {
+			seen[modelName] = struct{}{}
+			result = append(result, modelName)
+		}
+	}
+	for source := range sources {
+		if _, exists := seen[source]; !exists {
+			seen[source] = struct{}{}
+			result = append(result, source)
+		}
+	}
+	sort.Strings(result)
+	return result
 }
 
 func (channel *Channel) GetGroups() []string {

@@ -2343,6 +2343,8 @@
     "Model mapping must be a JSON object with string values": "モデルマッピングは文字列値を持つ JSON オブジェクトである必要があります",
     "Model mapping must be valid JSON": "モデルマッピングは有効な JSON である必要があります",
     "Model mapping values must be strings": "モデルマッピングの値は文字列である必要があります",
+    "Model mapping values must be strings or string arrays": "モデルマッピングの値は文字列または文字列配列である必要があります",
+    "Multiple rows with the same original model are tried from top to bottom before switching channels.": "同じ元モデルの複数行は、チャネルを切り替える前に上から順に試行されます。",
     "Model name": "モデル名",
     "Model Name": "モデル名",
     "Model Name *": "モデル名 *",

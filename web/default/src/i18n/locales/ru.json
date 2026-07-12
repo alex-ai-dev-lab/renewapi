@@ -2343,6 +2343,8 @@
     "Model mapping must be a JSON object with string values": "Сопоставление моделей должно быть JSON-объектом со строковыми значениями",
     "Model mapping must be valid JSON": "Сопоставление моделей должно быть допустимым JSON",
     "Model mapping values must be strings": "Значения сопоставления моделей должны быть строками",
+    "Model mapping values must be strings or string arrays": "Значения сопоставления моделей должны быть строками или массивами строк",
+    "Multiple rows with the same original model are tried from top to bottom before switching channels.": "Несколько строк для одной исходной модели проверяются сверху вниз до переключения канала.",
     "Model name": "Имя модели",
     "Model Name": "Название модели",
     "Model Name *": "Имя модели *",

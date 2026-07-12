@@ -622,13 +622,12 @@ export function ChannelMutateDrawer({
         Array<{ source: string; target: string }>
       >((acc, [rawSource, rawTarget]) => {
         const source = String(rawSource).trim()
-        const target = String(rawTarget ?? '').trim()
-
-        if (!source || !target) {
-          return acc
+        const targets = Array.isArray(rawTarget) ? rawTarget : [rawTarget]
+        for (const rawCandidate of targets) {
+          if (typeof rawCandidate !== 'string') continue
+          const target = rawCandidate.trim()
+          if (source && target) acc.push({ source, target })
         }
-
-        acc.push({ source, target })
         return acc
       }, [])
 

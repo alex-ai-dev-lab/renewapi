@@ -2343,6 +2343,8 @@
     "Model mapping must be a JSON object with string values": "Le mappage de modèles doit être un objet JSON avec des valeurs de chaîne",
     "Model mapping must be valid JSON": "La cartographie des modèles doit être un JSON valide",
     "Model mapping values must be strings": "Les valeurs du mappage de modèles doivent être des chaînes",
+    "Model mapping values must be strings or string arrays": "Les valeurs du mappage doivent être des chaînes ou des tableaux de chaînes",
+    "Multiple rows with the same original model are tried from top to bottom before switching channels.": "Plusieurs lignes pour le même modèle d'origine sont essayées de haut en bas avant de changer de canal.",
     "Model name": "Nom du modèle",
     "Model Name": "Nom du modèle",
     "Model Name *": "Nom du modèle *",

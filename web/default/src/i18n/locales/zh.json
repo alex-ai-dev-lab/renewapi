@@ -2637,6 +2637,8 @@
     "Model mapping must be a JSON object with string values": "模型映射必须是值为字符串的 JSON 对象",
     "Model mapping must be valid JSON": "模型映射必须是有效的 JSON",
     "Model mapping values must be strings": "模型映射的值必须是字符串",
+    "Model mapping values must be strings or string arrays": "模型映射的值必须是字符串或字符串数组",
+    "Multiple rows with the same original model are tried from top to bottom before switching channels.": "同一个原始模型的多行映射会按从上到下的顺序依次尝试，全部失败后才切换渠道。",
     "Model name": "模型名称",
     "Model Name": "模型名称",
     "Model Name *": "模型名称 *",

@@ -410,6 +410,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			if maybeRetryResponsesFunctionCallArgumentsAsObject(c, relayInfo, retryParam, channel, newAPIError) {
 				continue
 			}
+			if retryNextMappedModelCandidate(c, relayInfo, retryParam, channel, newAPIError) {
+				continue
+			}
 			service.RecordRouterCooldownFailure(channel.Id, relayInfo, newAPIError)
 			service.RecordChannelModelFailure(service.ChannelModelFailureParams{
 				ChannelId: channel.Id,
@@ -696,6 +699,21 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			AutoBan: &autoBanInt,
 		}, nil
 	}
+	if retryParam.ModelMappingFallbackChannelId > 0 {
+		channelId := retryParam.ModelMappingFallbackChannelId
+		retryParam.ModelMappingFallbackChannelId = 0
+		channel, err := model.CacheGetChannel(channelId)
+		if err != nil || channel == nil {
+			return nil, types.NewError(fmt.Errorf("failed to reload model fallback channel %d", channelId), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		}
+		if channel.Status != common.ChannelStatusEnabled || !service.ChannelAllowedForProduction(channel) {
+			return nil, types.NewError(fmt.Errorf("model fallback channel %d is unavailable", channelId), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		}
+		if newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName); newAPIError != nil {
+			return nil, newAPIError
+		}
+		return channel, nil
+	}
 	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
 
 	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
@@ -712,6 +730,33 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		return nil, newAPIError
 	}
 	return channel, nil
+}
+
+func retryNextMappedModelCandidate(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service.RetryParam, channel *model.Channel, relayErr *types.NewAPIError) bool {
+	if c == nil || info == nil || retryParam == nil || channel == nil || relayErr == nil {
+		return false
+	}
+	if types.IsSkipRetryError(relayErr) || info.HasSendResponse() || c.Writer.Written() {
+		return false
+	}
+	previous, next, ok := helper.AdvanceModelMappingFallback(info)
+	if !ok {
+		return false
+	}
+	retryParam.ModelMappingFallbackChannelId = channel.Id
+	retryParam.ResetRetryNextTry()
+	if retryParam.ExcludedChannelIds != nil {
+		delete(retryParam.ExcludedChannelIds, channel.Id)
+	}
+	logger.LogWarn(c, fmt.Sprintf(
+		"model mapping fallback: channel=%d source=%s from=%s to=%s reason=%s",
+		channel.Id,
+		info.ModelMappingFallbackSource,
+		previous,
+		next,
+		common.LocalLogPreview(relayErr.MaskSensitiveErrorWithStatusCode()),
+	))
+	return true
 }
 
 func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) bool {

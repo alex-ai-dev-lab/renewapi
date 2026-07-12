@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Code, Plus, Table, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -40,25 +40,6 @@ type MappingRow = {
   to: string
 }
 
-const DUPLICATE_MAPPING_SENTINEL = '{ "duplicate_source_models": '
-
-function getDuplicateSources(rows: MappingRow[]): string[] {
-  const seen = new Set<string>()
-  const duplicates = new Set<string>()
-
-  for (const row of rows) {
-    const source = row.from.trim()
-    if (!source) continue
-    if (seen.has(source)) {
-      duplicates.add(source)
-    } else {
-      seen.add(source)
-    }
-  }
-
-  return Array.from(duplicates)
-}
-
 export function ModelMappingEditor(props: ModelMappingEditorProps) {
   const { t } = useTranslation()
   const sourceListId = useId()
@@ -68,7 +49,6 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
   const [jsonValue, setJsonValue] = useState(props.value)
   const [jsonError, setJsonError] = useState<string | null>(null)
   const nextRowIdRef = useRef(0)
-  const duplicateSources = useMemo(() => getDuplicateSources(rows), [rows])
 
   const createRowId = () => {
     nextRowIdRef.current += 1
@@ -88,15 +68,23 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
         return false
       }
       const entries = Object.entries(parsed)
-      const invalidValue = entries.find(([, to]) => typeof to !== 'string')
+      const invalidValue = entries.find(
+        ([, to]) =>
+          typeof to !== 'string' &&
+          (!Array.isArray(to) || to.some((item) => typeof item !== 'string'))
+      )
       if (invalidValue) {
-        setJsonError(t('Model mapping values must be strings'))
+        setJsonError(t('Model mapping values must be strings or string arrays'))
         return false
       }
+      const expandedEntries = entries.flatMap(([from, to]) =>
+        (Array.isArray(to) ? to : [to]).map(
+          (target) => [from, String(target)] as const
+        )
+      )
       setRows((previousRows) => {
         const remainingRows = [...previousRows]
-        return entries.map(([from, to], index) => {
-          const toString = String(to)
+        return expandedEntries.map(([from, toString], index) => {
           const existingIndex = remainingRows.findIndex(
             (row) =>
               row.from === from ||
@@ -137,25 +125,24 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     if (updatedRows.length === 0) {
       return ''
     }
-    const obj: Record<string, string> = {}
+    const grouped = new Map<string, string[]>()
     updatedRows.forEach((row) => {
-      if (row.from.trim()) {
-        obj[row.from.trim()] = row.to.trim()
-      }
+      const source = row.from.trim()
+      const target = row.to.trim()
+      if (!source || !target) return
+      const targets = grouped.get(source) ?? []
+      if (!targets.includes(target)) targets.push(target)
+      grouped.set(source, targets)
+    })
+    const obj: Record<string, string | string[]> = {}
+    grouped.forEach((targets, source) => {
+      obj[source] = targets.length === 1 ? targets[0] : targets
     })
     return JSON.stringify(obj, null, 2)
   }
 
   const syncRows = (updatedRows: MappingRow[]) => {
     setRows(updatedRows)
-    const duplicates = getDuplicateSources(updatedRows)
-    if (duplicates.length > 0) {
-      setJsonError(t('Duplicate source model mappings are not allowed'))
-      setJsonValue(DUPLICATE_MAPPING_SENTINEL)
-      props.onChange(DUPLICATE_MAPPING_SENTINEL)
-      return
-    }
-
     const json = convertRowsToJson(updatedRows)
     setJsonError(null)
     setJsonValue(json)
@@ -194,7 +181,14 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
 
   const handleFillTemplate = () => {
     const template = JSON.stringify(
-      { 'gpt-3.5-turbo': 'gpt-3.5-turbo-0125' },
+      {
+        'glm-5.2': [
+          '@cf/zhipu-ai/glm-5.2',
+          'TCADP/glm-5.2',
+          'z-ai/glm-5.2',
+          'GLM-5.2',
+        ],
+      },
       null,
       2
     )
@@ -206,12 +200,9 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
   const handleModeChange = (nextMode: string) => {
     if (nextMode !== 'visual' && nextMode !== 'json') return
     if (nextMode === 'json') {
-      const duplicates = getDuplicateSources(rows)
-      if (duplicates.length === 0) {
-        const json = convertRowsToJson(rows)
-        setJsonValue(json)
-        props.onChange(json)
-      }
+      const json = convertRowsToJson(rows)
+      setJsonValue(json)
+      props.onChange(json)
       setMode('json')
       return
     }
@@ -251,17 +242,12 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
           </Alert>
         )}
 
-        {duplicateSources.length > 0 && (
-          <Alert>
-            <AlertDescription>
-              {t('Duplicate source model(s): {{models}}', {
-                models: duplicateSources.join(', '),
-              })}
-            </AlertDescription>
-          </Alert>
-        )}
-
         <TabsContent value='visual' className='space-y-2'>
+          <p className='text-muted-foreground text-sm'>
+            {t(
+              'Multiple rows with the same original model are tried from top to bottom before switching channels.'
+            )}
+          </p>
           {rows.length > 0 ? (
             <div className='space-y-2'>
               <div className='grid grid-cols-[1fr_1fr_auto] gap-2 text-sm font-medium'>

@@ -170,6 +170,10 @@ type RelayInfo struct {
 	ClaudeThinkingPreferSupportedChannel      bool
 	ClaudeThinkingSanitizedFallback           bool
 	ForceResponsesFunctionCallArgumentsObject bool
+	ModelMappingFallbackChannelId             int
+	ModelMappingFallbackSource                string
+	ModelMappingFallbackCandidates            []string
+	ModelMappingFallbackIndex                 int
 
 	// AntiPoisonGuardPrefix is retained for older patch compatibility. The
 	// current upstream-error normalization path does not inject guard prompts.

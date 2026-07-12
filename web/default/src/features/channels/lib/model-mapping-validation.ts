@@ -87,6 +87,7 @@ export function extractRedirectModels(modelMapping: string): string[] {
     }
 
     const values = Object.values(parsed)
+      .flatMap((value) => (Array.isArray(value) ? value : [value]))
       .map((value) => (typeof value === 'string' ? value.trim() : undefined))
       .filter((value): value is string => Boolean(value))
 
@@ -179,10 +180,17 @@ export function validateModelMappingJson(modelMapping: string): {
         error: 'Model mapping must be a valid JSON object',
       }
     }
-    if (Object.values(parsed).some((value) => typeof value !== 'string')) {
+    if (
+      Object.values(parsed).some(
+        (value) =>
+          typeof value !== 'string' &&
+          (!Array.isArray(value) ||
+            value.some((item) => typeof item !== 'string'))
+      )
+    ) {
       return {
         valid: false,
-        error: 'Model mapping values must be strings',
+        error: 'Model mapping values must be strings or string arrays',
       }
     }
     return { valid: true }

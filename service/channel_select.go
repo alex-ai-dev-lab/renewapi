@@ -33,6 +33,7 @@ type RetryParam struct {
 	LastSelectedChannelId                     int
 	ProviderRoutingPolicy                     *ProviderRoutingPolicy
 	ResponsesRequirement                      *ResponsesRoutingRequirement
+	ModelMappingFallbackChannelId             int
 }
 
 func (p *RetryParam) GetRetry() int {

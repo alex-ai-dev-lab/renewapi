@@ -99,11 +99,11 @@ func officialModelSet(converted map[string]any) map[string]bool {
 // replaceOfficialRatioField rewrites pricing for official models and preserves
 // local-only custom models. If a model is official but a specific lane no
 // longer exists in models.dev, the stale local lane is removed.
-func replaceOfficialRatioField(current map[string]float64, raw any, officialModels map[string]bool) (map[string]float64, int) {
+func replaceOfficialRatioField(current map[string]float64, raw any, officialModels map[string]bool, syncModels map[string]bool) (map[string]float64, int) {
 	officialValues := make(map[string]float64)
 	if m, ok := raw.(map[string]any); ok {
 		for k, v := range m {
-			if !officialModels[k] {
+			if !officialModels[k] || !syncModels[k] {
 				continue
 			}
 			if f, ok := toFloat(v); ok && isValidNonNegativeCost(f) {
@@ -115,7 +115,7 @@ func replaceOfficialRatioField(current map[string]float64, raw any, officialMode
 	merged := make(map[string]float64, len(current)+len(officialValues))
 	changed := 0
 	for k, v := range current {
-		if officialModels[k] {
+		if officialModels[k] && syncModels[k] {
 			if _, hasOfficialValue := officialValues[k]; !hasOfficialValue {
 				changed++
 				continue
@@ -144,17 +144,20 @@ func updateFloatOption(key string, values map[string]float64, updater func(strin
 	return updater(string(jsonStr))
 }
 
-// applyOfficialPricing aligns local pricing maps with models.dev official
-// prices for every official model, while preserving custom local-only models.
-func applyOfficialPricing(converted map[string]any) (int, error) {
+// applyOfficialPricing aligns enabled models with models.dev author pricing.
+// Inactive/legacy model entries are intentionally frozen.
+func applyOfficialPricing(converted map[string]any, syncModels map[string]bool) (int, error) {
 	officialModels := officialModelSet(converted)
 	if len(officialModels) == 0 {
 		return 0, fmt.Errorf("official models.dev payload did not include official model names")
 	}
+	if len(syncModels) == 0 {
+		return 0, fmt.Errorf("no enabled models are eligible for official price sync")
+	}
 
 	changedTotal := 0
 	if raw, ok := converted["model_ratio"]; ok {
-		cur, changed := replaceOfficialRatioField(ratio_setting.GetModelRatioCopy(), raw, officialModels)
+		cur, changed := replaceOfficialRatioField(ratio_setting.GetModelRatioCopy(), raw, officialModels, syncModels)
 		if changed > 0 {
 			changedTotal += changed
 			if err := updateFloatOption("ModelRatio", cur, ratio_setting.UpdateModelRatioByJSONString); err != nil {
@@ -164,7 +167,7 @@ func applyOfficialPricing(converted map[string]any) (int, error) {
 	}
 
 	if raw, ok := converted["completion_ratio"]; ok {
-		cur, changed := replaceOfficialRatioField(ratio_setting.GetCompletionRatioCopy(), raw, officialModels)
+		cur, changed := replaceOfficialRatioField(ratio_setting.GetCompletionRatioCopy(), raw, officialModels, syncModels)
 		if changed > 0 {
 			changedTotal += changed
 			if err := updateFloatOption("CompletionRatio", cur, ratio_setting.UpdateCompletionRatioByJSONString); err != nil {
@@ -174,7 +177,7 @@ func applyOfficialPricing(converted map[string]any) (int, error) {
 	}
 
 	if raw, ok := converted["cache_ratio"]; ok {
-		cur, changed := replaceOfficialRatioField(ratio_setting.GetCacheRatioCopy(), raw, officialModels)
+		cur, changed := replaceOfficialRatioField(ratio_setting.GetCacheRatioCopy(), raw, officialModels, syncModels)
 		if changed > 0 {
 			changedTotal += changed
 			if err := updateFloatOption("CacheRatio", cur, ratio_setting.UpdateCacheRatioByJSONString); err != nil {
@@ -184,7 +187,7 @@ func applyOfficialPricing(converted map[string]any) (int, error) {
 	}
 
 	if raw, ok := converted["create_cache_ratio"]; ok {
-		cur, changed := replaceOfficialRatioField(ratio_setting.GetCreateCacheRatioCopy(), raw, officialModels)
+		cur, changed := replaceOfficialRatioField(ratio_setting.GetCreateCacheRatioCopy(), raw, officialModels, syncModels)
 		if changed > 0 {
 			changedTotal += changed
 			if err := updateFloatOption("CreateCacheRatio", cur, ratio_setting.UpdateCreateCacheRatioByJSONString); err != nil {
@@ -243,7 +246,18 @@ func RunOfficialPriceSync() (int, error) {
 		return 0, err
 	}
 
-	merged, err := applyOfficialPricing(converted)
+	enabledModels, enabledErr := model.GetEnabledModelsOnEnabledChannels()
+	if enabledErr != nil {
+		officialSyncState.LastRunUnix = time.Now().Unix()
+		officialSyncState.LastOK = false
+		officialSyncState.LastError = enabledErr.Error()
+		return 0, enabledErr
+	}
+	syncModels := make(map[string]bool, len(enabledModels))
+	for _, modelName := range enabledModels {
+		syncModels[modelName] = true
+	}
+	merged, err := applyOfficialPricing(converted, syncModels)
 	officialSyncState.LastRunUnix = time.Now().Unix()
 	if err != nil {
 		officialSyncState.LastOK = false

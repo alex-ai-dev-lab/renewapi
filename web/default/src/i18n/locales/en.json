@@ -2343,6 +2343,8 @@
     "Model mapping must be a JSON object with string values": "Model mapping must be a JSON object with string values",
     "Model mapping must be valid JSON": "Model mapping must be valid JSON",
     "Model mapping values must be strings": "Model mapping values must be strings",
+    "Model mapping values must be strings or string arrays": "Model mapping values must be strings or string arrays",
+    "Multiple rows with the same original model are tried from top to bottom before switching channels.": "Multiple rows with the same original model are tried from top to bottom before switching channels.",
     "Model name": "Model name",
     "Model Name": "Model Name",
     "Model Name *": "Model Name *",

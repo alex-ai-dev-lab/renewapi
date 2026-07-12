@@ -87,17 +87,15 @@ func TestChannelUpstreamModelUpdateSelectFieldsIncludeModelMapping(t *testing.T)
 
 func TestNormalizeChannelModelMapping(t *testing.T) {
 	modelMapping := `{
-		" alias-model ": " upstream-model ",
-		"": "invalid",
-		"invalid-target": ""
+		" alias-model ": [" upstream-model ", "backup-model"]
 	}`
 	channel := &model.Channel{
 		ModelMapping: &modelMapping,
 	}
 
 	result := normalizeChannelModelMapping(channel)
-	require.Equal(t, map[string]string{
-		"alias-model": "upstream-model",
+	require.Equal(t, map[string][]string{
+		"alias-model": {"upstream-model", "backup-model"},
 	}, result)
 }
 
@@ -106,8 +104,8 @@ func TestCollectPendingUpstreamModelChangesFromModels_WithModelMapping(t *testin
 		[]string{"alias-model", "gpt-4o", "stale-model"},
 		[]string{"gpt-4o", "gpt-4.1", "mapped-target"},
 		[]string{"gpt-4.1"},
-		map[string]string{
-			"alias-model": "mapped-target",
+		map[string][]string{
+			"alias-model": {"mapped-target"},
 		},
 	)
 

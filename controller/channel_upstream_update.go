@@ -146,7 +146,7 @@ func applySelectedModelChanges(originModels []string, addModels []string, remove
 	return subtractModelNames(mergeModelNames(originModels, normalizedAdd), normalizedRemove)
 }
 
-func normalizeChannelModelMapping(channel *model.Channel) map[string]string {
+func normalizeChannelModelMapping(channel *model.Channel) map[string][]string {
 	if channel == nil || channel.ModelMapping == nil {
 		return nil
 	}
@@ -154,30 +154,21 @@ func normalizeChannelModelMapping(channel *model.Channel) map[string]string {
 	if rawMapping == "" || rawMapping == "{}" {
 		return nil
 	}
-	parsed := make(map[string]string)
-	if err := common.UnmarshalJsonStr(rawMapping, &parsed); err != nil {
+	parsed, err := common.ParseModelMapping(rawMapping)
+	if err != nil {
 		return nil
 	}
-	normalized := make(map[string]string, len(parsed))
-	for source, target := range parsed {
-		normalizedSource := strings.TrimSpace(source)
-		normalizedTarget := strings.TrimSpace(target)
-		if normalizedSource == "" || normalizedTarget == "" {
-			continue
-		}
-		normalized[normalizedSource] = normalizedTarget
-	}
-	if len(normalized) == 0 {
+	if len(parsed) == 0 {
 		return nil
 	}
-	return normalized
+	return parsed
 }
 
 func collectPendingUpstreamModelChangesFromModels(
 	localModels []string,
 	upstreamModels []string,
 	ignoredModels []string,
-	modelMapping map[string]string,
+	modelMapping map[string][]string,
 ) (pendingAddModels []string, pendingRemoveModels []string) {
 	localSet := make(map[string]struct{})
 	localModels = normalizeModelNames(localModels)
@@ -194,9 +185,11 @@ func collectPendingUpstreamModelChangesFromModels(
 
 	redirectSourceSet := make(map[string]struct{}, len(modelMapping))
 	redirectTargetSet := make(map[string]struct{}, len(modelMapping))
-	for source, target := range modelMapping {
+	for source, targets := range modelMapping {
 		redirectSourceSet[source] = struct{}{}
-		redirectTargetSet[target] = struct{}{}
+		for _, target := range targets {
+			redirectTargetSet[target] = struct{}{}
+		}
 	}
 
 	coveredUpstreamSet := make(map[string]struct{}, len(localSet)+len(redirectTargetSet))

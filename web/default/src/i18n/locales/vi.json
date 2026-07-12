@@ -2343,6 +2343,8 @@
     "Model mapping must be a JSON object with string values": "Ánh xạ mô hình phải là đối tượng JSON với giá trị chuỗi",
     "Model mapping must be valid JSON": "Ánh xạ mô hình phải là JSON hợp lệ",
     "Model mapping values must be strings": "Giá trị ánh xạ mô hình phải là chuỗi",
+    "Model mapping values must be strings or string arrays": "Giá trị ánh xạ mô hình phải là chuỗi hoặc mảng chuỗi",
+    "Multiple rows with the same original model are tried from top to bottom before switching channels.": "Nhiều dòng có cùng mô hình gốc sẽ được thử theo thứ tự từ trên xuống trước khi chuyển kênh.",
     "Model name": "Tên mẫu",
     "Model Name": "Tên mẫu",
     "Model Name *": "Tên mẫu *",

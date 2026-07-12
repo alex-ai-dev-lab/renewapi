@@ -871,10 +871,59 @@ type modelsDevCost struct {
 
 type modelsDevCandidate struct {
 	Provider   string
+	OwnerRank  int
 	Input      float64
 	Output     *float64
 	CacheRead  *float64
 	CacheWrite *float64
+}
+
+type modelsDevOwnerRule struct {
+	Prefixes  []string
+	Providers []string
+}
+
+var modelsDevOwnerRules = []modelsDevOwnerRule{
+	{Prefixes: []string{"gpt-", "chatgpt-", "o1", "o3", "o4", "codex-", "text-embedding-", "dall-e-", "tts-", "whisper-", "omni-moderation-", "computer-use-", "sora-"}, Providers: []string{"openai"}},
+	{Prefixes: []string{"claude-"}, Providers: []string{"anthropic"}},
+	{Prefixes: []string{"gemini-", "imagen-", "veo-", "chirp-"}, Providers: []string{"google"}},
+	{Prefixes: []string{"glm-", "cogview-", "cogvideo", "charglm-"}, Providers: []string{"zai", "zhipuai"}},
+	{Prefixes: []string{"qwen", "qwq", "qvq", "wan", "paraformer"}, Providers: []string{"alibaba", "alibaba-cn"}},
+	{Prefixes: []string{"deepseek-"}, Providers: []string{"deepseek"}},
+	{Prefixes: []string{"grok-"}, Providers: []string{"xai"}},
+	{Prefixes: []string{"kimi-", "moonshot-"}, Providers: []string{"moonshotai", "moonshotai-cn"}},
+	{Prefixes: []string{"minimax-", "abab"}, Providers: []string{"minimax", "minimax-cn"}},
+	{Prefixes: []string{"mistral-", "codestral-", "ministral-", "pixtral-", "devstral-", "magistral-"}, Providers: []string{"mistral"}},
+	{Prefixes: []string{"command-", "rerank-", "embed-english", "embed-multilingual"}, Providers: []string{"cohere"}},
+	{Prefixes: []string{"sonar-"}, Providers: []string{"perplexity"}},
+	{Prefixes: []string{"step-"}, Providers: []string{"stepfun", "stepfun-ai"}},
+	{Prefixes: []string{"solar-"}, Providers: []string{"upstage"}},
+	{Prefixes: []string{"mercury"}, Providers: []string{"inception"}},
+	{Prefixes: []string{"poolside"}, Providers: []string{"poolside"}},
+}
+
+func modelsDevOwnerProviderRank(modelName, provider string) (int, bool) {
+	modelName = strings.ToLower(strings.TrimSpace(modelName))
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	for _, rule := range modelsDevOwnerRules {
+		matched := false
+		for _, prefix := range rule.Prefixes {
+			if strings.HasPrefix(modelName, prefix) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		for rank, candidateProvider := range rule.Providers {
+			if provider == candidateProvider {
+				return rank, true
+			}
+		}
+		return 0, false
+	}
+	return 0, false
 }
 
 func cloneFloatPtr(v *float64) *float64 {
@@ -935,16 +984,9 @@ func buildModelsDevCandidate(provider string, cost modelsDevCost) (modelsDevCand
 }
 
 func shouldReplaceModelsDevCandidate(current, next modelsDevCandidate) bool {
-	currentNonZero := current.Input > 0
-	nextNonZero := next.Input > 0
-	if currentNonZero != nextNonZero {
-		// Prefer non-zero pricing data; this matches "cheapest non-zero" conflict policy.
-		return nextNonZero
+	if current.OwnerRank != next.OwnerRank {
+		return next.OwnerRank < current.OwnerRank
 	}
-	if nextNonZero && !nearlyEqual(next.Input, current.Input) {
-		return next.Input < current.Input
-	}
-	// Stable tie-breaker for deterministic result.
 	return next.Provider < current.Provider
 }
 
@@ -957,9 +999,9 @@ func shouldReplaceModelsDevCandidate(current, next modelsDevCandidate) bool {
 //	cache_ratio = cache_read_cost / input_cost
 //	create_cache_ratio = cache_write_cost / input_cost
 //
-// Duplicate model keys across providers are resolved by selecting the
-// cheapest non-zero input cost. If only zero-priced candidates exist,
-// a zero ratio is kept.
+// Duplicate model keys are accepted only from the model family's owner
+// provider. This prevents reseller prices (for example Alibaba-hosted GLM)
+// from overwriting the model author's official price.
 func convertModelsDevToRatioData(reader io.Reader) (map[string]any, error) {
 	var upstreamData map[string]modelsDevProvider
 	if err := common.DecodeJson(reader, &upstreamData); err != nil {
@@ -995,10 +1037,15 @@ func convertModelsDevToRatioData(reader io.Reader) (map[string]any, error) {
 			if !isOfficialModelsDevModelName(modelName) {
 				continue
 			}
+			ownerRank, owned := modelsDevOwnerProviderRank(modelName, provider)
+			if !owned {
+				continue
+			}
 			candidate, ok := buildModelsDevCandidate(provider, providerData.Models[modelName].Cost)
 			if !ok {
 				continue
 			}
+			candidate.OwnerRank = ownerRank
 			current, exists := selectedCandidates[modelName]
 			if !exists || shouldReplaceModelsDevCandidate(current, candidate) {
 				selectedCandidates[modelName] = candidate

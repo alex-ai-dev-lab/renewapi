@@ -40,6 +40,9 @@ func TestConvertModelsDevToRatioDataUsesOnlyOfficialProviders(t *testing.T) {
 		},
 		"alibaba-cn": {
 			"models": {
+				"glm-5.2": {
+					"cost": {"input": 1.1, "output": 3.851, "cache_read": 0.275}
+				},
 				"qwen3-max": {
 					"cost": {"input": 1.2, "output": 6, "cache_read": 0.12}
 				},
@@ -51,6 +54,13 @@ func TestConvertModelsDevToRatioDataUsesOnlyOfficialProviders(t *testing.T) {
 				},
 				"MiniMax/MiniMax-M2.7": {
 					"cost": {"input": 0.2, "output": 0.4, "cache_read": 0.02}
+				}
+			}
+		},
+		"zai": {
+			"models": {
+				"glm-5.2": {
+					"cost": {"input": 1.4, "output": 4.4, "cache_read": 0.26, "cache_write": 0}
 				}
 			}
 		},
@@ -93,6 +103,10 @@ func TestConvertModelsDevToRatioDataUsesOnlyOfficialProviders(t *testing.T) {
 	require.Equal(t, 0.0, createCacheRatios["qwen-zero"])
 	require.NotContains(t, modelRatios, "siliconflow/deepseek-v3.2")
 	require.NotContains(t, modelRatios, "MiniMax/MiniMax-M2.7")
+	require.Equal(t, 0.7, modelRatios["glm-5.2"])
+	require.InDelta(t, 4.4/1.4, completionRatios["glm-5.2"], 1e-12)
+	require.InDelta(t, 0.26/1.4, cacheRatios["glm-5.2"], 1e-12)
+	require.Equal(t, 0.0, createCacheRatios["glm-5.2"])
 }
 
 func TestReplaceOfficialRatioFieldOverwritesOfficialModelsOnly(t *testing.T) {
@@ -115,7 +129,13 @@ func TestReplaceOfficialRatioFieldOverwritesOfficialModelsOnly(t *testing.T) {
 		"stale-official":  true,
 	}
 
-	merged, changed := replaceOfficialRatioField(current, official, officialModels)
+	syncModels := map[string]bool{
+		"grok-4.3-high":   true,
+		"claude-opus-4-7": true,
+		"claude-opus-4-8": true,
+		"stale-official":  true,
+	}
+	merged, changed := replaceOfficialRatioField(current, official, officialModels, syncModels)
 
 	require.Equal(t, 4, changed)
 	require.Equal(t, 1.5, merged["grok-4.3-high"])
@@ -124,6 +144,19 @@ func TestReplaceOfficialRatioFieldOverwritesOfficialModelsOnly(t *testing.T) {
 	require.Equal(t, 2.5, merged["claude-opus-4-8"])
 	require.NotContains(t, merged, "stale-official")
 	require.NotContains(t, merged, "bad-price-format")
+}
+
+func TestReplaceOfficialRatioFieldPreservesInactiveOfficialModels(t *testing.T) {
+	current := map[string]float64{"active": 9, "inactive": 7}
+	official := map[string]any{"active": 1.5, "inactive": 2.5}
+	officialModels := map[string]bool{"active": true, "inactive": true}
+	syncModels := map[string]bool{"active": true}
+
+	merged, changed := replaceOfficialRatioField(current, official, officialModels, syncModels)
+
+	require.Equal(t, 1, changed)
+	require.Equal(t, 1.5, merged["active"])
+	require.Equal(t, 7.0, merged["inactive"])
 }
 
 func TestNextOfficialSyncTimeUsesSevenAMLocalTime(t *testing.T) {

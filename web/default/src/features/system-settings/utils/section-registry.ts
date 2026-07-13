@@ -25,7 +25,19 @@ import type { TFunction } from 'i18next'
 export type SectionDefinition<TSettings, TExtraArgs extends unknown[] = []> = {
   id: string
   titleKey: string
+  descriptionKey?: string
+  keywords?: readonly string[]
+  dangerLevel?: 'none' | 'warning' | 'critical'
   build: (settings: TSettings, ...extraArgs: TExtraArgs) => ReactNode
+}
+
+export type SettingsNavItem = {
+  id: string
+  title: string
+  description?: string
+  keywords: readonly string[]
+  dangerLevel: 'none' | 'warning' | 'critical'
+  url: string
 }
 
 /**
@@ -60,16 +72,25 @@ export function createSectionRegistry<
     ...SectionId[],
   ]
 
+  function getSectionUrl(sectionId: SectionId) {
+    return urlStyle === 'path'
+      ? `${basePath}/${sectionId}`
+      : `${basePath}?section=${sectionId}`
+  }
+
   /**
    * Get navigation items for sidebar
    */
   function getSectionNavItems(t: TFunction) {
     return sections.map((section) => ({
+      id: section.id,
       title: t(section.titleKey),
-      url:
-        urlStyle === 'path'
-          ? `${basePath}/${section.id}`
-          : `${basePath}?section=${section.id}`,
+      description: section.descriptionKey
+        ? t(section.descriptionKey)
+        : undefined,
+      keywords: section.keywords ?? [],
+      dangerLevel: section.dangerLevel ?? 'none',
+      url: getSectionUrl(section.id as SectionId),
     }))
   }
 
@@ -96,5 +117,6 @@ export function createSectionRegistry<
     getSectionNavItems,
     getSectionContent,
     getSectionMeta,
+    getSectionUrl,
   }
 }

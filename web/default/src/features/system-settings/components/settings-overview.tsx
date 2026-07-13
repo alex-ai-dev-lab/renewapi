@@ -16,94 +16,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMemo, useState, type ElementType } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import {
-  Box,
-  CreditCard,
-  Layout,
-  Search,
-  Settings,
-  Shield,
-  ShieldAlert,
-  Wrench,
-} from 'lucide-react'
+import { Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
-import { getAuthSectionNavItems } from '../auth/section-registry'
-import { getBillingSectionNavItems } from '../billing/section-registry'
-import { getContentSectionNavItems } from '../content/section-registry'
-import { getModelsSectionNavItems } from '../models/section-registry'
-import { getOperationsSectionNavItems } from '../operations/section-registry'
-import { getSecuritySectionNavItems } from '../security/section-registry'
-import { getSiteSectionNavItems } from '../site/section-registry'
-
-type SettingsArea = {
-  id: string
-  title: string
-  description: string
-  icon: ElementType
-  items: Array<{ title: string; url: string }>
-}
+import { getSettingsAreas } from '../utils/settings-area-registry'
 
 export function SettingsOverview() {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
 
-  const areas = useMemo<SettingsArea[]>(
-    () => [
-      {
-        id: 'site',
-        title: t('Site & Branding'),
-        description: t('Site identity, branding, notices, and public links'),
-        icon: Settings,
-        items: getSiteSectionNavItems(t),
-      },
-      {
-        id: 'auth',
-        title: t('Access & Identity'),
-        description: t('Login methods, OAuth, Passkeys, and access policy'),
-        icon: Shield,
-        items: getAuthSectionNavItems(t),
-      },
-      {
-        id: 'billing',
-        title: t('Billing & Payment'),
-        description: t('Quota, pricing, payment, subscriptions, and check-in'),
-        icon: CreditCard,
-        items: getBillingSectionNavItems(t),
-      },
-      {
-        id: 'models',
-        title: t('Models & Routing'),
-        description: t('Model behavior, error rules, affinity, and deployment'),
-        icon: Box,
-        items: getModelsSectionNavItems(t),
-      },
-      {
-        id: 'security',
-        title: t('Security & Risk'),
-        description: t('Rate limits, SSRF, sensitive words, and anti-poison'),
-        icon: ShieldAlert,
-        items: getSecuritySectionNavItems(t),
-      },
-      {
-        id: 'content',
-        title: t('Console & Content'),
-        description: t('Console appearance, announcements, chat, and API info'),
-        icon: Layout,
-        items: getContentSectionNavItems(t),
-      },
-      {
-        id: 'operations',
-        title: t('Operations'),
-        description: t('Monitoring, testing, email, logs, and performance'),
-        icon: Wrench,
-        items: getOperationsSectionNavItems(t),
-      },
-    ],
-    [t]
-  )
+  const areas = useMemo(() => getSettingsAreas(t), [t])
 
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const filteredAreas = useMemo(() => {
@@ -112,7 +36,7 @@ export function SettingsOverview() {
       .map((area) => ({
         ...area,
         items: area.items.filter((item) =>
-          `${area.title} ${area.description} ${item.title}`
+          `${area.title} ${area.description} ${item.title} ${item.description ?? ''} ${item.keywords.join(' ')}`
             .toLocaleLowerCase()
             .includes(normalizedQuery)
         ),

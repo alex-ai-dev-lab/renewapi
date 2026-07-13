@@ -16,104 +16,74 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  Activity,
-  Braces,
-  KeyRound,
-  Network,
-  Route,
-  Server,
-  Settings,
-  ShieldCheck,
-  type LucideIcon,
-} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  CHANNEL_EDITOR_SECTIONS,
+  type ChannelEditorSectionId,
+  type ChannelEditorSectionState,
+} from '../../lib/channel-editor-sections'
 
-export type ChannelEditorSectionId =
-  | 'overview'
-  | 'connection'
-  | 'models'
-  | 'routing'
-  | 'protocol'
-  | 'health'
-  | 'rewrites'
-  | 'advanced'
-
-export type ChannelEditorSectionState = 'clean' | 'dirty' | 'error'
+export type { ChannelEditorSectionId, ChannelEditorSectionState }
 
 type ChannelEditorNavigationProps = {
   activeSection: ChannelEditorSectionId
   sectionStates: Record<ChannelEditorSectionId, ChannelEditorSectionState>
   onNavigate: (section: ChannelEditorSectionId) => void
+  className?: string
 }
-
-const SECTIONS: Array<{
-  id: ChannelEditorSectionId
-  label: string
-  description: string
-  icon: LucideIcon
-}> = [
-  ['overview', 'Overview', 'Identity, provider, and availability', Server],
-  [
-    'connection',
-    'Connection & Authentication',
-    'Endpoint, credentials, and key policy',
-    KeyRound,
-  ],
-  [
-    'models',
-    'Models & Mapping',
-    'Client models and ordered upstream candidates',
-    Network,
-  ],
-  [
-    'routing',
-    'Routing & Traffic',
-    'Priority, weight, groups, and fallback',
-    Route,
-  ],
-  [
-    'protocol',
-    'Protocol & Capabilities',
-    'Responses, streaming, and continuation',
-    Braces,
-  ],
-  [
-    'health',
-    'Health & Security',
-    'Testing, recovery, TLS, and protection',
-    ShieldCheck,
-  ],
-  [
-    'rewrites',
-    'Request Rewrites',
-    'Headers, parameters, and prompt controls',
-    Settings,
-  ],
-  [
-    'advanced',
-    'Advanced Options',
-    'Provider-specific and automation settings',
-    Activity,
-  ],
-].map(([id, label, description, icon]) => ({
-  id: id as ChannelEditorSectionId,
-  label: label as string,
-  description: description as string,
-  icon: icon as LucideIcon,
-}))
 
 export function ChannelEditorNavigation(props: ChannelEditorNavigationProps) {
   const { t } = useTranslation()
 
   return (
     <nav
-      className='border-border/60 bg-muted/20 rounded-md border p-2'
+      className={cn(
+        'border-border/60 bg-muted/20 min-w-0 rounded-md border p-2',
+        props.className
+      )}
       aria-label={t('Channel editor sections')}
     >
-      <div className='grid gap-1 sm:grid-cols-2 lg:grid-cols-4'>
-        {SECTIONS.map((section) => {
+      <div className='md:hidden'>
+        <Select
+          value={props.activeSection}
+          onValueChange={(value) =>
+            props.onNavigate(value as ChannelEditorSectionId)
+          }
+        >
+          <SelectTrigger aria-label={t('Select channel editor section')}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              {CHANNEL_EDITOR_SECTIONS.map((section) => {
+                const state = props.sectionStates[section.id]
+                const status =
+                  state === 'error'
+                    ? t('Has errors')
+                    : state === 'dirty'
+                      ? t('Modified')
+                      : t('Saved')
+                return (
+                  <SelectItem key={section.id} value={section.id}>
+                    {t(section.label)} · {status}
+                  </SelectItem>
+                )
+              })}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className='hidden gap-1 md:grid md:grid-cols-4 xl:grid-cols-1'>
+        {CHANNEL_EDITOR_SECTIONS.map((section) => {
           const Icon = section.icon
           const active = props.activeSection === section.id
           const state = props.sectionStates[section.id]

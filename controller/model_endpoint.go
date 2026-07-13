@@ -1,15 +1,15 @@
 package controller
 
 import (
-	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/channelconfig"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -18,50 +18,25 @@ import (
 // modelEndpointPayload is the request shape accepted when replacing a channel's
 // per-model endpoint overrides. ChannelType is a pointer so the client can send
 // null to mean "auto-infer the protocol from the model name".
-type modelEndpointPayload struct {
-	Model       string `json:"model"`
-	BaseURL     string `json:"base_url"`
-	ChannelType *int   `json:"channel_type"`
+type modelEndpointPayload = channelconfig.ModelEndpointInput
+
+func relayFormatForAdminClientEndpoint(endpoint constant.EndpointType) (types.RelayFormat, bool) {
+	switch endpoint {
+	case constant.EndpointTypeOpenAI:
+		return types.RelayFormatOpenAI, true
+	case constant.EndpointTypeOpenAIResponse:
+		return types.RelayFormatOpenAIResponses, true
+	case constant.EndpointTypeOpenAIResponseCompact:
+		return types.RelayFormatOpenAIResponsesCompaction, true
+	case constant.EndpointTypeAnthropic:
+		return types.RelayFormatClaude, true
+	default:
+		return "", false
+	}
 }
 
 func normalizeModelEndpointPayloads(channelID int, payload []modelEndpointPayload) ([]*model.ModelEndpoint, error) {
-	if channelID <= 0 {
-		return nil, fmt.Errorf("invalid channel id")
-	}
-	endpoints := make([]*model.ModelEndpoint, 0, len(payload))
-	seen := make(map[string]struct{}, len(payload))
-	for index, item := range payload {
-		modelName := strings.TrimSpace(item.Model)
-		if modelName == "" {
-			return nil, fmt.Errorf("model endpoint %d: model is required", index+1)
-		}
-		if len([]rune(modelName)) > 255 {
-			return nil, fmt.Errorf("model endpoint %d: model exceeds 255 characters", index+1)
-		}
-		if _, exists := seen[modelName]; exists {
-			return nil, fmt.Errorf("duplicate model endpoint: %s", modelName)
-		}
-		seen[modelName] = struct{}{}
-
-		baseURL := strings.TrimSpace(item.BaseURL)
-		if len([]rune(baseURL)) > 512 {
-			return nil, fmt.Errorf("model endpoint %d: base_url exceeds 512 characters", index+1)
-		}
-		if baseURL != "" {
-			parsed, err := url.Parse(baseURL)
-			if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-				return nil, fmt.Errorf("model endpoint %d: base_url must be an absolute HTTP(S) URL", index+1)
-			}
-		}
-
-		endpoints = append(endpoints, &model.ModelEndpoint{
-			ChannelId:   channelID,
-			Model:       modelName,
-			BaseURL:     baseURL,
-			ChannelType: item.ChannelType,
-		})
-	}
-	return endpoints, nil
+	return channelconfig.NormalizeModelEndpoints(channelID, payload)
 }
 
 // PreviewChannelModelRoute shows the same route and bridge decision used by
@@ -72,7 +47,7 @@ func PreviewChannelModelRoute(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的渠道 ID"})
 		return
 	}
-	modelName := c.Query("model")
+	modelName := strings.TrimSpace(c.Query("model"))
 	if modelName == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "model is required"})
 		return
@@ -83,12 +58,10 @@ func PreviewChannelModelRoute(c *gin.Context) {
 		return
 	}
 	clientEndpoint := constant.EndpointType(c.DefaultQuery("client_endpoint", string(constant.EndpointTypeOpenAIResponse)))
-	var clientFormat types.RelayFormat = types.RelayFormatOpenAIResponses
-	switch clientEndpoint {
-	case constant.EndpointTypeOpenAI:
-		clientFormat = types.RelayFormatOpenAI
-	case constant.EndpointTypeAnthropic:
-		clientFormat = types.RelayFormatClaude
+	clientFormat, supported := relayFormatForAdminClientEndpoint(clientEndpoint)
+	if !supported {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "unsupported client_endpoint"})
+		return
 	}
 	decision := model.ResolveModelRouteDecision(channel, modelName)
 	capability := service.EvaluateChannelProtocolCapability(channel, modelName, clientFormat, nil)
@@ -140,9 +113,29 @@ func UpdateChannelModelEndpoints(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	if err := model.ReplaceChannelModelEndpoints(id, endpoints); err != nil {
+	channel, err := model.GetChannelById(id, true)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	result, err := channelconfig.Update(channelconfig.UpdateCommand{
+		Channel:        channel,
+		PresentFields:  map[string]bool{"model_endpoints": true},
+		ModelEndpoints: &endpoints,
+		Audit: channelconfig.AuditMetadata{
+			OperatorID: c.GetInt("id"),
+			RequestID:  c.GetString(common.RequestIdKey),
+			Reason:     "legacy model endpoint update",
+		},
+	})
+	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+	c.JSON(http.StatusOK, gin.H{
+		"success":        true,
+		"message":        "",
+		"config_version": result.Channel.ConfigVersion,
+		"no_op":          result.NoOp,
+	})
 }

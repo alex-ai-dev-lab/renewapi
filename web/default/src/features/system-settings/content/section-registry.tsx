@@ -47,7 +47,6 @@ import {
   type ThemeRadius,
   type ThemeScale,
 } from '@/lib/theme-customization'
-import type { ContentSettings } from '../types'
 import {
   parseHeaderNavModules,
   parseSidebarModulesAdmin,
@@ -59,8 +58,9 @@ import {
   serializeSystemSettingsNavigation,
 } from '../maintenance/config'
 import { HeaderNavigationSection } from '../maintenance/header-navigation-section'
-import { SidebarModulesSection } from '../maintenance/sidebar-modules-section'
 import { SettingsNavigationSection } from '../maintenance/settings-navigation-section'
+import { SidebarModulesSection } from '../maintenance/sidebar-modules-section'
+import type { ContentSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { AnnouncementsSection } from './announcements-section'
 import { ApiInfoSection } from './api-info-section'
@@ -433,3 +433,4 @@ export const CONTENT_DEFAULT_SECTION = contentRegistry.defaultSection
 export const getContentSectionNavItems = contentRegistry.getSectionNavItems
 export const getContentSectionContent = contentRegistry.getSectionContent
 export const getContentSectionMeta = contentRegistry.getSectionMeta
+export const getContentSectionUrl = contentRegistry.getSectionUrl

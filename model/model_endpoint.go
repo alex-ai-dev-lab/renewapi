@@ -44,29 +44,12 @@ func (ModelEndpoint) TableName() string {
 }
 
 var (
-	modelEndpointCache      map[int]map[string]*ModelEndpoint
-	modelEndpointCacheLock  sync.RWMutex
-	modelEndpointSyncOnce   sync.Once
-	modelEndpointSchemaOnce sync.Once
+	modelEndpointCache     map[int]map[string]*ModelEndpoint
+	modelEndpointCacheLock sync.RWMutex
+	modelEndpointSyncOnce  sync.Once
 )
 
-// ensureModelEndpointSchema creates or upgrades the model_endpoints table on
-// first use. This keeps the feature self-contained rather than editing the
-// shared AutoMigrate lists, and is safe to call from any code path because
-// AutoMigrate is idempotent and DB is initialized long before requests run.
-func ensureModelEndpointSchema() {
-	modelEndpointSchemaOnce.Do(func() {
-		if DB == nil {
-			return
-		}
-		if err := DB.AutoMigrate(&ModelEndpoint{}); err != nil {
-			common.SysError("failed to auto-migrate model_endpoints table: " + err.Error())
-		}
-	})
-}
-
 func loadModelEndpointsFromDB() (map[int]map[string]*ModelEndpoint, error) {
-	ensureModelEndpointSchema()
 	var endpoints []*ModelEndpoint
 	if err := DB.Find(&endpoints).Error; err != nil {
 		return nil, err
@@ -122,7 +105,6 @@ func GetModelEndpoint(channelId int, modelName string) *ModelEndpoint {
 		return nil
 	}
 	if !common.MemoryCacheEnabled {
-		ensureModelEndpointSchema()
 		var ep ModelEndpoint
 		if err := DB.Where("channel_id = ? AND model = ?", channelId, modelName).First(&ep).Error; err != nil {
 			return nil
@@ -320,12 +302,21 @@ func ResolveModelRoute(channel *Channel, modelName string) (channelType int, bas
 // GetChannelModelEndpoints returns all override rows for a channel, ordered by
 // model name for stable rendering in the admin UI.
 func GetChannelModelEndpoints(channelId int) ([]*ModelEndpoint, error) {
-	var endpoints []*ModelEndpoint
+	if channelId <= 0 {
+		return []*ModelEndpoint{}, nil
+	}
+	return GetChannelModelEndpointsTx(DB, channelId)
+}
+
+func GetChannelModelEndpointsTx(tx *gorm.DB, channelId int) ([]*ModelEndpoint, error) {
+	endpoints := make([]*ModelEndpoint, 0)
+	if tx == nil {
+		return endpoints, errors.New("transaction is required")
+	}
 	if channelId <= 0 {
 		return endpoints, nil
 	}
-	ensureModelEndpointSchema()
-	err := DB.Where("channel_id = ?", channelId).Order("model asc").Find(&endpoints).Error
+	err := tx.Where("channel_id = ?", channelId).Order("model asc").Find(&endpoints).Error
 	return endpoints, err
 }
 
@@ -336,9 +327,8 @@ func ReplaceChannelModelEndpoints(channelId int, endpoints []*ModelEndpoint) err
 	if channelId <= 0 {
 		return errors.New("invalid channel id")
 	}
-	ensureModelEndpointSchema()
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		return replaceChannelModelEndpointsTx(tx, channelId, endpoints)
+		return ReplaceChannelModelEndpointsTx(tx, channelId, endpoints)
 	})
 	if err != nil {
 		return err
@@ -347,7 +337,7 @@ func ReplaceChannelModelEndpoints(channelId int, endpoints []*ModelEndpoint) err
 	return nil
 }
 
-func replaceChannelModelEndpointsTx(tx *gorm.DB, channelId int, endpoints []*ModelEndpoint) error {
+func ReplaceChannelModelEndpointsTx(tx *gorm.DB, channelId int, endpoints []*ModelEndpoint) error {
 	if tx == nil {
 		return errors.New("transaction is required")
 	}
@@ -384,51 +374,12 @@ func replaceChannelModelEndpointsTx(tx *gorm.DB, channelId int, endpoints []*Mod
 	return tx.Create(&cleaned).Error
 }
 
-// UpdateChannelEditorState commits the channel, derived abilities, and the
-// optional per-model endpoint set atomically. A nil endpoint slice preserves
-// the existing rows; a non-nil empty slice explicitly clears them.
-func UpdateChannelEditorState(channel *Channel, endpoints []*ModelEndpoint, audit *ConfigAudit, updateKey bool) error {
-	if channel == nil || channel.Id <= 0 {
-		return errors.New("invalid channel")
-	}
-	if endpoints != nil {
-		ensureModelEndpointSchema()
-	}
-	var previousStatus int
-	err := DB.Transaction(func(tx *gorm.DB) error {
-		var err error
-		previousStatus, err = channel.updateWithTx(tx, updateKey)
-		if err != nil {
-			return err
-		}
-		if endpoints == nil {
-			return CreateConfigAuditTx(tx, audit)
-		}
-		if err := replaceChannelModelEndpointsTx(tx, channel.Id, endpoints); err != nil {
-			return err
-		}
-		return CreateConfigAuditTx(tx, audit)
-	})
-	if err != nil {
-		return err
-	}
-	if endpoints != nil {
-		ReloadModelEndpointCache()
-	}
-	if previousStatus != common.ChannelStatusEnabled && channel.Status == common.ChannelStatusEnabled {
-		CacheUpdateChannel(channel)
-		OnChannelEnabled(channel.Id)
-	}
-	return nil
-}
-
 // DeleteChannelModelEndpoints removes all override rows for a channel. It is
 // invoked when a channel is deleted so no orphan rows survive.
 func DeleteChannelModelEndpoints(channelId int) error {
 	if channelId <= 0 {
 		return errors.New("invalid channel id")
 	}
-	ensureModelEndpointSchema()
 	if err := DB.Where("channel_id = ?", channelId).Delete(&ModelEndpoint{}).Error; err != nil {
 		return err
 	}

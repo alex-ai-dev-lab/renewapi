@@ -68,3 +68,4 @@ export const SITE_DEFAULT_SECTION = siteRegistry.defaultSection
 export const getSiteSectionNavItems = siteRegistry.getSectionNavItems
 export const getSiteSectionContent = siteRegistry.getSectionContent
 export const getSiteSectionMeta = siteRegistry.getSectionMeta
+export const getSiteSectionUrl = siteRegistry.getSectionUrl

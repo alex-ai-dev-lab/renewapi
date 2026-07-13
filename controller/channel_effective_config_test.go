@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -103,4 +104,23 @@ func TestGetChannelEffectiveConfigRejectsInvalidOrMissingChannel(t *testing.T) {
 		require.Equal(t, testCase.statusCode, recorder.Code)
 		require.NotContains(t, recorder.Body.String(), "Authorization")
 	}
+}
+
+func TestGetChannelEffectiveConfigRejectsUnsupportedClientEndpoint(t *testing.T) {
+	db := setupChannelUpdateControllerTestDB(t)
+	channel := model.Channel{
+		Type: 1, Key: "sk-test", Status: common.ChannelStatusEnabled,
+		Name: "endpoint-validation", Models: "glm-5.2", Group: "default",
+		CreatedTime: common.GetTimestamp(),
+	}
+	require.NoError(t, db.Create(&channel).Error)
+
+	router := gin.New()
+	router.GET("/api/channel/:id/effective_config", GetChannelEffectiveConfig)
+	recorder := httptest.NewRecorder()
+	path := "/api/channel/" + strconv.Itoa(channel.Id) + "/effective_config?model=glm-5.2&client_endpoint=unknown"
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.NotContains(t, recorder.Body.String(), channel.Key)
 }

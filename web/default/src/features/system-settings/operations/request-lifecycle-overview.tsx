@@ -28,47 +28,50 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { SettingsSection } from '../components/settings-section'
+import { getModelsSectionUrl } from '../models/section-registry'
+import { getSecuritySectionUrl } from '../security/section-registry'
+import { getOperationsSectionUrl } from './section-registry'
 
 const STAGES: Array<{
   title: string
   description: string
-  to: string
+  to: () => string
   icon: typeof Gauge
 }> = [
   {
     title: 'Request rate limiting',
     description: 'Reject excessive client traffic before channel selection.',
-    to: '/system-settings/security/rate-limit',
+    to: () => getSecuritySectionUrl('rate-limit'),
     icon: Gauge,
   },
   {
     title: 'Upstream error normalization',
     description: 'Classify upstream failures into stable retry decisions.',
-    to: '/system-settings/models/upstream-error-rules',
+    to: () => getModelsSectionUrl('upstream-error-rules'),
     icon: ShieldAlert,
   },
   {
     title: 'Automatic retry',
     description: 'Apply the configured retry count and retryable status codes.',
-    to: '/system-settings/operations/monitoring',
+    to: () => getOperationsSectionUrl('monitoring'),
     icon: RefreshCw,
   },
   {
     title: 'Channel disable and recovery',
     description: 'Separate automatic circuit-breaking from manual disablement.',
-    to: '/system-settings/operations/monitoring',
+    to: () => getOperationsSectionUrl('monitoring'),
     icon: Activity,
   },
   {
     title: 'Channel Affinity',
     description: 'Prefer a healthy prior route without bypassing eligibility.',
-    to: '/system-settings/models/channel-affinity',
+    to: () => getModelsSectionUrl('channel-affinity'),
     icon: Route,
   },
   {
     title: 'Channel testing',
     description: 'Run explicit management tests and recovery checks.',
-    to: '/system-settings/operations/channel-test',
+    to: () => getOperationsSectionUrl('channel-test'),
     icon: TestTube2,
   },
 ]
@@ -90,7 +93,7 @@ export function RequestLifecycleOverview() {
             return (
               <Link
                 key={`${stage.title}-${index}`}
-                to={stage.to}
+                to={stage.to()}
                 className='hover:bg-muted/40 focus-visible:ring-ring grid min-h-20 grid-cols-[2rem_1fr_auto] items-center gap-3 border-b px-4 py-3 outline-none last:border-b-0 focus-visible:ring-2 focus-visible:ring-inset'
               >
                 <span className='bg-muted text-muted-foreground flex size-8 items-center justify-center rounded-md'>

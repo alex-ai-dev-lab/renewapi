@@ -4717,6 +4717,15 @@
     "The saved key will be cleared on save.": "The saved key will be cleared on save.",
     "Undo key clear": "Undo key clear",
     "Modified": "Modified",
-    "Has errors": "Has errors"
+    "Has errors": "Has errors",
+    "Channel configuration changed. Reload before saving again.": "Channel configuration changed. Reload before saving again.",
+    "Reload saved configuration and discard local changes?": "Reload saved configuration and discard local changes?",
+    "This channel changed after you opened it. Your local edits are still available.": "This channel changed after you opened it. Your local edits are still available.",
+    "Keep editing": "Keep editing",
+    "Reload saved configuration": "Reload saved configuration",
+    "Saved configuration summary": "Saved configuration summary",
+    "Preview does not include unsaved changes": "Preview does not include unsaved changes",
+    "Select channel editor section": "Select channel editor section",
+    "Saved": "Saved"
   }
 }

@@ -73,6 +73,9 @@ const THIRD_PARTY_COPYRIGHT_PATTERN =
   /^\/\*[\s\S]*?Copyright[\s\S]*?\*\/\r?\n?/i
 
 const checkMode = process.argv.includes('--check')
+const requestedFiles = process.argv
+  .slice(2)
+  .filter((argument) => argument !== '--check' && !argument.startsWith('--'))
 
 function isGeneratedFile(filePath) {
   return path.basename(filePath).includes('.gen.')
@@ -177,7 +180,15 @@ function formatPath(rootDir, filePath) {
 
 async function main() {
   const rootDir = process.cwd()
-  const sourceFiles = await collectTargetFiles(rootDir)
+  const sourceFiles = requestedFiles.length
+    ? requestedFiles
+        .map((file) => path.resolve(rootDir, file))
+        .filter(
+          (file) =>
+            SOURCE_EXTENSIONS.has(path.extname(file)) && !isGeneratedFile(file)
+        )
+        .sort()
+    : await collectTargetFiles(rootDir)
   const stats = {
     added: 0,
     checked: 0,

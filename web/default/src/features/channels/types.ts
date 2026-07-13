@@ -37,6 +37,7 @@ export type ChannelInfo = z.infer<typeof channelInfoSchema>
 
 export const channelSchema = z.object({
   id: z.number(),
+  config_version: z.number().default(1),
   type: z.number(),
   key: z.string(),
   openai_organization: z.string().nullish(),
@@ -78,6 +79,9 @@ export type Channel = z.infer<typeof channelSchema>
 
 export type ChannelUpdatePayload = Partial<Channel> & {
   key_mode?: 'append' | 'replace'
+  key_action?: 'keep' | 'replace' | 'append' | 'clear'
+  expected_config_version?: number
+  multi_key_mode?: 'random' | 'polling'
   clear_key?: boolean
   model_endpoints?: ModelEndpointInput[]
   change_reason?: string

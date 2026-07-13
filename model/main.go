@@ -298,6 +298,7 @@ func migrateDB() error {
 		&PerfMetric{},
 		&UserAgent{},
 		&ChannelModelStatus{},
+		&ModelEndpoint{},
 		&ConfigAudit{},
 	)
 	if err != nil {
@@ -359,6 +360,7 @@ func migrateDBFast() error {
 		{&PerfMetric{}, "PerfMetric"},
 		{&UserAgent{}, "UserAgent"},
 		{&ChannelModelStatus{}, "ChannelModelStatus"},
+		{&ModelEndpoint{}, "ModelEndpoint"},
 		{&ConfigAudit{}, "ConfigAudit"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大

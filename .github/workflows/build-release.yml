@@ -29,11 +29,134 @@ env:
   UPSTREAM_REF: 4e570389dd433a717373ce9c9b822b59f5ed3d5d
 
 jobs:
+  database-quality:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: renewapi_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: renewapi_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d renewapi_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify channel transaction on MySQL
+        env:
+          CHANNELCONFIG_TEST_DRIVER: mysql
+          CHANNELCONFIG_TEST_DSN: root:root@tcp(127.0.0.1:3306)/renewapi_test?charset=utf8mb4&parseTime=True&loc=UTC
+        run: go test -count=1 -run TestUpdateTransactionOnExternalDatabase ./service/channelconfig
+
+      - name: Verify channel transaction on PostgreSQL
+        env:
+          CHANNELCONFIG_TEST_DRIVER: postgres
+          CHANNELCONFIG_TEST_DSN: host=127.0.0.1 user=postgres password=postgres dbname=renewapi_test port=5432 sslmode=disable TimeZone=UTC
+        run: go test -count=1 -run TestUpdateTransactionOnExternalDatabase ./service/channelconfig
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Verify Go source and backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t changed_go < <(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" -- '*.go')
+          if ((${#changed_go[@]})); then
+            unformatted="$(gofmt -l "${changed_go[@]}")"
+            if [[ -n "$unformatted" ]]; then
+              printf 'Go files require gofmt:\n%s\n' "$unformatted"
+              exit 1
+            fi
+          fi
+          go test -count=1 ./...
+          go vet ./...
+          go build ./...
+
+      - name: Install default frontend dependencies
+        working-directory: web/default
+        run: bun install --frozen-lockfile
+
+      - name: Verify default frontend
+        working-directory: web/default
+        run: |
+          bun test
+          bun run typecheck
+          bun run build
+
+      - name: Verify changed default frontend files
+        shell: bash
+        working-directory: web/default
+        run: |
+          set -euo pipefail
+          mapfile -t changed < <(
+            git -C ../.. diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" -- web/default/src web/default/scripts |
+              sed 's#^web/default/##'
+          )
+          mapfile -t lint_files < <(printf '%s\n' "${changed[@]}" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' || true)
+          mapfile -t format_files < <(printf '%s\n' "${changed[@]}" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs|css|scss|json)$' || true)
+          if ((${#lint_files[@]})); then
+            bunx eslint "${lint_files[@]}"
+            bun run copyright:check -- "${lint_files[@]}"
+          fi
+          if ((${#format_files[@]})); then
+            bunx prettier --check "${format_files[@]}"
+          fi
+
+      - name: Install classic frontend dependencies
+        working-directory: web/classic
+        run: bun install --frozen-lockfile
+
+      - name: Build classic frontend
+        working-directory: web/classic
+        run: bun run build
+
+      - name: Verify commit diff
+        shell: bash
+        run: git diff --check "$GITHUB_SHA^" "$GITHUB_SHA"
+
   build:
+    needs: [quality, database-quality]
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.meta.outputs.image }}
       tag: ${{ steps.meta.outputs.tag }}
+      digest: ${{ steps.build.outputs.digest }}
       release_tag: ${{ steps.meta.outputs.release_tag }}
       tarball: ${{ steps.meta.outputs.tarball }}
     steps:

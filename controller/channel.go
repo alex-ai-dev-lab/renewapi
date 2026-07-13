@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/gemini"
 	"github.com/QuantumNous/new-api/relay/channel/ollama"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/channelconfig"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -540,78 +542,7 @@ func validateTwoFactorAuth(twoFA *model.TwoFA, code string) bool {
 
 // validateChannel 通用的渠道校验函数
 func validateChannel(channel *model.Channel, isAdd bool) error {
-	if channel == nil {
-		return fmt.Errorf("channel cannot be empty")
-	}
-
-	// 校验 channel settings
-	if err := channel.ValidateSettings(); err != nil {
-		return fmt.Errorf("渠道额外设置[channel setting] 格式错误：%s", err.Error())
-	}
-
-	if isAdd && strings.TrimSpace(channel.Key) == "" {
-		return fmt.Errorf("channel cannot be empty")
-	}
-
-	if strings.TrimSpace(channel.Name) == "" {
-		return fmt.Errorf("渠道名称不能为空")
-	}
-	if len(channel.GetModels()) == 0 {
-		return fmt.Errorf("模型不能为空")
-	}
-	if len(channel.GetGroups()) == 0 {
-		return fmt.Errorf("分组不能为空")
-	}
-
-	// abilities 表会将单个 model/group 作为主键字段，长度必须兼容所有数据库。
-	for _, m := range channel.GetModels() {
-		if len(m) > 255 {
-			return fmt.Errorf("模型名称过长: %s", m)
-		}
-	}
-	for _, group := range channel.GetGroups() {
-		if len(group) > 64 {
-			return fmt.Errorf("分组名称过长: %s", group)
-		}
-	}
-
-	// VertexAI 特殊校验
-	if channel.Type == constant.ChannelTypeVertexAi {
-		if channel.Other == "" {
-			return fmt.Errorf("部署地区不能为空")
-		}
-
-		regionMap, err := common.StrToMap(channel.Other)
-		if err != nil {
-			return fmt.Errorf("部署地区必须是标准的Json格式，例如{\"default\": \"us-central1\", \"region2\": \"us-east1\"}")
-		}
-
-		if regionMap["default"] == nil {
-			return fmt.Errorf("部署地区必须包含default字段")
-		}
-	}
-
-	// Codex OAuth key validation (optional, only when JSON object is provided)
-	if channel.Type == constant.ChannelTypeCodex {
-		trimmedKey := strings.TrimSpace(channel.Key)
-		if isAdd || trimmedKey != "" {
-			if !strings.HasPrefix(trimmedKey, "{") {
-				return fmt.Errorf("Codex key must be a valid JSON object")
-			}
-			var keyMap map[string]any
-			if err := common.Unmarshal([]byte(trimmedKey), &keyMap); err != nil {
-				return fmt.Errorf("Codex key must be a valid JSON object")
-			}
-			if v, ok := keyMap["access_token"]; !ok || v == nil || strings.TrimSpace(fmt.Sprintf("%v", v)) == "" {
-				return fmt.Errorf("Codex key JSON must include access_token")
-			}
-			if v, ok := keyMap["account_id"]; !ok || v == nil || strings.TrimSpace(fmt.Sprintf("%v", v)) == "" {
-				return fmt.Errorf("Codex key JSON must include account_id")
-			}
-		}
-	}
-
-	return nil
+	return channelconfig.ValidateChannel(channel, isAdd)
 }
 
 func RefreshCodexChannelCredential(c *gin.Context) {
@@ -1008,11 +939,13 @@ func DeleteChannelBatch(c *gin.Context) {
 
 type PatchChannel struct {
 	model.Channel
-	MultiKeyMode   *string                 `json:"multi_key_mode"`
-	KeyMode        *string                 `json:"key_mode"` // 多key模式下密钥覆盖或者追加
-	ModelEndpoints *[]modelEndpointPayload `json:"model_endpoints"`
-	ChangeReason   string                  `json:"change_reason"`
-	ClearKey       bool                    `json:"clear_key"`
+	MultiKeyMode          *string                 `json:"multi_key_mode"`
+	KeyMode               *string                 `json:"key_mode"` // legacy: append or replace
+	KeyAction             string                  `json:"key_action"`
+	ModelEndpoints        *[]modelEndpointPayload `json:"model_endpoints"`
+	ChangeReason          string                  `json:"change_reason"`
+	ClearKey              bool                    `json:"clear_key"` // legacy explicit clear
+	ExpectedConfigVersion *int64                  `json:"expected_config_version"`
 }
 
 func mergePatchChannelWithOrigin(channel *PatchChannel, origin *model.Channel, present map[string]json.RawMessage) {
@@ -1104,6 +1037,47 @@ func mergePatchChannelWithOrigin(channel *PatchChannel, origin *model.Channel, p
 	channel.Channel = merged
 }
 
+func resolveChannelKeyAction(channel *PatchChannel, present map[string]json.RawMessage) (string, error) {
+	_, keyProvided := present["key"]
+	action := strings.TrimSpace(channel.KeyAction)
+	if action == "" {
+		if channel.ClearKey {
+			if keyProvided && strings.TrimSpace(channel.Key) != "" {
+				return "", fmt.Errorf("clear_key cannot be combined with a replacement key")
+			}
+			return "clear", nil
+		}
+		if !keyProvided || strings.TrimSpace(channel.Key) == "" {
+			return "keep", nil
+		}
+		if channel.KeyMode != nil && *channel.KeyMode == "append" {
+			return "append", nil
+		}
+		return "replace", nil
+	}
+
+	switch action {
+	case "keep":
+		if keyProvided || channel.ClearKey {
+			return "", fmt.Errorf("key_action keep cannot include key or clear_key")
+		}
+	case "replace", "append":
+		if !keyProvided || strings.TrimSpace(channel.Key) == "" {
+			return "", fmt.Errorf("key_action %s requires a non-empty key", action)
+		}
+		if channel.ClearKey {
+			return "", fmt.Errorf("key_action %s cannot include clear_key", action)
+		}
+	case "clear":
+		if keyProvided || channel.ClearKey {
+			return "", fmt.Errorf("key_action clear must not include key or clear_key")
+		}
+	default:
+		return "", fmt.Errorf("unsupported key_action %q", action)
+	}
+	return action, nil
+}
+
 func UpdateChannel(c *gin.Context) {
 	channel := PatchChannel{}
 	requestFields := map[string]json.RawMessage{}
@@ -1137,17 +1111,17 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 	mergePatchChannelWithOrigin(&channel, originChannel, requestFields)
-	_, keyWasProvided := requestFields["key"]
-	if channel.ClearKey && keyWasProvided && strings.TrimSpace(channel.Key) != "" {
+	keyAction, err := resolveChannelKeyAction(&channel, requestFields)
+	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "clear_key cannot be combined with a replacement key",
+			"message": err.Error(),
 		})
 		return
 	}
 
 	if channel.Type == constant.ChannelTypeCodex {
-		if _, ok := requestFields["key"]; ok && strings.TrimSpace(channel.Key) != "" {
+		if (keyAction == "replace" || keyAction == "append") && strings.TrimSpace(channel.Key) != "" {
 			result, err := service.NormalizeCodexCredential(channel.Key)
 			if err != nil {
 				c.JSON(http.StatusOK, gin.H{
@@ -1184,117 +1158,136 @@ func UpdateChannel(c *gin.Context) {
 		channel.ChannelInfo.MultiKeyMode = constant.MultiKeyMode(*channel.MultiKeyMode)
 	}
 
-	// 处理多key模式下的密钥追加/覆盖逻辑
-	if channel.KeyMode != nil && channel.ChannelInfo.IsMultiKey {
-		switch *channel.KeyMode {
-		case "append":
-			// 追加模式：将新密钥添加到现有密钥列表
-			if originChannel.Key != "" {
-				var newKeys []string
-				var existingKeys []string
+	// 处理多key模式下的密钥追加逻辑。
+	if keyAction == "append" {
+		if !channel.ChannelInfo.IsMultiKey {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "key_action append requires a multi-key channel"})
+			return
+		}
+		// 追加模式：将新密钥添加到现有密钥列表
+		if originChannel.Key != "" {
+			var newKeys []string
+			var existingKeys []string
 
-				// 解析现有密钥
-				if strings.HasPrefix(strings.TrimSpace(originChannel.Key), "[") {
-					// JSON数组格式
-					var arr []json.RawMessage
-					if err := common.Unmarshal([]byte(strings.TrimSpace(originChannel.Key)), &arr); err == nil {
-						existingKeys = make([]string, len(arr))
-						for i, v := range arr {
-							existingKeys[i] = string(v)
-						}
-					}
-				} else {
-					// 换行分隔格式
-					existingKeys = strings.Split(strings.Trim(originChannel.Key, "\n"), "\n")
-				}
-
-				// 处理 Vertex AI 的特殊情况
-				if channel.Type == constant.ChannelTypeVertexAi && channel.GetOtherSettings().VertexKeyType != dto.VertexKeyTypeAPIKey {
-					// 尝试解析新密钥为JSON数组
-					if strings.HasPrefix(strings.TrimSpace(channel.Key), "[") {
-						array, err := getVertexArrayKeys(channel.Key)
-						if err != nil {
-							c.JSON(http.StatusOK, gin.H{
-								"success": false,
-								"message": "追加密钥解析失败: " + err.Error(),
-							})
-							return
-						}
-						newKeys = array
-					} else {
-						// 单个JSON密钥
-						newKeys = []string{channel.Key}
-					}
-				} else {
-					// 普通渠道的处理
-					inputKeys := strings.Split(channel.Key, "\n")
-					for _, key := range inputKeys {
-						key = strings.TrimSpace(key)
-						if key != "" {
-							newKeys = append(newKeys, key)
-						}
+			// 解析现有密钥
+			if strings.HasPrefix(strings.TrimSpace(originChannel.Key), "[") {
+				// JSON数组格式
+				var arr []json.RawMessage
+				if err := common.Unmarshal([]byte(strings.TrimSpace(originChannel.Key)), &arr); err == nil {
+					existingKeys = make([]string, len(arr))
+					for i, v := range arr {
+						existingKeys[i] = string(v)
 					}
 				}
-
-				seen := make(map[string]struct{}, len(existingKeys)+len(newKeys))
-				for _, key := range existingKeys {
-					normalized := strings.TrimSpace(key)
-					if normalized == "" {
-						continue
-					}
-					seen[normalized] = struct{}{}
-				}
-				dedupedNewKeys := make([]string, 0, len(newKeys))
-				for _, key := range newKeys {
-					normalized := strings.TrimSpace(key)
-					if normalized == "" {
-						continue
-					}
-					if _, ok := seen[normalized]; ok {
-						continue
-					}
-					seen[normalized] = struct{}{}
-					dedupedNewKeys = append(dedupedNewKeys, normalized)
-				}
-
-				allKeys := append(existingKeys, dedupedNewKeys...)
-				channel.Key = strings.Join(allKeys, "\n")
+			} else {
+				// 换行分隔格式
+				existingKeys = strings.Split(strings.Trim(originChannel.Key, "\n"), "\n")
 			}
-		case "replace":
-			// 覆盖模式：直接使用新密钥（默认行为，不需要特殊处理）
+
+			// 处理 Vertex AI 的特殊情况
+			if channel.Type == constant.ChannelTypeVertexAi && channel.GetOtherSettings().VertexKeyType != dto.VertexKeyTypeAPIKey {
+				// 尝试解析新密钥为JSON数组
+				if strings.HasPrefix(strings.TrimSpace(channel.Key), "[") {
+					array, err := getVertexArrayKeys(channel.Key)
+					if err != nil {
+						c.JSON(http.StatusOK, gin.H{
+							"success": false,
+							"message": "追加密钥解析失败: " + err.Error(),
+						})
+						return
+					}
+					newKeys = array
+				} else {
+					// 单个JSON密钥
+					newKeys = []string{channel.Key}
+				}
+			} else {
+				// 普通渠道的处理
+				inputKeys := strings.Split(channel.Key, "\n")
+				for _, key := range inputKeys {
+					key = strings.TrimSpace(key)
+					if key != "" {
+						newKeys = append(newKeys, key)
+					}
+				}
+			}
+
+			seen := make(map[string]struct{}, len(existingKeys)+len(newKeys))
+			for _, key := range existingKeys {
+				normalized := strings.TrimSpace(key)
+				if normalized == "" {
+					continue
+				}
+				seen[normalized] = struct{}{}
+			}
+			dedupedNewKeys := make([]string, 0, len(newKeys))
+			for _, key := range newKeys {
+				normalized := strings.TrimSpace(key)
+				if normalized == "" {
+					continue
+				}
+				if _, ok := seen[normalized]; ok {
+					continue
+				}
+				seen[normalized] = struct{}{}
+				dedupedNewKeys = append(dedupedNewKeys, normalized)
+			}
+
+			allKeys := append(existingKeys, dedupedNewKeys...)
+			channel.Key = strings.Join(allKeys, "\n")
 		}
 	}
-	updateKey := keyWasProvided && strings.TrimSpace(channel.Key) != ""
-	if channel.ClearKey {
+	updateKey := keyAction != "keep"
+	if keyAction == "clear" {
 		channel.Key = ""
-		updateKey = true
 	}
 	var modelEndpoints []*model.ModelEndpoint
+	var modelEndpointUpdate *[]*model.ModelEndpoint
 	if channel.ModelEndpoints != nil {
 		modelEndpoints, err = normalizeModelEndpointPayloads(channel.Id, *channel.ModelEndpoints)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 			return
 		}
+		modelEndpointUpdate = &modelEndpoints
 	}
-	audit, err := buildChannelConfigAudit(c, &channel, requestFields)
+	presentFields := make(map[string]bool, len(requestFields))
+	for field := range requestFields {
+		presentFields[field] = true
+	}
+	result, err := channelconfig.Update(channelconfig.UpdateCommand{
+		Channel:               &channel.Channel,
+		ExpectedConfigVersion: channel.ExpectedConfigVersion,
+		PresentFields:         presentFields,
+		UpdateKey:             updateKey,
+		ModelEndpoints:        modelEndpointUpdate,
+		Audit: channelconfig.AuditMetadata{
+			OperatorID: c.GetInt("id"),
+			RequestID:  c.GetString(common.RequestIdKey),
+			Reason:     channel.ChangeReason,
+		},
+	})
 	if err != nil {
+		if errors.Is(err, model.ErrChannelConfigConflict) {
+			c.JSON(http.StatusConflict, gin.H{
+				"success": false,
+				"code":    "CHANNEL_CONFIG_CONFLICT",
+				"message": "渠道配置已被其他操作更新，请重新加载后再保存",
+			})
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
-	err = model.UpdateChannelEditorState(&channel.Channel, modelEndpoints, audit, updateKey)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	model.InitChannelCache()
-	service.ResetProxyClientCache()
+	channel.Channel = *result.Channel
 	channel.Key = ""
 	clearChannelInfo(&channel.Channel)
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    channel,
+		"success":    true,
+		"message":    "",
+		"data":       channel,
+		"change_set": result.ChangeSet,
+		"no_op":      result.NoOp,
 	})
 	return
 }

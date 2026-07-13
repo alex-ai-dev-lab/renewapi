@@ -16,11 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { ClientIdentitySettingsCard } from '../models/client-identity-settings-card'
+import { UserAgentSettingsSection } from '../models/user-agent-settings-section'
 import { RateLimitSection } from '../request-limits/rate-limit-section'
 import { SensitiveWordsSection } from '../request-limits/sensitive-words-section'
 import { SSRFSection } from '../request-limits/ssrf-section'
-import { ClientIdentitySettingsCard } from '../models/client-identity-settings-card'
-import { UserAgentSettingsSection } from '../models/user-agent-settings-section'
 import type { SecuritySettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { AntiPoisonGuardSection } from './anti-poison-guard-section'
@@ -102,10 +102,9 @@ const SECURITY_SECTIONS = [
             settings['anti_poison_setting.tool_call_guard_enabled'],
           'anti_poison_setting.tool_call_guard_strict':
             settings['anti_poison_setting.tool_call_guard_strict'],
-          'anti_poison_setting.failure_mode':
-            normalizeAntiPoisonFailureMode(
-              settings['anti_poison_setting.failure_mode']
-            ),
+          'anti_poison_setting.failure_mode': normalizeAntiPoisonFailureMode(
+            settings['anti_poison_setting.failure_mode']
+          ),
           'anti_poison_setting.strip_guard_output':
             settings['anti_poison_setting.strip_guard_output'],
           'anti_poison_setting.signed_header_audit_enabled':
@@ -153,3 +152,4 @@ export const SECURITY_DEFAULT_SECTION = securityRegistry.defaultSection
 export const getSecuritySectionNavItems = securityRegistry.getSectionNavItems
 export const getSecuritySectionContent = securityRegistry.getSectionContent
 export const getSecuritySectionMeta = securityRegistry.getSectionMeta
+export const getSecuritySectionUrl = securityRegistry.getSectionUrl

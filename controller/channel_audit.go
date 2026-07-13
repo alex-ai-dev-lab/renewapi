@@ -1,12 +1,8 @@
 package controller
 
 import (
-	"encoding/json"
-	"fmt"
 	"net/http"
-	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -14,61 +10,39 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type channelAuditDiff struct {
+type channelAuditSummary struct {
 	ChangedFields      []string `json:"changed_fields"`
 	KeyChanged         bool     `json:"key_changed"`
 	ModelEndpointCount *int     `json:"model_endpoint_count,omitempty"`
 }
 
-func buildChannelConfigAudit(
-	c *gin.Context,
-	channel *PatchChannel,
-	present map[string]json.RawMessage,
-) (*model.ConfigAudit, error) {
-	diff := channelAuditDiff{ChangedFields: make([]string, 0, len(present))}
-	ignored := map[string]bool{
-		"id":              true,
-		"key":             true,
-		"key_mode":        true,
-		"clear_key":       true,
-		"change_reason":   true,
-		"model_endpoints": true,
+type channelConfigAuditDTO struct {
+	Id            int64               `json:"id"`
+	Action        string              `json:"action"`
+	OperatorId    int                 `json:"operator_id"`
+	Reason        string              `json:"reason"`
+	RequestId     string              `json:"request_id,omitempty"`
+	Summary       channelAuditSummary `json:"summary"`
+	ConfigVersion int64               `json:"config_version"`
+	CreatedAt     int64               `json:"created_at"`
+}
+
+func toChannelConfigAuditDTO(audit model.ConfigAudit) channelConfigAuditDTO {
+	summary := channelAuditSummary{ChangedFields: make([]string, 0)}
+	_ = common.Unmarshal([]byte(audit.Diff), &summary)
+	if summary.ChangedFields == nil {
+		summary.ChangedFields = make([]string, 0)
 	}
-	for field := range present {
-		if !ignored[field] {
-			diff.ChangedFields = append(diff.ChangedFields, field)
-		}
+	return channelConfigAuditDTO{
+		Id:            audit.Id,
+		Action:        audit.Action,
+		OperatorId:    audit.OperatorId,
+		Reason:        audit.Reason,
+		RequestId:     audit.RequestId,
+		Summary:       summary,
+		ConfigVersion: audit.ConfigVersion,
+		CreatedAt:     audit.CreatedAt,
 	}
-	_, diff.KeyChanged = present["key"]
-	if channel.ClearKey {
-		diff.KeyChanged = true
-	}
-	if channel.ModelEndpoints != nil {
-		count := len(*channel.ModelEndpoints)
-		diff.ModelEndpointCount = &count
-	}
-	sort.Strings(diff.ChangedFields)
-	diffJSON, err := common.Marshal(diff)
-	if err != nil {
-		return nil, err
-	}
-	reason := strings.TrimSpace(channel.ChangeReason)
-	if reason == "" {
-		reason = "channel editor update"
-	}
-	if len([]rune(reason)) > 255 {
-		return nil, fmt.Errorf("change_reason must not exceed 255 characters")
-	}
-	return &model.ConfigAudit{
-		ResourceType: "channel",
-		ResourceId:   channel.Id,
-		Action:       "update",
-		OperatorId:   c.GetInt("id"),
-		Reason:       reason,
-		RequestId:    strings.TrimSpace(c.GetHeader("X-Request-ID")),
-		Diff:         string(diffJSON),
-		CreatedAt:    common.GetTimestamp(),
-	}, nil
 }
 
 func GetChannelConfigAudits(c *gin.Context) {
@@ -78,10 +52,15 @@ func GetChannelConfigAudits(c *gin.Context) {
 		return
 	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
-	audits, err := model.ListConfigAudits("channel", id, limit)
+	beforeId, _ := strconv.ParseInt(c.DefaultQuery("before_id", "0"), 10, 64)
+	audits, err := model.ListConfigAuditsBefore("channel", id, beforeId, limit)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": audits})
+	data := make([]channelConfigAuditDTO, 0, len(audits))
+	for _, audit := range audits {
+		data = append(data, toChannelConfigAuditDTO(audit))
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": data})
 }

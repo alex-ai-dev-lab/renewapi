@@ -207,3 +207,4 @@ export const getOperationsSectionNavItems =
   operationsRegistry.getSectionNavItems
 export const getOperationsSectionContent = operationsRegistry.getSectionContent
 export const getOperationsSectionMeta = operationsRegistry.getSectionMeta
+export const getOperationsSectionUrl = operationsRegistry.getSectionUrl

@@ -26,6 +26,7 @@ import (
 
 type Channel struct {
 	Id                 int     `json:"id"`
+	ConfigVersion      int64   `json:"config_version" gorm:"not null;default:1"`
 	Type               int     `json:"type" gorm:"default:0"`
 	Key                string  `json:"key" gorm:"not null"`
 	OpenAIOrganization *string `json:"openai_organization"`
@@ -62,6 +63,8 @@ type Channel struct {
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
 }
+
+var ErrChannelConfigConflict = errors.New("channel configuration has changed")
 
 type ChannelInfo struct {
 	IsMultiKey             bool                  `json:"is_multi_key"`                        // 是否多Key模式
@@ -708,7 +711,7 @@ func (channel *Channel) Update() error {
 	var previousStatus int
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		var err error
-		previousStatus, err = channel.updateWithTx(tx, channel.Key != "")
+		previousStatus, err = channel.UpdateConfigTx(tx, nil, channel.Key != "", true)
 		return err
 	})
 	if err != nil {
@@ -721,18 +724,31 @@ func (channel *Channel) Update() error {
 	return nil
 }
 
-// updateWithTx persists the channel and its derived abilities using the
-// supplied transaction. Cache and recovery side effects intentionally happen
-// only after the caller commits.
-func (channel *Channel) updateWithTx(tx *gorm.DB, updateKey bool) (int, error) {
+func GetChannelByIDTx(tx *gorm.DB, id int) (*Channel, error) {
+	if tx == nil {
+		return nil, errors.New("transaction is required")
+	}
+	if id <= 0 {
+		return nil, errors.New("invalid channel id")
+	}
+	var channel Channel
+	if err := tx.First(&channel, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+	return &channel, nil
+}
+
+// UpdateConfigTx persists channel configuration using an optional compare-and-
+// swap version check. Callers own cache updates and other post-commit effects.
+func (channel *Channel) UpdateConfigTx(tx *gorm.DB, expectedVersion *int64, updateKey bool, updateAbilities bool) (int, error) {
 	if tx == nil {
 		return 0, errors.New("transaction is required")
 	}
-	previousStatus := channel.Status
-	var existing Channel
-	if err := tx.First(&existing, "id = ?", channel.Id).Error; err == nil {
-		previousStatus = existing.Status
+	existing, err := GetChannelByIDTx(tx, channel.Id)
+	if err != nil {
+		return 0, err
 	}
+	previousStatus := existing.Status
 	// If this is a multi-key channel, recalculate MultiKeySize based on the current key list to avoid inconsistency after editing keys
 	if channel.ChannelInfo.IsMultiKey {
 		var keyStr string
@@ -796,20 +812,32 @@ func (channel *Channel) updateWithTx(tx *gorm.DB, updateKey bool) (int, error) {
 		"remark":               channel.Remark,
 		"channel_info":         channel.ChannelInfo,
 		"settings":             channel.OtherSettings,
+		"config_version":       gorm.Expr("config_version + ?", 1),
 	}
 	if updateKey {
 		updates["key"] = channel.Key
 	}
-	err := tx.Model(&Channel{}).Where("id = ?", channel.Id).Updates(updates).Error
-	if err != nil {
-		return previousStatus, err
+	query := tx.Model(&Channel{}).Where("id = ?", channel.Id)
+	if expectedVersion != nil {
+		query = query.Where("config_version = ?", *expectedVersion)
+	}
+	result := query.Updates(updates)
+	if result.Error != nil {
+		return previousStatus, result.Error
+	}
+	if result.RowsAffected != 1 {
+		if expectedVersion != nil {
+			return previousStatus, ErrChannelConfigConflict
+		}
+		return previousStatus, gorm.ErrRecordNotFound
 	}
 	if err := tx.First(channel, "id = ?", channel.Id).Error; err != nil {
 		return previousStatus, err
 	}
-	err = channel.UpdateAbilities(tx)
-	if err != nil {
-		return previousStatus, err
+	if updateAbilities {
+		if err := channel.UpdateAbilities(tx); err != nil {
+			return previousStatus, err
+		}
 	}
 	return previousStatus, nil
 }

@@ -22,8 +22,11 @@ import { toast } from 'sonner'
 import { createChannel, updateChannel } from '../api'
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import {
+  buildChannelUpdatePatch,
+  hasChannelPatchChanges,
+  isChannelConfigConflict,
   transformFormDataToCreatePayload,
-  transformFormDataToUpdatePayload,
+  type ChannelDirtyFields,
   type ChannelFormValues,
 } from '../lib'
 import type { Channel } from '../types'
@@ -33,6 +36,15 @@ type UseChannelMutateFormParams = {
   isEditing: boolean
   isMultiKeyChannel: boolean
   onSuccess: () => void
+}
+
+type ChannelMutationInput = {
+  data: ChannelFormValues
+  dirtyFields: ChannelDirtyFields
+}
+
+export class ChannelConfigConflictError extends Error {
+  readonly code = 'CHANNEL_CONFIG_CONFLICT'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -64,32 +76,30 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
   const { t } = useTranslation()
 
   return useMutation({
-    mutationFn: async (data: ChannelFormValues): Promise<string> => {
+    mutationFn: async ({
+      data,
+      dirtyFields,
+    }: ChannelMutationInput): Promise<string> => {
       if (props.isEditing && props.currentRow) {
-        const payload = transformFormDataToUpdatePayload(
-          data,
-          props.currentRow.id
-        )
-        payload.model_endpoints = (data.model_endpoints || []).map(
-          (endpoint) => ({
-            model: endpoint.model.trim(),
-            base_url: endpoint.base_url.trim(),
-            channel_type: endpoint.channel_type,
-          })
-        )
-        payload.change_reason = data.change_reason?.trim() || undefined
-        const payloadWithKeyMode =
-          props.isMultiKeyChannel && data.key?.trim() && data.key_mode
-            ? {
-                ...payload,
-                key_mode: data.key_mode,
-              }
-            : payload
+        const payload = buildChannelUpdatePatch(data, {
+          channelId: props.currentRow.id,
+          configVersion: props.currentRow.config_version,
+          dirtyFields,
+          isMultiKeyChannel: props.isMultiKeyChannel,
+        })
+        if (!hasChannelPatchChanges(payload)) return SUCCESS_MESSAGES.UPDATED
 
-        const response = await updateChannel(
-          props.currentRow.id,
-          payloadWithKeyMode
-        )
+        let response
+        try {
+          response = await updateChannel(props.currentRow.id, payload)
+        } catch (error) {
+          if (isChannelConfigConflict(error)) {
+            throw new ChannelConfigConflictError(
+              t('Channel configuration changed. Reload before saving again.')
+            )
+          }
+          throw error
+        }
         if (!response.success) {
           throw new Error(response.message || t(ERROR_MESSAGES.UPDATE_FAILED))
         }
@@ -108,7 +118,14 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
       props.onSuccess()
     },
     onError: (error: unknown) => {
-      toast.error(getErrorMessage(error) || t(ERROR_MESSAGES.CREATE_FAILED))
+      toast.error(
+        getErrorMessage(error) ||
+          t(
+            props.isEditing
+              ? ERROR_MESSAGES.UPDATE_FAILED
+              : ERROR_MESSAGES.CREATE_FAILED
+          )
+      )
     },
   })
 }

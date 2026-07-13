@@ -5263,6 +5263,15 @@
     "Model Health": "模型健康",
     "Header Rules": "请求头规则",
     "Modified": "已修改",
-    "Has errors": "有错误"
+    "Has errors": "有错误",
+    "Channel configuration changed. Reload before saving again.": "渠道配置已发生变化，请重新加载后再保存。",
+    "Reload saved configuration and discard local changes?": "重新加载已保存配置并放弃本地修改吗？",
+    "This channel changed after you opened it. Your local edits are still available.": "你打开此渠道后，服务端配置已发生变化；当前本地修改仍被保留。",
+    "Keep editing": "继续查看修改",
+    "Reload saved configuration": "重新加载已保存配置",
+    "Saved configuration summary": "已保存配置摘要",
+    "Preview does not include unsaved changes": "预览尚未包含当前未保存修改",
+    "Select channel editor section": "选择渠道编辑分区",
+    "Saved": "已保存"
   }
 }

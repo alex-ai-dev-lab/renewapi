@@ -22,10 +22,10 @@ import { UpstreamErrorRulesSection } from '../security/upstream-error-rules-sect
 import type { ModelSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ClaudeSettingsCard } from './claude-settings-card'
-import { HeaderRulesSettingsCard } from './header-rules-settings-card'
 import { GeminiSettingsCard } from './gemini-settings-card'
 import { GlobalSettingsCard } from './global-settings-card'
 import { GrokSettingsCard } from './grok-settings-card'
+import { HeaderRulesSettingsCard } from './header-rules-settings-card'
 import { ModelOperationsOverview } from './model-operations-overview'
 
 function formatJsonForEditor(value: string, fallback: string) {
@@ -186,3 +186,4 @@ export const MODELS_DEFAULT_SECTION = modelsRegistry.defaultSection
 export const getModelsSectionNavItems = modelsRegistry.getSectionNavItems
 export const getModelsSectionContent = modelsRegistry.getSectionContent
 export const getModelsSectionMeta = modelsRegistry.getSectionMeta
+export const getModelsSectionUrl = modelsRegistry.getSectionUrl

@@ -185,12 +185,29 @@ export type ChannelModelRoutePreview = {
 export type ChannelEffectiveConfigItem = {
   key: string
   value?: unknown
-  source: 'global' | 'group' | 'channel' | 'request' | ''
+  source:
+    | 'global'
+    | 'group'
+    | 'channel'
+    | 'request'
+    | 'provider'
+    | 'model_category'
+    | 'model_endpoint'
+    | ''
   source_id?: string
   masked?: boolean
+  configured?: boolean
   chain: Array<{
-    source: 'global' | 'group' | 'channel' | 'request'
+    source:
+      | 'global'
+      | 'group'
+      | 'channel'
+      | 'request'
+      | 'provider'
+      | 'model_category'
+      | 'model_endpoint'
     source_id?: string
+    applicable: boolean
     present: boolean
     value?: unknown
   }>
@@ -202,6 +219,8 @@ export type ChannelEffectiveConfigResponse = {
   data?: {
     generated_at: number
     channel_id: number
+    config_version: number
+    persisted_only: true
     model?: string
     route?: NonNullable<ChannelModelRoutePreview['data']>['route']
     capability?: NonNullable<ChannelModelRoutePreview['data']>['capability']
@@ -211,14 +230,28 @@ export type ChannelEffectiveConfigResponse = {
 
 export type ChannelConfigAudit = {
   id: number
-  resource_type: string
-  resource_id: number
   action: string
   operator_id: number
   reason: string
   request_id?: string
-  diff: string
+  summary: {
+    changed_fields: string[]
+    key_changed: boolean
+    model_endpoint_count?: number
+  }
+  config_version: number
   created_at: number
+}
+
+export type ChannelChangeSet = {
+  changed_fields: string[]
+  key_changed: boolean
+  ability_changed: boolean
+  transport_changed: boolean
+  routing_changed: boolean
+  protocol_changed: boolean
+  endpoints_changed: boolean
+  endpoint_count: number
 }
 
 export async function getChannelModelRoutePreview(
@@ -273,7 +306,14 @@ export async function createChannel(
 export async function updateChannel(
   id: number,
   data: ChannelUpdatePayload
-): Promise<{ success: boolean; message?: string; data?: Channel }> {
+): Promise<{
+  success: boolean
+  message?: string
+  code?: string
+  data?: Channel
+  change_set?: ChannelChangeSet
+  no_op?: boolean
+}> {
   const res = await api.put(
     '/api/channel/',
     { id, ...data },

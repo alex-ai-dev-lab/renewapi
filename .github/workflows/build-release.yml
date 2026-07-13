@@ -16,6 +16,10 @@ on:
         description: "Optional release tag. Defaults to newapi-source-<image tag>."
         required: false
         type: string
+      base_sha:
+        description: "Optional base SHA used by changed-file quality checks."
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -81,7 +85,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
@@ -94,9 +98,12 @@ jobs:
 
       - name: Verify Go source and backend
         shell: bash
+        env:
+          INPUT_BASE_SHA: ${{ inputs.base_sha }}
         run: |
           set -euo pipefail
-          mapfile -t changed_go < <(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" -- '*.go')
+          base="${INPUT_BASE_SHA:-$GITHUB_SHA^}"
+          mapfile -t changed_go < <(git diff --name-only --diff-filter=ACMR "$base" "$GITHUB_SHA" -- '*.go')
           if ((${#changed_go[@]})); then
             unformatted="$(gofmt -l "${changed_go[@]}")"
             if [[ -n "$unformatted" ]]; then
@@ -122,10 +129,13 @@ jobs:
       - name: Verify changed default frontend files
         shell: bash
         working-directory: web/default
+        env:
+          INPUT_BASE_SHA: ${{ inputs.base_sha }}
         run: |
           set -euo pipefail
+          base="${INPUT_BASE_SHA:-$GITHUB_SHA^}"
           mapfile -t changed < <(
-            git -C ../.. diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" -- web/default/src web/default/scripts |
+            git -C ../.. diff --name-only --diff-filter=ACMR "$base" "$GITHUB_SHA" -- web/default/src web/default/scripts |
               sed 's#^web/default/##'
           )
           mapfile -t lint_files < <(printf '%s\n' "${changed[@]}" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' || true)
@@ -148,7 +158,9 @@ jobs:
 
       - name: Verify commit diff
         shell: bash
-        run: git diff --check "$GITHUB_SHA^" "$GITHUB_SHA"
+        env:
+          INPUT_BASE_SHA: ${{ inputs.base_sha }}
+        run: git diff --check "${INPUT_BASE_SHA:-$GITHUB_SHA^}" "$GITHUB_SHA"
 
   build:
     needs: [quality, database-quality]

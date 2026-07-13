@@ -67,7 +67,7 @@ export function ChannelEffectiveSummary(props: ChannelEffectiveSummaryProps) {
   return (
     <section
       className={cn(
-        'border-border/60 grid min-w-0 gap-3 rounded-md border p-3 xl:grid-cols-4',
+        'border-border/60 grid min-w-0 gap-3 rounded-md border p-3',
         props.className
       )}
     >
@@ -88,96 +88,101 @@ export function ChannelEffectiveSummary(props: ChannelEffectiveSummaryProps) {
           </span>
         ) : null}
       </div>
-      <div className='hidden xl:contents'>
-        <div className='flex items-center justify-between gap-3 sm:col-span-2 xl:col-span-4'>
+      <div className='hidden min-w-0 xl:flex xl:flex-col xl:gap-3'>
+        <div className='flex min-w-0 items-start justify-between gap-3'>
           <h2 className='text-xs font-semibold'>
             {t('Saved configuration summary')}
           </h2>
           {props.hasUnsavedChanges ? (
-            <span className='text-warning text-[11px]'>
+            <span className='text-warning min-w-0 text-right text-[11px]'>
               {t('Preview does not include unsaved changes')}
             </span>
           ) : null}
         </div>
-        <div className='flex min-w-0 items-start gap-2'>
-          <Activity
-            className='text-muted-foreground mt-0.5 h-4 w-4 shrink-0'
-            aria-hidden='true'
-          />
-          <div className='min-w-0'>
-            <div className='text-muted-foreground text-[11px]'>
-              {t('Status')}
-            </div>
-            <div className='mt-1'>
-              <Badge variant={enabled ? 'default' : 'secondary'}>
-                {getStatusLabel(status, props.loading, t)}
-              </Badge>
-            </div>
-          </div>
-        </div>
 
-        <div className='flex min-w-0 items-start gap-2'>
-          <Route
-            className='text-muted-foreground mt-0.5 h-4 w-4 shrink-0'
-            aria-hidden='true'
-          />
-          <div className='min-w-0'>
-            <div className='text-muted-foreground text-[11px]'>
-              {t('Effective route')}
-            </div>
-            <div className='mt-1 truncate text-xs font-medium'>
-              {data?.route
-                ? `${data.route.source} → ${data.route.endpoint}`
-                : t('Select a model to inspect')}
-            </div>
-          </div>
-        </div>
-
-        <div className='flex min-w-0 items-start gap-2'>
-          <ShieldCheck
-            className='text-muted-foreground mt-0.5 h-4 w-4 shrink-0'
-            aria-hidden='true'
-          />
-          <div className='min-w-0'>
-            <div className='text-muted-foreground text-[11px]'>
-              {t('Protocol capability')}
-            </div>
-            <div className='mt-1 text-xs font-medium'>
-              {data?.capability
-                ? data.capability.supported
-                  ? t('Supported')
-                  : t('Not supported')
-                : t('Not inspected')}
-            </div>
-            {data?.capability?.reason ? (
-              <div className='text-muted-foreground mt-0.5 line-clamp-1 text-[11px]'>
-                {data.capability.reason}
+        <div className='grid min-w-0 gap-3'>
+          <div className='flex min-w-0 items-start gap-2'>
+            <Activity
+              className='text-muted-foreground mt-0.5 h-4 w-4 shrink-0'
+              aria-hidden='true'
+            />
+            <div className='min-w-0'>
+              <div className='text-muted-foreground text-[11px]'>
+                {t('Status')}
               </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className='flex min-w-0 items-start gap-2'>
-          <History
-            className='text-muted-foreground mt-0.5 h-4 w-4 shrink-0'
-            aria-hidden='true'
-          />
-          <div className='min-w-0'>
-            <div className='text-muted-foreground text-[11px]'>
-              {t('Latest audited change')}
-            </div>
-            <div className='mt-1 line-clamp-1 text-xs font-medium'>
-              {props.latestAudit?.reason || t('No audit record')}
-            </div>
-            {props.latestAudit?.created_at ? (
-              <div className='text-muted-foreground mt-0.5 text-[11px]'>
-                {new Date(props.latestAudit.created_at * 1000).toLocaleString()}
+              <div className='mt-1'>
+                <Badge variant={enabled ? 'default' : 'secondary'}>
+                  {getStatusLabel(status, props.loading, t)}
+                </Badge>
               </div>
-            ) : null}
+            </div>
+          </div>
+
+          <div className='flex min-w-0 items-start gap-2'>
+            <Route
+              className='text-muted-foreground mt-0.5 h-4 w-4 shrink-0'
+              aria-hidden='true'
+            />
+            <div className='min-w-0'>
+              <div className='text-muted-foreground text-[11px]'>
+                {t('Effective route')}
+              </div>
+              <div className='mt-1 text-xs font-medium [overflow-wrap:anywhere]'>
+                {data?.route
+                  ? `${data.route.source} → ${data.route.endpoint}`
+                  : t('Select a model to inspect')}
+              </div>
+            </div>
+          </div>
+
+          <div className='flex min-w-0 items-start gap-2'>
+            <ShieldCheck
+              className='text-muted-foreground mt-0.5 h-4 w-4 shrink-0'
+              aria-hidden='true'
+            />
+            <div className='min-w-0'>
+              <div className='text-muted-foreground text-[11px]'>
+                {t('Protocol capability')}
+              </div>
+              <div className='mt-1 text-xs font-medium'>
+                {data?.capability
+                  ? data.capability.supported
+                    ? t('Supported')
+                    : t('Not supported')
+                  : t('Not inspected')}
+              </div>
+              {data?.capability?.reason ? (
+                <div className='text-muted-foreground mt-0.5 text-[11px] [overflow-wrap:anywhere]'>
+                  {data.capability.reason}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className='flex min-w-0 items-start gap-2'>
+            <History
+              className='text-muted-foreground mt-0.5 h-4 w-4 shrink-0'
+              aria-hidden='true'
+            />
+            <div className='min-w-0'>
+              <div className='text-muted-foreground text-[11px]'>
+                {t('Latest audited change')}
+              </div>
+              <div className='mt-1 text-xs font-medium [overflow-wrap:anywhere]'>
+                {props.latestAudit?.reason || t('No audit record')}
+              </div>
+              {props.latestAudit?.created_at ? (
+                <div className='text-muted-foreground mt-0.5 text-[11px]'>
+                  {new Date(
+                    props.latestAudit.created_at * 1000
+                  ).toLocaleString()}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 
-        <div className='flex flex-wrap items-center gap-2 sm:col-span-2 xl:col-span-4'>
+        <div className='border-border/60 flex min-w-0 flex-wrap items-center gap-2 border-t pt-3'>
           <Button
             type='button'
             size='sm'

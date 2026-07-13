@@ -337,42 +337,88 @@ func ReplaceChannelModelEndpoints(channelId int, endpoints []*ModelEndpoint) err
 		return errors.New("invalid channel id")
 	}
 	ensureModelEndpointSchema()
-	now := time.Now().Unix()
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("channel_id = ?", channelId).Delete(&ModelEndpoint{}).Error; err != nil {
-			return err
-		}
-		cleaned := make([]*ModelEndpoint, 0, len(endpoints))
-		seen := make(map[string]bool)
-		for _, ep := range endpoints {
-			if ep == nil {
-				continue
-			}
-			modelName := strings.TrimSpace(ep.Model)
-			if modelName == "" || seen[modelName] {
-				continue
-			}
-			seen[modelName] = true
-			cleaned = append(cleaned, &ModelEndpoint{
-				ChannelId:   channelId,
-				Model:       modelName,
-				BaseURL:     strings.TrimSpace(ep.BaseURL),
-				ChannelType: ep.ChannelType,
-				CreatedTime: now,
-				UpdatedTime: now,
-			})
-		}
-		if len(cleaned) > 0 {
-			if err := tx.Create(&cleaned).Error; err != nil {
-				return err
-			}
-		}
-		return nil
+		return replaceChannelModelEndpointsTx(tx, channelId, endpoints)
 	})
 	if err != nil {
 		return err
 	}
 	ReloadModelEndpointCache()
+	return nil
+}
+
+func replaceChannelModelEndpointsTx(tx *gorm.DB, channelId int, endpoints []*ModelEndpoint) error {
+	if tx == nil {
+		return errors.New("transaction is required")
+	}
+	if channelId <= 0 {
+		return errors.New("invalid channel id")
+	}
+	if err := tx.Where("channel_id = ?", channelId).Delete(&ModelEndpoint{}).Error; err != nil {
+		return err
+	}
+	now := time.Now().Unix()
+	cleaned := make([]*ModelEndpoint, 0, len(endpoints))
+	seen := make(map[string]bool)
+	for _, ep := range endpoints {
+		if ep == nil {
+			continue
+		}
+		modelName := strings.TrimSpace(ep.Model)
+		if modelName == "" || seen[modelName] {
+			continue
+		}
+		seen[modelName] = true
+		cleaned = append(cleaned, &ModelEndpoint{
+			ChannelId:   channelId,
+			Model:       modelName,
+			BaseURL:     strings.TrimSpace(ep.BaseURL),
+			ChannelType: ep.ChannelType,
+			CreatedTime: now,
+			UpdatedTime: now,
+		})
+	}
+	if len(cleaned) == 0 {
+		return nil
+	}
+	return tx.Create(&cleaned).Error
+}
+
+// UpdateChannelEditorState commits the channel, derived abilities, and the
+// optional per-model endpoint set atomically. A nil endpoint slice preserves
+// the existing rows; a non-nil empty slice explicitly clears them.
+func UpdateChannelEditorState(channel *Channel, endpoints []*ModelEndpoint, audit *ConfigAudit, updateKey bool) error {
+	if channel == nil || channel.Id <= 0 {
+		return errors.New("invalid channel")
+	}
+	if endpoints != nil {
+		ensureModelEndpointSchema()
+	}
+	var previousStatus int
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		previousStatus, err = channel.updateWithTx(tx, updateKey)
+		if err != nil {
+			return err
+		}
+		if endpoints == nil {
+			return CreateConfigAuditTx(tx, audit)
+		}
+		if err := replaceChannelModelEndpointsTx(tx, channel.Id, endpoints); err != nil {
+			return err
+		}
+		return CreateConfigAuditTx(tx, audit)
+	})
+	if err != nil {
+		return err
+	}
+	if endpoints != nil {
+		ReloadModelEndpointCache()
+	}
+	if previousStatus != common.ChannelStatusEnabled && channel.Status == common.ChannelStatusEnabled {
+		CacheUpdateChannel(channel)
+		OnChannelEnabled(channel.Id)
+	}
 	return nil
 }
 

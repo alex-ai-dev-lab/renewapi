@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { z } from 'zod'
+import type { ModelEndpointInput } from './model-endpoints'
 
 // ============================================================================
 // Channel Schema & Types
@@ -77,6 +78,9 @@ export type Channel = z.infer<typeof channelSchema>
 
 export type ChannelUpdatePayload = Partial<Channel> & {
   key_mode?: 'append' | 'replace'
+  clear_key?: boolean
+  model_endpoints?: ModelEndpointInput[]
+  change_reason?: string
 }
 
 // ============================================================================

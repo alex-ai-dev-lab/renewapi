@@ -58,10 +58,14 @@ export const sideDrawerSwitchItemClassName = (className?: string) =>
 export function SideDrawerSection(props: {
   children: ReactNode
   className?: string
+  id?: string
 }) {
   return createElement(
     'section',
-    { className: sideDrawerSectionClassName(props.className) },
+    {
+      id: props.id,
+      className: sideDrawerSectionClassName(cn('scroll-mt-4', props.className)),
+    },
     props.children
   )
 }

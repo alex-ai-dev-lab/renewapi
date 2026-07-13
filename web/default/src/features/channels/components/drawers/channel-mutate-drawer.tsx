@@ -24,7 +24,7 @@ import {
   useCallback,
   useRef,
 } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, type SubmitErrorHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -109,6 +109,8 @@ import {
   fetchModels,
   getAllModels,
   getChannel,
+  getChannelConfigAudits,
+  getChannelEffectiveConfig,
   getChannelModelRoutePreview,
   getChannelKey,
   getGroups,
@@ -152,6 +154,10 @@ import {
   collectInvalidStatusCodeEntries,
   collectNewDisallowedStatusCodeRedirects,
 } from '../../lib/status-code-risk-guard'
+import {
+  getChannelModelEndpoints,
+  type ModelEndpointInput,
+} from '../../model-endpoints'
 import type { Channel } from '../../types'
 import { useChannels } from '../channels-provider'
 import { CodexOAuthDialog } from '../dialogs/codex-oauth-dialog'
@@ -163,6 +169,12 @@ import {
 import { ParamOverrideEditorDialog } from '../dialogs/param-override-editor-dialog'
 import { StatusCodeRiskDialog } from '../dialogs/status-code-risk-dialog'
 import { ModelMappingEditor } from '../model-mapping-editor'
+import {
+  ChannelEditorNavigation,
+  type ChannelEditorSectionId,
+  type ChannelEditorSectionState,
+} from './channel-editor-navigation'
+import { ChannelEffectiveSummary } from './channel-effective-summary'
 import {
   ChannelAdvancedSection,
   ChannelApiAccessSection,
@@ -184,6 +196,99 @@ type ModelMappingGuardrail = {
   entries: Array<{ source: string; target: string }>
   missingSourceModels: string[]
   exposedTargetModels: string[]
+}
+
+const CHANNEL_EDITOR_FIELD_GROUPS: Record<ChannelEditorSectionId, string[]> = {
+  overview: ['name', 'type', 'status'],
+  connection: [
+    'base_url',
+    'key',
+    'clear_key',
+    'openai_organization',
+    'other',
+    'multi_key_mode',
+    'multi_key_type',
+    'batch_add_set_key_prefix_2_name',
+    'key_mode',
+    'vertex_key_type',
+    'aws_key_type',
+    'azure_responses_version',
+    'is_enterprise_account',
+  ],
+  models: ['models', 'group', 'model_mapping', 'model_endpoints'],
+  routing: [
+    'priority',
+    'weight',
+    'test_model',
+    'auto_ban',
+    'user_agent_id',
+    'user_agent_override',
+  ],
+  protocol: [
+    'force_format',
+    'thinking_to_content',
+    'pass_through_body_enabled',
+    'responses_function_call_arguments_format',
+    'responses_compaction_capability',
+    'responses_compaction_native_stream',
+    'responses_compaction_continuation',
+    'responses_compaction_route_fingerprint',
+    'responses_compaction_model_capabilities',
+    'allow_model_protocol_override',
+    'model_protocol_override_targets',
+    'allow_service_tier',
+    'disable_store',
+    'allow_safety_identifier',
+    'allow_include_obfuscation',
+    'allow_inference_geo',
+    'allow_speed',
+    'claude_beta_query',
+  ],
+  health: [
+    'auto_test_and_recover_enabled',
+    'auto_test_interval',
+    'auto_test_retry_count',
+    'auto_test_retry_threshold',
+    'auto_test_time_window_start',
+    'auto_test_time_window_end',
+    'auto_test_timezone',
+    'normalize_upstream_errors',
+    'anti_poison_enabled',
+    'anti_poison_profile',
+    'anti_poison_answer_envelope',
+    'anti_poison_response_proof',
+    'anti_poison_response_proof_enabled',
+    'anti_poison_tool_call_guard',
+    'anti_poison_opaque_scan',
+    'anti_poison_probe_before_every_request',
+    'anti_poison_stream_mode',
+    'anti_poison_hard_failures_to_quarantine',
+    'anti_poison_soft_failures_to_degrade',
+    'anti_poison_failure_mode',
+    'anti_poison_canary_echo_enabled',
+    'anti_poison_shape_check_enabled',
+    'requires_codex_identity',
+    'supports_claude_thinking',
+    'tls_insecure_skip_verify',
+    'proxy',
+  ],
+  rewrites: [
+    'status_code_mapping',
+    'param_override',
+    'header_override',
+    'system_prompt',
+    'system_prompt_override',
+  ],
+  advanced: [
+    'tag',
+    'remark',
+    'settings',
+    'setting',
+    'upstream_model_update_check_enabled',
+    'upstream_model_update_auto_sync_enabled',
+    'upstream_model_update_ignored_models',
+    'change_reason',
+  ],
 }
 
 // Helper functions
@@ -358,6 +463,8 @@ export function ChannelMutateDrawer({
     ((action: MissingModelsAction) => void) | null
   >(null)
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false)
+  const [activeEditorSection, setActiveEditorSection] =
+    useState<ChannelEditorSectionId>('overview')
   const [routePreviewModel, setRoutePreviewModel] = useState('')
   const [routePreviewEndpoint, setRoutePreviewEndpoint] =
     useState('openai-response')
@@ -378,6 +485,17 @@ export function ChannelMutateDrawer({
   } = useQuery({
     queryKey: channelsQueryKeys.detail(currentRow?.id || 0),
     queryFn: () => getChannel(currentRow!.id),
+    enabled: isEditing && Boolean(currentRow?.id),
+  })
+
+  const {
+    data: modelEndpointsData,
+    isLoading: isModelEndpointsLoading,
+    isError: isModelEndpointsError,
+    error: modelEndpointsQueryError,
+  } = useQuery({
+    queryKey: ['channel-model-endpoints', currentRow?.id || 0],
+    queryFn: () => getChannelModelEndpoints(currentRow!.id),
     enabled: isEditing && Boolean(currentRow?.id),
   })
 
@@ -440,6 +558,7 @@ export function ChannelMutateDrawer({
   const multiKeyMode = form.watch('multi_key_mode')
   const multiKeyType = form.watch('multi_key_type')
   const keyMode = form.watch('key_mode')
+  const clearKey = form.watch('clear_key') === true
   const currentGroups = form.watch('group')
   const currentType = form.watch('type')
   const modelProtocolOverrideEnabled = form.watch(
@@ -449,6 +568,7 @@ export function ChannelMutateDrawer({
     form.watch('model_protocol_override_targets') || []
   const currentBaseUrl = form.watch('base_url')
   const currentModels = form.watch('models')
+  const currentModelEndpoints = form.watch('model_endpoints') || []
   const currentName = form.watch('name')
   const currentModelMapping = form.watch('model_mapping')
   const awsKeyType = form.watch('aws_key_type')
@@ -456,6 +576,44 @@ export function ChannelMutateDrawer({
     'upstream_model_update_check_enabled'
   )
   const currentSettings = form.watch('settings')
+  const effectivePreviewModel = useMemo(
+    () => parseModelsString(currentModels || '')[0] || '',
+    [currentModels]
+  )
+
+  const { data: effectiveConfig, isLoading: isEffectiveConfigLoading } =
+    useQuery({
+      queryKey: ['channel-effective-config', channelId, effectivePreviewModel],
+      queryFn: () =>
+        getChannelEffectiveConfig(
+          channelId!,
+          effectivePreviewModel || undefined
+        ),
+      enabled: isEditing && Boolean(channelId),
+    })
+
+  const { data: channelAudits } = useQuery({
+    queryKey: ['channel-config-audits', channelId],
+    queryFn: () => getChannelConfigAudits(channelId!, 10),
+    enabled: isEditing && Boolean(channelId),
+  })
+
+  const sectionStates = (() => {
+    const errorFields = new Set(Object.keys(form.formState.errors))
+    const dirtyFields = new Set(Object.keys(form.formState.dirtyFields))
+
+    return Object.fromEntries(
+      Object.entries(CHANNEL_EDITOR_FIELD_GROUPS).map(([section, fields]) => {
+        let state: ChannelEditorSectionState = 'clean'
+        if (fields.some((field) => errorFields.has(field))) {
+          state = 'error'
+        } else if (fields.some((field) => dirtyFields.has(field))) {
+          state = 'dirty'
+        }
+        return [section, state]
+      })
+    ) as Record<ChannelEditorSectionId, ChannelEditorSectionState>
+  })()
 
   const previewModelRoute = useCallback(async () => {
     if (!channelId || !routePreviewModel.trim()) return
@@ -502,14 +660,21 @@ export function ChannelMutateDrawer({
   // Helper computed values
   const isBatchMode =
     multiKeyMode === 'batch' || multiKeyMode === 'multi_to_single'
-  const isChannelDetailLoading = isEditing && isChannelLoading
+  const isChannelDetailLoading =
+    isEditing && (isChannelLoading || isModelEndpointsLoading)
   const isChannelDetailUnavailable =
     isEditing &&
     !isChannelDetailLoading &&
-    (isChannelError || channelData?.success === false || !channelData?.data)
+    (isChannelError ||
+      isModelEndpointsError ||
+      channelData?.success === false ||
+      modelEndpointsData?.success === false ||
+      !channelData?.data)
   const channelDetailErrorMessage =
     channelData?.message ||
+    modelEndpointsData?.message ||
     getChannelQueryErrorMessage(channelQueryError) ||
+    getChannelQueryErrorMessage(modelEndpointsQueryError) ||
     t('Failed to load channel details')
 
   // Get all models list
@@ -701,8 +866,22 @@ export function ChannelMutateDrawer({
 
   // Load channel data into form when editing
   useEffect(() => {
-    if (isEditing && channelData?.data) {
-      const defaults = transformChannelToFormDefaults(channelData.data)
+    if (
+      isEditing &&
+      channelData?.data &&
+      modelEndpointsData?.success !== false
+    ) {
+      const modelEndpoints: ModelEndpointInput[] = (
+        modelEndpointsData?.data || []
+      ).map((endpoint) => ({
+        model: endpoint.model,
+        base_url: endpoint.base_url || '',
+        channel_type: endpoint.channel_type ?? null,
+      }))
+      const defaults = {
+        ...transformChannelToFormDefaults(channelData.data),
+        model_endpoints: modelEndpoints,
+      }
       form.reset(defaults)
       setAdvancedSettingsOpen(
         readAdvancedSettingsPreference() || hasAdvancedSettingsValues(defaults)
@@ -721,7 +900,7 @@ export function ChannelMutateDrawer({
       initialModelMappingRef.current = ''
       initialStatusCodeMappingRef.current = ''
     }
-  }, [isEditing, channelData, form])
+  }, [isEditing, channelData, modelEndpointsData, form])
 
   useEffect(() => {
     if (currentType !== 57) {
@@ -1075,6 +1254,15 @@ export function ChannelMutateDrawer({
       queryClient.invalidateQueries({
         queryKey: channelsQueryKeys.detail(channelId),
       })
+      queryClient.invalidateQueries({
+        queryKey: ['channel-model-endpoints', channelId],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ['channel-effective-config', channelId],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ['channel-config-audits', channelId],
+      })
     }
     onOpenChange(false)
     setOpen(null)
@@ -1281,16 +1469,24 @@ export function ChannelMutateDrawer({
   // Handle drawer close
   const handleOpenChange = useCallback(
     (v: boolean) => {
+      if (
+        !v &&
+        form.formState.isDirty &&
+        !window.confirm(t('Discard unsaved channel changes?'))
+      ) {
+        return
+      }
       onOpenChange(v)
       if (!v) {
         form.reset(CHANNEL_FORM_DEFAULT_VALUES)
+        setActiveEditorSection('overview')
         setAdvancedSettingsOpen(false)
         setCodexCredentialCandidates([])
         setSelectedCodexCredentialIndex(0)
         setCodexCredentialPreflight(null)
       }
     },
-    [onOpenChange, form]
+    [onOpenChange, form, t]
   )
 
   const handleAdvancedSettingsOpenChange = useCallback((nextOpen: boolean) => {
@@ -1302,6 +1498,37 @@ export function ChannelMutateDrawer({
       )
     }
   }, [])
+
+  const navigateEditorSection = useCallback(
+    (section: ChannelEditorSectionId) => {
+      setActiveEditorSection(section)
+      const isAdvancedSection = !['overview', 'connection', 'models'].includes(
+        section
+      )
+      if (isAdvancedSection && !advancedSettingsOpen) {
+        handleAdvancedSettingsOpenChange(true)
+      }
+
+      window.requestAnimationFrame(() => {
+        document
+          .getElementById(`channel-editor-${section}`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    },
+    [advancedSettingsOpen, handleAdvancedSettingsOpenChange]
+  )
+
+  const handleInvalidSubmit: SubmitErrorHandler<ChannelFormValues> =
+    useCallback(
+      (errors) => {
+        const errorFields = new Set(Object.keys(errors))
+        const section = Object.entries(CHANNEL_EDITOR_FIELD_GROUPS).find(
+          ([, fields]) => fields.some((field) => errorFields.has(field))
+        )?.[0] as ChannelEditorSectionId | undefined
+        if (section) navigateEditorSection(section)
+      },
+      [navigateEditorSection]
+    )
 
   return (
     <>
@@ -1333,7 +1560,7 @@ export function ChannelMutateDrawer({
           <Form {...form}>
             <form
               id='channel-form'
-              onSubmit={form.handleSubmit(onSubmit)}
+              onSubmit={form.handleSubmit(onSubmit, handleInvalidSubmit)}
               className={sideDrawerFormClassName('gap-5')}
             >
               {isChannelDetailLoading ? (
@@ -1353,8 +1580,24 @@ export function ChannelMutateDrawer({
                 </Alert>
               ) : (
                 <>
+                  <ChannelEditorNavigation
+                    activeSection={activeEditorSection}
+                    sectionStates={sectionStates}
+                    onNavigate={navigateEditorSection}
+                  />
+                  {isEditing ? (
+                    <ChannelEffectiveSummary
+                      loading={isEffectiveConfigLoading}
+                      response={effectiveConfig}
+                      latestAudit={channelAudits?.data?.[0]}
+                      multiKey={isMultiKeyChannel}
+                      actionsDisabled={form.formState.isDirty}
+                      onOpenModelHealth={() => setOpen('model-health')}
+                      onOpenMultiKey={() => setOpen('multi-key-manage')}
+                    />
+                  ) : null}
                   {/* ── Basic Information ── */}
-                  <ChannelBasicSection>
+                  <ChannelBasicSection id='channel-editor-overview'>
                     <div className='grid gap-4 sm:grid-cols-2'>
                       <FormField
                         control={form.control}
@@ -1448,7 +1691,7 @@ export function ChannelMutateDrawer({
                   </ChannelBasicSection>
 
                   {/* ── API Access ── */}
-                  <ChannelApiAccessSection>
+                  <ChannelApiAccessSection id='channel-editor-connection'>
                     {CHANNEL_TYPE_WARNINGS[currentType] && (
                       <Alert>
                         <AlertDescription>
@@ -2156,6 +2399,15 @@ export function ChannelMutateDrawer({
                                   placeholder={keyPlaceholder}
                                   rows={isBatchMode ? 8 : 4}
                                   {...field}
+                                  disabled={clearKey}
+                                  onChange={(event) => {
+                                    field.onChange(event)
+                                    if (clearKey) {
+                                      form.setValue('clear_key', false, {
+                                        shouldDirty: true,
+                                      })
+                                    }
+                                  }}
                                 />
                               </FormControl>
                               <FormDescription>
@@ -2410,8 +2662,58 @@ export function ChannelMutateDrawer({
                                         <Copy className='mr-2 h-4 w-4' />
                                         {t('Copy')}
                                       </Button>
+                                      {clearKey ? (
+                                        <Button
+                                          type='button'
+                                          variant='outline'
+                                          size='sm'
+                                          onClick={() =>
+                                            form.setValue('clear_key', false, {
+                                              shouldDirty: true,
+                                            })
+                                          }
+                                        >
+                                          {t('Undo key clear')}
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          type='button'
+                                          variant='destructive'
+                                          size='sm'
+                                          onClick={() => {
+                                            if (
+                                              !window.confirm(
+                                                t(
+                                                  'Clear the saved channel key when changes are saved?'
+                                                )
+                                              )
+                                            ) {
+                                              return
+                                            }
+                                            form.setValue('key', '', {
+                                              shouldDirty: true,
+                                            })
+                                            form.setValue('clear_key', true, {
+                                              shouldDirty: true,
+                                            })
+                                            setChannelKey(null)
+                                          }}
+                                        >
+                                          <Trash2 className='mr-2 h-4 w-4' />
+                                          {t('Clear saved key')}
+                                        </Button>
+                                      )}
                                     </div>
                                   </div>
+                                  {clearKey ? (
+                                    <Alert variant='destructive'>
+                                      <AlertDescription>
+                                        {t(
+                                          'The saved key will be cleared on save.'
+                                        )}
+                                      </AlertDescription>
+                                    </Alert>
+                                  ) : null}
                                   <Input
                                     readOnly
                                     value={channelKey ?? ''}
@@ -2592,7 +2894,7 @@ export function ChannelMutateDrawer({
                   </ChannelApiAccessSection>
 
                   {/* ── Models & Groups ── */}
-                  <ChannelModelsSection>
+                  <ChannelModelsSection id='channel-editor-models'>
                     <div className='space-y-5'>
                       <div className='border-border/60 bg-muted/10 rounded-lg border p-4'>
                         <FormField
@@ -2937,9 +3239,23 @@ export function ChannelMutateDrawer({
                   <ChannelModelEndpointsSection
                     channelId={channelId ?? undefined}
                     models={currentModels}
+                    rows={currentModelEndpoints}
+                    error={
+                      typeof form.formState.errors.model_endpoints?.message ===
+                      'string'
+                        ? form.formState.errors.model_endpoints.message
+                        : undefined
+                    }
+                    onChange={(rows) =>
+                      form.setValue('model_endpoints', rows, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    }
                   />
 
                   <ChannelAdvancedSection
+                    id='channel-editor-routing'
                     open={advancedSettingsOpen}
                     onOpenChange={handleAdvancedSettingsOpenChange}
                   >
@@ -3136,6 +3452,12 @@ export function ChannelMutateDrawer({
                                 <FormMessage />
                               </FormItem>
                             )}
+                          />
+
+                          <div
+                            id='channel-editor-health'
+                            className='scroll-mt-4'
+                            aria-hidden='true'
                           />
 
                           <FormField
@@ -3818,7 +4140,10 @@ export function ChannelMutateDrawer({
                         </div>
                       </div>
 
-                      <div className='flex flex-col gap-4 border-t pt-4'>
+                      <div
+                        id='channel-editor-advanced'
+                        className='flex scroll-mt-4 flex-col gap-4 border-t pt-4'
+                      >
                         <SubHeading
                           title={t('Internal Notes')}
                           icon={<FileText className='h-3.5 w-3.5' />}
@@ -3864,10 +4189,37 @@ export function ChannelMutateDrawer({
                               </FormItem>
                             )}
                           />
+
+                          <FormField
+                            control={form.control}
+                            name='change_reason'
+                            render={({ field }) => (
+                              <FormItem className='sm:col-span-2'>
+                                <FormLabel>{t('Change reason')}</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder={t(
+                                      'Describe why this channel configuration is changing'
+                                    )}
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  {t(
+                                    'Stored in the configuration audit log. Secrets must not be entered here.'
+                                  )}
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
                         </div>
                       </div>
 
-                      <div className='flex flex-col gap-4 border-t pt-4'>
+                      <div
+                        id='channel-editor-rewrites'
+                        className='flex scroll-mt-4 flex-col gap-4 border-t pt-4'
+                      >
                         <SubHeading
                           title={t('Override Rules')}
                           icon={<Code className='h-3.5 w-3.5' />}
@@ -4117,7 +4469,10 @@ export function ChannelMutateDrawer({
                             icon={<SlidersHorizontal className='h-3.5 w-3.5' />}
                           />
 
-                          <div className='divide-border space-y-0 divide-y border-y'>
+                          <div
+                            id='channel-editor-protocol'
+                            className='divide-border scroll-mt-4 space-y-0 divide-y border-y'
+                          >
                             <FormField
                               control={form.control}
                               name='allow_service_tier'
@@ -4547,7 +4902,9 @@ export function ChannelMutateDrawer({
                                 <Input
                                   {...field}
                                   value={field.value || ''}
-                                  placeholder={t('Leave empty for manual configuration')}
+                                  placeholder={t(
+                                    'Leave empty for manual configuration'
+                                  )}
                                   className='font-mono'
                                 />
                               </FormControl>

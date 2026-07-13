@@ -26,13 +26,14 @@ import {
 
 type ChannelApiAccessSectionProps = {
   children: ReactNode
+  id?: string
 }
 
 export function ChannelApiAccessSection(props: ChannelApiAccessSectionProps) {
   const { t } = useTranslation()
 
   return (
-    <SideDrawerSection>
+    <SideDrawerSection id={props.id}>
       <SideDrawerSectionHeader
         title={t('API Access')}
         description={t(

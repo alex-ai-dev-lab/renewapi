@@ -22,7 +22,7 @@ import {
   ERROR_MESSAGES,
   MODEL_FETCHABLE_TYPES,
 } from '../constants'
-import type { Channel } from '../types'
+import type { Channel, ChannelUpdatePayload } from '../types'
 
 // ============================================================================
 // Form Validation Schema
@@ -57,6 +57,20 @@ function isOptionalModelMapping(value: string | undefined): boolean {
         (Array.isArray(item) &&
           item.length > 0 &&
           item.every((candidate) => typeof candidate === 'string'))
+    )
+  } catch {
+    return false
+  }
+}
+
+function isOptionalAbsoluteHttpUrl(value: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed) return true
+  try {
+    const parsed = new URL(trimmed)
+    return (
+      (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      Boolean(parsed.host)
     )
   } catch {
     return false
@@ -132,6 +146,7 @@ export const channelFormSchema = z
     type: z.number().min(0, ERROR_MESSAGES.REQUIRED_TYPE),
     base_url: z.string().optional(),
     key: z.string(),
+    clear_key: z.boolean().optional(),
     openai_organization: z.string().optional(),
     models: z.string().min(1, ERROR_MESSAGES.REQUIRED_MODELS),
     group: z.array(z.string()).min(1, ERROR_MESSAGES.REQUIRED_GROUP),
@@ -142,6 +157,54 @@ export const channelFormSchema = z
         isOptionalModelMapping,
         'Model mapping must be a JSON object with string or string-array values'
       ),
+    model_endpoints: z
+      .array(
+        z.object({
+          model: z.string(),
+          base_url: z.string(),
+          channel_type: z.number().nullable(),
+        })
+      )
+      .superRefine((endpoints, context) => {
+        const seen = new Set<string>()
+        endpoints.forEach((endpoint) => {
+          const model = endpoint.model.trim()
+          if (!model) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Every model endpoint requires a model name',
+              path: [],
+            })
+          } else if (model.length > 255) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Model endpoint names must not exceed 255 characters',
+              path: [],
+            })
+          } else if (seen.has(model)) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Per-model endpoints cannot contain duplicate models',
+              path: [],
+            })
+          }
+          seen.add(model)
+          if (endpoint.base_url.length > 512) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Model endpoint URLs must not exceed 512 characters',
+              path: [],
+            })
+          } else if (!isOptionalAbsoluteHttpUrl(endpoint.base_url)) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Model endpoint URLs must be absolute HTTP(S) URLs',
+              path: [],
+            })
+          }
+        })
+      })
+      .optional(),
     priority: z.number().optional(),
     weight: z.number().optional(),
     test_model: z.string().optional(),
@@ -158,6 +221,10 @@ export const channelFormSchema = z
     remark: z
       .string()
       .max(255, 'Remark must be less than 255 characters')
+      .optional(),
+    change_reason: z
+      .string()
+      .max(255, 'Change reason must be less than 255 characters')
       .optional(),
     setting: z
       .string()
@@ -211,7 +278,9 @@ export const channelFormSchema = z
     responses_compaction_native_stream: z.boolean().optional(),
     responses_compaction_continuation: z.boolean().optional(),
     responses_compaction_route_fingerprint: z.string().optional(),
-    responses_compaction_model_capabilities: z.record(z.string(), z.unknown()).optional(),
+    responses_compaction_model_capabilities: z
+      .record(z.string(), z.unknown())
+      .optional(),
     anti_poison_profile: z
       .enum(['inherit', 'trusted', 'unknown', 'probation', 'quarantine'])
       .optional(),
@@ -359,10 +428,12 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   type: 1,
   base_url: '',
   key: '',
+  clear_key: false,
   openai_organization: '',
   models: '',
   group: ['default'],
   model_mapping: '',
+  model_endpoints: [],
   priority: 0,
   weight: 0,
   test_model: '',
@@ -371,6 +442,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   status_code_mapping: '',
   tag: '',
   remark: '',
+  change_reason: '',
   setting: '',
   param_override: '',
   header_override: '',
@@ -577,11 +649,14 @@ export function transformChannelToFormDefaults(
           ? parsed.responses_compaction.default_capability.capability
           : 'unknown',
         responses_compaction_native_stream:
-          parsed.responses_compaction?.default_capability?.native_stream === true,
+          parsed.responses_compaction?.default_capability?.native_stream ===
+          true,
         responses_compaction_continuation:
-          parsed.responses_compaction?.default_capability?.continuation === true,
+          parsed.responses_compaction?.default_capability?.continuation ===
+          true,
         responses_compaction_route_fingerprint:
-          parsed.responses_compaction?.default_capability?.route_fingerprint || '',
+          parsed.responses_compaction?.default_capability?.route_fingerprint ||
+          '',
         responses_compaction_model_capabilities:
           parsed.responses_compaction?.model_capabilities &&
           typeof parsed.responses_compaction.model_capabilities === 'object'
@@ -690,6 +765,7 @@ export function transformChannelToFormDefaults(
     type: channel.type,
     base_url: channel.base_url || '',
     key: '', // Never populate key from backend for security
+    clear_key: false,
     openai_organization: channel.openai_organization || '',
     models: channel.models || '',
     group: parseGroups(channel.group || 'default'),
@@ -760,8 +836,7 @@ function buildSettingJSON(formData: ChannelFormValues): string {
     responses_compaction: {
       default_capability: {
         capability: formData.responses_compaction_capability || 'unknown',
-        native_stream:
-          formData.responses_compaction_native_stream === true,
+        native_stream: formData.responses_compaction_native_stream === true,
         continuation: formData.responses_compaction_continuation === true,
         route_fingerprint:
           formData.responses_compaction_route_fingerprint?.trim() || undefined,
@@ -1032,8 +1107,8 @@ export function transformFormDataToCreatePayload(formData: ChannelFormValues): {
 export function transformFormDataToUpdatePayload(
   formData: ChannelFormValues,
   channelId: number
-): Partial<Channel> {
-  const payload: Partial<Channel> = {
+): ChannelUpdatePayload {
+  const payload: ChannelUpdatePayload = {
     id: channelId,
     name: formData.name,
     type: formData.type,
@@ -1060,6 +1135,11 @@ export function transformFormDataToUpdatePayload(
   // Only include key if it was changed (not empty)
   if (formData.key && formData.key.trim()) {
     payload.key = formData.key
+  }
+
+  if (formData.clear_key === true) {
+    payload.clear_key = true
+    delete payload.key
   }
 
   // Clean up empty strings to null for optional fields

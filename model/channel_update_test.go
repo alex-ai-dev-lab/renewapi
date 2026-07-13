@@ -25,7 +25,7 @@ func setupChannelUpdateTestDB(t *testing.T) {
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&Channel{}, &Ability{}, &ChannelModelStatus{}))
+	require.NoError(t, db.AutoMigrate(&Channel{}, &Ability{}, &ChannelModelStatus{}, &ConfigAudit{}))
 	DB = db
 	common.MemoryCacheEnabled = false
 	group2model2channels = make(map[string]map[string][]int)

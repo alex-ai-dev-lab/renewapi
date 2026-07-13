@@ -1,8 +1,11 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
@@ -19,6 +22,46 @@ type modelEndpointPayload struct {
 	Model       string `json:"model"`
 	BaseURL     string `json:"base_url"`
 	ChannelType *int   `json:"channel_type"`
+}
+
+func normalizeModelEndpointPayloads(channelID int, payload []modelEndpointPayload) ([]*model.ModelEndpoint, error) {
+	if channelID <= 0 {
+		return nil, fmt.Errorf("invalid channel id")
+	}
+	endpoints := make([]*model.ModelEndpoint, 0, len(payload))
+	seen := make(map[string]struct{}, len(payload))
+	for index, item := range payload {
+		modelName := strings.TrimSpace(item.Model)
+		if modelName == "" {
+			return nil, fmt.Errorf("model endpoint %d: model is required", index+1)
+		}
+		if len([]rune(modelName)) > 255 {
+			return nil, fmt.Errorf("model endpoint %d: model exceeds 255 characters", index+1)
+		}
+		if _, exists := seen[modelName]; exists {
+			return nil, fmt.Errorf("duplicate model endpoint: %s", modelName)
+		}
+		seen[modelName] = struct{}{}
+
+		baseURL := strings.TrimSpace(item.BaseURL)
+		if len([]rune(baseURL)) > 512 {
+			return nil, fmt.Errorf("model endpoint %d: base_url exceeds 512 characters", index+1)
+		}
+		if baseURL != "" {
+			parsed, err := url.Parse(baseURL)
+			if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+				return nil, fmt.Errorf("model endpoint %d: base_url must be an absolute HTTP(S) URL", index+1)
+			}
+		}
+
+		endpoints = append(endpoints, &model.ModelEndpoint{
+			ChannelId:   channelID,
+			Model:       modelName,
+			BaseURL:     baseURL,
+			ChannelType: item.ChannelType,
+		})
+	}
+	return endpoints, nil
 }
 
 // PreviewChannelModelRoute shows the same route and bridge decision used by
@@ -92,14 +135,10 @@ func UpdateChannelModelEndpoints(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	endpoints := make([]*model.ModelEndpoint, 0, len(payload))
-	for _, p := range payload {
-		endpoints = append(endpoints, &model.ModelEndpoint{
-			ChannelId:   id,
-			Model:       p.Model,
-			BaseURL:     p.BaseURL,
-			ChannelType: p.ChannelType,
-		})
+	endpoints, err := normalizeModelEndpointPayloads(id, payload)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
 	}
 	if err := model.ReplaceChannelModelEndpoints(id, endpoints); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})

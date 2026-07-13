@@ -16,8 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { SystemBehaviorSection } from '../general/system-behavior-section'
 import { UptimeKumaSection } from '../content/uptime-kuma-section'
+import { SystemBehaviorSection } from '../general/system-behavior-section'
 import { EmailSettingsSection } from '../integrations/email-settings-section'
 import { MonitoringSettingsSection } from '../integrations/monitoring-settings-section'
 import { WorkerSettingsSection } from '../integrations/worker-settings-section'
@@ -28,8 +28,14 @@ import type { OperationsSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ChannelTestSettingsSection } from './channel-test-settings-section'
 import { ModelEndpointDefaultsSection } from './model-endpoint-defaults-section'
+import { RequestLifecycleOverview } from './request-lifecycle-overview'
 
 const OPERATIONS_SECTIONS = [
+  {
+    id: 'overview',
+    titleKey: 'Request Lifecycle',
+    build: () => <RequestLifecycleOverview />,
+  },
   {
     id: 'email',
     titleKey: 'SMTP Email',
@@ -87,9 +93,7 @@ const OPERATIONS_SECTIONS = [
     id: 'channel-test',
     titleKey: 'Channel Test',
     build: (settings: OperationsSettings) => (
-      <ChannelTestSettingsSection
-        defaultValue={settings.ChannelTestSetting}
-      />
+      <ChannelTestSettingsSection defaultValue={settings.ChannelTestSetting} />
     ),
   },
   {
@@ -192,7 +196,7 @@ const operationsRegistry = createSectionRegistry<
   [string | null | undefined, number | null | undefined]
 >({
   sections: OPERATIONS_SECTIONS,
-  defaultSection: 'email',
+  defaultSection: 'overview',
   basePath: '/system-settings/operations',
   urlStyle: 'path',
 })

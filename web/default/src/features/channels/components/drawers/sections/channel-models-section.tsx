@@ -26,13 +26,14 @@ import {
 
 type ChannelModelsSectionProps = {
   children: ReactNode
+  id?: string
 }
 
 export function ChannelModelsSection(props: ChannelModelsSectionProps) {
   const { t } = useTranslation()
 
   return (
-    <SideDrawerSection>
+    <SideDrawerSection id={props.id}>
       <SideDrawerSectionHeader
         title={t('Models & Groups')}
         description={t('Published models, groups, and model remapping rules.')}

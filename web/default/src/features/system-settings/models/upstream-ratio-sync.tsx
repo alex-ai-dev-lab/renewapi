@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckSquare, RefreshCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -54,7 +54,6 @@ import {
   type ResolutionsMap,
 } from './upstream-ratio-sync-helpers'
 import { UpstreamRatioSyncTable } from './upstream-ratio-sync-table'
-import { OfficialPriceSyncPanel } from './official-price-sync-panel'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -160,25 +159,17 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
     enabled: channelDialogOpen,
   })
 
-  // Memoize the channels list so the effect below only re-runs when the query
-  // data actually changes, instead of on every render (the `|| []` fallback
-  // would otherwise produce a new array reference each render).
   const channels = useMemo(() => channelsData?.data ?? [], [channelsData?.data])
-
-  useEffect(() => {
-    if (channels.length === 0) return
-    setChannelEndpoints((prev) => {
-      let mutated = false
-      const next = { ...prev }
-      for (const channel of channels) {
-        if (!next[channel.id]) {
-          next[channel.id] = getDefaultEndpointForChannel(channel)
-          mutated = true
-        }
-      }
-      return mutated ? next : prev
-    })
-  }, [channels])
+  const effectiveChannelEndpoints = useMemo(
+    () =>
+      Object.fromEntries(
+        channels.map((channel) => [
+          channel.id,
+          channelEndpoints[channel.id] || getDefaultEndpointForChannel(channel),
+        ])
+      ),
+    [channelEndpoints, channels]
+  )
 
   const fetchMutation = useMutation({
     mutationFn: fetchUpstreamRatios,
@@ -262,7 +253,7 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
       id: ch.id,
       name: ch.name,
       base_url: ch.base_url,
-      endpoint: channelEndpoints[ch.id] || DEFAULT_ENDPOINT,
+      endpoint: effectiveChannelEndpoints[ch.id] || DEFAULT_ENDPOINT,
     }))
 
     fetchMutation.mutate({ upstreams, timeout: 10 })
@@ -519,8 +510,6 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
 
   return (
     <div className='space-y-4'>
-      <OfficialPriceSyncPanel />
-
       <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
         <div className='flex flex-col gap-2 sm:flex-row'>
           <Button onClick={handleOpenChannelDialog} disabled={isLoading}>
@@ -556,7 +545,7 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
         channels={channels}
         selectedChannelIds={selectedChannelIds}
         onSelectedChannelIdsChange={setSelectedChannelIds}
-        channelEndpoints={channelEndpoints}
+        channelEndpoints={effectiveChannelEndpoints}
         onChannelEndpointsChange={setChannelEndpoints}
         onConfirm={handleConfirmChannelSelection}
       />

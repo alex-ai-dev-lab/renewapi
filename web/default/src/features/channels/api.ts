@@ -182,6 +182,45 @@ export type ChannelModelRoutePreview = {
   }
 }
 
+export type ChannelEffectiveConfigItem = {
+  key: string
+  value?: unknown
+  source: 'global' | 'group' | 'channel' | 'request' | ''
+  source_id?: string
+  masked?: boolean
+  chain: Array<{
+    source: 'global' | 'group' | 'channel' | 'request'
+    source_id?: string
+    present: boolean
+    value?: unknown
+  }>
+}
+
+export type ChannelEffectiveConfigResponse = {
+  success: boolean
+  message?: string
+  data?: {
+    generated_at: number
+    channel_id: number
+    model?: string
+    route?: NonNullable<ChannelModelRoutePreview['data']>['route']
+    capability?: NonNullable<ChannelModelRoutePreview['data']>['capability']
+    items: ChannelEffectiveConfigItem[]
+  }
+}
+
+export type ChannelConfigAudit = {
+  id: number
+  resource_type: string
+  resource_id: number
+  action: string
+  operator_id: number
+  reason: string
+  request_id?: string
+  diff: string
+  created_at: number
+}
+
 export async function getChannelModelRoutePreview(
   id: number,
   model: string,
@@ -189,6 +228,30 @@ export async function getChannelModelRoutePreview(
 ): Promise<ChannelModelRoutePreview> {
   const res = await api.get(`/api/channel/${id}/model_route_preview`, {
     params: { model, client_endpoint: clientEndpoint },
+  })
+  return res.data
+}
+
+export async function getChannelEffectiveConfig(
+  id: number,
+  model?: string
+): Promise<ChannelEffectiveConfigResponse> {
+  const res = await api.get(`/api/channel/${id}/effective_config`, {
+    params: model ? { model, client_endpoint: 'openai-response' } : undefined,
+  })
+  return res.data
+}
+
+export async function getChannelConfigAudits(
+  id: number,
+  limit = 10
+): Promise<{
+  success: boolean
+  message?: string
+  data?: ChannelConfigAudit[]
+}> {
+  const res = await api.get(`/api/channel/${id}/audit`, {
+    params: { limit },
   })
   return res.data
 }

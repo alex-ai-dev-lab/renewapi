@@ -705,18 +705,42 @@ func (channel *Channel) Insert() error {
 }
 
 func (channel *Channel) Update() error {
+	var previousStatus int
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		previousStatus, err = channel.updateWithTx(tx, channel.Key != "")
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	if previousStatus != common.ChannelStatusEnabled && channel.Status == common.ChannelStatusEnabled {
+		CacheUpdateChannel(channel)
+		OnChannelEnabled(channel.Id)
+	}
+	return nil
+}
+
+// updateWithTx persists the channel and its derived abilities using the
+// supplied transaction. Cache and recovery side effects intentionally happen
+// only after the caller commits.
+func (channel *Channel) updateWithTx(tx *gorm.DB, updateKey bool) (int, error) {
+	if tx == nil {
+		return 0, errors.New("transaction is required")
+	}
 	previousStatus := channel.Status
-	if existing, err := GetChannelById(channel.Id, false); err == nil {
+	var existing Channel
+	if err := tx.First(&existing, "id = ?", channel.Id).Error; err == nil {
 		previousStatus = existing.Status
 	}
 	// If this is a multi-key channel, recalculate MultiKeySize based on the current key list to avoid inconsistency after editing keys
 	if channel.ChannelInfo.IsMultiKey {
 		var keyStr string
-		if channel.Key != "" {
+		if updateKey {
 			keyStr = channel.Key
 		} else {
 			// If key is not provided, read the existing key from the database
-			if existing, err := GetChannelById(channel.Id, true); err == nil {
+			if existing.Key != "" {
 				keyStr = existing.Key
 			}
 		}
@@ -747,7 +771,6 @@ func (channel *Channel) Update() error {
 			}
 		}
 	}
-	var err error
 	updates := map[string]interface{}{
 		"type":                 channel.Type,
 		"open_ai_organization": channel.OpenAIOrganization,
@@ -774,23 +797,21 @@ func (channel *Channel) Update() error {
 		"channel_info":         channel.ChannelInfo,
 		"settings":             channel.OtherSettings,
 	}
-	if channel.Key != "" {
+	if updateKey {
 		updates["key"] = channel.Key
 	}
-	err = DB.Model(&Channel{}).Where("id = ?", channel.Id).Updates(updates).Error
+	err := tx.Model(&Channel{}).Where("id = ?", channel.Id).Updates(updates).Error
 	if err != nil {
-		return err
+		return previousStatus, err
 	}
-	DB.Model(channel).First(channel, "id = ?", channel.Id)
-	err = channel.UpdateAbilities(nil)
+	if err := tx.First(channel, "id = ?", channel.Id).Error; err != nil {
+		return previousStatus, err
+	}
+	err = channel.UpdateAbilities(tx)
 	if err != nil {
-		return err
+		return previousStatus, err
 	}
-	if previousStatus != common.ChannelStatusEnabled && channel.Status == common.ChannelStatusEnabled {
-		CacheUpdateChannel(channel)
-		OnChannelEnabled(channel.Id)
-	}
-	return nil
+	return previousStatus, nil
 }
 
 func (channel *Channel) UpdateResponseTime(responseTime int64) {

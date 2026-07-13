@@ -26,13 +26,14 @@ import {
 
 type ChannelBasicSectionProps = {
   children: ReactNode
+  id?: string
 }
 
 export function ChannelBasicSection(props: ChannelBasicSectionProps) {
   const { t } = useTranslation()
 
   return (
-    <SideDrawerSection>
+    <SideDrawerSection id={props.id}>
       <SideDrawerSectionHeader
         title={t('Basic Information')}
         description={t('Name, provider type, and availability.')}

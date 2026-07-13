@@ -118,10 +118,10 @@ jobs:
             -t "$IMAGE:$TAG-amd64-package" \
             .
           docker save "$IMAGE:$TAG-amd64-package" | gzip -9 > "release-assets/$TARBALL"
-          cp compose.yaml docker-compose.yml .env.example release-assets/
+          cp docker-compose.yml .env.example release-assets/
           (
             cd release-assets
-            sha256sum "$TARBALL" compose.yaml docker-compose.yml .env.example > CHECKSUMS.txt
+            sha256sum "$TARBALL" docker-compose.yml .env.example > CHECKSUMS.txt
           )
 
       - name: Prepare release notes
@@ -157,7 +157,6 @@ jobs:
           prerelease: false
           files: |
             release-assets/${{ steps.meta.outputs.tarball }}
-            release-assets/compose.yaml
             release-assets/docker-compose.yml
             release-assets/.env.example
             release-assets/CHECKSUMS.txt

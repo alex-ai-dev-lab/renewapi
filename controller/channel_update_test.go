@@ -29,7 +29,7 @@ func setupChannelUpdateControllerTestDB(t *testing.T) *gorm.DB {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.ChannelModelStatus{}))
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.ChannelModelStatus{}, &model.ConfigAudit{}))
 	model.DB = db
 	common.MemoryCacheEnabled = false
 	common.RedisEnabled = false

@@ -16,120 +16,68 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useEffect, useState } from 'react'
-import { Loader2, Network, Plus, Save, Trash2 } from 'lucide-react'
+import { Network, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   SideDrawerSection,
   SideDrawerSectionHeader,
 } from '@/components/drawer-layout'
 import {
   MODEL_ENDPOINT_PROTOCOL_OPTIONS,
-  getChannelModelEndpoints,
-  updateChannelModelEndpoints,
-  type ModelEndpoint,
+  type ModelEndpointInput,
 } from '@/features/channels/model-endpoints'
 
 type ChannelModelEndpointsSectionProps = {
-  /** The channel id. Omitted/undefined while creating a brand-new channel. */
   channelId?: number
-  /** Comma-separated model list for the channel, used for suggestions. */
   models?: string
-}
-
-type EndpointRow = {
-  model: string
-  base_url: string
-  channel_type: number | null
+  rows: ModelEndpointInput[]
+  onChange: (rows: ModelEndpointInput[]) => void
+  error?: string
+  id?: string
 }
 
 const DATALIST_ID = 'channel-model-endpoint-models'
 
-export function ChannelModelEndpointsSection({
-  channelId,
-  models,
-}: ChannelModelEndpointsSectionProps) {
+export function ChannelModelEndpointsSection(
+  props: ChannelModelEndpointsSectionProps
+) {
   const { t } = useTranslation()
-  const [rows, setRows] = useState<EndpointRow[]>([])
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
-
-  const modelOptions = (models ?? '')
+  const modelOptions = (props.models ?? '')
     .split(',')
-    .map((m) => m.trim())
+    .map((model) => model.trim())
     .filter(Boolean)
 
-  const load = useCallback(async () => {
-    if (!channelId) return
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await getChannelModelEndpoints(channelId)
-      if (res.success && Array.isArray(res.data)) {
-        setRows(
-          res.data.map((e: ModelEndpoint) => ({
-            model: e.model,
-            base_url: e.base_url ?? '',
-            channel_type: e.channel_type ?? null,
-          }))
-        )
-      } else if (!res.success) {
-        setError(res.message || t('Failed to load per-model endpoints'))
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setLoading(false)
-    }
-  }, [channelId, t])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  const addRow = () =>
-    setRows((prev) => [
-      ...prev,
+  const addRow = () => {
+    props.onChange([
+      ...props.rows,
       { model: '', base_url: '', channel_type: null },
     ])
+  }
 
-  const removeRow = (idx: number) =>
-    setRows((prev) => prev.filter((_, i) => i !== idx))
+  const removeRow = (index: number) => {
+    props.onChange(props.rows.filter((_, rowIndex) => rowIndex !== index))
+  }
 
-  const updateRow = (idx: number, patch: Partial<EndpointRow>) =>
-    setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)))
-
-  const save = async () => {
-    if (!channelId) return
-    setSaving(true)
-    setError(null)
-    setSaved(false)
-    try {
-      const payload = rows
-        .filter((r) => r.model.trim())
-        .map((r) => ({
-          model: r.model.trim(),
-          base_url: r.base_url.trim(),
-          channel_type: r.channel_type,
-        }))
-      const res = await updateChannelModelEndpoints(channelId, payload)
-      if (res.success) {
-        setSaved(true)
-        await load()
-      } else {
-        setError(res.message || t('Failed to save per-model endpoints'))
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setSaving(false)
-    }
+  const updateRow = (index: number, patch: Partial<ModelEndpointInput>) => {
+    props.onChange(
+      props.rows.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, ...patch } : row
+      )
+    )
   }
 
   return (
-    <SideDrawerSection>
+    <SideDrawerSection id={props.id}>
       <SideDrawerSectionHeader
         title={t('Per-model Endpoints')}
         description={t(
@@ -137,104 +85,94 @@ export function ChannelModelEndpointsSection({
         )}
         icon={<Network className='h-4 w-4' aria-hidden='true' />}
       />
-      {!channelId ? (
-        <p className='text-sm text-muted-foreground'>
+      {!props.channelId ? (
+        <p className='text-muted-foreground text-sm'>
           {t(
             'Save the channel first, then reopen it to configure per-model endpoints.'
           )}
         </p>
       ) : (
         <div className='space-y-3'>
-          {error ? <p className='text-sm text-red-500'>{error}</p> : null}
+          {props.error ? (
+            <p className='text-destructive text-sm'>{t(props.error)}</p>
+          ) : null}
           <datalist id={DATALIST_ID}>
-            {modelOptions.map((m) => (
-              <option key={m} value={m} />
+            {modelOptions.map((model) => (
+              <option key={model} value={model} />
             ))}
           </datalist>
           <div className='space-y-2'>
-            {rows.map((row, idx) => (
+            {props.rows.map((row, index) => (
               <div
-                key={idx}
-                className='flex flex-col gap-2 rounded-md border border-border p-3 sm:flex-row sm:items-center'
+                key={index}
+                className='border-border/70 grid gap-2 rounded-md border p-3 sm:grid-cols-[minmax(8rem,0.8fr)_minmax(12rem,1fr)_10rem_2.25rem] sm:items-center'
               >
-                <input
-                  className='w-full rounded-md border border-input bg-background px-2 py-1 text-sm sm:w-40'
+                <Input
                   list={DATALIST_ID}
                   placeholder={t('Model')}
                   value={row.model}
-                  onChange={(e) => updateRow(idx, { model: e.target.value })}
+                  onChange={(event) =>
+                    updateRow(index, { model: event.target.value })
+                  }
                 />
-                <input
-                  className='w-full flex-1 rounded-md border border-input bg-background px-2 py-1 text-sm'
+                <Input
                   placeholder={t('Base URL (optional)')}
                   value={row.base_url}
-                  onChange={(e) => updateRow(idx, { base_url: e.target.value })}
-                />
-                <select
-                  className='w-full rounded-md border border-input bg-background px-2 py-1 text-sm sm:w-36'
-                  value={
-                    row.channel_type === null ? '' : String(row.channel_type)
+                  onChange={(event) =>
+                    updateRow(index, { base_url: event.target.value })
                   }
-                  onChange={(e) =>
-                    updateRow(idx, {
-                      channel_type:
-                        e.target.value === '' ? null : Number(e.target.value),
+                />
+                <Select
+                  value={
+                    row.channel_type === null
+                      ? 'auto'
+                      : String(row.channel_type)
+                  }
+                  onValueChange={(value) =>
+                    updateRow(index, {
+                      channel_type: value === 'auto' ? null : Number(value),
                     })
                   }
                 >
-                  {MODEL_ENDPOINT_PROTOCOL_OPTIONS.map((opt) => (
-                    <option
-                      key={opt.label}
-                      value={opt.value === null ? '' : String(opt.value)}
-                    >
-                      {t(opt.labelKey)}
-                    </option>
-                  ))}
-                </select>
-                <button
+                  <SelectTrigger aria-label={t('Upstream protocol')}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MODEL_ENDPOINT_PROTOCOL_OPTIONS.map((option) => (
+                      <SelectItem
+                        key={option.label}
+                        value={
+                          option.value === null ? 'auto' : String(option.value)
+                        }
+                      >
+                        {t(option.labelKey)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
                   type='button'
-                  className='inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:text-red-500'
-                  onClick={() => removeRow(idx)}
+                  variant='ghost'
+                  size='icon'
+                  onClick={() => removeRow(index)}
                   aria-label={t('Remove')}
                 >
-                  <Trash2 className='h-4 w-4' />
-                </button>
+                  <Trash2 className='h-4 w-4' aria-hidden='true' />
+                </Button>
               </div>
             ))}
-            {rows.length === 0 ? (
-              <p className='text-sm text-muted-foreground'>
+            {props.rows.length === 0 ? (
+              <p className='text-muted-foreground text-sm'>
                 {t('No per-model endpoints configured.')}
               </p>
             ) : null}
           </div>
           <div className='flex flex-wrap items-center gap-2'>
-            <button
-              type='button'
-              className='inline-flex items-center gap-1 rounded-md border border-input px-2.5 py-1.5 text-sm hover:bg-accent disabled:opacity-50'
-              onClick={addRow}
-              disabled={loading}
-            >
-              <Plus className='h-4 w-4' />
+            <Button type='button' variant='outline' size='sm' onClick={addRow}>
+              <Plus className='h-4 w-4' aria-hidden='true' />
               {t('Add model endpoint')}
-            </button>
-            <button
-              type='button'
-              className='inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50'
-              onClick={save}
-              disabled={saving || loading}
-            >
-              {saving ? (
-                <Loader2 className='h-4 w-4 animate-spin' />
-              ) : (
-                <Save className='h-4 w-4' />
-              )}
-              {t('Save endpoints')}
-            </button>
-            {saved ? (
-              <span className='text-xs text-muted-foreground'>
-                {t('Saved')}
-              </span>
-            ) : null}
+            </Button>
+            <Badge variant='secondary'>{t('Saved with channel')}</Badge>
           </div>
         </div>
       )}

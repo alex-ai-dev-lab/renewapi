@@ -28,6 +28,7 @@ import {
 
 type ChannelAdvancedSectionProps = {
   children: ReactNode
+  id?: string
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -36,7 +37,12 @@ export function ChannelAdvancedSection(props: ChannelAdvancedSectionProps) {
   const { t } = useTranslation()
 
   return (
-    <Collapsible open={props.open} onOpenChange={props.onOpenChange}>
+    <Collapsible
+      id={props.id}
+      className='scroll-mt-4'
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+    >
       <CollapsibleTrigger
         render={
           <button

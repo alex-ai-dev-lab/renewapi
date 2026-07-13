@@ -70,6 +70,14 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
           data,
           props.currentRow.id
         )
+        payload.model_endpoints = (data.model_endpoints || []).map(
+          (endpoint) => ({
+            model: endpoint.model.trim(),
+            base_url: endpoint.base_url.trim(),
+            channel_type: endpoint.channel_type,
+          })
+        )
+        payload.change_reason = data.change_reason?.trim() || undefined
         const payloadWithKeyMode =
           props.isMultiKeyChannel && data.key?.trim() && data.key_mode
             ? {

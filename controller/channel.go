@@ -1008,8 +1008,11 @@ func DeleteChannelBatch(c *gin.Context) {
 
 type PatchChannel struct {
 	model.Channel
-	MultiKeyMode *string `json:"multi_key_mode"`
-	KeyMode      *string `json:"key_mode"` // 多key模式下密钥覆盖或者追加
+	MultiKeyMode   *string                 `json:"multi_key_mode"`
+	KeyMode        *string                 `json:"key_mode"` // 多key模式下密钥覆盖或者追加
+	ModelEndpoints *[]modelEndpointPayload `json:"model_endpoints"`
+	ChangeReason   string                  `json:"change_reason"`
+	ClearKey       bool                    `json:"clear_key"`
 }
 
 func mergePatchChannelWithOrigin(channel *PatchChannel, origin *model.Channel, present map[string]json.RawMessage) {
@@ -1134,6 +1137,14 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 	mergePatchChannelWithOrigin(&channel, originChannel, requestFields)
+	_, keyWasProvided := requestFields["key"]
+	if channel.ClearKey && keyWasProvided && strings.TrimSpace(channel.Key) != "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "clear_key cannot be combined with a replacement key",
+		})
+		return
+	}
 
 	if channel.Type == constant.ChannelTypeCodex {
 		if _, ok := requestFields["key"]; ok && strings.TrimSpace(channel.Key) != "" {
@@ -1253,7 +1264,25 @@ func UpdateChannel(c *gin.Context) {
 			// 覆盖模式：直接使用新密钥（默认行为，不需要特殊处理）
 		}
 	}
-	err = channel.Update()
+	updateKey := keyWasProvided && strings.TrimSpace(channel.Key) != ""
+	if channel.ClearKey {
+		channel.Key = ""
+		updateKey = true
+	}
+	var modelEndpoints []*model.ModelEndpoint
+	if channel.ModelEndpoints != nil {
+		modelEndpoints, err = normalizeModelEndpointPayloads(channel.Id, *channel.ModelEndpoints)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+	}
+	audit, err := buildChannelConfigAudit(c, &channel, requestFields)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	err = model.UpdateChannelEditorState(&channel.Channel, modelEndpoints, audit, updateKey)
 	if err != nil {
 		common.ApiError(c, err)
 		return

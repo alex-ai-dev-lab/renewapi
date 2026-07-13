@@ -96,7 +96,7 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Verify Go source and backend
+      - name: Verify Go formatting
         shell: bash
         env:
           INPUT_BASE_SHA: ${{ inputs.base_sha }}
@@ -111,9 +111,6 @@ jobs:
               exit 1
             fi
           fi
-          go test -count=1 ./...
-          go vet ./...
-          go build ./...
 
       - name: Install default frontend dependencies
         working-directory: web/default
@@ -155,6 +152,12 @@ jobs:
       - name: Build classic frontend
         working-directory: web/classic
         run: bun run build
+
+      - name: Verify backend
+        run: |
+          go test -count=1 ./...
+          go vet ./...
+          go build ./...
 
       - name: Verify commit diff
         shell: bash

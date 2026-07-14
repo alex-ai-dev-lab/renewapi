@@ -31,10 +31,12 @@ func TestModelMappedHelperAdvancesOrderedFallbacks(t *testing.T) {
 
 func TestAdvanceModelMappingFallbackStopsAtLastCandidate(t *testing.T) {
 	info := &relaycommon.RelayInfo{
-		ChannelMeta:                    &relaycommon.ChannelMeta{ChannelId: 91},
-		ModelMappingFallbackChannelId:  91,
-		ModelMappingFallbackCandidates: []string{"a", "b"},
-		ModelMappingFallbackIndex:      1,
+		ChannelMeta: &relaycommon.ChannelMeta{ChannelId: 91},
+		ModelMappingRoute: relaycommon.ModelMappingRouteCursor{
+			ChannelId:  91,
+			Candidates: []string{"a", "b"},
+			Index:      1,
+		},
 	}
 	_, _, ok := AdvanceModelMappingFallback(info)
 	require.False(t, ok)

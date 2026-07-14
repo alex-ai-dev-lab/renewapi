@@ -298,6 +298,7 @@ func migrateDB() error {
 		&PerfMetric{},
 		&UserAgent{},
 		&ChannelModelStatus{},
+		&ChannelModelCapability{},
 		&ModelEndpoint{},
 		&ConfigAudit{},
 	)
@@ -360,6 +361,7 @@ func migrateDBFast() error {
 		{&PerfMetric{}, "PerfMetric"},
 		{&UserAgent{}, "UserAgent"},
 		{&ChannelModelStatus{}, "ChannelModelStatus"},
+		{&ChannelModelCapability{}, "ChannelModelCapability"},
 		{&ModelEndpoint{}, "ModelEndpoint"},
 		{&ConfigAudit{}, "ConfigAudit"},
 	}

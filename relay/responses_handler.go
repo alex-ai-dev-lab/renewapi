@@ -155,7 +155,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
 		}
-		record := service.ResponsesCompactionRecordFromSettings(info.ChannelSetting, info.OriginModelName)
+		record := service.EffectiveResponsesCompactionRecordByID(info.ChannelId, info.OriginModelName, info.ChannelSetting)
 		plan, err := service.PlanResponsesExecution(info.ResponsesRequestKind, record, request.Model, info.IsStream)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
@@ -167,6 +167,12 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		if plan.UpstreamPath == "/v1/responses/compact" {
 			info.RelayMode = relayconstant.RelayModeResponsesCompact
 			c.Set("responses_legacy_bridge_sse", plan.BridgeJSONToSSE)
+		} else {
+			// RelayInfo is reused across retries. A previous legacy candidate may
+			// have switched the mode to compact, so restore the native mode before
+			// trying a native-capable channel.
+			info.RelayMode = relayconstant.RelayModeResponses
+			c.Set("responses_legacy_bridge_sse", false)
 		}
 		c.Set("responses_upstream_stream", plan.UpstreamStream)
 		body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)

@@ -325,20 +325,82 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	relayInfo.LastError = nil
 	maxRetryTimes := compatRelayRetryBudget(relayInfo, relayFormat)
 
-	// Compat hook: OnSelectRetryParam (populates ExcludedChannelIds, PreferredChannelId, etc.)
-	compat.Hooks().OnSelectRetryParam(c, relayInfo, retryParam)
-
-	fallbackModels := getFallbackModels(c, relayInfo.OriginModelName)
-	for modelIndex, fallbackModel := range fallbackModels {
-		if modelIndex > 0 {
-			if switchErr := switchRelayFallbackModel(c, relayInfo, retryParam, fallbackModel, tokens, meta); switchErr != nil {
+	routePlan := service.NewRelayRoutePlan(
+		relayInfo.ClientModelName,
+		relayInfo.OriginModelName,
+		requiredModelName,
+		getFallbackModels(c, relayInfo.OriginModelName),
+	)
+	if responsesRequirement != nil && responsesRequirement.Kind != dto.ResponsesNormal &&
+		common.GetEnvOrDefaultBool("RESPONSES_COMPACTION_ROUTE_PLAN_ENABLED", false) {
+		concreteGroup := strings.TrimSpace(relayInfo.UsingGroup)
+		if concreteGroup == "" || strings.EqualFold(concreteGroup, "auto") {
+			concreteGroup = common.GetContextKeyString(c, constant.ContextKeyAutoGroup)
+		}
+		if concreteGroup == "" {
+			concreteGroup = common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+		}
+		planned, planErr := service.BuildResponsesRelayRoutePlan(service.ResponsesRelayRoutePlanParams{
+			Group:            concreteGroup,
+			ClientModel:      relayInfo.ClientModelName,
+			PrimaryModel:     relayInfo.OriginModelName,
+			RequiredModel:    requiredModelName,
+			InitialChannelId: common.GetContextKeyInt(c, constant.ContextKeyChannelId),
+			Requirement:      responsesRequirement,
+			Request:          relayInfo.Request,
+			ProviderPolicy:   getProviderRoutingPolicy(c),
+		})
+		if planErr != nil {
+			newAPIError = types.NewError(planErr, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+			return
+		}
+		routePlan = planned
+	}
+	for {
+		route, ok := routePlan.Current()
+		if !ok {
+			break
+		}
+		if routePlan.Position() > 0 {
+			if switchErr := switchRelayFallbackModel(c, relayInfo, retryParam, route.RoutingModel, tokens, meta); switchErr != nil {
 				newAPIError = switchErr
+				// A token may forbid an optional fallback model while a later route
+				// returns to an allowed client model/channel combination. Skip only
+				// this candidate instead of terminating the whole route plan.
+				if switchErr.GetErrorCode() == types.ErrorCodeModelNotFound && routePlan.Advance() {
+					continue
+				}
 				break
 			}
-			maxRetryTimes = compatRelayRetryBudget(relayInfo, relayFormat)
-			compat.Hooks().OnSelectRetryParam(c, relayInfo, retryParam)
 		}
+		if route.Group != "" {
+			retryParam.TokenGroup = route.Group
+		}
+		retryParam.RequiredModelName = route.RequiredModel
+		retryParam.PreferredChannelId = route.PreferredChannelId
+		retryParam.StrictPreferredChannel = route.StrictPreferredChannel
+		retryParam.ExcludedChannelIds = make(map[int]bool)
+		retryParam.SetRetry(0)
+		if route.StrictPreferredChannel {
+			maxRetryTimes = route.RetryBudget
+		} else {
+			maxRetryTimes = compatRelayRetryBudget(relayInfo, relayFormat)
+		}
+		// Compat hook: OnSelectRetryParam (populates excludes/preferences).
+		compat.Hooks().OnSelectRetryParam(c, relayInfo, retryParam)
+		if route.StrictPreferredChannel {
+			retryParam.PreferredChannelId = route.PreferredChannelId
+			retryParam.StrictPreferredChannel = true
+		}
+		compactCapabilityUnsupported := false
 		for ; retryParam.GetRetry() <= maxRetryTimes; retryParam.IncreaseRetry() {
+			// Retry hooks may adjust affinity, but a planned compaction route is an
+			// exact (channel, model) candidate. Re-pin it before every selection so
+			// a hook cannot escape into the ordinary random routing pool.
+			if route.StrictPreferredChannel {
+				retryParam.PreferredChannelId = route.PreferredChannelId
+				retryParam.StrictPreferredChannel = true
+			}
 			relayInfo.RetryIndex = retryParam.GetRetry()
 			service.SleepBeforeRouterRetry(c, relayInfo.RetryIndex)
 			service.ApplyRouterCooldownFilter(relayInfo, retryParam)
@@ -400,20 +462,32 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				newAPIError = compatStreamRetryError(relayInfo)
 			}
 
-			// Compat hook: AfterChannelCall (tracks failures)
-			compat.Hooks().AfterChannelCall(c, relayInfo, channel, newAPIError)
-
 			if newAPIError == nil {
+				capabilityOutcome := service.ObserveResponsesCapabilityAttempt(
+					channel,
+					relayInfo.OriginModelName,
+					service.ResponsesCapabilityAttempt{
+						Kind:         relayInfo.ResponsesRequestKind,
+						ClientStream: relayInfo.IsStream,
+						UsedLegacy:   relayInfo.RelayMode == relayconstant.RelayModeResponsesCompact,
+						Source:       "runtime",
+					},
+					nil,
+				)
+				// Compat hook: AfterChannelCall (tracks failures)
+				compat.Hooks().AfterChannelCall(c, relayInfo, channel, nil)
 				relayInfo.LastError = nil
-				clearCompatChannelFailure(channel.Id, relayInfo)
-				service.ClearRouterCooldown(channel.Id, relayInfo)
-				service.ClearChannelConsecutiveFailure(channel.Id, relayInfo.OriginModelName)
-				service.RecordChannelModelSuccess(channel.Id, relayInfo.UsingGroup, relayInfo.OriginModelName, relayModeName(relayInfo.RelayMode), relayInfo.RequestId)
-				firstByteLatency := relayInfo.FirstResponseTime.Sub(relayInfo.StartTime)
-				if firstByteLatency < 0 {
-					firstByteLatency = 0
+				if !capabilityOutcome.Related {
+					clearCompatChannelFailure(channel.Id, relayInfo)
+					service.ClearRouterCooldown(channel.Id, relayInfo)
+					service.ClearChannelConsecutiveFailure(channel.Id, relayInfo.OriginModelName)
+					service.RecordChannelModelSuccess(channel.Id, relayInfo.UsingGroup, relayInfo.OriginModelName, relayModeName(relayInfo.RelayMode), relayInfo.RequestId)
+					firstByteLatency := relayInfo.FirstResponseTime.Sub(relayInfo.StartTime)
+					if firstByteLatency < 0 {
+						firstByteLatency = 0
+					}
+					service.RecordAntiPoisonSuccess(channel.Id, channel.GetSetting(), firstByteLatency, time.Since(relayInfo.StartTime))
 				}
-				service.RecordAntiPoisonSuccess(channel.Id, channel.GetSetting(), firstByteLatency, time.Since(relayInfo.StartTime))
 				return
 			}
 
@@ -425,19 +499,36 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			if retryNextMappedModelCandidate(c, relayInfo, retryParam, channel, newAPIError) {
 				continue
 			}
-			service.RecordRouterCooldownFailure(channel.Id, relayInfo, newAPIError)
-			service.RecordChannelModelFailure(service.ChannelModelFailureParams{
-				ChannelId: channel.Id,
-				Group:     relayInfo.UsingGroup,
-				ModelName: relayInfo.OriginModelName,
-				Endpoint:  relayModeName(relayInfo.RelayMode),
-				RequestId: relayInfo.RequestId,
-				Error:     newAPIError,
-				AutoBan:   channel.GetAutoBan(),
-			})
-
-			processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
-			if service.IsChannelFailureError(newAPIError) {
+			capabilityOutcome := service.ObserveResponsesCapabilityAttempt(
+				channel,
+				relayInfo.OriginModelName,
+				service.ResponsesCapabilityAttempt{
+					Kind:         relayInfo.ResponsesRequestKind,
+					ClientStream: relayInfo.IsStream,
+					UsedLegacy:   relayInfo.RelayMode == relayconstant.RelayModeResponsesCompact,
+					Source:       "runtime",
+				},
+				newAPIError,
+			)
+			compactCapabilityUnsupported = capabilityOutcome.Unsupported
+			if !capabilityOutcome.Unsupported {
+				// Compat hook: AfterChannelCall (tracks failures)
+				compat.Hooks().AfterChannelCall(c, relayInfo, channel, newAPIError)
+				service.RecordRouterCooldownFailure(channel.Id, relayInfo, newAPIError)
+				service.RecordChannelModelFailure(service.ChannelModelFailureParams{
+					ChannelId: channel.Id,
+					Group:     relayInfo.UsingGroup,
+					ModelName: relayInfo.OriginModelName,
+					Endpoint:  relayModeName(relayInfo.RelayMode),
+					RequestId: relayInfo.RequestId,
+					Error:     newAPIError,
+					AutoBan:   channel.GetAutoBan(),
+				})
+				processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
+			} else {
+				service.ExcludeChannelForRetry(retryParam, channel.Id)
+			}
+			if !capabilityOutcome.Unsupported && service.IsChannelFailureError(newAPIError) {
 				service.ExcludeChannelForRetry(retryParam, channel.Id)
 			}
 			if service.IsAntiPoisonValidationError(newAPIError) {
@@ -452,6 +543,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 			remainingRetries := maxRetryTimes - retryParam.GetRetry()
 			shouldRetryResult := shouldRetry(c, newAPIError, remainingRetries)
+			if capabilityOutcome.Unsupported && remainingRetries > 0 {
+				shouldRetryResult = true
+			}
 
 			// Compat hook: OnRetryDecision (can override shouldRetry, adjust excludes/preferences)
 			finalShouldRetry := compat.Hooks().OnRetryDecision(c, relayInfo, channel, newAPIError, retryParam, shouldRetryResult)
@@ -476,7 +570,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if newAPIError == nil {
 			break
 		}
-		if modelIndex < len(fallbackModels)-1 && shouldTryNextFallbackModel(c, newAPIError) {
+		if routePlan.HasNext() && (compactCapabilityUnsupported || shouldTryNextFallbackModel(c, newAPIError)) {
+			routePlan.Advance()
 			continue
 		}
 		break
@@ -763,7 +858,7 @@ func retryNextMappedModelCandidate(c *gin.Context, info *relaycommon.RelayInfo, 
 	logger.LogWarn(c, fmt.Sprintf(
 		"model mapping fallback: channel=%d source=%s from=%s to=%s reason=%s",
 		channel.Id,
-		info.ModelMappingFallbackSource,
+		info.ModelMappingRoute.Source,
 		previous,
 		next,
 		common.LocalLogPreview(relayErr.MaskSensitiveErrorWithStatusCode()),

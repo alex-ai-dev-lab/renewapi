@@ -23,8 +23,8 @@ func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Reque
 	if isResponsesCompact && strings.HasSuffix(originModelName, ratio_setting.CompactModelSuffix) {
 		mappingModelName = strings.TrimSuffix(originModelName, ratio_setting.CompactModelSuffix)
 	}
-	if isResponsesCompact && info.ModelMappingFallbackChannelId == info.ChannelId && info.ModelMappingFallbackSource != "" {
-		mappingModelName = info.ModelMappingFallbackSource
+	if isResponsesCompact && info.ModelMappingRoute.ChannelId == info.ChannelId && info.ModelMappingRoute.Source != "" {
+		mappingModelName = info.ModelMappingRoute.Source
 	}
 
 	// A mapping value may be a legacy string or an ordered array. RelayInfo
@@ -41,25 +41,23 @@ func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Reque
 			return fmt.Errorf("model_mapping_contains_cycle")
 		}
 		channelId := info.ChannelId
-		if info.ModelMappingFallbackChannelId != channelId || info.ModelMappingFallbackSource != mappingModelName {
-			info.ModelMappingFallbackChannelId = channelId
-			info.ModelMappingFallbackSource = mappingModelName
-			info.ModelMappingFallbackCandidates = append([]string(nil), candidates...)
-			info.ModelMappingFallbackIndex = 0
-		}
-		if len(info.ModelMappingFallbackCandidates) > 0 {
-			if info.ModelMappingFallbackIndex < 0 || info.ModelMappingFallbackIndex >= len(info.ModelMappingFallbackCandidates) {
-				info.ModelMappingFallbackIndex = 0
+		if info.ModelMappingRoute.ChannelId != channelId || info.ModelMappingRoute.Source != mappingModelName {
+			info.ModelMappingRoute = common.ModelMappingRouteCursor{
+				ChannelId:  channelId,
+				Source:     mappingModelName,
+				Candidates: append([]string(nil), candidates...),
 			}
-			mappedModel := info.ModelMappingFallbackCandidates[info.ModelMappingFallbackIndex]
+		}
+		if len(info.ModelMappingRoute.Candidates) > 0 {
+			if info.ModelMappingRoute.Index < 0 || info.ModelMappingRoute.Index >= len(info.ModelMappingRoute.Candidates) {
+				info.ModelMappingRoute.Index = 0
+			}
+			mappedModel := info.ModelMappingRoute.Candidates[info.ModelMappingRoute.Index]
 			info.IsModelMapped = mappedModel != mappingModelName
 			info.UpstreamModelName = mappedModel
 		}
-	} else if info.ModelMappingFallbackChannelId != info.ChannelId {
-		info.ModelMappingFallbackChannelId = info.ChannelId
-		info.ModelMappingFallbackSource = mappingModelName
-		info.ModelMappingFallbackCandidates = nil
-		info.ModelMappingFallbackIndex = 0
+	} else if info.ModelMappingRoute.ChannelId != info.ChannelId {
+		info.ModelMappingRoute = common.ModelMappingRouteCursor{ChannelId: info.ChannelId, Source: mappingModelName}
 	}
 
 	if isResponsesCompact {
@@ -68,7 +66,6 @@ func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Reque
 			finalUpstreamModelName = info.UpstreamModelName
 		}
 		info.UpstreamModelName = finalUpstreamModelName
-		info.OriginModelName = ratio_setting.WithCompactModelSuffix(finalUpstreamModelName)
 	}
 	if request != nil {
 		request.SetModelName(info.UpstreamModelName)
@@ -79,14 +76,14 @@ func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Reque
 // AdvanceModelMappingFallback advances to the next ordered upstream model for
 // the current channel without performing cross-channel selection.
 func AdvanceModelMappingFallback(info *common.RelayInfo) (string, string, bool) {
-	if info == nil || info.ChannelMeta == nil || info.ModelMappingFallbackChannelId != info.ChannelId {
+	if info == nil || info.ChannelMeta == nil || info.ModelMappingRoute.ChannelId != info.ChannelId {
 		return "", "", false
 	}
-	next := info.ModelMappingFallbackIndex + 1
-	if next >= len(info.ModelMappingFallbackCandidates) {
+	next := info.ModelMappingRoute.Index + 1
+	if next >= len(info.ModelMappingRoute.Candidates) {
 		return "", "", false
 	}
-	previous := info.ModelMappingFallbackCandidates[info.ModelMappingFallbackIndex]
-	info.ModelMappingFallbackIndex = next
-	return previous, info.ModelMappingFallbackCandidates[next], true
+	previous := info.ModelMappingRoute.Candidates[info.ModelMappingRoute.Index]
+	info.ModelMappingRoute.Index = next
+	return previous, info.ModelMappingRoute.Candidates[next], true
 }

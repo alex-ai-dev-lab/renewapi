@@ -187,15 +187,79 @@ func ResponsesRouteFingerprint(channel *model.Channel, modelName string) string 
 	return hex.EncodeToString(sum[:])
 }
 
-func effectiveCompactionCapability(channel *model.Channel, modelName string) dto.ResponsesCompactionCapabilityRecord {
-	record, configured := responseCapabilityRecord(channel, modelName)
-	if !configured || record.Capability == "" {
+// ResponsesObservedRouteFingerprint invalidates runtime/probe evidence when
+// any channel configuration changes. Manual fingerprints keep the narrower
+// historical route fingerprint semantics for backward compatibility.
+func ResponsesObservedRouteFingerprint(channel *model.Channel, modelName string) string {
+	if channel == nil {
+		return ""
+	}
+	raw := fmt.Sprintf("%s\n%d\n%s", ResponsesRouteFingerprint(channel, modelName), channel.ConfigVersion, channel.GetModelMapping())
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
+
+func observedCompactionCapability(channel *model.Channel, modelName string) (dto.ResponsesCompactionCapabilityRecord, bool) {
+	if channel == nil {
+		return dto.ResponsesCompactionCapabilityRecord{}, false
+	}
+	observed, found := model.GetChannelModelCapability(channel.Id, modelName, model.ChannelCapabilityResponsesCompaction)
+	if !found || observed.RouteFingerprint == "" ||
+		!strings.EqualFold(observed.RouteFingerprint, ResponsesObservedRouteFingerprint(channel, modelName)) {
+		return dto.ResponsesCompactionCapabilityRecord{}, false
+	}
+	if observed.BlockedUntil > 0 && observed.BlockedUntil <= common.GetTimestamp() {
+		return dto.ResponsesCompactionCapabilityRecord{}, false
+	}
+	legacySupported := observed.LegacyStatus == model.ChannelCapabilityStatusSupported
+	nativeSupported := observed.NativeStatus == model.ChannelCapabilityStatusSupported
+	value := dto.CompactionUnknown
+	switch {
+	case legacySupported && nativeSupported:
+		value = dto.CompactionNativeV2AndLegacy
+	case legacySupported:
+		value = dto.CompactionLegacy
+	case nativeSupported:
+		value = dto.CompactionNativeV2
+	case observed.LegacyStatus == model.ChannelCapabilityStatusUnsupported &&
+		observed.NativeStatus == model.ChannelCapabilityStatusUnsupported:
+		value = dto.CompactionDisabled
+	case observed.CapabilityValue != "":
+		// Backward-compatible fallback for rows written before facet statuses
+		// were introduced.
+		value = dto.CompactionCapability(observed.CapabilityValue)
+	}
+	if value == dto.CompactionUnknown && observed.Status != model.ChannelCapabilityStatusSupported {
+		return dto.ResponsesCompactionCapabilityRecord{}, false
+	}
+	record := dto.ResponsesCompactionCapabilityRecord{
+		Capability:       value,
+		NativeStream:     observed.NativeStreamStatus == model.ChannelCapabilityStatusSupported || observed.NativeStream,
+		Continuation:     observed.ContinuationStatus == model.ChannelCapabilityStatusSupported || observed.Continuation,
+		RouteFingerprint: observed.RouteFingerprint,
+		VerifiedAt:       observed.VerifiedAt,
+	}
+	if record.Capability == "" {
 		record.Capability = dto.CompactionUnknown
 	}
-	if record.RouteFingerprint != "" && !strings.EqualFold(record.RouteFingerprint, ResponsesRouteFingerprint(channel, modelName)) {
-		return dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionUnknown}
+	return record, true
+}
+
+func effectiveCompactionCapability(channel *model.Channel, modelName string) dto.ResponsesCompactionCapabilityRecord {
+	record, configured := responseCapabilityRecord(channel, modelName)
+	if configured {
+		if record.Capability == "" {
+			record.Capability = dto.CompactionUnknown
+		}
+		if record.RouteFingerprint != "" && !strings.EqualFold(record.RouteFingerprint, ResponsesRouteFingerprint(channel, modelName)) {
+			return dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionUnknown}
+		}
+		return record
 	}
-	return record
+	if observed, found := observedCompactionCapability(channel, modelName); found {
+		return observed
+	}
+	return dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionUnknown}
 }
 
 func ChannelMatchesResponsesRequirement(channel *model.Channel, modelName string, requirement *ResponsesRoutingRequirement, request dto.Request) bool {
@@ -208,6 +272,12 @@ func ChannelMatchesResponsesRequirement(channel *model.Channel, modelName string
 	}
 	if !channelSupportsRequiredContinuation(channel, modelName, requirement, request) {
 		return false
+	}
+	_, manuallyConfigured := responseCapabilityRecord(channel, modelName)
+	if !manuallyConfigured {
+		if decided, allowed := observedCapabilityFacetDecision(channel, modelName, requirement); decided {
+			return allowed
+		}
 	}
 	record := effectiveCompactionCapability(channel, modelName)
 	if record.Capability == dto.CompactionDisabled {
@@ -236,6 +306,17 @@ func ChannelMatchesResponsesRequirement(channel *model.Channel, modelName string
 
 func PlanResponsesExecution(kind dto.ResponsesRequestKind, record dto.ResponsesCompactionCapabilityRecord, upstreamModel string, clientStream bool) (ResponsesExecutionPlan, error) {
 	plan := ResponsesExecutionPlan{Kind: kind, UpstreamPath: "/v1/responses", UpstreamModel: strings.TrimSuffix(upstreamModel, "-openai-compact"), UpstreamStream: clientStream}
+	if record.Capability == dto.CompactionUnknown && !ResponsesCompactionEnforcementStrict() {
+		// Observe mode performs a conservative real request so capability can be
+		// learned. The legacy endpoint remains legacy; trigger requests default to
+		// the native Responses transport.
+		if kind == dto.ResponsesCompactEndpoint {
+			record.Capability = dto.CompactionLegacy
+		} else {
+			record.Capability = dto.CompactionNativeV2
+			record.NativeStream = clientStream
+		}
+	}
 	switch kind {
 	case dto.ResponsesNormal, dto.ResponsesCompactedContextContinuation:
 		return plan, nil
@@ -272,6 +353,16 @@ func EffectiveResponsesCompactionRecord(channel *model.Channel, modelName string
 	return effectiveCompactionCapability(channel, modelName)
 }
 
+func EffectiveResponsesCompactionRecordByID(channelID int, modelName string, fallbackSettings dto.ChannelSettings) dto.ResponsesCompactionCapabilityRecord {
+	if channel, err := model.CacheGetChannel(channelID); err == nil && channel != nil {
+		return effectiveCompactionCapability(channel, modelName)
+	}
+	return ResponsesCompactionRecordFromSettings(fallbackSettings, modelName)
+}
+
+// ResponsesCompactionRecordFromSettings is retained for callers that do not
+// have a channel identity. Production routing should use the effective
+// resolver so route fingerprints and observed capabilities are honored.
 func ResponsesCompactionRecordFromSettings(settings dto.ChannelSettings, modelName string) dto.ResponsesCompactionCapabilityRecord {
 	result := dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionUnknown}
 	if settings.ResponsesCompaction == nil {

@@ -90,6 +90,13 @@ type TokenCountMeta struct {
 	estimatePromptTokens int
 }
 
+type ModelMappingRouteCursor struct {
+	ChannelId  int
+	Source     string
+	Candidates []string
+	Index      int
+}
+
 type RelayInfo struct {
 	TokenId           int
 	TokenKey          string
@@ -171,10 +178,7 @@ type RelayInfo struct {
 	ClaudeThinkingPreferSupportedChannel      bool
 	ClaudeThinkingSanitizedFallback           bool
 	ForceResponsesFunctionCallArgumentsObject bool
-	ModelMappingFallbackChannelId             int
-	ModelMappingFallbackSource                string
-	ModelMappingFallbackCandidates            []string
-	ModelMappingFallbackIndex                 int
+	ModelMappingRoute                         ModelMappingRouteCursor
 
 	// AntiPoisonGuardPrefix is retained for older patch compatibility. The
 	// current upstream-error normalization path does not inject guard prompts.

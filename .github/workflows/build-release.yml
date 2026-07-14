@@ -290,6 +290,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
           name: renewapi source image ${{ steps.meta.outputs.tag }}
           body_path: release-assets/RELEASE_NOTES.md
           draft: false
@@ -299,3 +300,12 @@ jobs:
             release-assets/docker-compose.yml
             release-assets/.env.example
             release-assets/CHECKSUMS.txt
+
+      - name: Verify release tag source commit
+        if: inputs.create_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+        run: |
+          actual="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')"
+          test "$actual" = "$GITHUB_SHA"

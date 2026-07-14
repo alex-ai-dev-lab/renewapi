@@ -30,6 +30,48 @@ func TestChannelMatchesResponsesRequirement(t *testing.T) {
 	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"native_v2","continuation":true}}}`), "gpt-5.4", continuation, nil))
 	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"legacy"}}}`), "gpt-5.4-openai-compact", legacyEndpoint, nil))
 	require.False(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeAnthropic, `{"responses_compaction":{"default_capability":{"capability":"native_v2_and_legacy","native_stream":true,"continuation":true}}}`), "gpt-5.4", trigger, nil))
+
+	routedTrigger := &ResponsesRoutingRequirement{
+		Kind:                      dto.ResponsesCompactionTrigger,
+		RequiredContinuationModel: "gpt-5.5",
+	}
+	routedChannel := channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"native_v2"}}}`)
+	routedChannel.Models = "gpt-5.6-sol"
+	require.False(t, ChannelMatchesResponsesRequirement(routedChannel, "gpt-5.6-sol", routedTrigger, nil))
+	routedChannel.Models = "gpt-5.5,gpt-5.6-sol"
+	require.True(t, ChannelMatchesResponsesRequirement(routedChannel, "gpt-5.6-sol", routedTrigger, nil))
+}
+
+func TestResolveResponsesCompactionRoutingModel(t *testing.T) {
+	t.Setenv("RESPONSES_COMPACTION_MODEL", "gpt-5.6-sol")
+
+	modelName, routed := ResolveResponsesCompactionRoutingModel(dto.ResponsesCompactionTrigger, "gpt-5.5")
+	require.True(t, routed)
+	require.Equal(t, "gpt-5.6-sol", modelName)
+
+	for _, kind := range []dto.ResponsesRequestKind{
+		dto.ResponsesNormal,
+		dto.ResponsesCompactedContextContinuation,
+		dto.ResponsesCompactEndpoint,
+	} {
+		modelName, routed = ResolveResponsesCompactionRoutingModel(kind, "gpt-5.5")
+		require.False(t, routed)
+		require.Equal(t, "gpt-5.5", modelName)
+	}
+}
+
+func TestResolveResponsesCompactionRoutingModelDisabledByDefault(t *testing.T) {
+	t.Setenv("RESPONSES_COMPACTION_MODEL", "")
+	modelName, routed := ResolveResponsesCompactionRoutingModel(dto.ResponsesCompactionTrigger, "gpt-5.5")
+	require.False(t, routed)
+	require.Equal(t, "gpt-5.5", modelName)
+}
+
+func TestResolveResponsesCompactionRoutingModelDoesNotFillMissingClientModel(t *testing.T) {
+	t.Setenv("RESPONSES_COMPACTION_MODEL", "gpt-5.6-sol")
+	modelName, routed := ResolveResponsesCompactionRoutingModel(dto.ResponsesCompactionTrigger, "")
+	require.False(t, routed)
+	require.Empty(t, modelName)
 }
 
 func TestInspectAndClassifyResponsesInput(t *testing.T) {

@@ -45,7 +45,19 @@ func Distribute() func(c *gin.Context) {
 			common.SetContextKey(c, constant.ContextKeyProviderRoutingPolicy, modelRequest.ProviderPolicy)
 		}
 		responsesRequirement := responsesRoutingRequirement(c)
-		if len(modelRequest.Models) > 1 {
+		clientModel := modelRequest.Model
+		common.SetContextKey(c, constant.ContextKeyClientModel, clientModel)
+		compactionModelRouted := false
+		requiredContinuationModel := ""
+		if responsesRequirement != nil {
+			if routingModel, routed := service.ResolveResponsesCompactionRoutingModel(responsesRequirement.Kind, clientModel); routed {
+				modelRequest.Model = routingModel
+				responsesRequirement.RequiredContinuationModel = clientModel
+				requiredContinuationModel = clientModel
+				compactionModelRouted = true
+			}
+		}
+		if len(modelRequest.Models) > 1 && !compactionModelRouted {
 			common.SetContextKey(c, constant.ContextKeyFallbackModels, modelRequest.Models)
 		}
 		if ok {
@@ -87,9 +99,9 @@ func Distribute() func(c *gin.Context) {
 				if !ok {
 					tokenModelLimit = map[string]bool{}
 				}
-				matchName := ratio_setting.FormatMatchingModelName(modelRequest.Model) // match gpts & thinking-*
+				matchName := ratio_setting.FormatMatchingModelName(clientModel) // match gpts & thinking-*
 				if _, ok := tokenModelLimit[matchName]; !ok {
-					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenModelForbidden, map[string]any{"Model": modelRequest.Model}))
+					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenModelForbidden, map[string]any{"Model": clientModel}))
 					return
 				}
 			}
@@ -119,9 +131,10 @@ func Distribute() func(c *gin.Context) {
 					}
 				}
 
-				preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup)
+				preferredChannelID, found := service.GetPreferredChannelByCompactionAffinity(c, clientModel, usingGroup)
+				preferredByCompactionAffinity := found
 				if !found {
-					preferredChannelID, found = service.GetPreferredChannelByCompactionAffinity(c, modelRequest.Model, usingGroup)
+					preferredChannelID, found = service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup)
 				}
 				if found {
 					preferred, err := model.CacheGetChannel(preferredChannelID)
@@ -140,9 +153,9 @@ func Distribute() func(c *gin.Context) {
 							userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 							autoGroups := service.GetUserAutoGroup(userGroup)
 							for _, g := range autoGroups {
-								if model.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) &&
-									!model.IsChannelModelDisabledForGroup(preferred.Id, g, modelRequest.Model) {
-									if channelAffinityFallbackOnly() && higherPriorityChannelAvailable(g, modelRequest.Model, preferred, modelRequest.ProviderPolicy, responsesRequirement) {
+								if channelEnabledForGroupModel(preferred, g, modelRequest.Model) &&
+									channelEnabledForGroupModel(preferred, g, requiredContinuationModel) {
+									if !preferredByCompactionAffinity && channelAffinityFallbackOnly() && higherPriorityChannelAvailable(g, modelRequest.Model, preferred, modelRequest.ProviderPolicy, responsesRequirement) {
 										common.SysLog(fmt.Sprintf("affinity channel deferred: higher priority channel available for group=%s model=%s affinity_channel=%d", g, modelRequest.Model, preferred.Id))
 									} else {
 										selectGroup = g
@@ -153,9 +166,9 @@ func Distribute() func(c *gin.Context) {
 									break
 								}
 							}
-						} else if model.IsChannelEnabledForGroupModel(usingGroup, modelRequest.Model, preferred.Id) &&
-							!model.IsChannelModelDisabledForGroup(preferred.Id, usingGroup, modelRequest.Model) {
-							if channelAffinityFallbackOnly() && higherPriorityChannelAvailable(usingGroup, modelRequest.Model, preferred, modelRequest.ProviderPolicy, responsesRequirement) {
+						} else if channelEnabledForGroupModel(preferred, usingGroup, modelRequest.Model) &&
+							channelEnabledForGroupModel(preferred, usingGroup, requiredContinuationModel) {
+							if !preferredByCompactionAffinity && channelAffinityFallbackOnly() && higherPriorityChannelAvailable(usingGroup, modelRequest.Model, preferred, modelRequest.ProviderPolicy, responsesRequirement) {
 								common.SysLog(fmt.Sprintf("affinity channel deferred: higher priority channel available for group=%s model=%s affinity_channel=%d", usingGroup, modelRequest.Model, preferred.Id))
 							} else {
 								channel = preferred
@@ -181,6 +194,7 @@ func Distribute() func(c *gin.Context) {
 						ClientRelayFormat:             clientFormat,
 						ProviderRoutingPolicy:         modelRequest.ProviderPolicy,
 						ResponsesRequirement:          responsesRequirement,
+						RequiredModelName:             requiredContinuationModel,
 					})
 					if err != nil {
 						showGroup := usingGroup
@@ -210,8 +224,12 @@ func Distribute() func(c *gin.Context) {
 		}
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
-			service.RecordChannelAffinity(c, channel.Id)
-			service.RecordCompactionResponseAffinity(c, channel.Id, modelRequest.Model, common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
+			finalChannelID := common.GetContextKeyInt(c, constant.ContextKeyChannelId)
+			if finalChannelID <= 0 {
+				finalChannelID = channel.Id
+			}
+			service.RecordChannelAffinity(c, finalChannelID)
+			service.RecordCompactionResponseAffinity(c, finalChannelID, clientModel, common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
 		}
 	}
 }
@@ -240,14 +258,30 @@ func higherPriorityChannelAvailable(group, modelName string, affinityChannel *mo
 	if policy != nil && !policy.Empty() {
 		routingPolicy = policy
 	}
-	topChannel, err := model.GetRandomSatisfiedChannelExcludingWithPolicy(group, modelName, 0, nil, routingPolicy)
-	if err != nil || topChannel == nil {
+	excluded := make(map[int]bool)
+	for attempts := 0; attempts < 64; attempts++ {
+		topChannel, err := model.GetRandomSatisfiedChannelExcludingWithPolicy(group, modelName, 0, excluded, routingPolicy)
+		if err != nil || topChannel == nil {
+			return false
+		}
+		if service.ChannelMatchesResponsesRequirement(topChannel, modelName, requirement, nil) &&
+			(requirement == nil || channelEnabledForGroupModel(topChannel, group, requirement.RequiredContinuationModel)) {
+			return topChannel.GetPriority() > affinityChannel.GetPriority()
+		}
+		excluded[topChannel.Id] = true
+	}
+	return false
+}
+
+func channelEnabledForGroupModel(channel *model.Channel, group, modelName string) bool {
+	if channel == nil {
 		return false
 	}
-	if !service.ChannelMatchesResponsesRequirement(topChannel, modelName, requirement, nil) {
-		return false
+	if strings.TrimSpace(modelName) == "" {
+		return true
 	}
-	return topChannel.GetPriority() > affinityChannel.GetPriority()
+	return model.IsChannelEnabledForGroupModel(group, modelName, channel.Id) &&
+		!model.IsChannelModelDisabledForGroup(channel.Id, group, modelName)
 }
 
 func responsesRoutingRequirement(c *gin.Context) *service.ResponsesRoutingRequirement {

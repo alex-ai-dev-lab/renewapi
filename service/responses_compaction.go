@@ -29,8 +29,9 @@ type ResponsesInputSignals struct {
 }
 
 type ResponsesRoutingRequirement struct {
-	Kind         dto.ResponsesRequestKind
-	ClientStream bool
+	Kind                      dto.ResponsesRequestKind
+	ClientStream              bool
+	RequiredContinuationModel string
 }
 
 type ResponsesExecutionPlan struct {
@@ -80,6 +81,37 @@ func ClassifyResponsesRequest(path string, signals ResponsesInputSignals) dto.Re
 
 func ResponsesCompactionEnforcementStrict() bool {
 	return !strings.EqualFold(strings.TrimSpace(common.GetEnvOrDefaultString("RESPONSES_COMPACTION_ENFORCEMENT", "strict")), "observe")
+}
+
+// ResolveResponsesCompactionRoutingModel returns the model used to select the
+// channel and build the upstream request. Only native compaction triggers are
+// redirected; ordinary Responses requests, compacted-context continuations,
+// and the legacy /v1/responses/compact endpoint keep their requested model.
+func ResolveResponsesCompactionRoutingModel(kind dto.ResponsesRequestKind, requestedModel string) (string, bool) {
+	if kind != dto.ResponsesCompactionTrigger || strings.TrimSpace(requestedModel) == "" {
+		return requestedModel, false
+	}
+	targetModel := strings.TrimSpace(common.GetEnvOrDefaultString("RESPONSES_COMPACTION_MODEL", ""))
+	if targetModel == "" {
+		return requestedModel, false
+	}
+	targetModel = ResolveLatestModelAlias(targetModel)
+	if strings.EqualFold(targetModel, requestedModel) {
+		return requestedModel, false
+	}
+	return targetModel, true
+}
+
+func channelAdvertisesRoutingModel(channel *model.Channel, modelName string) bool {
+	if channel == nil || strings.TrimSpace(modelName) == "" {
+		return false
+	}
+	for _, candidate := range channel.GetRoutingModels() {
+		if strings.EqualFold(candidate, modelName) {
+			return true
+		}
+	}
+	return false
 }
 
 func responseCapabilityRecord(channel *model.Channel, modelName string) (dto.ResponsesCompactionCapabilityRecord, bool) {
@@ -134,6 +166,12 @@ func ChannelMatchesResponsesRequirement(channel *model.Channel, modelName string
 	}
 	protocol := EvaluateChannelProtocolCapability(channel, modelName, types.RelayFormatOpenAIResponses, request)
 	if !protocol.Supported || protocol.Lossy {
+		return false
+	}
+	if requirement.Kind == dto.ResponsesCompactionTrigger &&
+		requirement.RequiredContinuationModel != "" &&
+		!strings.EqualFold(requirement.RequiredContinuationModel, modelName) &&
+		!channelAdvertisesRoutingModel(channel, requirement.RequiredContinuationModel) {
 		return false
 	}
 	record := effectiveCompactionCapability(channel, modelName)

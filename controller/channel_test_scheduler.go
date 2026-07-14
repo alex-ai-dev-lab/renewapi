@@ -40,6 +40,22 @@ func responsesCompactionProbeModels(channel *model.Channel) []string {
 	if channel == nil {
 		return nil
 	}
+	settings := channel.GetSetting().ResponsesCompaction
+	manualCapabilityIsConcrete := func(modelName string) bool {
+		if settings == nil {
+			return false
+		}
+		modelName = strings.TrimSuffix(strings.TrimSpace(modelName), ratio_setting.CompactModelSuffix)
+		if record, ok := settings.ModelCapabilities[modelName]; ok {
+			capability := strings.TrimSpace(string(record.Capability))
+			return capability != "" && !strings.EqualFold(capability, string(dto.CompactionUnknown))
+		}
+		if settings.DefaultCapability != nil {
+			capability := strings.TrimSpace(string(settings.DefaultCapability.Capability))
+			return capability != "" && !strings.EqualFold(capability, string(dto.CompactionUnknown))
+		}
+		return false
+	}
 	seen := make(map[string]string)
 	add := func(modelName string) {
 		modelName = strings.TrimSpace(modelName)
@@ -47,12 +63,11 @@ func responsesCompactionProbeModels(channel *model.Channel) []string {
 			return
 		}
 		modelName = strings.TrimSuffix(modelName, ratio_setting.CompactModelSuffix)
-		if modelName != "" {
+		if modelName != "" && !manualCapabilityIsConcrete(modelName) {
 			seen[strings.ToLower(modelName)] = modelName
 		}
 	}
 
-	settings := channel.GetSetting().ResponsesCompaction
 	if settings != nil {
 		for modelName := range settings.ModelCapabilities {
 			add(modelName)

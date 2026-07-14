@@ -52,11 +52,24 @@ func TestResponsesCompactionProbeModelsStayExplicitlyScoped(t *testing.T) {
 		TestModel: common.GetPointer("gpt-5.3"),
 	}
 	channel.SetSetting(dto.ChannelSettings{ResponsesCompaction: &dto.ResponsesCompactionSettings{
-		DefaultCapability: &dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionLegacy},
+		DefaultCapability: &dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionUnknown},
 		ModelCapabilities: map[string]dto.ResponsesCompactionCapabilityRecord{
 			"gpt-5.6": {Capability: dto.CompactionNativeV2},
 		},
 	}})
 
-	require.Equal(t, []string{"gpt-5.3", "gpt-5.4", "gpt-5.6", "gpt-5.7"}, responsesCompactionProbeModels(channel))
+	require.Equal(t, []string{"gpt-5.3", "gpt-5.4", "gpt-5.7"}, responsesCompactionProbeModels(channel))
+}
+
+func TestResponsesCompactionProbeModelsSkipConcreteManualDeclarations(t *testing.T) {
+	t.Setenv("RESPONSES_COMPACTION_PROBE_MAX_MODELS", "10")
+	channel := &model.Channel{Models: "gpt-5.4-openai-compact,gpt-5.5-openai-compact,gpt-5.6-openai-compact"}
+	channel.SetSetting(dto.ChannelSettings{ResponsesCompaction: &dto.ResponsesCompactionSettings{
+		ModelCapabilities: map[string]dto.ResponsesCompactionCapabilityRecord{
+			"gpt-5.4": {Capability: dto.CompactionDisabled},
+			"gpt-5.5": {Capability: dto.CompactionLegacy},
+			"gpt-5.6": {Capability: dto.CompactionUnknown},
+		},
+	}})
+	require.Equal(t, []string{"gpt-5.6"}, responsesCompactionProbeModels(channel))
 }

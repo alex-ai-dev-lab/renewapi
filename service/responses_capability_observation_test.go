@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"net/http"
+	"sync"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -26,6 +27,9 @@ func setupResponsesCapabilityTestDB(t *testing.T) {
 	})
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
 	require.NoError(t, db.AutoMigrate(&model.ChannelModelCapability{}))
 	model.DB = db
 	common.MemoryCacheEnabled = true
@@ -141,6 +145,21 @@ func TestManualCapabilityOverridesObservedEvidence(t *testing.T) {
 	}, nil))
 }
 
+func TestManualUnknownFallsBackToObservedEvidence(t *testing.T) {
+	setupResponsesCapabilityTestDB(t)
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+	channel := compactTestChannel()
+	channel.SetSetting(dto.ChannelSettings{ResponsesCompaction: &dto.ResponsesCompactionSettings{
+		DefaultCapability: &dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionUnknown},
+	}})
+	ObserveResponsesCapabilityAttempt(channel, "gpt-5.5", ResponsesCapabilityAttempt{
+		Kind: dto.ResponsesCompactionTrigger,
+	}, nil)
+	require.True(t, ChannelMatchesResponsesRequirement(channel, "gpt-5.5", &ResponsesRoutingRequirement{
+		Kind: dto.ResponsesCompactionTrigger,
+	}, nil))
+}
+
 func TestObservedCapabilityInvalidatesOnChannelConfigChange(t *testing.T) {
 	setupResponsesCapabilityTestDB(t)
 	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
@@ -149,4 +168,58 @@ func TestObservedCapabilityInvalidatesOnChannelConfigChange(t *testing.T) {
 	require.True(t, ChannelMatchesResponsesRequirement(channel, "gpt-5.5", &ResponsesRoutingRequirement{Kind: dto.ResponsesCompactionTrigger}, nil))
 	channel.ConfigVersion++
 	require.False(t, ChannelMatchesResponsesRequirement(channel, "gpt-5.5", &ResponsesRoutingRequirement{Kind: dto.ResponsesCompactionTrigger}, nil))
+
+	ObserveResponsesCapabilityAttempt(channel, "gpt-5.5", ResponsesCapabilityAttempt{Kind: dto.ResponsesCompactionTrigger}, nil)
+	record, found := model.GetChannelModelCapability(channel.Id, "gpt-5.5", model.ChannelCapabilityResponsesCompaction)
+	require.True(t, found)
+	require.Equal(t, model.ChannelCapabilityStatusSupported, record.NativeStatus)
+	require.Equal(t, model.ChannelCapabilityStatusUnknown, record.LegacyStatus)
+	require.Equal(t, model.ChannelCapabilityStatusUnknown, record.ContinuationStatus)
+}
+
+func TestObservedCapabilityConfigChangeDoesNotReviveOldFacets(t *testing.T) {
+	setupResponsesCapabilityTestDB(t)
+	channel := compactTestChannel()
+	ObserveResponsesCapabilityAttempt(channel, "gpt-5.5", ResponsesCapabilityAttempt{
+		Kind:       dto.ResponsesCompactEndpoint,
+		UsedLegacy: true,
+	}, nil)
+	ObserveResponsesCapabilityAttempt(channel, "gpt-5.5", ResponsesCapabilityAttempt{
+		Kind: dto.ResponsesCompactedContextContinuation,
+	}, nil)
+
+	channel.ConfigVersion++
+	ObserveResponsesCapabilityAttempt(channel, "gpt-5.5", ResponsesCapabilityAttempt{
+		Kind: dto.ResponsesCompactionTrigger,
+	}, nil)
+	record, found := model.GetChannelModelCapability(channel.Id, "gpt-5.5", model.ChannelCapabilityResponsesCompaction)
+	require.True(t, found)
+	require.Equal(t, model.ChannelCapabilityStatusSupported, record.NativeStatus)
+	require.Equal(t, model.ChannelCapabilityStatusUnknown, record.LegacyStatus)
+	require.Equal(t, model.ChannelCapabilityStatusUnknown, record.ContinuationStatus)
+}
+
+func TestObservedCapabilitySerializesConcurrentFacetUpdates(t *testing.T) {
+	setupResponsesCapabilityTestDB(t)
+	channel := compactTestChannel()
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for _, attempt := range []ResponsesCapabilityAttempt{
+		{Kind: dto.ResponsesCompactEndpoint, UsedLegacy: true},
+		{Kind: dto.ResponsesCompactionTrigger},
+	} {
+		attempt := attempt
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			ObserveResponsesCapabilityAttempt(channel, "gpt-5.5", attempt, nil)
+		}()
+	}
+	close(start)
+	wg.Wait()
+	record, found := model.GetChannelModelCapability(channel.Id, "gpt-5.5", model.ChannelCapabilityResponsesCompaction)
+	require.True(t, found)
+	require.Equal(t, model.ChannelCapabilityStatusSupported, record.LegacyStatus)
+	require.Equal(t, model.ChannelCapabilityStatusSupported, record.NativeStatus)
 }

@@ -404,36 +404,24 @@ func (channel *Channel) GetModels() []string {
 }
 
 // GetRoutingModels returns the client-visible models used to build routing
-// abilities. Mapping sources are virtual client models; mapping targets are
-// upstream-only candidates and are hidden unless they are also a source.
+// abilities. Models explicitly listed on the channel remain routable even when
+// they are also mapping targets. Mapping sources are added as virtual client
+// models, while target-only candidates are not added implicitly.
 func (channel *Channel) GetRoutingModels() []string {
 	models := channel.GetModels()
 	mapping, err := common.ParseModelMapping(channel.GetModelMapping())
 	if err != nil || len(mapping) == 0 {
 		return models
 	}
-	sources := make(map[string]struct{}, len(mapping))
-	targets := make(map[string]struct{})
-	for source, candidates := range mapping {
-		sources[source] = struct{}{}
-		for _, candidate := range candidates {
-			targets[candidate] = struct{}{}
-		}
-	}
-	result := make([]string, 0, len(models)+len(sources))
-	seen := make(map[string]struct{}, len(models)+len(sources))
+	result := make([]string, 0, len(models)+len(mapping))
+	seen := make(map[string]struct{}, len(models)+len(mapping))
 	for _, modelName := range models {
-		if _, upstreamOnly := targets[modelName]; upstreamOnly {
-			if _, clientSource := sources[modelName]; !clientSource {
-				continue
-			}
-		}
 		if _, exists := seen[modelName]; !exists {
 			seen[modelName] = struct{}{}
 			result = append(result, modelName)
 		}
 	}
-	for source := range sources {
+	for source := range mapping {
 		if _, exists := seen[source]; !exists {
 			seen[source] = struct{}{}
 			result = append(result, source)

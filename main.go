@@ -180,18 +180,12 @@ func main() {
 
 	// Initialize HTTP server
 	server := gin.New()
-	server.Use(gin.CustomRecovery(func(c *gin.Context, err any) {
-		common.SysLog(fmt.Sprintf("panic detected: %v", err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": gin.H{
-				"message": fmt.Sprintf("Panic detected, error: %v. Please report at https://github.com/alex-ai-dev-lab/renewapi/issues", err),
-				"type":    "new_api_panic",
-			},
-		})
-	}))
+	server.Use(middleware.RequestId())
+	// PanicRecoveryHandler owns structured logging and the redacted response, so
+	// disable Gin's duplicate recovery writer by passing a nil writer.
+	server.Use(gin.CustomRecoveryWithWriter(nil, middleware.PanicRecoveryHandler))
 	// This will cause SSE not to work!!!
 	//server.Use(gzip.Gzip(gzip.DefaultCompression))
-	server.Use(middleware.RequestId())
 	server.Use(middleware.PoweredBy())
 	server.Use(middleware.I18n())
 	middleware.SetUpLogger(server)

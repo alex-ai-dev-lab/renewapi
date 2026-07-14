@@ -1,9 +1,10 @@
 package relay
 
 import (
+	"fmt"
 	"io"
+	"mime"
 	"net/http"
-	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -158,8 +159,17 @@ func chatCompletionsViaResponses(c *gin.Context, info *relaycommon.RelayInfo, ad
 
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 
-	httpResp = resp.(*http.Response)
-	upstreamIsStream := (responsesReq.Stream != nil && *responsesReq.Stream) || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
+	var ok bool
+	httpResp, ok = resp.(*http.Response)
+	if !ok || httpResp == nil {
+		return nil, types.NewOpenAIError(
+			fmt.Errorf("unexpected upstream response type %T", resp),
+			types.ErrorCodeBadResponse,
+			http.StatusBadGateway,
+		)
+	}
+	mediaType, _, _ := mime.ParseMediaType(httpResp.Header.Get("Content-Type"))
+	upstreamIsStream := (responsesReq.Stream != nil && *responsesReq.Stream) || mediaType == "text/event-stream"
 	if httpResp.StatusCode != http.StatusOK {
 		newApiErr := service.RelayErrorHandler(c.Request.Context(), httpResp, false)
 		service.ResetStatusCode(newApiErr, statusCodeMappingStr)

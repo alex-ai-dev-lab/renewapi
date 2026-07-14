@@ -211,7 +211,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			}
 		}
 
-		logger.LogDebug(c, "requestBody: %s", jsonData)
+		logger.LogDebug(c, "prepared Responses upstream request: bytes=%d pass_through=%t", len(jsonData), passThroughEnabled)
 		body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
@@ -241,7 +241,15 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 
 	if resp != nil {
-		httpResp = resp.(*http.Response)
+		var ok bool
+		httpResp, ok = resp.(*http.Response)
+		if !ok || httpResp == nil {
+			return types.NewOpenAIError(
+				fmt.Errorf("unexpected upstream response type %T", resp),
+				types.ErrorCodeBadResponse,
+				http.StatusBadGateway,
+			)
+		}
 
 		if httpResp.StatusCode != http.StatusOK {
 			newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
@@ -258,7 +266,14 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		return newAPIError
 	}
 
-	usageDto := usage.(*dto.Usage)
+	usageDto, ok := usage.(*dto.Usage)
+	if !ok || usageDto == nil {
+		return types.NewOpenAIError(
+			fmt.Errorf("unexpected Responses usage type %T", usage),
+			types.ErrorCodeBadResponse,
+			http.StatusBadGateway,
+		)
+	}
 	if info.RelayMode == relayconstant.RelayModeResponsesCompact {
 		originModelName := info.OriginModelName
 		originPriceData := info.PriceData

@@ -17,28 +17,32 @@ import (
 const emitterContextKey = "responses_protocol_bridge_emitter"
 
 type toolState struct {
-	Index     int
-	ItemID    string
-	CallID    string
-	Name      string
-	Arguments strings.Builder
-	Started   bool
+	Index       int
+	OutputIndex int
+	ItemID      string
+	CallID      string
+	Name        string
+	Arguments   strings.Builder
+	Started     bool
 }
 
 type ResponsesStreamEmitter struct {
-	ResponseID     string
-	MessageID      string
-	Model          string
-	CreatedAt      int64
-	Sequence       int
-	Started        bool
-	MessageStarted bool
-	Text           strings.Builder
-	Tools          map[int]*toolState
-	ToolOrder      []int
-	Usage          *dto.Usage
-	FinishReason   string
-	Completed      bool
+	ResponseID         string
+	MessageID          string
+	Model              string
+	CreatedAt          int64
+	Sequence           int
+	Started            bool
+	MessageStarted     bool
+	MessageOutputIndex int
+	NextOutputIndex    int
+	Text               strings.Builder
+	Tools              map[int]*toolState
+	ToolsByCallID      map[string]*toolState
+	ToolOrder          []int
+	Usage              *dto.Usage
+	FinishReason       string
+	Completed          bool
 }
 
 func getEmitter(c *gin.Context, info *relaycommon.RelayInfo, chunk *dto.ChatCompletionsStreamResponse) *ResponsesStreamEmitter {
@@ -72,11 +76,13 @@ func getEmitter(c *gin.Context, info *relaycommon.RelayInfo, chunk *dto.ChatComp
 		created = common.GetTimestamp()
 	}
 	emitter := &ResponsesStreamEmitter{
-		ResponseID: responseID,
-		MessageID:  "msg_" + strings.TrimPrefix(responseID, "resp_"),
-		Model:      model,
-		CreatedAt:  created,
-		Tools:      make(map[int]*toolState),
+		ResponseID:         responseID,
+		MessageID:          "msg_" + strings.TrimPrefix(responseID, "resp_"),
+		Model:              model,
+		CreatedAt:          created,
+		MessageOutputIndex: -1,
+		Tools:              make(map[int]*toolState),
+		ToolsByCallID:      make(map[string]*toolState),
 	}
 	c.Set(emitterContextKey, emitter)
 	return emitter
@@ -108,7 +114,7 @@ func EmitChatChunk(c *gin.Context, info *relaycommon.RelayInfo, chunk *dto.ChatC
 			}
 			emitter.Text.WriteString(text)
 			if err := emitter.send(c, "response.output_text.delta", map[string]any{
-				"item_id": emitter.MessageID, "output_index": 0, "content_index": 0, "delta": text,
+				"item_id": emitter.MessageID, "output_index": emitter.MessageOutputIndex, "content_index": 0, "delta": text,
 			}); err != nil {
 				return err
 			}
@@ -120,33 +126,26 @@ func EmitChatChunk(c *gin.Context, info *relaycommon.RelayInfo, chunk *dto.ChatC
 			}
 			state := emitter.Tools[index]
 			if state == nil {
-				state = &toolState{Index: index}
+				state = &toolState{Index: index, OutputIndex: -1}
 				emitter.Tools[index] = state
 				emitter.ToolOrder = append(emitter.ToolOrder, index)
 			}
-			if tool.ID != "" {
-				state.CallID = tool.ID
+			if err := state.updateIdentity(tool.ID, tool.Function.Name); err != nil {
+				return err
 			}
-			if tool.Function.Name != "" {
-				state.Name = tool.Function.Name
-			}
-			if !state.Started {
-				if state.CallID == "" {
-					state.CallID = fmt.Sprintf("call_%d", index)
-				}
-				state.ItemID = "fc_" + state.CallID
-				state.Started = true
-				if err := emitter.send(c, "response.output_item.added", map[string]any{
-					"output_index": emitter.toolOutputIndex(index),
-					"item":         map[string]any{"type": "function_call", "id": state.ItemID, "call_id": state.CallID, "name": state.Name, "arguments": "", "status": "in_progress"},
-				}); err != nil {
-					return err
-				}
-			}
+			argumentDelta := tool.Function.Arguments
 			if tool.Function.Arguments != "" {
 				state.Arguments.WriteString(tool.Function.Arguments)
+			}
+			if !state.Started && state.CallID != "" && state.Name != "" {
+				if err := emitter.startTool(c, state); err != nil {
+					return err
+				}
+				continue
+			}
+			if state.Started && argumentDelta != "" {
 				if err := emitter.send(c, "response.function_call_arguments.delta", map[string]any{
-					"item_id": state.ItemID, "output_index": emitter.toolOutputIndex(index), "delta": tool.Function.Arguments,
+					"item_id": state.ItemID, "output_index": state.OutputIndex, "delta": argumentDelta,
 				}); err != nil {
 					return err
 				}
@@ -176,26 +175,29 @@ func CompleteChatStream(c *gin.Context, info *relaycommon.RelayInfo, usage *dto.
 	}
 	if emitter.MessageStarted {
 		text := emitter.Text.String()
-		if err := emitter.send(c, "response.output_text.done", map[string]any{"item_id": emitter.MessageID, "output_index": 0, "content_index": 0, "text": text}); err != nil {
+		if err := emitter.send(c, "response.output_text.done", map[string]any{"item_id": emitter.MessageID, "output_index": emitter.MessageOutputIndex, "content_index": 0, "text": text}); err != nil {
 			return err
 		}
-		if err := emitter.send(c, "response.content_part.done", map[string]any{"item_id": emitter.MessageID, "output_index": 0, "content_index": 0, "part": map[string]any{"type": "output_text", "text": text, "annotations": []any{}}}); err != nil {
+		if err := emitter.send(c, "response.content_part.done", map[string]any{"item_id": emitter.MessageID, "output_index": emitter.MessageOutputIndex, "content_index": 0, "part": map[string]any{"type": "output_text", "text": text, "annotations": []any{}}}); err != nil {
 			return err
 		}
-		if err := emitter.send(c, "response.output_item.done", map[string]any{"output_index": 0, "item": emitter.messageItem("completed")}); err != nil {
+		if err := emitter.send(c, "response.output_item.done", map[string]any{"output_index": emitter.MessageOutputIndex, "item": emitter.messageItem("completed")}); err != nil {
 			return err
 		}
 	}
 	for _, index := range emitter.ToolOrder {
 		state := emitter.Tools[index]
-		if state == nil || !state.Started {
+		if state == nil {
 			continue
 		}
-		arguments := state.Arguments.String()
-		if err := emitter.send(c, "response.function_call_arguments.done", map[string]any{"item_id": state.ItemID, "output_index": emitter.toolOutputIndex(index), "arguments": arguments}); err != nil {
+		if err := emitter.startTool(c, state); err != nil {
 			return err
 		}
-		if err := emitter.send(c, "response.output_item.done", map[string]any{"output_index": emitter.toolOutputIndex(index), "item": emitter.toolItem(state, "completed")}); err != nil {
+		arguments := state.Arguments.String()
+		if err := emitter.send(c, "response.function_call_arguments.done", map[string]any{"item_id": state.ItemID, "output_index": state.OutputIndex, "arguments": arguments}); err != nil {
+			return err
+		}
+		if err := emitter.send(c, "response.output_item.done", map[string]any{"output_index": state.OutputIndex, "item": emitter.toolItem(state, "completed")}); err != nil {
 			return err
 		}
 	}
@@ -285,10 +287,11 @@ func (e *ResponsesStreamEmitter) ensureMessage(c *gin.Context) error {
 		return nil
 	}
 	e.MessageStarted = true
-	if err := e.send(c, "response.output_item.added", map[string]any{"output_index": 0, "item": e.messageItem("in_progress")}); err != nil {
+	e.MessageOutputIndex = e.allocateOutputIndex()
+	if err := e.send(c, "response.output_item.added", map[string]any{"output_index": e.MessageOutputIndex, "item": e.messageItem("in_progress")}); err != nil {
 		return err
 	}
-	return e.send(c, "response.content_part.added", map[string]any{"item_id": e.MessageID, "output_index": 0, "content_index": 0, "part": map[string]any{"type": "output_text", "text": "", "annotations": []any{}}})
+	return e.send(c, "response.content_part.added", map[string]any{"item_id": e.MessageID, "output_index": e.MessageOutputIndex, "content_index": 0, "part": map[string]any{"type": "output_text", "text": "", "annotations": []any{}}})
 }
 
 func (e *ResponsesStreamEmitter) messageItem(status string) map[string]any {
@@ -299,17 +302,54 @@ func (e *ResponsesStreamEmitter) toolItem(state *toolState, status string) map[s
 	return map[string]any{"type": "function_call", "id": state.ItemID, "status": status, "call_id": state.CallID, "name": state.Name, "arguments": state.Arguments.String()}
 }
 
-func (e *ResponsesStreamEmitter) toolOutputIndex(toolIndex int) int {
-	base := 0
-	if e.MessageStarted {
-		base = 1
-	}
-	for order, index := range e.ToolOrder {
-		if index == toolIndex {
-			return base + order
+func (s *toolState) updateIdentity(callID, name string) error {
+	if callID != "" {
+		if s.CallID != "" && s.CallID != callID {
+			return fmt.Errorf("tool index %d changed call_id from %q to %q", s.Index, s.CallID, callID)
 		}
+		s.CallID = callID
 	}
-	return base + toolIndex
+	if name != "" {
+		if s.Name != "" && s.Name != name {
+			return fmt.Errorf("tool index %d changed name from %q to %q", s.Index, s.Name, name)
+		}
+		s.Name = name
+	}
+	return nil
+}
+
+func (e *ResponsesStreamEmitter) startTool(c *gin.Context, state *toolState) error {
+	if state.Started {
+		return nil
+	}
+	if state.CallID == "" {
+		state.CallID = fmt.Sprintf("call_%d", state.Index)
+	}
+	if existing, ok := e.ToolsByCallID[state.CallID]; ok && existing != state {
+		return fmt.Errorf("duplicate tool call_id %q", state.CallID)
+	}
+	state.ItemID = "fc_" + state.CallID
+	state.OutputIndex = e.allocateOutputIndex()
+	state.Started = true
+	e.ToolsByCallID[state.CallID] = state
+	if err := e.send(c, "response.output_item.added", map[string]any{
+		"output_index": state.OutputIndex,
+		"item":         map[string]any{"type": "function_call", "id": state.ItemID, "call_id": state.CallID, "name": state.Name, "arguments": "", "status": "in_progress"},
+	}); err != nil {
+		return err
+	}
+	if state.Arguments.Len() == 0 {
+		return nil
+	}
+	return e.send(c, "response.function_call_arguments.delta", map[string]any{
+		"item_id": state.ItemID, "output_index": state.OutputIndex, "delta": state.Arguments.String(),
+	})
+}
+
+func (e *ResponsesStreamEmitter) allocateOutputIndex() int {
+	index := e.NextOutputIndex
+	e.NextOutputIndex++
+	return index
 }
 
 func (e *ResponsesStreamEmitter) responseObject() (*dto.OpenAIResponsesResponse, error) {
@@ -318,7 +358,7 @@ func (e *ResponsesStreamEmitter) responseObject() (*dto.OpenAIResponsesResponse,
 	toolCalls := make([]dto.ToolCallResponse, 0, len(e.ToolOrder))
 	for _, index := range e.ToolOrder {
 		state := e.Tools[index]
-		if state == nil {
+		if state == nil || !state.Started {
 			continue
 		}
 		toolCalls = append(toolCalls, dto.ToolCallResponse{ID: state.CallID, Type: "function", Function: dto.FunctionResponse{Name: state.Name, Arguments: state.Arguments.String()}})
@@ -334,7 +374,42 @@ func (e *ResponsesStreamEmitter) responseObject() (*dto.OpenAIResponsesResponse,
 	if e.Usage != nil {
 		chat.Usage = *e.Usage
 	}
-	return openaicompat.ChatResponseToResponses(chat)
+	response, err := openaicompat.ChatResponseToResponses(chat)
+	if err != nil {
+		return nil, err
+	}
+	if e.NextOutputIndex == 0 {
+		return response, nil
+	}
+
+	ordered := make([]dto.ResponsesOutput, e.NextOutputIndex)
+	assigned := make([]bool, e.NextOutputIndex)
+	for _, item := range response.Output {
+		outputIndex := -1
+		switch item.Type {
+		case "message":
+			outputIndex = e.MessageOutputIndex
+			item.ID = e.MessageID
+		case "function_call":
+			state, ok := e.ToolsByCallID[item.CallId]
+			if ok {
+				outputIndex = state.OutputIndex
+				item.ID = state.ItemID
+			}
+		}
+		if outputIndex < 0 || outputIndex >= len(ordered) || assigned[outputIndex] {
+			return nil, fmt.Errorf("cannot map Responses output item type=%q call_id=%q to a stable stream index", item.Type, item.CallId)
+		}
+		ordered[outputIndex] = item
+		assigned[outputIndex] = true
+	}
+	for index, ok := range assigned {
+		if !ok {
+			return nil, fmt.Errorf("Responses stream output index %d was not assigned", index)
+		}
+	}
+	response.Output = ordered
+	return response, nil
 }
 
 func (e *ResponsesStreamEmitter) send(c *gin.Context, eventType string, fields map[string]any) error {

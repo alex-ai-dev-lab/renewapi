@@ -12,11 +12,14 @@ not download an upstream archive or apply patch files.
 - both frontends install from their lockfiles and build;
 - the default frontend also runs tests and type checking;
 - ESLint, Prettier, and copyright checks apply to changed frontend files;
+- frontend jobs publish their real `dist` assets for the backend embed checks;
+- the backend downloads those assets before running complete Go tests, vet, and build;
 - Docker builds only after the backend and both frontend jobs pass.
 
 Changed-file formatting and lint checks prevent new debt without making the
 workflow fail on unrelated historical files. Full tests, type checking, and
-builds remain mandatory.
+builds remain mandatory. Frontend assets are built once per workflow attempt and
+reused by the backend instead of rebuilding them or substituting placeholders.
 
 ## Image Build And Release
 

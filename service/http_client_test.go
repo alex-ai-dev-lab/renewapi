@@ -1,14 +1,31 @@
 package service
 
 import (
+	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/types"
 )
+
+type contextOnlyDialer struct {
+	deadlineSeen bool
+	mu           sync.Mutex
+}
+
+func (d *contextOnlyDialer) DialContext(ctx context.Context, _, _ string) (net.Conn, error) {
+	d.mu.Lock()
+	_, d.deadlineSeen = ctx.Deadline()
+	d.mu.Unlock()
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
 
 func resetHTTPClientTestState(t *testing.T) {
 	t.Helper()
@@ -201,5 +218,85 @@ func TestTLSVerificationErrorDoesNotDisableChannel(t *testing.T) {
 	)
 	if ShouldDisableChannel(err) {
 		t.Fatal("TLS verification errors must not auto-disable channels")
+	}
+}
+
+func TestHTTPTransportHasBoundedConnectionPhases(t *testing.T) {
+	transport, err := newHTTPTransportWithOptions(HTTPClientOptions{})
+	if err != nil {
+		t.Fatalf("new transport: %v", err)
+	}
+	if transport.DialContext == nil {
+		t.Fatal("DialContext must be configured")
+	}
+	if transport.TLSHandshakeTimeout != httpTLSHandshakeTimeout {
+		t.Fatalf("TLSHandshakeTimeout = %s, want %s", transport.TLSHandshakeTimeout, httpTLSHandshakeTimeout)
+	}
+	if transport.IdleConnTimeout != httpIdleConnTimeout {
+		t.Fatalf("IdleConnTimeout = %s, want %s", transport.IdleConnTimeout, httpIdleConnTimeout)
+	}
+	if transport.ExpectContinueTimeout != httpExpectContinueTimeout {
+		t.Fatalf("ExpectContinueTimeout = %s, want %s", transport.ExpectContinueTimeout, httpExpectContinueTimeout)
+	}
+}
+
+func TestSOCKS5DialPropagatesContextAndAddsDeadline(t *testing.T) {
+	dialer := &contextOnlyDialer{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	started := time.Now()
+	_, err := dialSOCKS5Context(ctx, dialer, "tcp", "example.com:443")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("dial error = %v, want context.Canceled", err)
+	}
+	if time.Since(started) > time.Second {
+		t.Fatal("canceled SOCKS dial did not return promptly")
+	}
+	dialer.mu.Lock()
+	deadlineSeen := dialer.deadlineSeen
+	dialer.mu.Unlock()
+	if !deadlineSeen {
+		t.Fatal("SOCKS dial context must carry a deadline")
+	}
+}
+
+func TestConcurrentHTTPClientCacheMissReturnsSingleClient(t *testing.T) {
+	resetHTTPClientTestState(t)
+	options := HTTPClientOptions{Proxy: "http://127.0.0.1:9", TLSInsecureSkipVerify: true}
+
+	const workers = 32
+	start := make(chan struct{})
+	clients := make(chan *http.Client, workers)
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			client, err := GetHttpClientWithOptions(options)
+			clients <- client
+			errs <- err
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(clients)
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("get cached client: %v", err)
+		}
+	}
+	var expected *http.Client
+	for client := range clients {
+		if expected == nil {
+			expected = client
+			continue
+		}
+		if client != expected {
+			t.Fatal("concurrent cache miss returned multiple clients")
+		}
 	}
 }

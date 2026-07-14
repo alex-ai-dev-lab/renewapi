@@ -66,7 +66,7 @@ func newProtectedFetchHTTPClient() *http.Client {
 
 func newProtectedFetchHTTPClientWithOptions(options HTTPClientOptions) (*http.Client, error) {
 	options = normalizeHTTPClientOptions(options)
-	netDialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+	netDialer := &net.Dialer{Timeout: httpDialTimeout, KeepAlive: httpKeepAlive}
 	dialContext := netDialer.DialContext
 	proxyFunc := http.ProxyFromEnvironment
 	protectDirectDial := true
@@ -87,7 +87,7 @@ func newProtectedFetchHTTPClientWithOptions(options HTTPClientOptions) (*http.Cl
 			proxyFunc = nil
 			protectDirectDial = false
 			dialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return socksDialer.Dial(network, addr)
+				return dialSOCKS5Context(ctx, socksDialer, network, addr)
 			}
 		default:
 			return nil, unsupportedProxySchemeError(parsedURL.Scheme)
@@ -110,7 +110,7 @@ func newProtectedFetchHTTPClientWithProxy(resolver ssrfResolver, dialContext fun
 		resolver = net.DefaultResolver
 	}
 	if dialContext == nil {
-		netDialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+		netDialer := &net.Dialer{Timeout: httpDialTimeout, KeepAlive: httpKeepAlive}
 		dialContext = netDialer.DialContext
 	}
 	if getProtection == nil {
@@ -189,11 +189,14 @@ func (t *ssrfProtectedRoundTripper) newTransport(proxyURL *url.URL) *http.Transp
 		}
 	}
 	transport := &http.Transport{
-		MaxIdleConns:        common.RelayMaxIdleConns,
-		MaxIdleConnsPerHost: common.RelayMaxIdleConnsPerHost,
-		ForceAttemptHTTP2:   true,
-		Proxy:               proxyFunc,
-		DialContext:         dialContext,
+		MaxIdleConns:          common.RelayMaxIdleConns,
+		MaxIdleConnsPerHost:   common.RelayMaxIdleConnsPerHost,
+		IdleConnTimeout:       httpIdleConnTimeout,
+		TLSHandshakeTimeout:   httpTLSHandshakeTimeout,
+		ExpectContinueTimeout: httpExpectContinueTimeout,
+		ForceAttemptHTTP2:     true,
+		Proxy:                 proxyFunc,
+		DialContext:           dialContext,
 	}
 	if t.tlsInsecure {
 		transport.TLSClientConfig = newInsecureTLSConfig()

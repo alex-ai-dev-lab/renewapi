@@ -23,6 +23,14 @@ type HTTPClientOptions struct {
 	TLSInsecureSkipVerify bool
 }
 
+const (
+	httpDialTimeout           = 30 * time.Second
+	httpKeepAlive             = 30 * time.Second
+	httpTLSHandshakeTimeout   = 10 * time.Second
+	httpIdleConnTimeout       = 90 * time.Second
+	httpExpectContinueTimeout = 1 * time.Second
+)
+
 var (
 	httpClient              *http.Client
 	ssrfProtectedHTTPClient *http.Client
@@ -116,6 +124,11 @@ func GetSSRFProtectedHTTPClientWithOptions(options HTTPClientOptions) (*http.Cli
 		return nil, err
 	}
 	proxyClientLock.Lock()
+	if existing, ok := protectedFetchClients[options]; ok {
+		proxyClientLock.Unlock()
+		closeHTTPClientIdleConnections(client)
+		return existing, nil
+	}
 	protectedFetchClients[options] = client
 	proxyClientLock.Unlock()
 	return client, nil
@@ -155,6 +168,11 @@ func GetHttpClientWithOptions(options HTTPClientOptions) (*http.Client, error) {
 		return nil, err
 	}
 	proxyClientLock.Lock()
+	if existing, ok := proxyClients[options]; ok {
+		proxyClientLock.Unlock()
+		closeHTTPClientIdleConnections(client)
+		return existing, nil
+	}
 	proxyClients[options] = client
 	proxyClientLock.Unlock()
 	return client, nil
@@ -230,7 +248,7 @@ func NewWebSocketDialerWithOptions(options HTTPClientOptions) (*websocket.Dialer
 			}
 			dialer.Proxy = nil
 			dialer.NetDialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return socksDialer.Dial(network, addr)
+				return dialSOCKS5Context(ctx, socksDialer, network, addr)
 			}
 		default:
 			return nil, unsupportedProxySchemeError(parsedURL.Scheme)
@@ -249,10 +267,15 @@ func normalizeHTTPClientOptions(options HTTPClientOptions) HTTPClientOptions {
 
 func newHTTPTransportWithOptions(options HTTPClientOptions) (*http.Transport, error) {
 	options = normalizeHTTPClientOptions(options)
+	netDialer := &net.Dialer{Timeout: httpDialTimeout, KeepAlive: httpKeepAlive}
 	transport := &http.Transport{
-		MaxIdleConns:        common.RelayMaxIdleConns,
-		MaxIdleConnsPerHost: common.RelayMaxIdleConnsPerHost,
-		ForceAttemptHTTP2:   true,
+		MaxIdleConns:          common.RelayMaxIdleConns,
+		MaxIdleConnsPerHost:   common.RelayMaxIdleConnsPerHost,
+		IdleConnTimeout:       httpIdleConnTimeout,
+		TLSHandshakeTimeout:   httpTLSHandshakeTimeout,
+		ExpectContinueTimeout: httpExpectContinueTimeout,
+		DialContext:           netDialer.DialContext,
+		ForceAttemptHTTP2:     true,
 	}
 	if options.Proxy == "" {
 		transport.Proxy = http.ProxyFromEnvironment // Support HTTP_PROXY, HTTPS_PROXY, NO_PROXY env vars
@@ -271,7 +294,7 @@ func newHTTPTransportWithOptions(options HTTPClientOptions) (*http.Transport, er
 			}
 			// proxy.SOCKS5 使用 tcp 参数，所有 TCP 连接包括 DNS 查询都将通过代理进行。行为与 socks5h 相同
 			transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return socksDialer.Dial(network, addr)
+				return dialSOCKS5Context(ctx, socksDialer, network, addr)
 			}
 		default:
 			return nil, unsupportedProxySchemeError(parsedURL.Scheme)
@@ -297,7 +320,7 @@ func parseProxyURL(proxyURL string) (*url.URL, error) {
 	return url.Parse(strings.TrimSpace(proxyURL))
 }
 
-func newSocks5Dialer(parsedURL *url.URL) (proxy.Dialer, error) {
+func newSocks5Dialer(parsedURL *url.URL) (proxy.ContextDialer, error) {
 	var auth *proxy.Auth
 	if parsedURL.User != nil {
 		auth = &proxy.Auth{
@@ -308,7 +331,26 @@ func newSocks5Dialer(parsedURL *url.URL) (proxy.Dialer, error) {
 			auth.Password = password
 		}
 	}
-	return proxy.SOCKS5("tcp", parsedURL.Host, auth, proxy.Direct)
+	dialer, err := proxy.SOCKS5(
+		"tcp",
+		parsedURL.Host,
+		auth,
+		&net.Dialer{Timeout: httpDialTimeout, KeepAlive: httpKeepAlive},
+	)
+	if err != nil {
+		return nil, err
+	}
+	contextDialer, ok := dialer.(proxy.ContextDialer)
+	if !ok {
+		return nil, fmt.Errorf("SOCKS5 dialer does not support contexts")
+	}
+	return contextDialer, nil
+}
+
+func dialSOCKS5Context(ctx context.Context, dialer proxy.ContextDialer, network, addr string) (net.Conn, error) {
+	dialCtx, cancel := context.WithTimeout(ctx, httpDialTimeout)
+	defer cancel()
+	return dialer.DialContext(dialCtx, network, addr)
 }
 
 func unsupportedProxySchemeError(scheme string) error {

@@ -211,4 +211,7 @@ func TestProtectedFetchRoundTripperReusesTransportPerProxy(t *testing.T) {
 	require.Same(t, direct, roundTripper.transportFor(nil))
 	require.NotSame(t, direct, roundTripper.transportFor(proxyURL))
 	require.True(t, direct.ForceAttemptHTTP2)
+	require.Equal(t, httpTLSHandshakeTimeout, direct.TLSHandshakeTimeout)
+	require.Equal(t, httpIdleConnTimeout, direct.IdleConnTimeout)
+	require.Equal(t, httpExpectContinueTimeout, direct.ExpectContinueTimeout)
 }

@@ -63,7 +63,13 @@ func responsesRequirementForRelay(info *relaycommon.RelayInfo) *service.Response
 	if info == nil || (info.RelayMode != relayconstant.RelayModeResponses && info.RelayMode != relayconstant.RelayModeResponsesCompact) {
 		return nil
 	}
-	return &service.ResponsesRoutingRequirement{Kind: info.ResponsesRequestKind, ClientStream: info.IsStream}
+	requirement := &service.ResponsesRoutingRequirement{Kind: info.ResponsesRequestKind, ClientStream: info.IsStream}
+	if info.ResponsesRequestKind == dto.ResponsesCompactionTrigger &&
+		info.ClientModelName != "" &&
+		!strings.EqualFold(info.ClientModelName, info.OriginModelName) {
+		requirement.RequiredContinuationModel = info.ClientModelName
+	}
+	return requirement
 }
 
 func relayModeName(mode int) string {
@@ -294,6 +300,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}()
 
 	modelDefaultEndpoint, _ := operation_setting.ForceModelDefaultEndpoint(relayInfo.OriginModelName)
+	responsesRequirement := responsesRequirementForRelay(relayInfo)
+	requiredModelName := ""
+	if responsesRequirement != nil {
+		requiredModelName = responsesRequirement.RequiredContinuationModel
+	}
 	retryParam := &service.RetryParam{
 		Ctx:                           c,
 		TokenGroup:                    relayInfo.TokenGroup,
@@ -307,7 +318,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		ClientRelayFormat:             relayFormat,
 		Request:                       relayInfo.Request,
 		ProviderRoutingPolicy:         getProviderRoutingPolicy(c),
-		ResponsesRequirement:          responsesRequirementForRelay(relayInfo),
+		ResponsesRequirement:          responsesRequirement,
+		RequiredModelName:             requiredModelName,
 	}
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil
@@ -1343,6 +1355,11 @@ func recordRelayErrorLog(c *gin.Context, riskChannelId int, err *types.NewAPIErr
 	other["channel_id"] = channelId
 	other["channel_name"] = c.GetString("channel_name")
 	other["channel_type"] = c.GetInt("channel_type")
+	clientModelName := common.GetContextKeyString(c, constant.ContextKeyClientModel)
+	if clientModelName != "" && !strings.EqualFold(clientModelName, modelName) {
+		other["client_model_name"] = clientModelName
+		other["routing_model_name"] = modelName
+	}
 	if service.IsModelScopedChannelFailureError(err) {
 		other["failure_scope"] = "channel_model"
 		other["channel_model_status"] = "auto_disabled"

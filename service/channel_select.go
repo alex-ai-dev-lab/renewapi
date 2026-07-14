@@ -33,6 +33,7 @@ type RetryParam struct {
 	LastSelectedChannelId                     int
 	ProviderRoutingPolicy                     *ProviderRoutingPolicy
 	ResponsesRequirement                      *ResponsesRoutingRequirement
+	RequiredModelName                         string
 	ModelMappingFallbackChannelId             int
 }
 
@@ -109,6 +110,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			preferred.Status == common.ChannelStatusEnabled &&
 			model.IsChannelEnabledForGroupModel(param.TokenGroup, param.ModelName, preferred.Id) &&
 			!model.IsChannelModelDisabledForGroup(preferred.Id, param.TokenGroup, param.ModelName) &&
+			channelSupportsRequiredModelForGroup(param, preferred, param.TokenGroup) &&
 			ChannelMatchesProviderRoutingPolicy(preferred, param.ProviderRoutingPolicy) &&
 			channelMatchesRetryRequirements(param, preferred) {
 			param.LastSelectedChannelId = preferred.Id
@@ -128,7 +130,8 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 				channelMatchesRetryRequirements(param, preferred) {
 				for _, autoGroup := range autoGroups {
 					if model.IsChannelEnabledForGroupModel(autoGroup, param.ModelName, preferred.Id) &&
-						!model.IsChannelModelDisabledForGroup(preferred.Id, autoGroup, param.ModelName) {
+						!model.IsChannelModelDisabledForGroup(preferred.Id, autoGroup, param.ModelName) &&
+						channelSupportsRequiredModelForGroup(param, preferred, autoGroup) {
 						common.SetContextKey(param.Ctx, constant.ContextKeyAutoGroup, autoGroup)
 						param.LastSelectedChannelId = preferred.Id
 						return preferred, autoGroup, nil
@@ -234,6 +237,14 @@ func channelMatchesRetryRequirements(param *RetryParam, channel *model.Channel) 
 	return true
 }
 
+func channelSupportsRequiredModelForGroup(param *RetryParam, channel *model.Channel, group string) bool {
+	if param == nil || channel == nil || param.RequiredModelName == "" || strings.EqualFold(param.RequiredModelName, param.ModelName) {
+		return true
+	}
+	return model.IsChannelEnabledForGroupModel(group, param.RequiredModelName, channel.Id) &&
+		!model.IsChannelModelDisabledForGroup(channel.Id, group, param.RequiredModelName)
+}
+
 func ChannelAllowedForProduction(channel *model.Channel) bool {
 	if channel == nil {
 		return false
@@ -259,7 +270,7 @@ func getRandomSatisfiedChannelWithRequirements(param *RetryParam, group string, 
 		if err != nil || channel == nil {
 			return channel, err
 		}
-		if channelMatchesRetryRequirements(param, channel) {
+		if channelMatchesRetryRequirements(param, channel) && channelSupportsRequiredModelForGroup(param, channel, group) {
 			return channel, nil
 		}
 		excluded[channel.Id] = true

@@ -283,7 +283,27 @@ jobs:
         with:
           name: ${{ steps.meta.outputs.tarball }}
           path: release-assets/
+          include-hidden-files: true
           retention-days: 7
+
+      - name: Download uploaded release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.tarball }}
+          path: uploaded-release-assets
+
+      - name: Verify uploaded release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f uploaded-release-assets/.env.example
+          test -f uploaded-release-assets/${{ steps.meta.outputs.tarball }}
+          test -f uploaded-release-assets/docker-compose.yml
+          test -f uploaded-release-assets/CHECKSUMS.txt
+          (
+            cd uploaded-release-assets
+            sha256sum -c CHECKSUMS.txt
+          )
 
       - name: Create GitHub Release
         if: inputs.create_release

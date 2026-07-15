@@ -31,7 +31,11 @@ commit is pushed. It:
 - builds and pushes `linux/amd64` and `linux/arm64` images to GHCR;
 - publishes immutable `sha-<12 character commit>` tags;
 - records the manifest digest as a workflow output;
-- generates an amd64 tarball artifact and optional GitHub release.
+- generates an amd64 tarball artifact and optional GitHub release;
+- explicitly includes the hidden `.env.example` file in the uploaded artifact;
+- downloads the uploaded artifact again and verifies every entry in
+  `CHECKSUMS.txt`, so validation covers the delivered package rather than only
+  the runner's pre-upload directory.
 
 Set `base_sha` to the reviewed source baseline so changed-file checks cover the
 entire delivery range. Deploy the immutable SHA tag or digest, not `latest`.

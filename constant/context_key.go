@@ -12,6 +12,12 @@ const (
 	ContextKeyRequestStartTime ContextKey = "request_start_time"
 	ContextKeyFallbackModels   ContextKey = "fallback_models"
 	ContextKeyTruncationRetry  ContextKey = "truncation_retry"
+	// ContextKeyResponsesRelayRoutePlan stores the request-scoped compaction
+	// route plan selected before the first channel context is installed.
+	ContextKeyResponsesRelayRoutePlan ContextKey = "responses_relay_route_plan"
+	// ContextKeyResponsesRoutingRequest stores the fully decoded Responses DTO
+	// used for request-aware protocol capability checks in the distributor.
+	ContextKeyResponsesRoutingRequest ContextKey = "responses_routing_request"
 
 	/* token related keys */
 	ContextKeyTokenUnlimited         ContextKey = "token_unlimited_quota"

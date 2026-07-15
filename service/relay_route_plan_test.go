@@ -35,6 +35,7 @@ func setupRelayRoutePlanTestDB(t *testing.T, channels ...*model.Channel) {
 		&model.Ability{},
 		&model.ChannelModelStatus{},
 		&model.ChannelModelCapability{},
+		&model.ModelEndpoint{},
 	))
 	model.DB = db
 	common.MemoryCacheEnabled = true
@@ -133,6 +134,127 @@ func TestBuildResponsesRelayRoutePlanOrdersInitialExactThenVersionsAndChannels(t
 		entries[2].PreferredChannelId,
 		entries[3].PreferredChannelId,
 	})
+}
+
+func TestBuildResponsesRelayRoutePlanSelectsHigherPriorityChannelAlternativeBeforeLowerPriorityExact(t *testing.T) {
+	supported := dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionNativeV2}
+	highPriority := routePlanTestChannel(71, "high-priority", "gpt-5.5,gpt-5.6", 20, nil)
+	highPriority.SetSetting(dto.ChannelSettings{ResponsesCompaction: &dto.ResponsesCompactionSettings{
+		ModelCapabilities: map[string]dto.ResponsesCompactionCapabilityRecord{
+			"gpt-5.6": supported,
+		},
+	}})
+	lowerPriority := routePlanTestChannel(89, "lower-priority", "gpt-5.5", 10, nil)
+	lowerPriority.SetSetting(dto.ChannelSettings{ResponsesCompaction: &dto.ResponsesCompactionSettings{
+		ModelCapabilities: map[string]dto.ResponsesCompactionCapabilityRecord{
+			"gpt-5.5": supported,
+		},
+	}})
+	setupRelayRoutePlanTestDB(t, highPriority, lowerPriority)
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+	require.NoError(t, model.UpsertChannelModelCapability(model.ChannelModelCapability{
+		ChannelId:          highPriority.Id,
+		ModelName:          "gpt-5.5",
+		Capability:         model.ChannelCapabilityResponsesCompaction,
+		Status:             model.ChannelCapabilityStatusSupported,
+		LegacyStatus:       model.ChannelCapabilityStatusUnsupported,
+		NativeStatus:       model.ChannelCapabilityStatusUnsupported,
+		ContinuationStatus: model.ChannelCapabilityStatusSupported,
+		RouteFingerprint:   ResponsesObservedRouteFingerprint(highPriority, "gpt-5.5"),
+		Source:             "test",
+	}))
+
+	plan, err := BuildResponsesRelayRoutePlan(ResponsesRelayRoutePlanParams{
+		Group:        "default",
+		ClientModel:  "gpt-5.5",
+		PrimaryModel: "gpt-5.5",
+		Requirement:  &ResponsesRoutingRequirement{Kind: dto.ResponsesCompactionTrigger},
+		Request:      &dto.OpenAIResponsesRequest{Model: "gpt-5.5", Input: []byte(`"test"`)},
+	})
+	require.NoError(t, err)
+	entries := routePlanEntries(plan)
+	require.GreaterOrEqual(t, len(entries), 2)
+	require.Equal(t, 71, entries[0].PreferredChannelId)
+	require.Equal(t, "gpt-5.6", entries[0].RoutingModel)
+	require.Equal(t, 89, entries[1].PreferredChannelId)
+	require.Equal(t, "gpt-5.5", entries[1].RoutingModel)
+}
+
+func TestBuildResponsesRelayRoutePlanHonorsPinnedChannelAndTokenModelLimit(t *testing.T) {
+	capability := &dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionNativeV2, Continuation: true}
+	pinned := routePlanTestChannel(71, "pinned", "gpt-5.5,gpt-5.6,gpt-5.7", 10, capability)
+	other := routePlanTestChannel(89, "other", "gpt-5.5,gpt-5.6,gpt-5.7", 20, capability)
+	setupRelayRoutePlanTestDB(t, pinned, other)
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+
+	plan, err := BuildResponsesRelayRoutePlan(ResponsesRelayRoutePlanParams{
+		Group:           "default",
+		ClientModel:     "gpt-5.5",
+		PrimaryModel:    "gpt-5.5",
+		PinnedChannelId: 71,
+		Requirement:     &ResponsesRoutingRequirement{Kind: dto.ResponsesCompactionTrigger},
+		Request:         &dto.OpenAIResponsesRequest{Model: "gpt-5.5", Input: []byte(`"test"`)},
+		TokenModelAllowed: func(modelName string) bool {
+			return modelName != "gpt-5.7"
+		},
+	})
+	require.NoError(t, err)
+	entries := routePlanEntries(plan)
+	require.Len(t, entries, 2)
+	for _, entry := range entries {
+		require.Equal(t, 71, entry.PreferredChannelId)
+		require.NotEqual(t, "gpt-5.7", entry.RoutingModel)
+	}
+}
+
+func TestBuildResponsesRelayRoutePlanPreservesAutoGroupOrder(t *testing.T) {
+	capability := &dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionNativeV2}
+	firstGroup := routePlanTestChannel(71, "first-group", "gpt-5.5", 1, capability)
+	firstGroup.Group = "first"
+	secondGroup := routePlanTestChannel(89, "second-group", "gpt-5.5", 100, capability)
+	secondGroup.Group = "second"
+	setupRelayRoutePlanTestDB(t, firstGroup, secondGroup)
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+
+	plan, err := BuildResponsesRelayRoutePlan(ResponsesRelayRoutePlanParams{
+		Groups:       []string{"first", "second"},
+		ClientModel:  "gpt-5.5",
+		PrimaryModel: "gpt-5.5",
+		Requirement:  &ResponsesRoutingRequirement{Kind: dto.ResponsesCompactionTrigger},
+		Request:      &dto.OpenAIResponsesRequest{Model: "gpt-5.5", Input: []byte(`"test"`)},
+	})
+	require.NoError(t, err)
+	entries := routePlanEntries(plan)
+	require.Len(t, entries, 2)
+	require.Equal(t, "first", entries[0].Group)
+	require.Equal(t, 71, entries[0].PreferredChannelId)
+	require.Equal(t, "second", entries[1].Group)
+	require.Equal(t, 89, entries[1].PreferredChannelId)
+}
+
+func TestBuildResponsesRelayRoutePlanDistinguishesStrictAndFallbackAffinity(t *testing.T) {
+	capability := &dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionNativeV2}
+	highPriority := routePlanTestChannel(71, "high-priority", "gpt-5.5", 20, capability)
+	affinity := routePlanTestChannel(89, "affinity", "gpt-5.5", 10, capability)
+	setupRelayRoutePlanTestDB(t, highPriority, affinity)
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+	params := ResponsesRelayRoutePlanParams{
+		Group:              "default",
+		ClientModel:        "gpt-5.5",
+		PrimaryModel:       "gpt-5.5",
+		PreferredChannelId: 89,
+		Requirement:        &ResponsesRoutingRequirement{Kind: dto.ResponsesCompactionTrigger},
+		Request:            &dto.OpenAIResponsesRequest{Model: "gpt-5.5", Input: []byte(`"test"`)},
+	}
+
+	fallbackOnly, err := BuildResponsesRelayRoutePlan(params)
+	require.NoError(t, err)
+	require.Equal(t, 71, routePlanEntries(fallbackOnly)[0].PreferredChannelId)
+
+	params.PreferChannelFirst = true
+	strictAffinity, err := BuildResponsesRelayRoutePlan(params)
+	require.NoError(t, err)
+	require.Equal(t, 89, routePlanEntries(strictAffinity)[0].PreferredChannelId)
 }
 
 func TestBuildResponsesRelayRoutePlanRequiresInitialContextRoute(t *testing.T) {

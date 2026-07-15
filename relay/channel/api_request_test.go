@@ -1,9 +1,11 @@
 package channel
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -111,6 +113,34 @@ func TestDoRequestAddsHintOnlyForTLSVerificationErrors(t *testing.T) {
 	var newAPIErr *types.NewAPIError
 	require.ErrorAs(t, err, &newAPIErr)
 	require.Contains(t, newAPIErr.Error(), "跳过上游 TLS 证书校验")
+}
+
+func TestDoRequestPropagatesInboundCancellation(t *testing.T) {
+	resetAPIRequestHTTPClientState(t)
+	gin.SetMode(gin.TestMode)
+
+	upstreamCanceled := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+		close(upstreamCanceled)
+	}))
+	defer server.Close()
+
+	requestContext, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(requestContext)
+
+	upstreamRequest, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+	_, err = doRequest(ctx, upstreamRequest, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}})
+	require.Error(t, err)
+	select {
+	case <-upstreamCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("upstream request did not inherit inbound cancellation")
+	}
 }
 
 func TestProcessHeaderOverride_ChannelTestSkipsClientHeaderPlaceholder(t *testing.T) {

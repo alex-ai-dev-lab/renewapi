@@ -824,6 +824,9 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 			}()
 		}
 	}
+	if c != nil && c.Request != nil {
+		req = req.WithContext(c.Request.Context())
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

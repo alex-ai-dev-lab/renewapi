@@ -73,3 +73,46 @@ func TestResponsesCompactionProbeModelsSkipConcreteManualDeclarations(t *testing
 	}})
 	require.Equal(t, []string{"gpt-5.6"}, responsesCompactionProbeModels(channel))
 }
+
+func TestResponsesCompactionProbeModelsRevalidateMeasuredDeclarations(t *testing.T) {
+	t.Setenv("RESPONSES_COMPACTION_PROBE_MAX_MODELS", "10")
+	channel := &model.Channel{}
+	channel.SetSetting(dto.ChannelSettings{ResponsesCompaction: &dto.ResponsesCompactionSettings{
+		ModelCapabilities: map[string]dto.ResponsesCompactionCapabilityRecord{
+			"gpt-5.5": {Capability: dto.CompactionNativeV2, VerifiedAt: 123},
+		},
+	}})
+	require.Equal(t, []string{"gpt-5.5"}, responsesCompactionProbeModels(channel))
+}
+
+func TestBuildResponsesCompactionProbeRequestCoversTriggerAndContinuation(t *testing.T) {
+	trigger, err := buildResponsesCompactionProbeRequest("gpt-5.5", true, nil)
+	require.NoError(t, err)
+	require.JSONEq(t, `[{"role":"user","content":[{"type":"input_text","text":"Compress this channel capability probe state."}]},{"type":"compaction_trigger"}]`, string(trigger.Input))
+	require.NotNil(t, trigger.Stream)
+	require.True(t, *trigger.Stream)
+
+	item := []byte(`{"type":"compaction_summary","encrypted_content":"opaque"}`)
+	continuation, err := buildResponsesCompactionProbeRequest("gpt-5.5", false, item)
+	require.NoError(t, err)
+	require.JSONEq(t, `[{"type":"compaction_summary","encrypted_content":"opaque"},{"role":"user","content":[{"type":"input_text","text":"Reply with CONTINUE_OK."}]}]`, string(continuation.Input))
+	require.NotNil(t, continuation.Stream)
+	require.False(t, *continuation.Stream)
+}
+
+func TestResponsesCompactionObservationCompleteRequiresNativeFacets(t *testing.T) {
+	record := model.ChannelModelCapability{
+		LegacyStatus: model.ChannelCapabilityStatusSupported,
+		NativeStatus: model.ChannelCapabilityStatusSupported,
+	}
+	require.False(t, responsesCompactionObservationComplete(record))
+	record.NativeStreamStatus = model.ChannelCapabilityStatusSupported
+	record.ContinuationStatus = model.ChannelCapabilityStatusSupported
+	require.True(t, responsesCompactionObservationComplete(record))
+
+	record = model.ChannelModelCapability{
+		LegacyStatus: model.ChannelCapabilityStatusSupported,
+		NativeStatus: model.ChannelCapabilityStatusUnsupported,
+	}
+	require.True(t, responsesCompactionObservationComplete(record))
+}

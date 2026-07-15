@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
@@ -48,11 +49,11 @@ func responsesCompactionProbeModels(channel *model.Channel) []string {
 		modelName = strings.TrimSuffix(strings.TrimSpace(modelName), ratio_setting.CompactModelSuffix)
 		if record, ok := settings.ModelCapabilities[modelName]; ok {
 			capability := strings.TrimSpace(string(record.Capability))
-			return capability != "" && !strings.EqualFold(capability, string(dto.CompactionUnknown))
+			return capability != "" && !strings.EqualFold(capability, string(dto.CompactionUnknown)) && record.VerifiedAt <= 0
 		}
 		if settings.DefaultCapability != nil {
 			capability := strings.TrimSpace(string(settings.DefaultCapability.Capability))
-			return capability != "" && !strings.EqualFold(capability, string(dto.CompactionUnknown))
+			return capability != "" && !strings.EqualFold(capability, string(dto.CompactionUnknown)) && settings.DefaultCapability.VerifiedAt <= 0
 		}
 		return false
 	}
@@ -108,13 +109,48 @@ func responsesCompactionProbeModels(channel *model.Channel) []string {
 	return result
 }
 
+func buildResponsesCompactionProbeRequest(modelName string, stream bool, compactedItem json.RawMessage) (*dto.OpenAIResponsesRequest, error) {
+	message := json.RawMessage(`{"role":"user","content":[{"type":"input_text","text":"Compress this channel capability probe state."}]}`)
+	items := []json.RawMessage{message}
+	if len(compactedItem) > 0 {
+		items = []json.RawMessage{
+			append(json.RawMessage(nil), compactedItem...),
+			json.RawMessage(`{"role":"user","content":[{"type":"input_text","text":"Reply with CONTINUE_OK."}]}`),
+		}
+	} else {
+		items = append(items, json.RawMessage(`{"type":"compaction_trigger"}`))
+	}
+	input, err := common.Marshal(items)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.OpenAIResponsesRequest{
+		Model:  modelName,
+		Input:  input,
+		Store:  json.RawMessage(`false`),
+		Stream: common.GetPointer(stream),
+	}, nil
+}
+
+func responsesCompactionObservationComplete(record model.ChannelModelCapability) bool {
+	if record.LegacyStatus == model.ChannelCapabilityStatusUnknown || record.NativeStatus == model.ChannelCapabilityStatusUnknown {
+		return false
+	}
+	if record.NativeStatus != model.ChannelCapabilityStatusSupported {
+		return true
+	}
+	return record.NativeStreamStatus != model.ChannelCapabilityStatusUnknown &&
+		record.ContinuationStatus != model.ChannelCapabilityStatusUnknown
+}
+
 func probeResponsesCompactionCapabilities(channel *model.Channel, testUserID int) {
 	if !common.GetEnvOrDefaultBool("RESPONSES_COMPACTION_PROBE_ENABLED", false) {
 		return
 	}
 	for _, modelName := range responsesCompactionProbeModels(channel) {
 		if record, found := model.GetChannelModelCapability(channel.Id, modelName, model.ChannelCapabilityResponsesCompaction); found &&
-			record.NextProbeAt > common.GetTimestamp() {
+			record.NextProbeAt > common.GetTimestamp() &&
+			(strings.EqualFold(record.Source, "probe") || responsesCompactionObservationComplete(record)) {
 			continue
 		}
 		responsesCompactionProbeSemaphore <- struct{}{}
@@ -129,6 +165,60 @@ func probeResponsesCompactionCapabilities(channel *model.Channel, testUserID int
 			UsedLegacy: true,
 			Source:     "probe",
 		}, result.newAPIError)
+
+		nativeRequest, err := buildResponsesCompactionProbeRequest(modelName, false, nil)
+		if err != nil {
+			common.SysLog(fmt.Sprintf("responses native compaction probe skipped: channel=%d model=%s error=%s", channel.Id, modelName, err.Error()))
+			continue
+		}
+		responsesCompactionProbeSemaphore <- struct{}{}
+		nativeResult := testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), false, &channelTestRequestOverride{
+			Request: nativeRequest,
+			Kind:    dto.ResponsesCompactionTrigger,
+		})
+		<-responsesCompactionProbeSemaphore
+		service.ObserveResponsesCapabilityAttempt(channel, modelName, service.ResponsesCapabilityAttempt{
+			Kind:   dto.ResponsesCompactionTrigger,
+			Source: "probe",
+		}, nativeResult.newAPIError)
+
+		streamRequest, err := buildResponsesCompactionProbeRequest(modelName, true, nil)
+		if err != nil {
+			common.SysLog(fmt.Sprintf("responses native stream compaction probe skipped: channel=%d model=%s error=%s", channel.Id, modelName, err.Error()))
+			continue
+		}
+		responsesCompactionProbeSemaphore <- struct{}{}
+		streamResult := testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), true, &channelTestRequestOverride{
+			Request:  streamRequest,
+			Kind:     dto.ResponsesCompactionTrigger,
+			IsStream: true,
+		})
+		<-responsesCompactionProbeSemaphore
+		service.ObserveResponsesCapabilityAttempt(channel, modelName, service.ResponsesCapabilityAttempt{
+			Kind:         dto.ResponsesCompactionTrigger,
+			ClientStream: true,
+			Source:       "probe",
+		}, streamResult.newAPIError)
+
+		compactedItem := nativeResult.compactionItem
+		if len(compactedItem) == 0 {
+			compactedItem = streamResult.compactionItem
+		}
+		if len(compactedItem) > 0 {
+			continuationRequest, buildErr := buildResponsesCompactionProbeRequest(modelName, false, compactedItem)
+			if buildErr == nil {
+				responsesCompactionProbeSemaphore <- struct{}{}
+				continuationResult := testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), false, &channelTestRequestOverride{
+					Request: continuationRequest,
+					Kind:    dto.ResponsesCompactedContextContinuation,
+				})
+				<-responsesCompactionProbeSemaphore
+				service.ObserveResponsesCapabilityAttempt(channel, modelName, service.ResponsesCapabilityAttempt{
+					Kind:   dto.ResponsesCompactedContextContinuation,
+					Source: "probe",
+				}, continuationResult.newAPIError)
+			}
+		}
 		time.Sleep(100 * time.Millisecond)
 	}
 }

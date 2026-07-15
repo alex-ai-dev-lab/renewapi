@@ -257,10 +257,11 @@ jobs:
             -t "$IMAGE:$TAG-amd64-package" \
             .
           docker save "$IMAGE:$TAG-amd64-package" | gzip -9 > "release-assets/$TARBALL"
-          cp docker-compose.yml .env.example release-assets/
+          cp docker-compose.yml release-assets/
+          cp .env.example release-assets/default.env.example
           (
             cd release-assets
-            sha256sum "$TARBALL" docker-compose.yml .env.example > CHECKSUMS.txt
+            sha256sum "$TARBALL" docker-compose.yml default.env.example > CHECKSUMS.txt
           )
 
       - name: Prepare release notes
@@ -296,7 +297,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f uploaded-release-assets/.env.example
+          test -f uploaded-release-assets/default.env.example
           test -f uploaded-release-assets/${{ steps.meta.outputs.tarball }}
           test -f uploaded-release-assets/docker-compose.yml
           test -f uploaded-release-assets/CHECKSUMS.txt
@@ -318,7 +319,7 @@ jobs:
           files: |
             release-assets/${{ steps.meta.outputs.tarball }}
             release-assets/docker-compose.yml
-            release-assets/.env.example
+            release-assets/default.env.example
             release-assets/CHECKSUMS.txt
 
       - name: Verify release tag source commit

@@ -85,6 +85,14 @@ func TestResponsesCompactionProbeModelsRevalidateMeasuredDeclarations(t *testing
 	require.Equal(t, []string{"gpt-5.5"}, responsesCompactionProbeModels(channel))
 }
 
+func TestResponsesCompactionProbeTimeoutSeconds(t *testing.T) {
+	t.Setenv("RESPONSES_COMPACTION_PROBE_TIMEOUT_SECONDS", "37")
+	require.Equal(t, 37, responsesCompactionProbeTimeoutSeconds())
+
+	t.Setenv("RESPONSES_COMPACTION_PROBE_TIMEOUT_SECONDS", "1")
+	require.Equal(t, 5, responsesCompactionProbeTimeoutSeconds())
+}
+
 func TestBuildResponsesCompactionProbeRequestCoversTriggerAndContinuation(t *testing.T) {
 	trigger, err := buildResponsesCompactionProbeRequest("gpt-5.5", true, nil)
 	require.NoError(t, err)

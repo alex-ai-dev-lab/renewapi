@@ -55,9 +55,10 @@ type testResult struct {
 }
 
 type channelTestRequestOverride struct {
-	Request  dto.Request
-	Kind     dto.ResponsesRequestKind
-	IsStream bool
+	Request        dto.Request
+	Kind           dto.ResponsesRequestKind
+	IsStream       bool
+	TimeoutSeconds int
 }
 
 const channelTestNoncePrefix = "NEWAPI_TEST_"
@@ -343,8 +344,12 @@ func testChannelWithRequest(channel *model.Channel, testUserID int, testModel st
 		Body:   nil,
 		Header: buildChannelTestHeaders(endpointType, isStream),
 	}
-	if cfg.TimeoutSeconds > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutSeconds)*time.Second)
+	timeoutSeconds := cfg.TimeoutSeconds
+	if override != nil && override.TimeoutSeconds > 0 {
+		timeoutSeconds = override.TimeoutSeconds
+	}
+	if timeoutSeconds > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 		defer cancel()
 		c.Request = c.Request.WithContext(ctx)
 	}

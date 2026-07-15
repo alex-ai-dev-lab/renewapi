@@ -37,6 +37,14 @@ var testTracking = &channelTestTracker{
 
 var responsesCompactionProbeSemaphore = make(chan struct{}, 4)
 
+func responsesCompactionProbeTimeoutSeconds() int {
+	timeoutSeconds := common.GetEnvOrDefault("RESPONSES_COMPACTION_PROBE_TIMEOUT_SECONDS", 90)
+	if timeoutSeconds < 5 {
+		return 5
+	}
+	return timeoutSeconds
+}
+
 func responsesCompactionProbeModels(channel *model.Channel) []string {
 	if channel == nil {
 		return nil
@@ -153,8 +161,17 @@ func probeResponsesCompactionCapabilities(channel *model.Channel, testUserID int
 			(strings.EqualFold(record.Source, "probe") || responsesCompactionObservationComplete(record)) {
 			continue
 		}
+		probeTimeoutSeconds := responsesCompactionProbeTimeoutSeconds()
+		legacyRequest := &dto.OpenAIResponsesCompactionRequest{
+			Model: modelName,
+			Input: json.RawMessage(`[{"role":"user","content":[{"type":"input_text","text":"Compress this channel capability probe state."}]}]`),
+		}
 		responsesCompactionProbeSemaphore <- struct{}{}
-		result := testChannel(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponseCompact), false)
+		result := testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponseCompact), false, &channelTestRequestOverride{
+			Request:        legacyRequest,
+			Kind:           dto.ResponsesCompactEndpoint,
+			TimeoutSeconds: probeTimeoutSeconds,
+		})
 		<-responsesCompactionProbeSemaphore
 		if result.localErr != nil && result.newAPIError == nil {
 			common.SysLog(fmt.Sprintf("responses compaction probe skipped: channel=%d model=%s error=%s", channel.Id, modelName, result.localErr.Error()))
@@ -173,8 +190,9 @@ func probeResponsesCompactionCapabilities(channel *model.Channel, testUserID int
 		}
 		responsesCompactionProbeSemaphore <- struct{}{}
 		nativeResult := testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), false, &channelTestRequestOverride{
-			Request: nativeRequest,
-			Kind:    dto.ResponsesCompactionTrigger,
+			Request:        nativeRequest,
+			Kind:           dto.ResponsesCompactionTrigger,
+			TimeoutSeconds: probeTimeoutSeconds,
 		})
 		<-responsesCompactionProbeSemaphore
 		service.ObserveResponsesCapabilityAttempt(channel, modelName, service.ResponsesCapabilityAttempt{
@@ -189,9 +207,10 @@ func probeResponsesCompactionCapabilities(channel *model.Channel, testUserID int
 		}
 		responsesCompactionProbeSemaphore <- struct{}{}
 		streamResult := testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), true, &channelTestRequestOverride{
-			Request:  streamRequest,
-			Kind:     dto.ResponsesCompactionTrigger,
-			IsStream: true,
+			Request:        streamRequest,
+			Kind:           dto.ResponsesCompactionTrigger,
+			IsStream:       true,
+			TimeoutSeconds: probeTimeoutSeconds,
 		})
 		<-responsesCompactionProbeSemaphore
 		service.ObserveResponsesCapabilityAttempt(channel, modelName, service.ResponsesCapabilityAttempt{
@@ -209,8 +228,9 @@ func probeResponsesCompactionCapabilities(channel *model.Channel, testUserID int
 			if buildErr == nil {
 				responsesCompactionProbeSemaphore <- struct{}{}
 				continuationResult := testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), false, &channelTestRequestOverride{
-					Request: continuationRequest,
-					Kind:    dto.ResponsesCompactedContextContinuation,
+					Request:        continuationRequest,
+					Kind:           dto.ResponsesCompactedContextContinuation,
+					TimeoutSeconds: probeTimeoutSeconds,
 				})
 				<-responsesCompactionProbeSemaphore
 				service.ObserveResponsesCapabilityAttempt(channel, modelName, service.ResponsesCapabilityAttempt{
@@ -404,7 +424,6 @@ func testSingleChannelWithRetries(channel *model.Channel, testUserID int, retryC
 				common.GetContextKeyString(lastResult.context, constant.ContextKeyChannelKey),
 				channel.Name)
 		}
-		probeResponsesCompactionCapabilities(channel, testUserID)
 		return
 	}
 
@@ -492,6 +511,7 @@ func runIndependentChannelTest() {
 
 		// Test this channel
 		testTracking.recordTest(channel.Id)
+		go probeResponsesCompactionCapabilities(channel, testUserID)
 		go testSingleChannelWithRetries(channel, testUserID, retryCount, retryThreshold)
 
 		// Stagger tests to avoid thundering herd

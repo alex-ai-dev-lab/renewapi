@@ -1461,6 +1461,46 @@ func TestChannel(c *gin.Context) {
 	})
 }
 
+func ProbeChannelResponsesCompaction(c *gin.Context) {
+	channelID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	channel, err := model.CacheGetChannel(channelID)
+	if err != nil {
+		channel, err = model.GetChannelById(channelID, true)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
+	models := responsesCompactionProbeModels(channel)
+	if len(models) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "channel has no explicitly scoped responses compaction models",
+		})
+		return
+	}
+	testUserID, err := resolveChannelTestUserID(c)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	probeResponsesCompactionCapabilities(channel, testUserID, true)
+	records, err := model.ListChannelModelCapabilities(channelID, model.ChannelCapabilityResponsesCompaction)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"models":  models,
+		"records": records,
+	})
+}
+
 var testAllChannelsLock sync.Mutex
 var testAllChannelsRunning bool = false
 

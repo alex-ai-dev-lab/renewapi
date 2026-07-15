@@ -151,8 +151,8 @@ func responsesCompactionObservationComplete(record model.ChannelModelCapability)
 		record.ContinuationStatus != model.ChannelCapabilityStatusUnknown
 }
 
-func probeResponsesCompactionCapabilities(channel *model.Channel, testUserID int) {
-	if !common.GetEnvOrDefaultBool("RESPONSES_COMPACTION_PROBE_ENABLED", false) {
+func probeResponsesCompactionCapabilities(channel *model.Channel, testUserID int, force bool) {
+	if !force && !common.GetEnvOrDefaultBool("RESPONSES_COMPACTION_PROBE_ENABLED", false) {
 		return
 	}
 	for _, modelName := range responsesCompactionProbeModels(channel) {
@@ -511,7 +511,7 @@ func runIndependentChannelTest() {
 
 		// Test this channel
 		testTracking.recordTest(channel.Id)
-		go probeResponsesCompactionCapabilities(channel, testUserID)
+		go probeResponsesCompactionCapabilities(channel, testUserID, false)
 		go testSingleChannelWithRetries(channel, testUserID, retryCount, retryThreshold)
 
 		// Stagger tests to avoid thundering herd

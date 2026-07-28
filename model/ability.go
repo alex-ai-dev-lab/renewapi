@@ -294,7 +294,7 @@ func abilityPriority(ability Ability) int64 {
 }
 
 func (channel *Channel) AddAbilities(tx *gorm.DB) error {
-	models_ := channel.GetModels()
+	models_ := channel.GetRoutingModels()
 	groups_ := channel.GetGroups()
 	abilitySet := make(map[string]struct{})
 	abilities := make([]Ability, 0, len(models_))
@@ -366,7 +366,7 @@ func (channel *Channel) UpdateAbilities(tx *gorm.DB) error {
 	}
 
 	// Then add new abilities
-	models_ := channel.GetModels()
+	models_ := channel.GetRoutingModels()
 	groups_ := channel.GetGroups()
 	abilitySet := make(map[string]struct{})
 	abilities := make([]Ability, 0, len(models_))

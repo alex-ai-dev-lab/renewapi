@@ -58,7 +58,7 @@ func ReloadChannelCache() error {
 		}
 		groups := strings.Split(channel.Group, ",")
 		for _, group := range groups {
-			models := strings.Split(channel.Models, ",")
+			models := channel.GetRoutingModels()
 			for _, model := range models {
 				if _, ok := newGroup2model2channels[group][model]; !ok {
 					newGroup2model2channels[group][model] = make([]int, 0)
@@ -361,7 +361,7 @@ func CacheUpdateChannelStatus(id int, status int) {
 			if !exists {
 				continue
 			}
-			for _, modelName := range channel.GetModels() {
+			for _, modelName := range channel.GetRoutingModels() {
 				modelName = strings.TrimSpace(modelName)
 				channels, exists := model2channels[modelName]
 				if !exists {
@@ -391,7 +391,7 @@ func CacheUpdateChannelStatus(id int, status int) {
 		if group2model2channels[group] == nil {
 			group2model2channels[group] = make(map[string][]int)
 		}
-		for _, modelName := range channel.GetModels() {
+		for _, modelName := range channel.GetRoutingModels() {
 			modelName = strings.TrimSpace(modelName)
 			if modelName == "" {
 				continue

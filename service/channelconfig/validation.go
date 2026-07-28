@@ -105,8 +105,8 @@ func ValidateChannel(channel *model.Channel, isAdd bool) error {
 		}
 	}
 	if channel.ModelMapping != nil {
-		var mapping map[string]any
-		if err := common.Unmarshal([]byte(*channel.ModelMapping), &mapping); err != nil {
+		mapping, err := common.ParseModelMapping(*channel.ModelMapping)
+		if err != nil {
 			return fmt.Errorf("模型映射格式错误: %w", err)
 		}
 		if mapping == nil {

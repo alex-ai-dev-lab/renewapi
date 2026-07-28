@@ -29,8 +29,9 @@ type ResponsesInputSignals struct {
 }
 
 type ResponsesRoutingRequirement struct {
-	Kind         dto.ResponsesRequestKind
-	ClientStream bool
+	Kind                      dto.ResponsesRequestKind
+	ClientStream              bool
+	RequiredContinuationModel string
 }
 
 type ResponsesExecutionPlan struct {
@@ -82,6 +83,80 @@ func ResponsesCompactionEnforcementStrict() bool {
 	return !strings.EqualFold(strings.TrimSpace(common.GetEnvOrDefaultString("RESPONSES_COMPACTION_ENFORCEMENT", "strict")), "observe")
 }
 
+// ResolveResponsesCompactionRoutingModel returns the model used to select the
+// channel and build the upstream request. Only native compaction triggers are
+// redirected; ordinary Responses requests, compacted-context continuations,
+// and the legacy /v1/responses/compact endpoint keep their requested model.
+func ResolveResponsesCompactionRoutingModel(kind dto.ResponsesRequestKind, requestedModel string) (string, bool) {
+	if kind != dto.ResponsesCompactionTrigger || strings.TrimSpace(requestedModel) == "" {
+		return requestedModel, false
+	}
+	targetModel := strings.TrimSpace(common.GetEnvOrDefaultString("RESPONSES_COMPACTION_MODEL", ""))
+	if targetModel == "" {
+		return requestedModel, false
+	}
+	targetModel = ResolveLatestModelAlias(targetModel)
+	if strings.EqualFold(targetModel, requestedModel) {
+		return requestedModel, false
+	}
+	return targetModel, true
+}
+
+func channelAdvertisesRoutingModel(channel *model.Channel, modelName string) bool {
+	if channel == nil || strings.TrimSpace(modelName) == "" {
+		return false
+	}
+	for _, candidate := range channel.GetRoutingModels() {
+		if strings.EqualFold(candidate, modelName) {
+			return true
+		}
+	}
+	return false
+}
+
+type responsesRouteCompatibility struct {
+	ChannelType int
+	BaseURL     string
+	Endpoint    string
+}
+
+func normalizeResponsesRouteBaseURL(raw string) string {
+	base := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if parsed, err := url.Parse(base); err == nil {
+		parsed.Scheme = strings.ToLower(parsed.Scheme)
+		parsed.Host = strings.ToLower(parsed.Host)
+		base = parsed.String()
+	}
+	return base
+}
+
+func responsesRouteCompatibilityForModel(channel *model.Channel, modelName string) responsesRouteCompatibility {
+	decision := model.ResolveModelRouteDecision(channel, modelName)
+	return responsesRouteCompatibility{
+		ChannelType: decision.ChannelType,
+		BaseURL:     normalizeResponsesRouteBaseURL(decision.BaseURL),
+		Endpoint:    string(decision.Endpoint),
+	}
+}
+
+func channelSupportsRequiredContinuation(channel *model.Channel, compactionModel string, requirement *ResponsesRoutingRequirement, request dto.Request) bool {
+	if requirement == nil || requirement.Kind != dto.ResponsesCompactionTrigger {
+		return true
+	}
+	continuationModel := strings.TrimSpace(requirement.RequiredContinuationModel)
+	if continuationModel == "" || strings.EqualFold(continuationModel, compactionModel) {
+		return true
+	}
+	if !channelAdvertisesRoutingModel(channel, continuationModel) {
+		return false
+	}
+	if responsesRouteCompatibilityForModel(channel, compactionModel) != responsesRouteCompatibilityForModel(channel, continuationModel) {
+		return false
+	}
+	continuationRequirement := &ResponsesRoutingRequirement{Kind: dto.ResponsesCompactedContextContinuation}
+	return ChannelMatchesResponsesRequirement(channel, continuationModel, continuationRequirement, request)
+}
+
 func responseCapabilityRecord(channel *model.Channel, modelName string) (dto.ResponsesCompactionCapabilityRecord, bool) {
 	if channel == nil {
 		return dto.ResponsesCompactionCapabilityRecord{}, false
@@ -106,12 +181,7 @@ func ResponsesRouteFingerprint(channel *model.Channel, modelName string) string 
 	}
 	clientModel := strings.TrimSuffix(modelName, "-openai-compact")
 	decision := model.ResolveModelRouteDecision(channel, clientModel)
-	base := strings.TrimRight(strings.TrimSpace(decision.BaseURL), "/")
-	if parsed, err := url.Parse(base); err == nil {
-		parsed.Scheme = strings.ToLower(parsed.Scheme)
-		parsed.Host = strings.ToLower(parsed.Host)
-		base = parsed.String()
-	}
+	base := normalizeResponsesRouteBaseURL(decision.BaseURL)
 	raw := fmt.Sprintf("%d\n%s\n%s\n%s", decision.ChannelType, base, decision.Endpoint, clientModel)
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
@@ -134,6 +204,9 @@ func ChannelMatchesResponsesRequirement(channel *model.Channel, modelName string
 	}
 	protocol := EvaluateChannelProtocolCapability(channel, modelName, types.RelayFormatOpenAIResponses, request)
 	if !protocol.Supported || protocol.Lossy {
+		return false
+	}
+	if !channelSupportsRequiredContinuation(channel, modelName, requirement, request) {
 		return false
 	}
 	record := effectiveCompactionCapability(channel, modelName)

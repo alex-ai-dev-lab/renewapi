@@ -111,6 +111,7 @@ type RelayInfo struct {
 	UsePrice                        bool
 	RelayMode                       int
 	OriginModelName                 string
+	ClientModelName                 string
 	RequestURLPath                  string
 	RequestHeaders                  map[string]string
 	ShouldIncludeUsage              bool
@@ -518,6 +519,7 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 		UserEmail:  common.GetContextKeyString(c, constant.ContextKeyUserEmail),
 
 		OriginModelName: common.GetContextKeyString(c, constant.ContextKeyOriginalModel),
+		ClientModelName: common.GetContextKeyString(c, constant.ContextKeyClientModel),
 
 		TokenId:        common.GetContextKeyInt(c, constant.ContextKeyTokenId),
 		TokenKey:       common.GetContextKeyString(c, constant.ContextKeyTokenKey),
@@ -557,6 +559,9 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 			//promptTokens: common.GetContextKeyInt(c, constant.ContextKeyPromptTokens),
 			estimatePromptTokens: common.GetContextKeyInt(c, constant.ContextKeyEstimatedTokens),
 		},
+	}
+	if info.ClientModelName == "" {
+		info.ClientModelName = info.OriginModelName
 	}
 
 	if info.RelayMode == relayconstant.RelayModeUnknown {

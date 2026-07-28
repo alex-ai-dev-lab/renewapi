@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"math/rand"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -400,6 +401,32 @@ func (channel *Channel) GetModels() []string {
 		}
 	}
 	return res
+}
+
+// GetRoutingModels includes explicitly listed models and virtual mapping
+// sources. Target-only fallback candidates are not exposed implicitly.
+func (channel *Channel) GetRoutingModels() []string {
+	models := channel.GetModels()
+	mapping, err := common.ParseModelMapping(channel.GetModelMapping())
+	if err != nil || len(mapping) == 0 {
+		return models
+	}
+	result := make([]string, 0, len(models)+len(mapping))
+	seen := make(map[string]struct{}, len(models)+len(mapping))
+	for _, modelName := range models {
+		if _, exists := seen[modelName]; !exists {
+			seen[modelName] = struct{}{}
+			result = append(result, modelName)
+		}
+	}
+	for source := range mapping {
+		if _, exists := seen[source]; !exists {
+			seen[source] = struct{}{}
+			result = append(result, source)
+		}
+	}
+	sort.Strings(result)
+	return result
 }
 
 func (channel *Channel) GetGroups() []string {

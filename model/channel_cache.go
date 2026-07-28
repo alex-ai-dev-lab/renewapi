@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -103,12 +104,25 @@ func ReloadChannelCache() error {
 	return nil
 }
 
-func SyncChannelCache(frequency int) {
-	for {
-		time.Sleep(time.Duration(frequency) * time.Second)
-		common.SysLog("syncing channels from database")
-		InitChannelCache()
+func RunChannelCacheSync(ctx context.Context, frequency int) {
+	if frequency <= 0 {
+		frequency = 60
 	}
+	ticker := time.NewTicker(time.Duration(frequency) * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			common.SysLog("syncing channels from database")
+			InitChannelCache()
+		}
+	}
+}
+
+func SyncChannelCache(frequency int) {
+	RunChannelCacheSync(context.Background(), frequency)
 }
 
 func GetRandomSatisfiedChannel(group string, model string, retry int) (*Channel, error) {

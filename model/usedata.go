@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -21,14 +22,30 @@ type QuotaData struct {
 	Quota     int    `json:"quota" gorm:"default:0"`
 }
 
-func UpdateQuotaData() {
+func RunQuotaDataUpdater(ctx context.Context) {
 	for {
 		if common.IsDataExportEnabled() {
 			common.SysLog("正在更新数据看板数据...")
 			SaveQuotaDataCache()
 		}
-		time.Sleep(time.Duration(common.DataExportInterval) * time.Minute)
+		interval := time.Duration(common.DataExportInterval) * time.Minute
+		if interval <= 0 {
+			interval = time.Minute
+		}
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return
+		case <-timer.C:
+		}
 	}
+}
+
+func UpdateQuotaData() {
+	RunQuotaDataUpdater(context.Background())
 }
 
 var CacheQuotaData = make(map[string]*QuotaData)

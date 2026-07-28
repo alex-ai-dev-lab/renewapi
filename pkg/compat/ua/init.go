@@ -12,6 +12,7 @@
 package ua
 
 import (
+	"context"
 	"github.com/QuantumNous/new-api/model"
 )
 
@@ -19,4 +20,8 @@ import (
 // Called from main.go startup sequence.
 func InitCache() {
 	model.InitUserAgentCache()
+}
+
+func Run(ctx context.Context) {
+	model.RunUserAgentCacheSync(ctx)
 }

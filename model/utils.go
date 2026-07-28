@@ -1,13 +1,13 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 
-	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
 )
 
@@ -30,13 +30,25 @@ func init() {
 	}
 }
 
-func InitBatchUpdater() {
-	gopool.Go(func() {
-		for {
-			time.Sleep(time.Duration(common.BatchUpdateInterval) * time.Second)
+func RunBatchUpdater(ctx context.Context) {
+	interval := time.Duration(common.BatchUpdateInterval) * time.Second
+	if interval <= 0 {
+		interval = time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
 			batchUpdate()
 		}
-	})
+	}
+}
+
+func InitBatchUpdater() {
+	go RunBatchUpdater(context.Background())
 }
 
 func addNewRecord(type_ int, id int, value int) {

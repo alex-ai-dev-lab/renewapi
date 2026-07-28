@@ -17,7 +17,7 @@ func ReconcileBillingOnce(ctx context.Context, limit int) (int, error) {
 	if reservedTimeout < 60 {
 		reservedTimeout = 60
 	}
-	stale, err := model.ListStaleReservedTaskLedgers(time.Now().Unix()-int64(reservedTimeout), limit)
+	stale, err := model.ListStaleReservedTaskLedgersContext(ctx, time.Now().Unix()-int64(reservedTimeout), limit)
 	if err != nil {
 		return 0, err
 	}
@@ -38,7 +38,7 @@ func ReconcileBillingOnce(ctx context.Context, limit int) (int, error) {
 	if requestTimeout < 300 {
 		requestTimeout = 300
 	}
-	orphanedRequests, err := model.ListStaleReservedBillingLedgers("request", time.Now().Unix()-int64(requestTimeout), limit)
+	orphanedRequests, err := model.ListStaleReservedBillingLedgersContext(ctx, "request", time.Now().Unix()-int64(requestTimeout), limit)
 	if err != nil {
 		return resolved, err
 	}
@@ -55,7 +55,7 @@ func ReconcileBillingOnce(ctx context.Context, limit int) (int, error) {
 		resolved++
 	}
 
-	ledgers, err := model.ListBillingLedgersForReconcile(limit)
+	ledgers, err := model.ListBillingLedgersForReconcileContext(ctx, limit)
 	if err != nil {
 		return resolved, err
 	}
@@ -80,7 +80,7 @@ func ReconcileBillingOnce(ctx context.Context, limit int) (int, error) {
 		model.InvalidateBillingBalanceCaches(ledger.UserID, ledger.TokenID)
 		resolved++
 	}
-	processed, outboxErr := model.ProcessBillingOutbox(limit)
+	processed, outboxErr := model.ProcessBillingOutboxContext(ctx, limit)
 	if outboxErr != nil {
 		return resolved, outboxErr
 	}
@@ -88,6 +88,10 @@ func ReconcileBillingOnce(ctx context.Context, limit int) (int, error) {
 }
 
 func StartBillingReconciler(ctx context.Context) {
+	go RunBillingReconciler(ctx)
+}
+
+func RunBillingReconciler(ctx context.Context) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -99,22 +103,37 @@ func StartBillingReconciler(ctx context.Context) {
 	if batchSize < 1 || batchSize > 500 {
 		batchSize = 100
 	}
-	go func() {
-		run := func() {
-			if _, err := ReconcileBillingOnce(ctx, batchSize); err != nil && ctx.Err() == nil {
-				common.SysLog("billing reconciler error: " + err.Error())
-			}
+	run := func() {
+		if _, err := ReconcileBillingOnce(ctx, batchSize); err != nil && ctx.Err() == nil {
+			common.SysLog("billing reconciler error: " + err.Error())
 		}
-		run()
-		ticker := time.NewTicker(time.Duration(intervalSeconds) * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				run()
-			}
+	}
+	run()
+	ticker := time.NewTicker(time.Duration(intervalSeconds) * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			run()
 		}
-	}()
+	}
+}
+
+func FlushBillingOutbox(ctx context.Context, batchSize int) (int, error) {
+	if batchSize < 1 || batchSize > 500 {
+		batchSize = 100
+	}
+	total := 0
+	for {
+		if err := ctx.Err(); err != nil {
+			return total, err
+		}
+		processed, err := model.ProcessBillingOutboxContext(ctx, batchSize)
+		total += processed
+		if err != nil || processed < batchSize {
+			return total, err
+		}
+	}
 }

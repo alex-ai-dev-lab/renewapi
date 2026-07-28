@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,9 +34,10 @@ const (
 )
 
 var (
-	officialSyncOnce  sync.Once
-	officialSyncMu    sync.Mutex
-	officialSyncState = struct {
+	officialSyncOnce    sync.Once
+	officialSyncRun     = make(chan struct{}, 1)
+	officialSyncStateMu sync.RWMutex
+	officialSyncState   = struct {
 		LastRunUnix    int64
 		LastOK         bool
 		LastError      string
@@ -46,23 +48,38 @@ var (
 
 // fetchOfficialPricing downloads and converts models.dev pricing into ratio maps.
 func fetchOfficialPricing() (map[string]any, error) {
+	return fetchOfficialPricingContext(context.Background())
+}
+
+func fetchOfficialPricingContext(ctx context.Context) (map[string]any, error) {
 	client := &http.Client{Timeout: officialSyncHTTPTimeout}
-	req, err := http.NewRequest(http.MethodGet, officialPriceSourceURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "new-api-official-price-sync")
 
 	// Simple retry with backoff (mirrors existing ratio_sync behavior).
 	var resp *http.Response
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, officialPriceSourceURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("User-Agent", "new-api-official-price-sync")
 		resp, lastErr = client.Do(req)
 		if lastErr == nil {
 			break
 		}
-		time.Sleep(time.Duration(300*(1<<attempt)) * time.Millisecond)
+		if attempt == 2 {
+			break
+		}
+		timer := time.NewTimer(time.Duration(300*(1<<attempt)) * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
 	}
 	if lastErr != nil {
 		return nil, lastErr
@@ -225,29 +242,42 @@ func nextOfficialSyncTime(now time.Time) time.Time {
 // RunOfficialPriceSync performs a single official price sync cycle. Safe to call
 // from a scheduled task or a manual admin trigger.
 func RunOfficialPriceSync() (int, error) {
-	officialSyncMu.Lock()
-	defer officialSyncMu.Unlock()
+	return RunOfficialPriceSyncContext(context.Background())
+}
+
+func RunOfficialPriceSyncContext(ctx context.Context) (changed int, err error) {
+	select {
+	case officialSyncRun <- struct{}{}:
+		defer func() { <-officialSyncRun }()
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
 
 	defer func() {
 		if r := recover(); r != nil {
-			common.SysError(fmt.Sprintf("official price sync panic: %v", r))
+			err = fmt.Errorf("official price sync panic: %v", r)
+			common.SysError(err.Error())
 		}
 	}()
 
-	converted, err := fetchOfficialPricing()
+	converted, err := fetchOfficialPricingContext(ctx)
 	if err != nil {
+		officialSyncStateMu.Lock()
 		officialSyncState.LastRunUnix = time.Now().Unix()
 		officialSyncState.LastOK = false
 		officialSyncState.LastError = err.Error()
+		officialSyncStateMu.Unlock()
 		common.SysError("official price sync fetch failed: " + err.Error())
 		return 0, err
 	}
 
 	merged, err := applyOfficialPricing(converted)
+	officialSyncStateMu.Lock()
 	officialSyncState.LastRunUnix = time.Now().Unix()
 	if err != nil {
 		officialSyncState.LastOK = false
 		officialSyncState.LastError = err.Error()
+		officialSyncStateMu.Unlock()
 		common.SysError("official price sync apply failed: " + err.Error())
 		return merged, err
 	}
@@ -258,32 +288,44 @@ func RunOfficialPriceSync() (int, error) {
 	if names := officialModelSet(converted); len(names) > 0 {
 		officialSyncState.LastModelsNum = len(names)
 	}
-	common.SysLog(fmt.Sprintf("official price sync ok: %d official models, %d pricing entries changed", officialSyncState.LastModelsNum, merged))
+	modelsNum := officialSyncState.LastModelsNum
+	officialSyncStateMu.Unlock()
+	common.SysLog(fmt.Sprintf("official price sync ok: %d official models, %d pricing entries changed", modelsNum, merged))
 	return merged, nil
 }
 
 // StartOfficialPriceSyncTask runs the daily official price sync on the master
 // node at 07:00 in the process local timezone.
 func StartOfficialPriceSyncTask() {
+	officialSyncOnce.Do(func() {
+		go RunOfficialPriceSyncTask(context.Background())
+	})
+}
+
+func RunOfficialPriceSyncTask(ctx context.Context) {
 	if !common.IsMasterNode {
 		return
 	}
-	officialSyncOnce.Do(func() {
-		go func() {
-			for {
-				next := nextOfficialSyncTime(time.Now())
-				common.SysLog(fmt.Sprintf("official price sync scheduled at %s", next.Format(time.RFC3339)))
-				time.Sleep(time.Until(next))
-				_, _ = RunOfficialPriceSync()
+	for {
+		next := nextOfficialSyncTime(time.Now())
+		common.SysLog(fmt.Sprintf("official price sync scheduled at %s", next.Format(time.RFC3339)))
+		timer := time.NewTimer(time.Until(next))
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
 			}
-		}()
-	})
+			return
+		case <-timer.C:
+			_, _ = RunOfficialPriceSyncContext(ctx)
+		}
+	}
 }
 
 // OfficialPriceSyncStatus returns a snapshot of the last sync state for the UI.
 func OfficialPriceSyncStatus() map[string]any {
-	officialSyncMu.Lock()
-	defer officialSyncMu.Unlock()
+	officialSyncStateMu.RLock()
+	defer officialSyncStateMu.RUnlock()
 	return map[string]any{
 		"last_run_unix":    officialSyncState.LastRunUnix,
 		"last_ok":          officialSyncState.LastOK,

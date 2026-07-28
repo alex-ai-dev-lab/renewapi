@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -20,19 +21,22 @@ func StartClientIdentityRotationWorker() {
 	}
 	rotationWorkerStarted = true
 
-	// 启动时立即检查一次
-	checkAndRotateClientIdentity()
+	go RunClientIdentityRotationWorker(context.Background())
+}
 
-	// 每小时检查一次
+func RunClientIdentityRotationWorker(ctx context.Context) {
+	checkAndRotateClientIdentity()
 	ticker := time.NewTicker(time.Hour)
-	go func() {
-		defer ticker.Stop()
-		for range ticker.C {
+	defer ticker.Stop()
+	common.SysLog("client identity rotation worker started")
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
 			checkAndRotateClientIdentity()
 		}
-	}()
-
-	common.SysLog("client identity rotation worker started")
+	}
 }
 
 // checkAndRotateClientIdentity 检查并轮换客户端标识符

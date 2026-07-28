@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -707,12 +708,16 @@ func MarkBillingLedgerForReconcile(id uint64, desired string, quota int64, cause
 }
 
 func ListBillingLedgersForReconcile(limit int) ([]BillingLedger, error) {
+	return ListBillingLedgersForReconcileContext(context.Background(), limit)
+}
+
+func ListBillingLedgersForReconcileContext(ctx context.Context, limit int) ([]BillingLedger, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 	now := time.Now().Unix()
 	var ledgers []BillingLedger
-	err := DB.Where("state = ? AND next_retry_at <= ?", BillingLedgerStateReconcileRequired, now).
+	err := DB.WithContext(ctx).Where("state = ? AND next_retry_at <= ?", BillingLedgerStateReconcileRequired, now).
 		Order("next_retry_at asc, id asc").Limit(limit).Find(&ledgers).Error
 	return ledgers, err
 }
@@ -721,12 +726,20 @@ func ListStaleReservedTaskLedgers(cutoff int64, limit int) ([]BillingLedger, err
 	return ListStaleReservedBillingLedgers("task", cutoff, limit)
 }
 
+func ListStaleReservedTaskLedgersContext(ctx context.Context, cutoff int64, limit int) ([]BillingLedger, error) {
+	return ListStaleReservedBillingLedgersContext(ctx, "task", cutoff, limit)
+}
+
 func ListStaleReservedBillingLedgers(kind string, cutoff int64, limit int) ([]BillingLedger, error) {
+	return ListStaleReservedBillingLedgersContext(context.Background(), kind, cutoff, limit)
+}
+
+func ListStaleReservedBillingLedgersContext(ctx context.Context, kind string, cutoff int64, limit int) ([]BillingLedger, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 	var ledgers []BillingLedger
-	err := DB.Where("kind = ? AND state = ? AND created_at <= ?", kind, BillingLedgerStateReserved, cutoff).
+	err := DB.WithContext(ctx).Where("kind = ? AND state = ? AND created_at <= ?", kind, BillingLedgerStateReserved, cutoff).
 		Order("created_at asc, id asc").Limit(limit).Find(&ledgers).Error
 	return ledgers, err
 }

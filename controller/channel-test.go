@@ -223,10 +223,18 @@ func resolveChannelTestUserID(c *gin.Context) (int, error) {
 }
 
 func testChannel(channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) testResult {
-	return testChannelWithRequest(channel, testUserID, testModel, endpointType, isStream, nil)
+	return testChannelContext(context.Background(), channel, testUserID, testModel, endpointType, isStream)
 }
 
 func testChannelWithRequest(channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool, override *channelTestRequestOverride) testResult {
+	return testChannelWithRequestContext(context.Background(), channel, testUserID, testModel, endpointType, isStream, override)
+}
+
+func testChannelContext(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) testResult {
+	return testChannelWithRequestContext(ctx, channel, testUserID, testModel, endpointType, isStream, nil)
+}
+
+func testChannelWithRequestContext(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool, override *channelTestRequestOverride) testResult {
 	tik := time.Now()
 	cfg := operation_setting.GetChannelTestSetting()
 	var unsupportedTestChannelTypes = []int{
@@ -343,11 +351,15 @@ func testChannelWithRequest(channel *model.Channel, testUserID int, testModel st
 		Body:   nil,
 		Header: buildChannelTestHeaders(endpointType, isStream),
 	}
-	if cfg.TimeoutSeconds > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutSeconds)*time.Second)
-		defer cancel()
-		c.Request = c.Request.WithContext(ctx)
+	if ctx == nil {
+		ctx = context.Background()
 	}
+	if cfg.TimeoutSeconds > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(cfg.TimeoutSeconds)*time.Second)
+		defer cancel()
+	}
+	c.Request = c.Request.WithContext(ctx)
 
 	cache, err := model.GetUserCache(testUserID)
 	if err != nil {
@@ -1563,16 +1575,20 @@ func TestAllChannels(c *gin.Context) {
 	})
 }
 
-var autoTestChannelsOnce sync.Once
-
-func AutomaticallyTestChannels() {
+func RunAutomaticChannelTests(ctx context.Context) {
 	// 只在Master节点定时测试渠道
 	if !common.IsMasterNode {
 		return
 	}
+	// Per-channel independent scheduling (interval / retry / retry-threshold /
+	// time-window). See channel_test_scheduler.go.
+	runIndependentAutoTest(ctx)
+}
+
+var autoTestChannelsOnce sync.Once
+
+func AutomaticallyTestChannels() {
 	autoTestChannelsOnce.Do(func() {
-		// Per-channel independent scheduling (interval / retry / retry-threshold /
-		// time-window). See channel_test_scheduler.go.
-		startIndependentAutoTest()
+		go RunAutomaticChannelTests(context.Background())
 	})
 }

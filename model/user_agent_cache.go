@@ -1,7 +1,7 @@
 package model
 
 import (
-	"sync"
+	"context"
 	"sync/atomic"
 	"time"
 
@@ -13,21 +13,24 @@ import (
 var (
 	userAgentByID        atomic.Pointer[map[int]*UserAgent]
 	userAgentGlobalByCat atomic.Pointer[map[string]*UserAgent]
-	userAgentCacheOnce   sync.Once
 )
 
-// InitUserAgentCache loads the user-agent snapshot and starts periodic refresh.
+// InitUserAgentCache loads the initial user-agent snapshot.
 func InitUserAgentCache() {
 	refreshUserAgentCache()
-	userAgentCacheOnce.Do(func() {
-		go func() {
-			ticker := time.NewTicker(5 * time.Minute)
-			defer ticker.Stop()
-			for range ticker.C {
-				refreshUserAgentCache()
-			}
-		}()
-	})
+}
+
+func RunUserAgentCacheSync(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			refreshUserAgentCache()
+		}
+	}
 }
 
 func refreshUserAgentCache() {

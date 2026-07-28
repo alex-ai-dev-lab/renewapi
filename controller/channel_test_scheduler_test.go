@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -115,4 +116,23 @@ func TestResponsesCompactionObservationCompleteRequiresNativeFacets(t *testing.T
 		NativeStatus: model.ChannelCapabilityStatusUnsupported,
 	}
 	require.True(t, responsesCompactionObservationComplete(record))
+}
+
+func TestResponsesCapabilityProbeSemaphoreHonorsCancellation(t *testing.T) {
+	for i := 0; i < cap(responsesCompactionProbeSemaphore); i++ {
+		responsesCompactionProbeSemaphore <- struct{}{}
+	}
+	defer func() {
+		for i := 0; i < cap(responsesCompactionProbeSemaphore); i++ {
+			<-responsesCompactionProbeSemaphore
+		}
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result := runResponsesCapabilityProbe(ctx, func() testResult {
+		t.Fatal("probe callback must not run after cancellation")
+		return testResult{}
+	})
+	require.ErrorIs(t, result.localErr, context.Canceled)
 }

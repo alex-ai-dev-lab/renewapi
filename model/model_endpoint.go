@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"sync"
@@ -93,14 +94,21 @@ func ReloadModelEndpointCache() {
 func ensureModelEndpointCache() {
 	modelEndpointSyncOnce.Do(func() {
 		ReloadModelEndpointCache()
-		go func() {
-			ticker := time.NewTicker(time.Minute)
-			defer ticker.Stop()
-			for range ticker.C {
-				ReloadModelEndpointCache()
-			}
-		}()
 	})
+}
+
+func RunModelEndpointCacheSync(ctx context.Context) {
+	ensureModelEndpointCache()
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ReloadModelEndpointCache()
+		}
+	}
 }
 
 // GetModelEndpoint returns the override row for (channelId, modelName) or nil.

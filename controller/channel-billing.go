@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -137,7 +138,11 @@ func GetClaudeAuthHeader(token string) http.Header {
 }
 
 func GetResponseBody(method, url string, channel *model.Channel, headers http.Header) ([]byte, error) {
-	req, err := http.NewRequest(method, url, nil)
+	return GetResponseBodyContext(context.Background(), method, url, channel, headers)
+}
+
+func GetResponseBodyContext(ctx context.Context, method, url string, channel *model.Channel, headers http.Header) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -499,11 +504,24 @@ func UpdateAllChannelsBalance(c *gin.Context) {
 	return
 }
 
-func AutomaticallyUpdateChannels(frequency int) {
-	for {
-		time.Sleep(time.Duration(frequency) * time.Minute)
-		common.SysLog("updating all channels")
-		_ = updateAllChannelsBalance()
-		common.SysLog("channels update done")
+func RunChannelBalanceUpdater(ctx context.Context, frequency int) {
+	if frequency <= 0 {
+		return
 	}
+	ticker := time.NewTicker(time.Duration(frequency) * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			common.SysLog("updating all channels")
+			_ = updateAllChannelsBalance()
+			common.SysLog("channels update done")
+		}
+	}
+}
+
+func AutomaticallyUpdateChannels(frequency int) {
+	RunChannelBalanceUpdater(context.Background(), frequency)
 }

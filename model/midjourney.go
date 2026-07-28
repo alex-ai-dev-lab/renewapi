@@ -1,5 +1,7 @@
 package model
 
+import "context"
+
 type Midjourney struct {
 	Id              int    `json:"id"`
 	Code            int    `json:"code"`
@@ -97,10 +99,14 @@ func GetAllTasks(startIdx int, num int, queryParams TaskQueryParams) []*Midjourn
 }
 
 func GetAllUnFinishTasks() []*Midjourney {
+	return GetAllUnFinishTasksContext(context.Background())
+}
+
+func GetAllUnFinishTasksContext(ctx context.Context) []*Midjourney {
 	var tasks []*Midjourney
 	var err error
 	// get all tasks progress is not 100%
-	err = DB.Where("progress != ?", "100%").Find(&tasks).Error
+	err = DB.WithContext(ctx).Where("progress != ?", "100%").Find(&tasks).Error
 	if err != nil {
 		return nil
 	}

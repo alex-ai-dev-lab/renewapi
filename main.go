@@ -38,7 +38,6 @@ import (
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 
-	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -64,8 +63,16 @@ func main() {
 		os.Exit(runMigrationCommand(os.Args[2:]))
 	}
 	startTime := time.Now()
-	workerCtx, stopWorkers := context.WithCancel(context.Background())
-	defer stopWorkers()
+	signalCtx, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stopSignals()
+	workers := newBackgroundWorkers()
+	startWorker := func(name string, run func(context.Context)) {
+		workers.Go(name, func(ctx context.Context) {
+			common.SysLog("worker started: " + name)
+			run(ctx)
+			common.SysLog("worker stopped: " + name)
+		})
+	}
 
 	err := InitResources()
 	if err != nil {
@@ -81,12 +88,24 @@ func main() {
 		common.SysLog("running in debug mode")
 	}
 
-	defer func() {
-		err := model.CloseDB()
-		if err != nil {
-			common.FatalLog("failed to close database: " + err.Error())
+	resourcesClosed := false
+	closeResources := func() {
+		if resourcesClosed {
+			return
 		}
+		resourcesClosed = true
+		if err := common.CloseRedis(); err != nil {
+			common.SysError("failed to close Redis: " + err.Error())
+		}
+		if err := model.CloseDB(); err != nil {
+			common.SysError("failed to close database: " + err.Error())
+		}
+	}
+	defer func() {
+		workers.cancel()
+		closeResources()
 	}()
+	startWorker("system-monitor", common.RunSystemMonitor)
 
 	if common.RedisEnabled {
 		// for compatibility with old versions
@@ -111,40 +130,43 @@ func main() {
 			model.InitChannelCache()
 		}()
 
-		go model.SyncChannelCache(common.SyncFrequency)
+		startWorker("channel-cache-sync", func(ctx context.Context) { model.RunChannelCacheSync(ctx, common.SyncFrequency) })
 	}
 
 	// User-Agent cache for relay hot path (custom UA list feature)
 	ua.InitCache()
+	startWorker("user-agent-cache", ua.Run)
+	startWorker("model-endpoint-cache", model.RunModelEndpointCacheSync)
+	startWorker("channel-failure-cleanup", service.RunChannelFailureTrackerCleanup)
 
 	// 热更新配置
-	go model.SyncOptions(common.SyncFrequency)
+	startWorker("option-sync", func(ctx context.Context) { model.RunOptionSync(ctx, common.SyncFrequency) })
 
 	// 数据看板
-	go model.UpdateQuotaData()
+	startWorker("quota-data", model.RunQuotaDataUpdater)
 
 	if os.Getenv("CHANNEL_UPDATE_FREQUENCY") != "" {
 		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_UPDATE_FREQUENCY"))
 		if err != nil {
 			common.FatalLog("failed to parse CHANNEL_UPDATE_FREQUENCY: " + err.Error())
 		}
-		go controller.AutomaticallyUpdateChannels(frequency)
+		startWorker("channel-balance", func(ctx context.Context) { controller.RunChannelBalanceUpdater(ctx, frequency) })
 	}
 
-	go controller.AutomaticallyTestChannels()
+	startWorker("channel-tests", controller.RunAutomaticChannelTests)
 
 	// Codex credential auto-refresh check every 10 minutes, refresh when expires within 1 day
-	service.StartCodexCredentialAutoRefreshTask()
+	startWorker("codex-credential-refresh", service.RunCodexCredentialAutoRefreshTask)
 
 	// Subscription quota reset task (daily/weekly/monthly/custom)
-	service.StartSubscriptionQuotaResetTask()
-	service.StartBillingReconciler(workerCtx)
+	startWorker("subscription-reset", service.RunSubscriptionQuotaResetTask)
+	startWorker("billing-reconciler", service.RunBillingReconciler)
 
 	// Client identity rotation worker
-	service.StartClientIdentityRotationWorker()
+	startWorker("client-identity-rotation", service.RunClientIdentityRotationWorker)
 
 	// Official model price sync task (daily from models.dev)
-	pricesync.Start()
+	startWorker("official-price-sync", pricesync.Run)
 
 	// Wire task polling adaptor factory (breaks service -> relay import cycle)
 	service.GetTaskAdaptorFunc = func(platform constant.TaskPlatform) service.TaskPollingAdaptor {
@@ -156,27 +178,37 @@ func main() {
 	}
 
 	// Channel upstream model update check task
-	scheduler.Start()
+	startWorker("channel-upstream-model-sync", scheduler.Run)
 
 	if common.IsMasterNode && constant.UpdateTask {
-		gopool.Go(func() {
-			controller.UpdateMidjourneyTaskBulk()
-		})
-		gopool.Go(func() {
-			controller.UpdateTaskBulk()
-		})
+		startWorker("midjourney-task-polling", controller.RunMidjourneyTaskBulk)
+		startWorker("task-polling", controller.RunTaskBulk)
 	}
 	if os.Getenv("BATCH_UPDATE_ENABLED") == "true" {
 		common.BatchUpdateEnabled = true
 		common.SysLog("batch update enabled with interval " + strconv.Itoa(common.BatchUpdateInterval) + "s")
-		model.InitBatchUpdater()
+		startWorker("batch-updater", model.RunBatchUpdater)
 	}
 
 	if os.Getenv("ENABLE_PPROF") == "true" {
-		gopool.Go(func() {
-			log.Println(http.ListenAndServe("127.0.0.1:8005", nil))
+		pprofServer := &http.Server{Addr: "127.0.0.1:8005", Handler: http.DefaultServeMux}
+		startWorker("pprof-server", func(ctx context.Context) {
+			errCh := make(chan error, 1)
+			go func() { errCh <- pprofServer.ListenAndServe() }()
+			select {
+			case <-ctx.Done():
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+				defer cancel()
+				if err := pprofServer.Shutdown(shutdownCtx); err != nil {
+					log.Printf("pprof shutdown: %v", err)
+				}
+			case err := <-errCh:
+				if err != nil && !errors.Is(err, http.ErrServerClosed) {
+					log.Printf("pprof server: %v", err)
+				}
+			}
 		})
-		go common.Monitor()
+		startWorker("pprof-monitor", common.RunPprofMonitor)
 		common.SysLog("pprof enabled")
 	}
 
@@ -250,23 +282,18 @@ func main() {
 		serverErr <- srv.ListenAndServe()
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(quit)
 	select {
-	case sig := <-quit:
-		common.SysLog(fmt.Sprintf("received signal: %v, shutting down...", sig))
-		stopWorkers()
+	case <-signalCtx.Done():
+		common.SysLog("received shutdown signal")
 	case listenErr := <-serverErr:
 		if listenErr != nil && !errors.Is(listenErr, http.ErrServerClosed) {
-			common.FatalLog("failed to start HTTP server: " + listenErr.Error())
+			common.SysError("HTTP server stopped unexpectedly: " + listenErr.Error())
 		}
-		return
 	}
 
-	shutdownSeconds := common.GetEnvOrDefault("SHUTDOWN_TIMEOUT_SECONDS", 120)
+	shutdownSeconds := common.GetEnvOrDefault("SHUTDOWN_TIMEOUT_SECONDS", 5)
 	if shutdownSeconds <= 0 {
-		shutdownSeconds = 120
+		shutdownSeconds = 5
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(shutdownSeconds)*time.Second)
 	defer cancel()
@@ -276,6 +303,18 @@ func main() {
 			common.SysError(fmt.Sprintf("forced server close failed: %v", closeErr))
 		}
 	}
+	if err := workers.Stop(shutdownCtx); err != nil {
+		common.SysError("background worker shutdown failed: " + err.Error())
+	}
+
+	if err := model.ShutdownSpendLogBatch(shutdownCtx); err != nil {
+		common.SysError("failed to flush spend log batch: " + err.Error())
+	}
+	if processed, err := service.FlushBillingOutbox(shutdownCtx, 100); err != nil {
+		common.SysError("failed to flush billing outbox: " + err.Error())
+	} else if processed > 0 {
+		common.SysLog(fmt.Sprintf("flushed %d billing outbox events", processed))
+	}
 
 	if common.BatchUpdateEnabled {
 		model.FlushBatchUpdates()
@@ -283,6 +322,7 @@ func main() {
 	if common.IsDataExportEnabled() {
 		model.SaveQuotaDataCache()
 	}
+	closeResources()
 	common.SysLog("server exited")
 }
 
@@ -477,9 +517,6 @@ func InitResources() error {
 		}
 		errornorm.SetGlobalStore(store)
 	}
-
-	// 启动系统监控
-	common.StartSystemMonitor()
 
 	// Initialize i18n
 	err = i18n.Init()

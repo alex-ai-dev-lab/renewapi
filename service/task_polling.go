@@ -95,12 +95,21 @@ func sweepTimedOutTasks(ctx context.Context) {
 
 // TaskPollingLoop 主轮询循环，每 15 秒检查一次未完成的任务
 func TaskPollingLoop() {
+	RunTaskPollingLoop(context.Background())
+}
+
+func RunTaskPollingLoop(ctx context.Context) {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
 	for {
-		time.Sleep(time.Duration(15) * time.Second)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 		common.SysLog("任务进度轮询开始")
-		ctx := context.TODO()
 		sweepTimedOutTasks(ctx)
-		allTasks := model.GetAllUnFinishSyncTasks(constant.TaskQueryLimit)
+		allTasks := model.GetAllUnFinishSyncTasksContext(ctx, constant.TaskQueryLimit)
 		platformTask := make(map[constant.TaskPlatform][]*model.Task)
 		for _, t := range allTasks {
 			platformTask[t.Platform] = append(platformTask[t.Platform], t)
@@ -137,21 +146,21 @@ func TaskPollingLoop() {
 				continue
 			}
 
-			DispatchPlatformUpdate(platform, taskChannelM, taskM)
+			DispatchPlatformUpdate(ctx, platform, taskChannelM, taskM)
 		}
 		common.SysLog("任务进度轮询完成")
 	}
 }
 
 // DispatchPlatformUpdate 按平台分发轮询更新
-func DispatchPlatformUpdate(platform constant.TaskPlatform, taskChannelM map[int][]string, taskM map[string]*model.Task) {
+func DispatchPlatformUpdate(ctx context.Context, platform constant.TaskPlatform, taskChannelM map[int][]string, taskM map[string]*model.Task) {
 	switch platform {
 	case constant.TaskPlatformMidjourney:
 		// MJ 轮询由其自身处理，这里预留入口
 	case constant.TaskPlatformSuno:
-		_ = UpdateSunoTasks(context.Background(), taskChannelM, taskM)
+		_ = UpdateSunoTasks(ctx, taskChannelM, taskM)
 	default:
-		if err := UpdateVideoTasks(context.Background(), platform, taskChannelM, taskM); err != nil {
+		if err := UpdateVideoTasks(ctx, platform, taskChannelM, taskM); err != nil {
 			common.SysLog(fmt.Sprintf("UpdateVideoTasks fail: %s", err))
 		}
 	}

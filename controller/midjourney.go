@@ -20,12 +20,21 @@ import (
 )
 
 func UpdateMidjourneyTaskBulk() {
-	//imageModel := "midjourney"
-	ctx := context.TODO()
-	for {
-		time.Sleep(time.Duration(15) * time.Second)
+	RunMidjourneyTaskBulk(context.Background())
+}
 
-		tasks := model.GetAllUnFinishTasks()
+func RunMidjourneyTaskBulk(ctx context.Context) {
+	//imageModel := "midjourney"
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		tasks := model.GetAllUnFinishTasksContext(ctx)
 		if len(tasks) == 0 {
 			continue
 		}
@@ -56,6 +65,9 @@ func UpdateMidjourneyTaskBulk() {
 		}
 
 		for channelId, taskIds := range taskChannelM {
+			if ctx.Err() != nil {
+				return
+			}
 			logger.LogInfo(ctx, fmt.Sprintf("渠道 #%d 未完成的任务有: %d", channelId, len(taskIds)))
 			if len(taskIds) == 0 {
 				continue
@@ -78,16 +90,13 @@ func UpdateMidjourneyTaskBulk() {
 			body, _ := common.Marshal(map[string]any{
 				"ids": taskIds,
 			})
-			req, err := http.NewRequest("POST", requestUrl, bytes.NewBuffer(body))
+			requestCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			req, err := http.NewRequestWithContext(requestCtx, "POST", requestUrl, bytes.NewBuffer(body))
 			if err != nil {
+				cancel()
 				logger.LogError(ctx, fmt.Sprintf("Get Task error: %v", err))
 				continue
 			}
-			// 设置超时时间
-			timeout := time.Second * 15
-			ctx, cancel := context.WithTimeout(context.Background(), timeout)
-			// 使用带有超时的 context 创建新的请求
-			req = req.WithContext(ctx)
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("mj-api-secret", midjourneyChannel.Key)
 			setting := midjourneyChannel.GetSetting()
@@ -96,19 +105,25 @@ func UpdateMidjourneyTaskBulk() {
 				TLSInsecureSkipVerify: setting.TLSInsecureSkipVerify,
 			})
 			if err != nil {
+				cancel()
 				logger.LogError(ctx, fmt.Sprintf("Get Task client error: %v", err))
 				continue
 			}
 			resp, err := client.Do(req)
 			if err != nil {
+				cancel()
 				logger.LogError(ctx, fmt.Sprintf("Get Task Do req error: %v", err))
 				continue
 			}
 			if resp.StatusCode != http.StatusOK {
+				_ = resp.Body.Close()
+				cancel()
 				logger.LogError(ctx, fmt.Sprintf("Get Task status code: %d", resp.StatusCode))
 				continue
 			}
 			responseBody, err := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			cancel()
 			if err != nil {
 				logger.LogError(ctx, fmt.Sprintf("Get Mjp Task parse body error: %v", err))
 				continue
@@ -119,9 +134,7 @@ func UpdateMidjourneyTaskBulk() {
 				logger.LogError(ctx, fmt.Sprintf("Get Mjp Task parse body error2: %v, body: %s", err, string(responseBody)))
 				continue
 			}
-			resp.Body.Close()
-			req.Body.Close()
-			cancel()
+			_ = req.Body.Close()
 
 			for _, responseItem := range responseItems {
 				task := taskM[responseItem.MjId]

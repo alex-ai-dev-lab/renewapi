@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -71,6 +72,10 @@ func enqueueBillingOutboxTx(tx *gorm.DB, ledger *BillingLedger, eventType string
 }
 
 func ProcessBillingOutbox(limit int) (int, error) {
+	return ProcessBillingOutboxContext(context.Background(), limit)
+}
+
+func ProcessBillingOutboxContext(ctx context.Context, limit int) (int, error) {
 	if DB == nil || LOG_DB == nil {
 		return 0, errors.New("billing outbox databases are not initialized")
 	}
@@ -78,25 +83,30 @@ func ProcessBillingOutbox(limit int) (int, error) {
 		limit = 100
 	}
 	now := GetDBTimestamp()
+	db := DB.WithContext(ctx)
+	logDB := LOG_DB.WithContext(ctx)
 	var items []BillingOutbox
-	if err := DB.Where("processed_at = 0 AND available_at <= ?", now).Order("id asc").Limit(limit).Find(&items).Error; err != nil {
+	if err := db.Where("processed_at = 0 AND available_at <= ?", now).Order("id asc").Limit(limit).Find(&items).Error; err != nil {
 		return 0, err
 	}
 	processed := 0
 	for i := range items {
+		if err := ctx.Err(); err != nil {
+			return processed, err
+		}
 		item := items[i]
 		event := BillingAuditEvent{
 			EventKey: item.EventKey, LedgerID: item.LedgerID, RequestID: item.RequestID,
 			EventType: item.EventType, Payload: item.Payload, CreatedAt: item.CreatedAt,
 		}
-		if err := LOG_DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&event).Error; err != nil {
-			_ = DB.Model(&BillingOutbox{}).Where("id = ? AND processed_at = 0", item.ID).Updates(map[string]any{
+		if err := logDB.Clauses(clause.OnConflict{DoNothing: true}).Create(&event).Error; err != nil {
+			_ = db.Model(&BillingOutbox{}).Where("id = ? AND processed_at = 0", item.ID).Updates(map[string]any{
 				"attempts": gorm.Expr("attempts + 1"), "available_at": now + billingRetryDelay(item.Attempts+1),
 				"last_error": truncateBillingError(err.Error()), "updated_at": now,
 			}).Error
 			continue
 		}
-		res := DB.Model(&BillingOutbox{}).Where("id = ? AND processed_at = 0", item.ID).Updates(map[string]any{
+		res := db.Model(&BillingOutbox{}).Where("id = ? AND processed_at = 0", item.ID).Updates(map[string]any{
 			"processed_at": now, "last_error": "", "updated_at": now,
 		})
 		if res.Error != nil {

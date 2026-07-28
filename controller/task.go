@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
@@ -17,6 +18,10 @@ import (
 // UpdateTaskBulk 薄入口，实际轮询逻辑在 service 层
 func UpdateTaskBulk() {
 	service.TaskPollingLoop()
+}
+
+func RunTaskBulk(ctx context.Context) {
+	service.RunTaskPollingLoop(ctx)
 }
 
 func GetAllTask(c *gin.Context) {

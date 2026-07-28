@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -144,7 +147,7 @@ func responsesCompactionObservationComplete(record model.ChannelModelCapability)
 		record.ContinuationStatus != model.ChannelCapabilityStatusUnknown
 }
 
-func probeResponsesCompactionCapabilities(channel *model.Channel, testUserID int) {
+func probeResponsesCompactionCapabilities(ctx context.Context, channel *model.Channel, testUserID int) {
 	if !common.GetEnvOrDefaultBool("RESPONSES_COMPACTION_PROBE_ENABLED", false) {
 		return
 	}
@@ -154,15 +157,27 @@ func probeResponsesCompactionCapabilities(channel *model.Channel, testUserID int
 			(strings.EqualFold(record.Source, "probe") || responsesCompactionObservationComplete(record)) {
 			continue
 		}
-		if _, err := probeResponsesCompactionCapabilityModel(channel, testUserID, modelName); err != nil {
+		if _, err := probeResponsesCompactionCapabilityModelContext(ctx, channel, testUserID, modelName); err != nil {
 			common.SysLog(fmt.Sprintf("responses compaction probe incomplete: channel=%d model=%s error=%s", channel.Id, modelName, err.Error()))
 		}
-		time.Sleep(100 * time.Millisecond)
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return
+		case <-timer.C:
+		}
 	}
 }
 
-func runResponsesCapabilityProbe(call func() testResult) testResult {
-	responsesCompactionProbeSemaphore <- struct{}{}
+func runResponsesCapabilityProbe(ctx context.Context, call func() testResult) testResult {
+	select {
+	case responsesCompactionProbeSemaphore <- struct{}{}:
+	case <-ctx.Done():
+		return testResult{localErr: ctx.Err()}
+	}
 	defer func() { <-responsesCompactionProbeSemaphore }()
 	return call()
 }
@@ -179,6 +194,10 @@ func observeResponsesCapabilityProbeResult(channel *model.Channel, modelName str
 }
 
 func probeResponsesCompactionCapabilityModel(channel *model.Channel, testUserID int, modelName string) (model.ChannelModelCapability, error) {
+	return probeResponsesCompactionCapabilityModelContext(context.Background(), channel, testUserID, modelName)
+}
+
+func probeResponsesCompactionCapabilityModelContext(ctx context.Context, channel *model.Channel, testUserID int, modelName string) (model.ChannelModelCapability, error) {
 	if channel == nil {
 		return model.ChannelModelCapability{}, errors.New("channel is required")
 	}
@@ -188,8 +207,8 @@ func probeResponsesCompactionCapabilityModel(channel *model.Channel, testUserID 
 	}
 	var probeErrors []error
 
-	legacyResult := runResponsesCapabilityProbe(func() testResult {
-		return testChannel(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponseCompact), false)
+	legacyResult := runResponsesCapabilityProbe(ctx, func() testResult {
+		return testChannelContext(ctx, channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponseCompact), false)
 	})
 	if err := observeResponsesCapabilityProbeResult(channel, modelName, service.ResponsesCapabilityAttempt{
 		Kind: dto.ResponsesCompactEndpoint, UsedLegacy: true, Source: "probe",
@@ -201,8 +220,8 @@ func probeResponsesCompactionCapabilityModel(channel *model.Channel, testUserID 
 	if err != nil {
 		probeErrors = append(probeErrors, fmt.Errorf("native request: %w", err))
 	} else {
-		nativeResult := runResponsesCapabilityProbe(func() testResult {
-			return testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), false, &channelTestRequestOverride{
+		nativeResult := runResponsesCapabilityProbe(ctx, func() testResult {
+			return testChannelWithRequestContext(ctx, channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), false, &channelTestRequestOverride{
 				Request: nativeRequest, Kind: dto.ResponsesCompactionTrigger,
 			})
 		})
@@ -217,8 +236,8 @@ func probeResponsesCompactionCapabilityModel(channel *model.Channel, testUserID 
 		if buildErr != nil {
 			probeErrors = append(probeErrors, fmt.Errorf("native stream request: %w", buildErr))
 		} else {
-			streamResult = runResponsesCapabilityProbe(func() testResult {
-				return testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), true, &channelTestRequestOverride{
+			streamResult = runResponsesCapabilityProbe(ctx, func() testResult {
+				return testChannelWithRequestContext(ctx, channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), true, &channelTestRequestOverride{
 					Request: streamRequest, Kind: dto.ResponsesCompactionTrigger, IsStream: true,
 				})
 			})
@@ -238,8 +257,8 @@ func probeResponsesCompactionCapabilityModel(channel *model.Channel, testUserID 
 			if buildErr != nil {
 				probeErrors = append(probeErrors, fmt.Errorf("continuation request: %w", buildErr))
 			} else {
-				continuationResult := runResponsesCapabilityProbe(func() testResult {
-					return testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), false, &channelTestRequestOverride{
+				continuationResult := runResponsesCapabilityProbe(ctx, func() testResult {
+					return testChannelWithRequestContext(ctx, channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), false, &channelTestRequestOverride{
 						Request: continuationRequest, Kind: dto.ResponsesCompactedContextContinuation,
 					})
 				})
@@ -374,7 +393,7 @@ func isClockInTestWindow(nowTime, timeWindowStart, timeWindowEnd string) bool {
 	return nowTime >= timeWindowStart || nowTime <= timeWindowEnd
 }
 
-func testSingleChannelWithRetries(channel *model.Channel, testUserID int, retryCount int, retryThreshold int) {
+func testSingleChannelWithRetries(ctx context.Context, channel *model.Channel, testUserID int, retryCount int, retryThreshold int) {
 	defer func() {
 		if r := recover(); r != nil {
 			common.SysError(fmt.Sprintf("recovered panic testing channel %d: %v", channel.Id, r))
@@ -395,8 +414,11 @@ func testSingleChannelWithRetries(channel *model.Channel, testUserID int, retryC
 	var lastElapsed int64
 	var succeeded bool
 	for attempt := 0; attempt < retryCount; attempt++ {
+		if ctx.Err() != nil {
+			return
+		}
 		tStart := time.Now()
-		lastResult = testChannel(channel, testUserID, "", "", shouldUseStreamForAutomaticChannelTest(channel))
+		lastResult = testChannelContext(ctx, channel, testUserID, "", "", shouldUseStreamForAutomaticChannelTest(channel))
 		elapsed := time.Since(tStart).Milliseconds()
 		lastElapsed = elapsed
 
@@ -425,7 +447,15 @@ func testSingleChannelWithRetries(channel *model.Channel, testUserID int, retryC
 			break
 		}
 		if attempt < retryCount-1 {
-			time.Sleep(500 * time.Millisecond)
+			timer := time.NewTimer(500 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return
+			case <-timer.C:
+			}
 		}
 	}
 
@@ -437,7 +467,7 @@ func testSingleChannelWithRetries(channel *model.Channel, testUserID int, retryC
 				common.GetContextKeyString(lastResult.context, constant.ContextKeyChannelKey),
 				channel.Name)
 		}
-		probeResponsesCompactionCapabilities(channel, testUserID)
+		probeResponsesCompactionCapabilities(ctx, channel, testUserID)
 		return
 	}
 
@@ -466,7 +496,7 @@ func testSingleChannelWithRetries(channel *model.Channel, testUserID int, retryC
 
 // runIndependentChannelTest is called by the global auto-test loop. It tests
 // channels that are due according to their individual schedules.
-func runIndependentChannelTest() {
+func runIndependentChannelTest(ctx context.Context) {
 	if !operation_setting.GetMonitorSetting().AutoTestChannelEnabled {
 		return
 	}
@@ -494,11 +524,21 @@ func runIndependentChannelTest() {
 
 	// Drop tracking state for channels that no longer exist.
 	activeIDs := make(map[int]bool, len(channels))
+	tests, testsCtx := errgroup.WithContext(ctx)
+	concurrency := common.GetEnvOrDefault("AUTO_TEST_CHANNEL_CONCURRENCY", 4)
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	semaphore := make(chan struct{}, concurrency)
 	for _, channel := range channels {
+		if ctx.Err() != nil {
+			return
+		}
 		activeIDs[channel.Id] = true
 	}
 	testTracking.cleanup(activeIDs)
 
+scheduleLoop:
 	for _, channel := range channels {
 		// Skip channels that are disabled (not auto-disabled)
 		if channel.Status != common.ChannelStatusEnabled &&
@@ -523,18 +563,27 @@ func runIndependentChannelTest() {
 			continue
 		}
 
-		// Test this channel
+		// Test due channels with bounded concurrency. The errgroup ensures every
+		// request is joined before this scan returns or shutdown proceeds.
+		select {
+		case semaphore <- struct{}{}:
+		case <-testsCtx.Done():
+			break scheduleLoop
+		}
 		testTracking.recordTest(channel.Id)
-		go testSingleChannelWithRetries(channel, testUserID, retryCount, retryThreshold)
-
-		// Stagger tests to avoid thundering herd
-		time.Sleep(100 * time.Millisecond)
+		channel := channel
+		tests.Go(func() error {
+			defer func() { <-semaphore }()
+			testSingleChannelWithRetries(testsCtx, channel, testUserID, retryCount, retryThreshold)
+			return nil
+		})
 	}
+	_ = tests.Wait()
 }
 
 // AutomaticallyTestChannelsWithIndependentSchedule replaces the original
 // AutomaticallyTestChannels with per-channel scheduling support.
-func startIndependentAutoTest() {
+func runIndependentAutoTest(ctx context.Context) {
 	if !common.IsMasterNode {
 		return
 	}
@@ -542,19 +591,21 @@ func startIndependentAutoTest() {
 	// Scan frequency: every 30 seconds, check if any channels are due
 	scanInterval := 30 * time.Second
 
-	go func() {
-		for {
-			if !operation_setting.GetMonitorSetting().AutoTestChannelEnabled {
-				time.Sleep(1 * time.Minute)
-				continue
-			}
-			for {
-				runIndependentChannelTest()
-				time.Sleep(scanInterval)
-				if !operation_setting.GetMonitorSetting().AutoTestChannelEnabled {
-					break
-				}
-			}
+	for {
+		interval := scanInterval
+		if operation_setting.GetMonitorSetting().AutoTestChannelEnabled {
+			runIndependentChannelTest(ctx)
+		} else {
+			interval = time.Minute
 		}
-	}()
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return
+		case <-timer.C:
+		}
+	}
 }

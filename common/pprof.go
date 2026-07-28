@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime/pprof"
@@ -9,14 +10,23 @@ import (
 	"github.com/shirou/gopsutil/cpu"
 )
 
-// Monitor 定时监控cpu使用率，超过阈值输出pprof文件
+// Monitor preserves the legacy blocking entrypoint.
 func Monitor() {
+	RunPprofMonitor(context.Background())
+}
+
+// RunPprofMonitor 定时监控cpu使用率，超过阈值输出pprof文件
+func RunPprofMonitor(ctx context.Context) {
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		percent, err := cpu.Percent(time.Second, false)
 		if err != nil {
-			panic(err)
+			SysLog("读取 CPU 使用率失败 " + err.Error())
+			continue
 		}
-		if percent[0] > 80 {
+		if len(percent) > 0 && percent[0] > 80 {
 			fmt.Println("cpu usage too high")
 			// write pprof file
 			if _, err := os.Stat("./pprof"); os.IsNotExist(err) {
@@ -36,10 +46,28 @@ func Monitor() {
 				SysLog("启动pprof失败 " + err.Error())
 				continue
 			}
-			time.Sleep(10 * time.Second) // profile for 30 seconds
+			timer := time.NewTimer(10 * time.Second)
+			select {
+			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+				pprof.StopCPUProfile()
+				_ = f.Close()
+				return
+			case <-timer.C:
+			}
 			pprof.StopCPUProfile()
-			f.Close()
+			_ = f.Close()
 		}
-		time.Sleep(30 * time.Second)
+		timer := time.NewTimer(30 * time.Second)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return
+		case <-timer.C:
+		}
 	}
 }

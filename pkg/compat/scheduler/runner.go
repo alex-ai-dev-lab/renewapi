@@ -4,6 +4,7 @@
 package scheduler
 
 import (
+	"context"
 	"github.com/QuantumNous/new-api/controller"
 )
 
@@ -11,4 +12,8 @@ import (
 // This is the unified entry point for main.go.
 func Start() {
 	controller.StartChannelUpstreamModelUpdateTask()
+}
+
+func Run(ctx context.Context) {
+	controller.RunChannelUpstreamModelUpdateTask(ctx)
 }

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -930,12 +931,16 @@ type SubscriptionPreConsumeResult struct {
 
 // ExpireDueSubscriptions marks expired subscriptions and handles group downgrade.
 func ExpireDueSubscriptions(limit int) (int, error) {
+	return ExpireDueSubscriptionsContext(context.Background(), limit)
+}
+
+func ExpireDueSubscriptionsContext(ctx context.Context, limit int) (int, error) {
 	if limit <= 0 {
 		limit = 200
 	}
 	now := GetDBTimestamp()
 	var subs []UserSubscription
-	if err := DB.Where("status = ? AND end_time > 0 AND end_time <= ?", "active", now).
+	if err := DB.WithContext(ctx).Where("status = ? AND end_time > 0 AND end_time <= ?", "active", now).
 		Order("end_time asc, id asc").
 		Limit(limit).
 		Find(&subs).Error; err != nil {
@@ -952,8 +957,11 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 		}
 	}
 	for userId := range userIds {
+		if err := ctx.Err(); err != nil {
+			return expiredCount, err
+		}
 		cacheGroup := ""
-		err := DB.Transaction(func(tx *gorm.DB) error {
+		err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			res := tx.Model(&UserSubscription{}).
 				Where("user_id = ? AND status = ? AND end_time > 0 AND end_time <= ?", userId, "active", now).
 				Updates(map[string]interface{}{
@@ -1207,12 +1215,16 @@ func RefundSubscriptionPreConsume(requestId string) error {
 
 // ResetDueSubscriptions resets subscriptions whose next_reset_time has passed.
 func ResetDueSubscriptions(limit int) (int, error) {
+	return ResetDueSubscriptionsContext(context.Background(), limit)
+}
+
+func ResetDueSubscriptionsContext(ctx context.Context, limit int) (int, error) {
 	if limit <= 0 {
 		limit = 200
 	}
 	now := GetDBTimestamp()
 	var subs []UserSubscription
-	if err := DB.Where("next_reset_time > 0 AND next_reset_time <= ? AND status = ?", now, "active").
+	if err := DB.WithContext(ctx).Where("next_reset_time > 0 AND next_reset_time <= ? AND status = ?", now, "active").
 		Order("next_reset_time asc").
 		Limit(limit).
 		Find(&subs).Error; err != nil {
@@ -1223,12 +1235,15 @@ func ResetDueSubscriptions(limit int) (int, error) {
 	}
 	resetCount := 0
 	for _, sub := range subs {
-		subCopy := sub
-		plan, err := getSubscriptionPlanByIdTx(nil, sub.PlanId)
-		if err != nil || plan == nil {
-			continue
+		if err := ctx.Err(); err != nil {
+			return resetCount, err
 		}
-		err = DB.Transaction(func(tx *gorm.DB) error {
+		subCopy := sub
+		err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			plan, err := getSubscriptionPlanByIdTx(tx, sub.PlanId)
+			if err != nil || plan == nil {
+				return nil
+			}
 			var locked UserSubscription
 			if err := lockForUpdate(tx).
 				Where("id = ? AND next_reset_time > 0 AND next_reset_time <= ?", subCopy.Id, now).

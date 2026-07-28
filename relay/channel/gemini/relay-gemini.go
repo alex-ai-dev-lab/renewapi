@@ -1681,6 +1681,10 @@ type GeminiModelsResponse struct {
 }
 
 func FetchGeminiModels(baseURL, apiKey, proxyURL string, tlsInsecureSkipVerify ...bool) ([]string, error) {
+	return FetchGeminiModelsContext(context.Background(), baseURL, apiKey, proxyURL, tlsInsecureSkipVerify...)
+}
+
+func FetchGeminiModelsContext(ctx context.Context, baseURL, apiKey, proxyURL string, tlsInsecureSkipVerify ...bool) ([]string, error) {
 	client, err := service.GetHttpClientWithOptions(service.HTTPClientOptions{
 		Proxy:                 proxyURL,
 		TLSInsecureSkipVerify: len(tlsInsecureSkipVerify) > 0 && tlsInsecureSkipVerify[0],
@@ -1699,8 +1703,8 @@ func FetchGeminiModels(baseURL, apiKey, proxyURL string, tlsInsecureSkipVerify .
 			url = fmt.Sprintf("%s?pageToken=%s", url, nextPageToken)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		request, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		request, err := http.NewRequestWithContext(requestCtx, "GET", url, nil)
 		if err != nil {
 			cancel()
 			return nil, fmt.Errorf("创建请求失败: %v", err)

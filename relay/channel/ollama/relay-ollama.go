@@ -2,6 +2,7 @@ package ollama
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -279,6 +280,10 @@ func ollamaEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 }
 
 func FetchOllamaModels(baseURL, apiKey string, options ...service.HTTPClientOptions) ([]OllamaModel, error) {
+	return FetchOllamaModelsContext(context.Background(), baseURL, apiKey, options...)
+}
+
+func FetchOllamaModelsContext(ctx context.Context, baseURL, apiKey string, options ...service.HTTPClientOptions) ([]OllamaModel, error) {
 	url := fmt.Sprintf("%s/api/tags", baseURL)
 
 	clientOptions := service.HTTPClientOptions{}
@@ -289,7 +294,7 @@ func FetchOllamaModels(baseURL, apiKey string, options ...service.HTTPClientOpti
 	if err != nil {
 		return nil, fmt.Errorf("创建HTTP客户端失败: %v", err)
 	}
-	request, err := http.NewRequest("GET", url, nil)
+	request, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %v", err)
 	}

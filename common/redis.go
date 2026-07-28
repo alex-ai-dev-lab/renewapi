@@ -52,6 +52,16 @@ func InitRedisClient() (err error) {
 	return err
 }
 
+func CloseRedis() error {
+	if RDB == nil {
+		return nil
+	}
+	err := RDB.Close()
+	RDB = nil
+	RedisEnabled = false
+	return err
+}
+
 func ParseRedisOption() *redis.Options {
 	opt, err := redis.ParseURL(os.Getenv("REDIS_CONN_STRING"))
 	if err != nil {

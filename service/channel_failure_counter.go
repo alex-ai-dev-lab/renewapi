@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strconv"
 	"sync"
 	"time"
@@ -52,14 +53,17 @@ var channelConsecutiveFailureTracker = struct {
 	items: make(map[string]channelConsecutiveFailureState),
 }
 
-func init() {
-	go func() {
-		ticker := time.NewTicker(10 * time.Minute)
-		defer ticker.Stop()
-		for range ticker.C {
+func RunChannelFailureTrackerCleanup(ctx context.Context) {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
 			cleanupChannelConsecutiveFailureTracker()
 		}
-	}()
+	}
 }
 
 func cleanupChannelConsecutiveFailureTracker() {

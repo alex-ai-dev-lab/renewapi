@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -142,4 +144,14 @@ func TestNextOfficialSyncTimeUsesSevenAMLocalTime(t *testing.T) {
 		time.Date(2026, 6, 9, 7, 0, 0, 0, location),
 		nextOfficialSyncTime(afterSeven),
 	)
+}
+
+func TestOfficialPriceSyncWaitHonorsCancellation(t *testing.T) {
+	officialSyncRun <- struct{}{}
+	defer func() { <-officialSyncRun }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := RunOfficialPriceSyncContext(ctx)
+	require.True(t, errors.Is(err, context.Canceled))
 }

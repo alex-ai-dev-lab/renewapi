@@ -28,33 +28,45 @@ var (
 
 func StartSubscriptionQuotaResetTask() {
 	subscriptionResetOnce.Do(func() {
-		if !common.IsMasterNode {
-			return
-		}
-		gopool.Go(func() {
-			logger.LogInfo(context.Background(), fmt.Sprintf("subscription quota reset task started: tick=%s", subscriptionResetTickInterval))
-			ticker := time.NewTicker(subscriptionResetTickInterval)
-			defer ticker.Stop()
-
-			runSubscriptionQuotaResetOnce()
-			for range ticker.C {
-				runSubscriptionQuotaResetOnce()
-			}
-		})
+		gopool.Go(func() { RunSubscriptionQuotaResetTask(context.Background()) })
 	})
 }
 
+func RunSubscriptionQuotaResetTask(ctx context.Context) {
+	if !common.IsMasterNode {
+		return
+	}
+	logger.LogInfo(ctx, fmt.Sprintf("subscription quota reset task started: tick=%s", subscriptionResetTickInterval))
+	runSubscriptionQuotaResetOnceContext(ctx)
+	ticker := time.NewTicker(subscriptionResetTickInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runSubscriptionQuotaResetOnceContext(ctx)
+		}
+	}
+}
+
 func runSubscriptionQuotaResetOnce() {
+	runSubscriptionQuotaResetOnceContext(context.Background())
+}
+
+func runSubscriptionQuotaResetOnceContext(ctx context.Context) {
 	if !subscriptionResetRunning.CompareAndSwap(false, true) {
 		return
 	}
 	defer subscriptionResetRunning.Store(false)
 
-	ctx := context.Background()
 	totalReset := 0
 	totalExpired := 0
 	for {
-		n, err := model.ExpireDueSubscriptions(subscriptionResetBatchSize)
+		if ctx.Err() != nil {
+			return
+		}
+		n, err := model.ExpireDueSubscriptionsContext(ctx, subscriptionResetBatchSize)
 		if err != nil {
 			logger.LogWarn(ctx, fmt.Sprintf("subscription expire task failed: %v", err))
 			return
@@ -68,7 +80,10 @@ func runSubscriptionQuotaResetOnce() {
 		}
 	}
 	for {
-		n, err := model.ResetDueSubscriptions(subscriptionResetBatchSize)
+		if ctx.Err() != nil {
+			return
+		}
+		n, err := model.ResetDueSubscriptionsContext(ctx, subscriptionResetBatchSize)
 		if err != nil {
 			logger.LogWarn(ctx, fmt.Sprintf("subscription quota reset task failed: %v", err))
 			return

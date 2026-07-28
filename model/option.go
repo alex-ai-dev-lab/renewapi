@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"time"
@@ -213,12 +214,25 @@ func loadOptionsFromDatabase() {
 	}
 }
 
-func SyncOptions(frequency int) {
-	for {
-		time.Sleep(time.Duration(frequency) * time.Second)
-		common.SysLog("syncing options from database")
-		loadOptionsFromDatabase()
+func RunOptionSync(ctx context.Context, frequency int) {
+	if frequency <= 0 {
+		frequency = 60
 	}
+	ticker := time.NewTicker(time.Duration(frequency) * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			common.SysLog("syncing options from database")
+			loadOptionsFromDatabase()
+		}
+	}
+}
+
+func SyncOptions(frequency int) {
+	RunOptionSync(context.Background(), frequency)
 }
 
 func UpdateOption(key string, value string) error {

@@ -29,6 +29,10 @@ type consumeLogBatcher struct {
 	queue     chan consumeLogBatchItem
 	batchSize int
 	interval  time.Duration
+	stop      chan struct{}
+	done      chan struct{}
+	enqueueMu sync.RWMutex
+	stopping  bool
 }
 
 var (
@@ -42,6 +46,11 @@ func enqueueConsumeLog(c *gin.Context, log *Log, export consumeLogExport) bool {
 	}
 	b := getConsumeLogBatcher()
 	if b == nil {
+		return false
+	}
+	b.enqueueMu.RLock()
+	defer b.enqueueMu.RUnlock()
+	if b.stopping {
 		return false
 	}
 	select {
@@ -79,21 +88,35 @@ func getConsumeLogBatcher() *consumeLogBatcher {
 			queue:     make(chan consumeLogBatchItem, queueSize),
 			batchSize: size,
 			interval:  time.Duration(intervalMs) * time.Millisecond,
+			stop:      make(chan struct{}),
+			done:      make(chan struct{}),
 		}
-		go consumeLogBatch.run(context.Background())
+		go consumeLogBatch.run()
 	})
 	return consumeLogBatch
 }
 
-func (b *consumeLogBatcher) run(ctx context.Context) {
+func (b *consumeLogBatcher) run() {
+	defer close(b.done)
 	ticker := time.NewTicker(b.interval)
 	defer ticker.Stop()
 	batch := make([]consumeLogBatchItem, 0, b.batchSize)
 	for {
 		select {
-		case <-ctx.Done():
-			b.flush(batch)
-			return
+		case <-b.stop:
+			for {
+				select {
+				case item := <-b.queue:
+					batch = append(batch, item)
+					if len(batch) >= b.batchSize {
+						b.flush(batch)
+						batch = batch[:0]
+					}
+				default:
+					b.flush(batch)
+					return
+				}
+			}
 		case item := <-b.queue:
 			batch = append(batch, item)
 			if len(batch) >= b.batchSize {
@@ -106,6 +129,25 @@ func (b *consumeLogBatcher) run(ctx context.Context) {
 				batch = batch[:0]
 			}
 		}
+	}
+}
+
+func ShutdownSpendLogBatch(ctx context.Context) error {
+	b := consumeLogBatch
+	if b == nil {
+		return nil
+	}
+	b.enqueueMu.Lock()
+	if !b.stopping {
+		b.stopping = true
+		close(b.stop)
+	}
+	b.enqueueMu.Unlock()
+	select {
+	case <-b.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

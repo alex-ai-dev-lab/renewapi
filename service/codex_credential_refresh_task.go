@@ -34,31 +34,38 @@ func shouldAutoRefreshCodexChannelStatus(status int) bool {
 
 func StartCodexCredentialAutoRefreshTask() {
 	codexCredentialRefreshOnce.Do(func() {
-		if !common.IsMasterNode {
-			return
-		}
-
-		gopool.Go(func() {
-			logger.LogInfo(context.Background(), fmt.Sprintf("codex credential auto-refresh task started: tick=%s threshold=%s", codexCredentialRefreshTickInterval, codexCredentialRefreshThreshold))
-
-			ticker := time.NewTicker(codexCredentialRefreshTickInterval)
-			defer ticker.Stop()
-
-			runCodexCredentialAutoRefreshOnce()
-			for range ticker.C {
-				runCodexCredentialAutoRefreshOnce()
-			}
-		})
+		gopool.Go(func() { RunCodexCredentialAutoRefreshTask(context.Background()) })
 	})
 }
 
+func RunCodexCredentialAutoRefreshTask(ctx context.Context) {
+	if !common.IsMasterNode {
+		return
+	}
+	logger.LogInfo(ctx, fmt.Sprintf("codex credential auto-refresh task started: tick=%s threshold=%s", codexCredentialRefreshTickInterval, codexCredentialRefreshThreshold))
+	runCodexCredentialAutoRefreshOnceContext(ctx)
+	ticker := time.NewTicker(codexCredentialRefreshTickInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runCodexCredentialAutoRefreshOnceContext(ctx)
+		}
+	}
+}
+
 func runCodexCredentialAutoRefreshOnce() {
+	runCodexCredentialAutoRefreshOnceContext(context.Background())
+}
+
+func runCodexCredentialAutoRefreshOnceContext(ctx context.Context) {
 	if !codexCredentialRefreshRunning.CompareAndSwap(false, true) {
 		return
 	}
 	defer codexCredentialRefreshRunning.Store(false)
 
-	ctx := context.Background()
 	now := time.Now()
 
 	var refreshed int
@@ -66,8 +73,11 @@ func runCodexCredentialAutoRefreshOnce() {
 
 	offset := 0
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		var channels []*model.Channel
-		err := model.DB.
+		err := model.DB.WithContext(ctx).
 			Select("id", "name", "key", "status", "channel_info").
 			Where("type = ? AND (status = ? OR status = ?)",
 				constant.ChannelTypeCodex,
@@ -88,6 +98,9 @@ func runCodexCredentialAutoRefreshOnce() {
 		offset += codexCredentialRefreshBatchSize
 
 		for _, ch := range channels {
+			if ctx.Err() != nil {
+				return
+			}
 			if ch == nil {
 				continue
 			}

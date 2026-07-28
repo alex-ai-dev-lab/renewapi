@@ -4,6 +4,7 @@
 package pricesync
 
 import (
+	"context"
 	"os"
 	"strings"
 
@@ -19,6 +20,14 @@ func Start() {
 		return
 	}
 	controller.StartOfficialPriceSyncTask()
+}
+
+func Run(ctx context.Context) {
+	if !autoSyncEnabled() {
+		common.SysLog("official models.dev price sync auto task disabled by OFFICIAL_PRICE_SYNC_ENABLED")
+		return
+	}
+	controller.RunOfficialPriceSyncTask(ctx)
 }
 
 func autoSyncEnabled() bool {

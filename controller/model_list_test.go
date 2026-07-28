@@ -84,7 +84,7 @@ func initModelListColumnNames(t *testing.T) {
 	common.UsingPostgreSQL = false
 	require.NoError(t, os.Setenv("SQL_DSN", "local"))
 
-	require.NoError(t, model.InitDB())
+	require.NoError(t, model.InitDBForMigration())
 	if model.DB != nil {
 		sqlDB, err := model.DB.DB()
 		if err == nil {

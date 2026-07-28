@@ -1,11 +1,13 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 )
@@ -17,10 +19,7 @@ func GetOverviewStats(c *gin.Context) {
 
 	stats, err := model.GetOverviewStats(startTime)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Failed to get overview stats: " + err.Error(),
-		})
+		respondStatsError(c, "overview", err)
 		return
 	}
 
@@ -37,10 +36,7 @@ func GetChannelStats(c *gin.Context) {
 
 	stats, err := model.GetChannelStats(startTime)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Failed to get channel stats: " + err.Error(),
-		})
+		respondStatsError(c, "channel", err)
 		return
 	}
 
@@ -57,10 +53,7 @@ func GetModelStats(c *gin.Context) {
 
 	stats, err := model.GetModelStats(startTime)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Failed to get model stats: " + err.Error(),
-		})
+		respondStatsError(c, "model", err)
 		return
 	}
 
@@ -77,10 +70,7 @@ func GetUserStats(c *gin.Context) {
 
 	stats, err := model.GetUserStats(startTime)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Failed to get user stats: " + err.Error(),
-		})
+		respondStatsError(c, "user", err)
 		return
 	}
 
@@ -105,10 +95,7 @@ func GetChannelUserStats(c *gin.Context) {
 
 	stats, err := model.GetChannelUserStats(startTime, channelID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Failed to get channel user stats: " + err.Error(),
-		})
+		respondStatsError(c, "channel-user", err)
 		return
 	}
 
@@ -133,10 +120,7 @@ func GetChannelTrendStats(c *gin.Context) {
 
 	stats, err := model.GetChannelTrendStats(startTime, channelID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Failed to get channel trend stats: " + err.Error(),
-		})
+		respondStatsError(c, "channel-trend", err)
 		return
 	}
 
@@ -161,10 +145,7 @@ func GetModelTrendStats(c *gin.Context) {
 
 	stats, err := model.GetModelTrendStats(startTime, modelName)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Failed to get model trend stats: " + err.Error(),
-		})
+		respondStatsError(c, "model-trend", err)
 		return
 	}
 
@@ -189,16 +170,21 @@ func GetUserTrendStats(c *gin.Context) {
 
 	stats, err := model.GetUserTrendStats(startTime, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "Failed to get user trend stats: " + err.Error(),
-		})
+		respondStatsError(c, "user-trend", err)
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data":    stats,
+	})
+}
+
+func respondStatsError(c *gin.Context, operation string, err error) {
+	common.SysError(fmt.Sprintf("stats query failed: operation=%s request_id=%s error=%v", operation, c.GetString(common.RequestIdKey), model.SanitizeDBError(err)))
+	c.JSON(http.StatusInternalServerError, gin.H{
+		"success": false,
+		"message": "Failed to query statistics",
 	})
 }
 

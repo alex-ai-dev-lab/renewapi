@@ -167,7 +167,15 @@ func chooseDB(envName string, isLog bool) (*gorm.DB, error) {
 	return gorm.Open(sqlite.Open(common.SQLitePath), newGormConfig(true))
 }
 
-func InitDB() (err error) {
+func InitDB() error {
+	return initDB(false)
+}
+
+func InitDBForMigration() error {
+	return initDB(true)
+}
+
+func initDB(migrationMode bool) (err error) {
 	db, err := chooseDB("SQL_DSN", false)
 	if err == nil {
 		if common.DebugEnabled {
@@ -194,25 +202,31 @@ func InitDB() (err error) {
 		}
 		sqlDB.SetConnMaxLifetime(time.Second * time.Duration(common.GetEnvOrDefault("SQL_MAX_LIFETIME", 60)))
 
-		if !common.IsMasterNode {
+		if migrationMode {
 			return nil
 		}
-		if common.UsingMySQL {
-			//_, _ = sqlDB.Exec("ALTER TABLE channels MODIFY model_mapping TEXT;") // TODO: delete this line when most users have upgraded
-		}
-		common.SysLog("database migration started")
-		err = migrateDB()
-		return err
+		return CheckSchemaMigrations()
 	} else {
 		common.FatalLog(err)
 	}
 	return err
 }
 
-func InitLogDB() (err error) {
+func InitLogDB() error {
+	return initLogDB(false)
+}
+
+func InitLogDBForMigration() error {
+	return initLogDB(true)
+}
+
+func initLogDB(migrationMode bool) (err error) {
 	if os.Getenv("LOG_SQL_DSN") == "" {
 		LOG_DB = DB
-		return
+		if migrationMode {
+			return nil
+		}
+		return CheckLogSchema()
 	}
 	db, err := chooseDB("LOG_SQL_DSN", true)
 	if err == nil {
@@ -240,37 +254,43 @@ func InitLogDB() (err error) {
 		}
 		sqlDB.SetConnMaxLifetime(time.Second * time.Duration(common.GetEnvOrDefault("SQL_MAX_LIFETIME", 60)))
 
-		if !common.IsMasterNode {
+		if migrationMode {
 			return nil
 		}
-		common.SysLog("database migration started")
-		err = migrateLOGDB()
-		return err
+		return CheckLogSchema()
 	} else {
 		common.FatalLog(err)
 	}
 	return err
 }
 
-func migrateDB() error {
-	if err := runSchemaMigrationOnce("billing-ledger:v1", migrateBillingLedgerV1); err != nil {
-		return err
+func mainSchemaMigrationDefinitions() []schemaMigrationDefinition {
+	return []schemaMigrationDefinition{
+		{Key: "core-schema:v1", Revision: "2026-07-28.1", Apply: migrateCoreSchemaV1},
+		{Key: "billing-ledger:v1", Revision: "2026-07-28.1", Apply: migrateBillingLedgerV1},
+		{Key: "channel-config:v1", Revision: "2026-07-28.1", Apply: migrateChannelConfigV1},
+		{Key: "responses-capability:v1", Revision: "2026-07-28.1", Apply: migrateResponsesCapabilityV1},
+		{Key: "manual:subscription_plans.price_amount_decimal:v1", Revision: "2026-07-28.1", Apply: migrateSubscriptionPlanPriceAmount},
+		{Key: "manual:tokens.model_limits_text:v1", Revision: "2026-07-28.1", Apply: migrateTokenModelLimitsToText},
 	}
-	if err := runSchemaMigrationOnce("channel-config:v1", migrateChannelConfigV1); err != nil {
-		return err
-	}
-	if err := runSchemaMigrationOnce("responses-capability:v1", migrateResponsesCapabilityV1); err != nil {
-		return err
-	}
-	// Migrate price_amount column from float/double to decimal for existing tables
-	if err := runSchemaMigrationOnce("manual:subscription_plans.price_amount_decimal:v1", migrateSubscriptionPlanPriceAmount); err != nil {
-		return err
-	}
-	// Migrate model_limits column from varchar to text for existing tables
-	if err := runSchemaMigrationOnce("manual:tokens.model_limits_text:v1", migrateTokenModelLimitsToText); err != nil {
-		return err
-	}
+}
 
+func ApplySchemaMigrations() error {
+	return migrateDB()
+}
+
+func migrateDB() error {
+	return withSchemaMigrationLock(func() error {
+		for _, def := range mainSchemaMigrationDefinitions() {
+			if err := runSchemaMigration(def); err != nil {
+				return fmt.Errorf("apply migration %s: %w", def.Key, err)
+			}
+		}
+		return nil
+	})
+}
+
+func migrateCoreSchemaV1() error {
 	err := DB.AutoMigrate(
 		&Channel{},
 		&Token{},
@@ -319,93 +339,7 @@ func migrateDB() error {
 }
 
 func migrateDBFast() error {
-	if err := runSchemaMigrationOnce("billing-ledger:v1", migrateBillingLedgerV1); err != nil {
-		return err
-	}
-	if err := runSchemaMigrationOnce("channel-config:v1", migrateChannelConfigV1); err != nil {
-		return err
-	}
-	if err := runSchemaMigrationOnce("responses-capability:v1", migrateResponsesCapabilityV1); err != nil {
-		return err
-	}
-	if err := runSchemaMigrationOnce("manual:subscription_plans.price_amount_decimal:v1", migrateSubscriptionPlanPriceAmount); err != nil {
-		return err
-	}
-	if err := runSchemaMigrationOnce("manual:tokens.model_limits_text:v1", migrateTokenModelLimitsToText); err != nil {
-		return err
-	}
-
-	var wg sync.WaitGroup
-
-	migrations := []struct {
-		model interface{}
-		name  string
-	}{
-		{&Channel{}, "Channel"},
-		{&Token{}, "Token"},
-		{&User{}, "User"},
-		{&PasskeyCredential{}, "PasskeyCredential"},
-		{&Option{}, "Option"},
-		{&Redemption{}, "Redemption"},
-		{&Ability{}, "Ability"},
-		{&Log{}, "Log"},
-		{&Midjourney{}, "Midjourney"},
-		{&TopUp{}, "TopUp"},
-		{&QuotaData{}, "QuotaData"},
-		{&Task{}, "Task"},
-		{&Model{}, "Model"},
-		{&Vendor{}, "Vendor"},
-		{&PrefillGroup{}, "PrefillGroup"},
-		{&Setup{}, "Setup"},
-		{&TwoFA{}, "TwoFA"},
-		{&TwoFABackupCode{}, "TwoFABackupCode"},
-		{&Checkin{}, "Checkin"},
-		{&SubscriptionOrder{}, "SubscriptionOrder"},
-		{&UserSubscription{}, "UserSubscription"},
-		{&SubscriptionPreConsumeRecord{}, "SubscriptionPreConsumeRecord"},
-		{&CustomOAuthProvider{}, "CustomOAuthProvider"},
-		{&UserOAuthBinding{}, "UserOAuthBinding"},
-		{&PerfMetric{}, "PerfMetric"},
-		{&UserAgent{}, "UserAgent"},
-		{&ChannelModelStatus{}, "ChannelModelStatus"},
-	}
-	// 动态计算migration数量，确保errChan缓冲区足够大
-	errChan := make(chan error, len(migrations))
-
-	for _, m := range migrations {
-		wg.Add(1)
-		go func(model interface{}, name string) {
-			defer wg.Done()
-			if err := DB.AutoMigrate(model); err != nil {
-				errChan <- fmt.Errorf("failed to migrate %s: %v", name, err)
-			}
-		}(m.model, m.name)
-	}
-
-	// Wait for all migrations to complete
-	wg.Wait()
-	close(errChan)
-
-	// Check for any errors
-	for err := range errChan {
-		if err != nil {
-			return err
-		}
-	}
-	if err := ensureLogCreatedAtIDIndex(DB); err != nil {
-		return err
-	}
-	if common.UsingSQLite {
-		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
-			return err
-		}
-	} else {
-		if err := DB.AutoMigrate(&SubscriptionPlan{}); err != nil {
-			return err
-		}
-	}
-	common.SysLog("database migrated")
-	return nil
+	return migrateDB()
 }
 
 func migrateLOGDB() error {
@@ -413,6 +347,17 @@ func migrateLOGDB() error {
 		return err
 	}
 	return ensureLogCreatedAtIDIndex(LOG_DB)
+}
+
+func ApplyLogSchemaMigrations() error {
+	return migrateLOGDB()
+}
+
+func CheckLogSchema() error {
+	if LOG_DB == nil || !LOG_DB.Migrator().HasTable(&Log{}) || !LOG_DB.Migrator().HasTable(&BillingAuditEvent{}) {
+		return fmt.Errorf("%w: log schema", ErrSchemaMigrationsPending)
+	}
+	return nil
 }
 
 func migrateBillingLedgerV1() error {

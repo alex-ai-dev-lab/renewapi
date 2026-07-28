@@ -73,3 +73,7 @@ func sanitizeDBError(err error) error {
 	}
 	return err
 }
+
+func SanitizeDBError(err error) error {
+	return sanitizeDBError(err)
+}

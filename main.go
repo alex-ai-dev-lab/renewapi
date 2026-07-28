@@ -5,6 +5,7 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -59,6 +60,9 @@ var classicBuildFS embed.FS
 var classicIndexPage []byte
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		os.Exit(runMigrationCommand(os.Args[2:]))
+	}
 	startTime := time.Now()
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
@@ -280,6 +284,84 @@ func main() {
 		model.SaveQuotaDataCache()
 	}
 	common.SysLog("server exited")
+}
+
+func runMigrationCommand(args []string) int {
+	flags := flag.NewFlagSet("migrate", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	check := flags.Bool("check", false, "verify that all schema migrations are applied")
+	up := flags.Bool("up", false, "apply all pending schema migrations")
+	status := flags.Bool("status", false, "print schema migration status")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	selected := 0
+	for _, enabled := range []bool{*check, *up, *status} {
+		if enabled {
+			selected++
+		}
+	}
+	if selected != 1 || flags.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: new-api migrate --check|--up|--status")
+		return 2
+	}
+
+	_ = godotenv.Load(".env")
+	originalArgs := os.Args
+	os.Args = []string{originalArgs[0]}
+	common.InitEnv()
+	os.Args = originalArgs
+	logger.SetupLogger()
+
+	if err := model.InitDBForMigration(); err != nil {
+		fmt.Fprintln(os.Stderr, "initialize main database:", err)
+		return 1
+	}
+	if err := model.InitLogDBForMigration(); err != nil {
+		fmt.Fprintln(os.Stderr, "initialize log database:", err)
+		return 1
+	}
+	defer func() {
+		if err := model.CloseDB(); err != nil {
+			fmt.Fprintln(os.Stderr, "close database:", err)
+		}
+	}()
+
+	if *up {
+		if err := model.ApplySchemaMigrations(); err != nil {
+			fmt.Fprintln(os.Stderr, "apply main schema migrations:", err)
+			return 1
+		}
+		if err := model.ApplyLogSchemaMigrations(); err != nil {
+			fmt.Fprintln(os.Stderr, "apply log schema migrations:", err)
+			return 1
+		}
+	}
+
+	statuses, err := model.GetSchemaMigrationStatus()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "read migration status:", err)
+		return 1
+	}
+	for _, item := range statuses {
+		state := "pending"
+		if item.Applied {
+			state = "applied"
+		}
+		fmt.Printf("%s\t%s\t%s\t%s\t%dms\n", state, item.Key, item.Checksum, item.AppVersion, item.DurationMS)
+	}
+	if *status {
+		return 0
+	}
+	if err := model.CheckSchemaMigrations(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if err := model.CheckLogSchema(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return 0
 }
 
 func InjectUmamiAnalytics() {

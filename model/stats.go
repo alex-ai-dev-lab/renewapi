@@ -110,6 +110,7 @@ type ChannelUserStat struct {
 
 func GetOverviewStats(startTime time.Time) (*OverviewStats, error) {
 	stats := &OverviewStats{}
+	var err error
 
 	query := `
 		SELECT
@@ -152,7 +153,10 @@ func GetOverviewStats(startTime time.Time) (*OverviewStats, error) {
 	stats.SuccessRate = percent(stats.SuccessRequests, stats.TotalRequests)
 	stats.ErrorRate = percent(stats.FailedRequests, stats.TotalRequests)
 	stats.TotalCost = quotaToUSD(totalQuota)
-	stats.RequestsPerMinute = requestsPerMinute(stats.TotalRequests, startTime)
+	stats.RequestsPerMinute, err = requestsPerMinute(stats.TotalRequests, startTime)
+	if err != nil {
+		return nil, err
+	}
 	if avgFirstToken.Valid {
 		stats.AvgFirstTokenTime = avgFirstToken.Float64
 	}
@@ -160,25 +164,37 @@ func GetOverviewStats(startTime time.Time) (*OverviewStats, error) {
 		stats.AvgUseTime = avgUseTime.Float64
 	}
 
-	stats.Trend = getTrendData(startTime)
-	stats.TopChannels = getTopChannels(startTime, 10)
-	stats.TopFailChannels = getChannelsBy(startTime, 8, "error_rate DESC, total_requests DESC")
-	stats.SlowestChannels = getChannelsBy(startTime, 8, "avg_first_token DESC, total_requests DESC")
-	stats.TopModels = getTopModels(startTime, 10)
-	stats.TopCostUsers = getUsersBy(startTime, 8, "total_quota DESC, total_requests DESC")
+	if stats.Trend, err = getTrendData(startTime); err != nil {
+		return nil, err
+	}
+	if stats.TopChannels, err = getTopChannels(startTime, 10); err != nil {
+		return nil, err
+	}
+	if stats.TopFailChannels, err = getChannelsBy(startTime, 8, "error_rate DESC, total_requests DESC"); err != nil {
+		return nil, err
+	}
+	if stats.SlowestChannels, err = getChannelsBy(startTime, 8, "avg_first_token DESC, total_requests DESC"); err != nil {
+		return nil, err
+	}
+	if stats.TopModels, err = getTopModels(startTime, 10); err != nil {
+		return nil, err
+	}
+	if stats.TopCostUsers, err = getUsersBy(startTime, 8, "total_quota DESC, total_requests DESC"); err != nil {
+		return nil, err
+	}
 	return stats, nil
 }
 
 func GetChannelStats(startTime time.Time) ([]ChannelStat, error) {
-	return getTopChannels(startTime, 50), nil
+	return getTopChannels(startTime, 50)
 }
 
 func GetModelStats(startTime time.Time) ([]ModelStat, error) {
-	return getTopModels(startTime, 50), nil
+	return getTopModels(startTime, 50)
 }
 
 func GetUserStats(startTime time.Time) ([]UserStat, error) {
-	return getUsersBy(startTime, 50, "total_quota DESC, total_requests DESC"), nil
+	return getUsersBy(startTime, 50, "total_quota DESC, total_requests DESC")
 }
 
 func GetChannelUserStats(startTime time.Time, channelID int) ([]ChannelUserStat, error) {
@@ -203,9 +219,9 @@ func GetChannelUserStats(startTime time.Time, channelID int) ([]ChannelUserStat,
 			COALESCE(SUM(prompt_tokens), 0) AS total_prompt_tokens,
 			COALESCE(SUM(completion_tokens), 0) AS total_output_tokens
 		FROM logs
-		WHERE channel_id = ?
+		WHERE channel_id = ? AND type IN (?, ?)
 	`
-	args := []interface{}{LogTypeConsume, LogTypeError, LogTypeConsume, LogTypeError, channelID}
+	args := []interface{}{LogTypeConsume, LogTypeError, LogTypeConsume, LogTypeError, channelID, LogTypeConsume, LogTypeError}
 	if !startTime.IsZero() {
 		query += " AND created_at >= ?"
 		args = append(args, startTime.Unix())
@@ -214,8 +230,9 @@ func GetChannelUserStats(startTime time.Time, channelID int) ([]ChannelUserStat,
 
 	rows, err := LOG_DB.Raw(query, args...).Rows()
 	if err != nil {
-		return stats, nil
+		return nil, err
 	}
+	defer rows.Close()
 
 	for rows.Next() {
 		var stat ChannelUserStat
@@ -237,7 +254,7 @@ func GetChannelUserStats(startTime time.Time, channelID int) ([]ChannelUserStat,
 			&stat.TotalPromptTokens,
 			&stat.TotalOutputTokens,
 		); err != nil {
-			continue
+			return nil, err
 		}
 		if avgFirstToken.Valid {
 			stat.AvgFirstToken = avgFirstToken.Float64
@@ -248,9 +265,14 @@ func GetChannelUserStats(startTime time.Time, channelID int) ([]ChannelUserStat,
 		stat.TotalCost = quotaToUSD(totalQuota)
 		stats = append(stats, stat)
 	}
-	_ = rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
-	channelNames := getChannelNameMap([]int{channelID})
+	channelNames, err := getChannelNameMap([]int{channelID})
+	if err != nil {
+		return nil, err
+	}
 	for i := range stats {
 		stats[i].ChannelName = channelNameOrUnknown(channelNames, stats[i].ChannelID)
 	}
@@ -261,24 +283,24 @@ func GetChannelTrendStats(startTime time.Time, channelID int) ([]TrendPoint, err
 	if channelID <= 0 {
 		return []TrendPoint{}, nil
 	}
-	return getTrendDataFiltered(startTime, channelID, "", 0), nil
+	return getTrendDataFiltered(startTime, channelID, "", 0)
 }
 
 func GetModelTrendStats(startTime time.Time, modelName string) ([]TrendPoint, error) {
 	if modelName == "" {
 		return []TrendPoint{}, nil
 	}
-	return getTrendDataFiltered(startTime, 0, modelName, 0), nil
+	return getTrendDataFiltered(startTime, 0, modelName, 0)
 }
 
 func GetUserTrendStats(startTime time.Time, userID int) ([]TrendPoint, error) {
 	if userID <= 0 {
 		return []TrendPoint{}, nil
 	}
-	return getTrendDataFiltered(startTime, 0, "", userID), nil
+	return getTrendDataFiltered(startTime, 0, "", userID)
 }
 
-func getUsersBy(startTime time.Time, limit int, orderBy string) []UserStat {
+func getUsersBy(startTime time.Time, limit int, orderBy string) ([]UserStat, error) {
 	var stats []UserStat
 	query := `
 		SELECT
@@ -297,9 +319,10 @@ func getUsersBy(startTime time.Time, limit int, orderBy string) []UserStat {
 		FROM logs
 	`
 
-	args := []interface{}{LogTypeConsume, LogTypeError, LogTypeConsume, LogTypeError}
+	query += " WHERE type IN (?, ?)"
+	args := []interface{}{LogTypeConsume, LogTypeError, LogTypeConsume, LogTypeError, LogTypeConsume, LogTypeError}
 	if !startTime.IsZero() {
-		query += " WHERE created_at >= ?"
+		query += " AND created_at >= ?"
 		args = append(args, startTime.Unix())
 	}
 	query += " GROUP BY user_id ORDER BY " + orderBy + " LIMIT ?"
@@ -307,8 +330,9 @@ func getUsersBy(startTime time.Time, limit int, orderBy string) []UserStat {
 
 	rows, err := LOG_DB.Raw(query, args...).Rows()
 	if err != nil {
-		return stats
+		return nil, err
 	}
+	defer rows.Close()
 
 	for rows.Next() {
 		var stat UserStat
@@ -329,7 +353,7 @@ func getUsersBy(startTime time.Time, limit int, orderBy string) []UserStat {
 			&stat.TotalPromptTokens,
 			&stat.TotalOutputTokens,
 		); err != nil {
-			continue
+			return nil, err
 		}
 		if avgFirstToken.Valid {
 			stat.AvgFirstToken = avgFirstToken.Float64
@@ -340,10 +364,20 @@ func getUsersBy(startTime time.Time, limit int, orderBy string) []UserStat {
 		stat.TotalCost = quotaToUSD(totalQuota)
 		stats = append(stats, stat)
 	}
-	_ = rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
+	userIDs := make([]int, 0, len(stats))
+	for _, stat := range stats {
+		userIDs = append(userIDs, stat.UserID)
+	}
+	topChannels, err := getUserTopChannelIDs(startTime, userIDs)
+	if err != nil {
+		return nil, err
+	}
 	for i := range stats {
-		stats[i].TopChannelID = getUserTopChannelID(startTime, stats[i].UserID)
+		stats[i].TopChannelID = topChannels[stats[i].UserID]
 	}
 	channelIDs := make([]int, 0, len(stats))
 	for _, stat := range stats {
@@ -351,18 +385,21 @@ func getUsersBy(startTime time.Time, limit int, orderBy string) []UserStat {
 			channelIDs = append(channelIDs, stat.TopChannelID)
 		}
 	}
-	channelNames := getChannelNameMap(channelIDs)
+	channelNames, err := getChannelNameMap(channelIDs)
+	if err != nil {
+		return nil, err
+	}
 	for i := range stats {
 		stats[i].TopChannelName = channelNameOrUnknown(channelNames, stats[i].TopChannelID)
 	}
-	return stats
+	return stats, nil
 }
 
-func getTrendData(startTime time.Time) []TrendPoint {
+func getTrendData(startTime time.Time) ([]TrendPoint, error) {
 	return getTrendDataFiltered(startTime, 0, "", 0)
 }
 
-func getTrendDataFiltered(startTime time.Time, channelID int, modelName string, userID int) []TrendPoint {
+func getTrendDataFiltered(startTime time.Time, channelID int, modelName string, userID int) ([]TrendPoint, error) {
 	var trend []TrendPoint
 	interval := trendIntervalSeconds(startTime)
 	query := `
@@ -400,8 +437,9 @@ func getTrendDataFiltered(startTime time.Time, channelID int, modelName string, 
 
 	rows, err := LOG_DB.Raw(query, args...).Rows()
 	if err != nil {
-		return trend
+		return nil, err
 	}
+	defer rows.Close()
 
 	for rows.Next() {
 		var point TrendPoint
@@ -419,7 +457,7 @@ func getTrendDataFiltered(startTime time.Time, channelID int, modelName string, 
 			&point.TotalPromptTokens,
 			&point.TotalOutputTokens,
 		); err != nil {
-			continue
+			return nil, err
 		}
 		point.SuccessRate = percent(point.Success, point.Requests)
 		point.ErrorRate = percent(point.Failure, point.Requests)
@@ -432,15 +470,17 @@ func getTrendDataFiltered(startTime time.Time, channelID int, modelName string, 
 		point.TotalCost = quotaToUSD(totalQuota)
 		trend = append(trend, point)
 	}
-	_ = rows.Close()
-	return trend
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return trend, nil
 }
 
-func getTopChannels(startTime time.Time, limit int) []ChannelStat {
+func getTopChannels(startTime time.Time, limit int) ([]ChannelStat, error) {
 	return getChannelsBy(startTime, limit, "total_requests DESC")
 }
 
-func getChannelsBy(startTime time.Time, limit int, orderBy string) []ChannelStat {
+func getChannelsBy(startTime time.Time, limit int, orderBy string) ([]ChannelStat, error) {
 	var stats []ChannelStat
 	query := `
 		SELECT
@@ -458,9 +498,10 @@ func getChannelsBy(startTime time.Time, limit int, orderBy string) []ChannelStat
 		FROM logs
 	`
 
-	args := []interface{}{LogTypeConsume, LogTypeError, LogTypeConsume, LogTypeError}
+	query += " WHERE type IN (?, ?)"
+	args := []interface{}{LogTypeConsume, LogTypeError, LogTypeConsume, LogTypeError, LogTypeConsume, LogTypeError}
 	if !startTime.IsZero() {
-		query += " WHERE created_at >= ?"
+		query += " AND created_at >= ?"
 		args = append(args, startTime.Unix())
 	}
 	query += " GROUP BY channel_id ORDER BY " + orderBy + " LIMIT ?"
@@ -468,8 +509,9 @@ func getChannelsBy(startTime time.Time, limit int, orderBy string) []ChannelStat
 
 	rows, err := LOG_DB.Raw(query, args...).Rows()
 	if err != nil {
-		return stats
+		return nil, err
 	}
+	defer rows.Close()
 
 	for rows.Next() {
 		var stat ChannelStat
@@ -489,7 +531,7 @@ func getChannelsBy(startTime time.Time, limit int, orderBy string) []ChannelStat
 			&stat.TotalPromptTokens,
 			&stat.TotalOutputTokens,
 		); err != nil {
-			continue
+			return nil, err
 		}
 		if avgFirstToken.Valid {
 			stat.AvgFirstToken = avgFirstToken.Float64
@@ -500,20 +542,25 @@ func getChannelsBy(startTime time.Time, limit int, orderBy string) []ChannelStat
 		stat.TotalCost = quotaToUSD(totalQuota)
 		stats = append(stats, stat)
 	}
-	_ = rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	channelIDs := make([]int, 0, len(stats))
 	for _, stat := range stats {
 		channelIDs = append(channelIDs, stat.ChannelID)
 	}
-	channelNames := getChannelNameMap(channelIDs)
+	channelNames, err := getChannelNameMap(channelIDs)
+	if err != nil {
+		return nil, err
+	}
 	for i := range stats {
 		stats[i].ChannelName = channelNameOrUnknown(channelNames, stats[i].ChannelID)
 	}
-	return stats
+	return stats, nil
 }
 
-func getTopModels(startTime time.Time, limit int) []ModelStat {
+func getTopModels(startTime time.Time, limit int) ([]ModelStat, error) {
 	var stats []ModelStat
 	query := `
 		SELECT
@@ -531,9 +578,10 @@ func getTopModels(startTime time.Time, limit int) []ModelStat {
 		FROM logs
 	`
 
-	args := []interface{}{LogTypeConsume, LogTypeError, LogTypeConsume, LogTypeError}
+	query += " WHERE type IN (?, ?)"
+	args := []interface{}{LogTypeConsume, LogTypeError, LogTypeConsume, LogTypeError, LogTypeConsume, LogTypeError}
 	if !startTime.IsZero() {
-		query += " WHERE created_at >= ?"
+		query += " AND created_at >= ?"
 		args = append(args, startTime.Unix())
 	}
 	query += " GROUP BY model_name ORDER BY total_requests DESC LIMIT ?"
@@ -541,8 +589,9 @@ func getTopModels(startTime time.Time, limit int) []ModelStat {
 
 	rows, err := LOG_DB.Raw(query, args...).Rows()
 	if err != nil {
-		return stats
+		return nil, err
 	}
+	defer rows.Close()
 
 	for rows.Next() {
 		var stat ModelStat
@@ -562,7 +611,7 @@ func getTopModels(startTime time.Time, limit int) []ModelStat {
 			&stat.TotalPromptTokens,
 			&stat.TotalOutputTokens,
 		); err != nil {
-			continue
+			return nil, err
 		}
 		if avgFirstToken.Valid {
 			stat.AvgFirstToken = avgFirstToken.Float64
@@ -573,32 +622,48 @@ func getTopModels(startTime time.Time, limit int) []ModelStat {
 		stat.TotalCost = quotaToUSD(totalQuota)
 		stats = append(stats, stat)
 	}
-	_ = rows.Close()
-	return stats
-}
-
-func getUserTopChannelID(startTime time.Time, userID int) int {
-	query := `
-		SELECT channel_id
-		FROM logs
-		WHERE user_id = ?
-	`
-	args := []interface{}{userID}
-	if !startTime.IsZero() {
-		query += " AND created_at >= ?"
-		args = append(args, startTime.Unix())
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
-	query += " GROUP BY channel_id ORDER BY COALESCE(SUM(quota), 0) DESC, COUNT(*) DESC LIMIT 1"
-
-	var channelID int
-	_ = LOG_DB.Raw(query, args...).Row().Scan(&channelID)
-	return channelID
+	return stats, nil
 }
 
-func getChannelNameMap(ids []int) map[int]string {
+func getUserTopChannelIDs(startTime time.Time, userIDs []int) (map[int]int, error) {
+	topChannels := make(map[int]int, len(userIDs))
+	if len(userIDs) == 0 {
+		return topChannels, nil
+	}
+	type userChannelTotal struct {
+		UserID       int
+		ChannelID    int
+		TotalQuota   int64
+		RequestCount int64
+	}
+	var totals []userChannelTotal
+	query := LOG_DB.Table("logs").
+		Select("user_id, channel_id, COALESCE(SUM(quota), 0) AS total_quota, COUNT(*) AS request_count").
+		Where("user_id IN ?", userIDs).
+		Where("type IN ?", []int{LogTypeConsume, LogTypeError})
+	if !startTime.IsZero() {
+		query = query.Where("created_at >= ?", startTime.Unix())
+	}
+	if err := query.Group("user_id, channel_id").
+		Order("user_id ASC, total_quota DESC, request_count DESC, channel_id ASC").
+		Scan(&totals).Error; err != nil {
+		return nil, err
+	}
+	for _, total := range totals {
+		if _, exists := topChannels[total.UserID]; !exists {
+			topChannels[total.UserID] = total.ChannelID
+		}
+	}
+	return topChannels, nil
+}
+
+func getChannelNameMap(ids []int) (map[int]string, error) {
 	names := map[int]string{}
 	if len(ids) == 0 {
-		return names
+		return names, nil
 	}
 	type row struct {
 		ID   int
@@ -606,12 +671,12 @@ func getChannelNameMap(ids []int) map[int]string {
 	}
 	var rows []row
 	if err := DB.Table("channels").Select("id, name").Where("id IN ?", ids).Scan(&rows).Error; err != nil {
-		return names
+		return nil, err
 	}
 	for _, r := range rows {
 		names[r.ID] = r.Name
 	}
-	return names
+	return names, nil
 }
 
 func channelNameOrUnknown(names map[int]string, id int) string {
@@ -641,6 +706,8 @@ func frtExprWithAlias(alias string) string {
 	switch LOG_DB.Dialector.Name() {
 	case "mysql":
 		return "CASE WHEN JSON_VALID(" + prefix + "other) THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(" + prefix + "other, '$.frt')) AS DECIMAL(18,3)) ELSE NULL END"
+	case "postgres":
+		return "CAST(SUBSTRING(" + prefix + "other FROM '\"frt\"[[:space:]]*:[[:space:]]*(-?[0-9]+([.][0-9]+)?)') AS DOUBLE PRECISION)"
 	default:
 		return "CASE WHEN json_valid(" + prefix + "other) THEN CAST(json_extract(" + prefix + "other, '$.frt') AS REAL) ELSE NULL END"
 	}
@@ -668,9 +735,9 @@ func quotaToUSD(quota int64) float64 {
 	return float64(quota) / common.QuotaPerUnit
 }
 
-func requestsPerMinute(total int64, startTime time.Time) float64 {
+func requestsPerMinute(total int64, startTime time.Time) (float64, error) {
 	if total <= 0 {
-		return 0
+		return 0, nil
 	}
 	if startTime.IsZero() {
 		var bounds struct {
@@ -680,20 +747,22 @@ func requestsPerMinute(total int64, startTime time.Time) float64 {
 		if err := LOG_DB.Table("logs").
 			Where("type IN ?", []int{LogTypeConsume, LogTypeError}).
 			Select("MIN(created_at) AS min_created_at, MAX(created_at) AS max_created_at").
-			Scan(&bounds).Error; err != nil || bounds.MaxCreatedAt <= bounds.MinCreatedAt {
-			return 0
+			Scan(&bounds).Error; err != nil {
+			return 0, err
+		} else if bounds.MaxCreatedAt <= bounds.MinCreatedAt {
+			return 0, nil
 		}
 		minutes := float64(bounds.MaxCreatedAt-bounds.MinCreatedAt) / 60
 		if minutes <= 0 {
-			return float64(total)
+			return float64(total), nil
 		}
-		return float64(total) / minutes
+		return float64(total) / minutes, nil
 	}
 	minutes := time.Since(startTime).Minutes()
 	if minutes <= 0 {
-		return float64(total)
+		return float64(total), nil
 	}
-	return float64(total) / minutes
+	return float64(total) / minutes, nil
 }
 
 func percent(part, total int64) float64 {

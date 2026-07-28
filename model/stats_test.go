@@ -1,10 +1,13 @@
 package model
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestGetModelStatsIncludesAverageFirstToken(t *testing.T) {
@@ -37,6 +40,12 @@ func TestGetModelStatsIncludesAverageFirstToken(t *testing.T) {
 		ModelName: "broken-json",
 		Other:     ``,
 	}).Error)
+	require.NoError(t, LOG_DB.Create(&Log{
+		CreatedAt: now,
+		Type:      LogTypeManage,
+		ModelName: "gpt-test",
+		Other:     `{"frt":999}`,
+	}).Error)
 
 	stats, err := GetModelStats(time.Now().Add(-time.Hour))
 	require.NoError(t, err)
@@ -55,6 +64,60 @@ func TestGetModelStatsIncludesAverageFirstToken(t *testing.T) {
 	require.InDelta(t, 66.666, got.SuccessRate, 0.01)
 	require.InDelta(t, 33.333, got.ErrorRate, 0.01)
 	require.InDelta(t, 200, got.AvgFirstToken, 0.001)
+}
+
+func TestStatsQueryErrorsArePropagated(t *testing.T) {
+	oldDB := DB
+	oldLogDB := LOG_DB
+	t.Cleanup(func() {
+		DB = oldDB
+		LOG_DB = oldLogDB
+	})
+
+	db, err := gorm.Open(sqlite.Open("file:stats_error?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	DB = db
+	LOG_DB = db
+	require.NoError(t, db.AutoMigrate(&Log{}, &Channel{}))
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
+
+	_, err = GetChannelStats(time.Now().Add(-time.Hour))
+	require.Error(t, err)
+	_, err = GetOverviewStats(time.Now().Add(-time.Hour))
+	require.Error(t, err)
+}
+
+func TestGetUserStatsUsesFixedQueryCount(t *testing.T) {
+	truncateTables(t)
+	now := time.Now().Unix()
+	for userID := 1; userID <= 6; userID++ {
+		channelID := 100 + userID
+		require.NoError(t, DB.Create(&Channel{Id: channelID, Name: "channel"}).Error)
+		require.NoError(t, LOG_DB.Create(&Log{
+			UserId:    userID,
+			Username:  "user",
+			CreatedAt: now,
+			Type:      LogTypeConsume,
+			Quota:     userID * 100,
+			ChannelId: channelID,
+		}).Error)
+	}
+
+	var queryCount atomic.Int64
+	callbackName := "test:stats-query-count"
+	require.NoError(t, DB.Callback().Query().Before("gorm:query").Register(callbackName, func(*gorm.DB) {
+		queryCount.Add(1)
+	}))
+	t.Cleanup(func() {
+		_ = DB.Callback().Query().Remove(callbackName)
+	})
+
+	stats, err := GetUserStats(time.Now().Add(-time.Hour))
+	require.NoError(t, err)
+	require.Len(t, stats, 6)
+	require.LessOrEqual(t, queryCount.Load(), int64(3), "query count must not grow with the number of users")
 }
 
 func TestGetOverviewStatsIncludesOperationalSignals(t *testing.T) {

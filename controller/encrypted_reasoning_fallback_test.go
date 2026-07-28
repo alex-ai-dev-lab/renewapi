@@ -54,10 +54,11 @@ func TestCompatStreamRetryError_PreFirstChunkHandlerStop(t *testing.T) {
 	}
 }
 
-func TestCompatStreamRetryError_AfterChunkHandlerStopNoRetry(t *testing.T) {
+func TestCompatStreamRetryError_AfterCommittedGenericChunkPreservesLegacyHandling(t *testing.T) {
 	status := relaycommon.NewStreamStatus()
 	status.RecordError("invalid_encrypted_content")
 	status.SetEndReason(relaycommon.StreamEndReasonHandlerStop, nil)
+	status.MarkClientCommitted()
 	info := &relaycommon.RelayInfo{
 		IsStream:              true,
 		ReceivedResponseCount: 1,
@@ -65,6 +66,7 @@ func TestCompatStreamRetryError_AfterChunkHandlerStopNoRetry(t *testing.T) {
 	}
 
 	assert.Nil(t, compatStreamRetryError(info))
+	assert.False(t, info.StreamStatus.Outcome().RetryableBeforeCommit)
 }
 
 func TestShouldExcludeChannelAfterRetryDecision_SingleKeyRetryable404(t *testing.T) {

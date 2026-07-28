@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/relay/antipoison"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -58,4 +59,59 @@ func TestResponsesHandlersPreserveCacheWriteTokens(t *testing.T) {
 		},
 	}, "")
 	require.Equal(t, 30, streamUsage.PromptTokensDetails.CacheWriteTokens)
+}
+
+func runResponsesStreamTest(t *testing.T, body string) (*httptest.ResponseRecorder, *relaycommon.RelayInfo, *types.NewAPIError) {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{
+		IsStream:        true,
+		DisablePing:     true,
+		RelayFormat:     types.RelayFormatOpenAIResponses,
+		OriginModelName: "gpt-test",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "gpt-test",
+		},
+	}
+	_, apiErr := OaiResponsesStreamHandler(ctx, info, &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	})
+	return recorder, info, apiErr
+}
+
+func TestOaiResponsesStreamHandlerClassifiesEmptyAndMalformedBodies(t *testing.T) {
+	_, emptyInfo, apiErr := runResponsesStreamTest(t, "")
+	require.NotNil(t, apiErr)
+	require.Equal(t, types.ErrorCodeEmptyResponse, apiErr.GetErrorCode())
+	require.Equal(t, relaycommon.StreamAttemptEmptyResponse, emptyInfo.StreamStatus.Outcome().Code)
+
+	_, malformedInfo, apiErr := runResponsesStreamTest(t, "data: not-json\n\n")
+	require.NotNil(t, apiErr)
+	require.Equal(t, types.ErrorCodeBadResponseBody, apiErr.GetErrorCode())
+	require.Equal(t, relaycommon.StreamAttemptBadResponseBody, malformedInfo.StreamStatus.Outcome().Code)
+}
+
+func TestOaiResponsesStreamHandlerRequiresCompletedTerminal(t *testing.T) {
+	recorder, info, apiErr := runResponsesStreamTest(t, `data: {"type":"response.created"}`+"\n\n")
+	require.NotNil(t, apiErr)
+	require.Equal(t, types.ErrorCodeBadResponseBody, apiErr.GetErrorCode())
+	outcome := info.StreamStatus.Outcome()
+	require.Equal(t, relaycommon.StreamAttemptIncomplete, outcome.Code)
+	require.True(t, outcome.ClientCommitted)
+	require.Contains(t, recorder.Body.String(), "response.created")
+}
+
+func TestOaiResponsesStreamHandlerCompletedAndFailedTerminals(t *testing.T) {
+	completed := `data: {"type":"response.completed","response":{"id":"resp-test","object":"response","model":"gpt-test","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}` + "\n\n"
+	_, completedInfo, apiErr := runResponsesStreamTest(t, completed)
+	require.Nil(t, apiErr)
+	require.Equal(t, relaycommon.StreamAttemptOK, completedInfo.StreamStatus.Outcome().Code)
+
+	recorder, failedInfo, apiErr := runResponsesStreamTest(t, `data: {"type":"response.failed"}`+"\n\n")
+	require.NotNil(t, apiErr)
+	require.Equal(t, relaycommon.StreamAttemptFailed, failedInfo.StreamStatus.Outcome().Code)
+	require.Empty(t, recorder.Body.String(), "failed terminal must stay pre-commit so recovery can retry")
 }

@@ -3,16 +3,20 @@ package helper
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
+
+const streamStatusContextKey = "relay_stream_status"
 
 func FlushWriter(c *gin.Context) (err error) {
 	defer func() {
@@ -29,12 +33,9 @@ func FlushWriter(c *gin.Context) (err error) {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
 
-	flusher, ok := c.Writer.(http.Flusher)
-	if !ok {
-		return errors.New("streaming error: flusher not found")
+	if err := http.NewResponseController(c.Writer).Flush(); err != nil {
+		return fmt.Errorf("flush stream data failed: %w", err)
 	}
-
-	flusher.Flush()
 	return nil
 }
 
@@ -83,12 +84,14 @@ func ClaudeChunkData(c *gin.Context, resp dto.ClaudeResponse, data string) {
 }
 
 func ResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data string) error {
+	if c == nil || c.Writer == nil {
+		return errors.New("context or writer is nil")
+	}
 	if requestContextDone(c) {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
-	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
-	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("data: %s", data)})
-	return FlushWriter(c)
+	payload := fmt.Sprintf("event: %s\ndata: %s\n\n", resp.Type, data)
+	return writeBusinessStreamData(c, payload)
 }
 
 func StringData(c *gin.Context, str string) error {
@@ -100,8 +103,40 @@ func StringData(c *gin.Context, str string) error {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
 
-	c.Render(-1, common.CustomEvent{Data: "data: " + str})
-	return FlushWriter(c)
+	return writeBusinessStreamData(c, "data: "+str+"\n\n")
+}
+
+func writeBusinessStreamData(c *gin.Context, payload string) error {
+	written, err := c.Writer.Write([]byte(payload))
+	if written > 0 {
+		markBusinessStreamCommitted(c)
+	}
+	if err != nil {
+		return fmt.Errorf("write stream data failed: %w", err)
+	}
+	if written != len(payload) {
+		return fmt.Errorf("write stream data failed: %w", io.ErrShortWrite)
+	}
+	if err := FlushWriter(c); err != nil {
+		return err
+	}
+	if value, ok := c.Get(streamStatusContextKey); ok {
+		if status, ok := value.(*relaycommon.StreamStatus); ok && status != nil {
+			status.MarkForwarded()
+		}
+	}
+	return nil
+}
+
+func markBusinessStreamCommitted(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	if value, ok := c.Get(streamStatusContextKey); ok {
+		if status, ok := value.(*relaycommon.StreamStatus); ok && status != nil {
+			status.MarkClientCommitted()
+		}
+	}
 }
 
 func PingData(c *gin.Context) error {

@@ -244,7 +244,7 @@ func Distribute() func(c *gin.Context) {
 			return
 		}
 		c.Next()
-		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
+		if channel != nil && c.Writer != nil && service.RelaySemanticSuccess(c) {
 			finalChannelID := common.GetContextKeyInt(c, constant.ContextKeyChannelId)
 			if finalChannelID <= 0 {
 				finalChannelID = channel.Id

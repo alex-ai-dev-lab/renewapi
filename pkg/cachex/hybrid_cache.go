@@ -3,6 +3,8 @@ package cachex
 import (
 	"context"
 	"errors"
+	"hash/fnv"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -37,9 +39,10 @@ type HybridCache[V any] struct {
 	redisCodec   ValueCodec[V]
 	redisEnabled func() bool
 
-	memOnce sync.Once
-	memInit func() *hot.HotCache[string, V]
-	mem     *hot.HotCache[string, V]
+	memOnce  sync.Once
+	memInit  func() *hot.HotCache[string, V]
+	mem      *hot.HotCache[string, V]
+	memLocks [64]sync.Mutex
 }
 
 func NewHybridCache[V any](cfg HybridCacheConfig[V]) *HybridCache[V] {
@@ -105,6 +108,9 @@ func (c *HybridCache[V]) Get(key string) (value V, found bool, err error) {
 		return zero, false, e
 	}
 
+	lock := c.memoryLock(full)
+	lock.Lock()
+	defer lock.Unlock()
 	return c.memCache().Get(full)
 }
 
@@ -124,8 +130,82 @@ func (c *HybridCache[V]) SetWithTTL(key string, v V, ttl time.Duration) error {
 		return c.redis.Set(ctx, full, raw, ttl).Err()
 	}
 
+	lock := c.memoryLock(full)
+	lock.Lock()
 	c.memCache().SetWithTTL(full, v, ttl)
+	lock.Unlock()
 	return nil
+}
+
+// CompareAndDelete removes key only when its current value still matches
+// expected. Redis uses one Lua operation; the in-memory cache serializes Get,
+// SetWithTTL, and this method by key.
+func (c *HybridCache[V]) CompareAndDelete(key string, expected V, equal func(V, V) bool) (bool, error) {
+	full := c.ns.FullKey(key)
+	if full == "" {
+		return false, nil
+	}
+	if equal == nil {
+		return false, errors.New("compare function is nil")
+	}
+
+	if c.redisOn() {
+		raw, err := c.redisCodec.Encode(expected)
+		if err != nil {
+			return false, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), defaultRedisOpTimeout)
+		defer cancel()
+		const script = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("UNLINK", KEYS[1])
+end
+return 0`
+		deleted, err := c.redis.Eval(ctx, script, []string{full}, raw).Int()
+		return deleted > 0, err
+	}
+
+	lock := c.memoryLock(full)
+	lock.Lock()
+	defer lock.Unlock()
+	current, found, err := c.memCache().Get(full)
+	if err != nil || !found || !equal(current, expected) {
+		return false, err
+	}
+	deleted := c.memCache().DeleteMany([]string{full})
+	return deleted[full], nil
+}
+
+func (c *HybridCache[V]) memoryLock(key string) *sync.Mutex {
+	return &c.memLocks[c.memoryLockIndex(key)]
+}
+
+func (c *HybridCache[V]) memoryLockIndex(key string) int {
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(key))
+	return int(hash.Sum32() % uint32(len(c.memLocks)))
+}
+
+func (c *HybridCache[V]) lockMemoryKeys(keys []string) func() {
+	indexes := make([]int, 0, len(keys))
+	seen := make(map[int]struct{}, len(keys))
+	for _, key := range keys {
+		index := c.memoryLockIndex(key)
+		if _, ok := seen[index]; ok {
+			continue
+		}
+		seen[index] = struct{}{}
+		indexes = append(indexes, index)
+	}
+	sort.Ints(indexes)
+	for _, index := range indexes {
+		c.memLocks[index].Lock()
+	}
+	return func() {
+		for i := len(indexes) - 1; i >= 0; i-- {
+			c.memLocks[indexes[i]].Unlock()
+		}
+	}
 }
 
 // Keys returns keys with valid values. In Redis, it returns all matching keys.
@@ -169,7 +249,13 @@ func (c *HybridCache[V]) Purge() error {
 		return err
 	}
 
+	for i := range c.memLocks {
+		c.memLocks[i].Lock()
+	}
 	c.memCache().Purge()
+	for i := len(c.memLocks) - 1; i >= 0; i-- {
+		c.memLocks[i].Unlock()
+	}
 	return nil
 }
 
@@ -267,6 +353,8 @@ func (c *HybridCache[V]) DeleteMany(keys []string) (map[string]bool, error) {
 		return res, nil
 	}
 
+	unlock := c.lockMemoryKeys(fullKeys)
+	defer unlock()
 	return c.memCache().DeleteMany(fullKeys), nil
 }
 

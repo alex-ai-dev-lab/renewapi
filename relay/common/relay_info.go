@@ -743,6 +743,10 @@ func (info *RelayInfo) HasSendResponse() bool {
 	return info.FirstResponseTime.After(info.StartTime)
 }
 
+func (info *RelayInfo) ClientResponseCommitted() bool {
+	return info != nil && info.StreamStatus != nil && info.StreamStatus.IsClientCommitted()
+}
+
 type TaskRelayInfo struct {
 	Action       string
 	OriginTaskID string

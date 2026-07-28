@@ -50,6 +50,7 @@ func TestStreamStatus_SetEndReason_Concurrent(t *testing.T) {
 		StreamEndReasonEOF,
 		StreamEndReasonPanic,
 		StreamEndReasonPingFail,
+		StreamEndReasonWriteError,
 		StreamEndReasonFirstByteTimeout,
 	}
 
@@ -194,4 +195,95 @@ func TestStreamStatus_Summary_NilSafe(t *testing.T) {
 	t.Parallel()
 	var s *StreamStatus
 	assert.Equal(t, "StreamStatus<nil>", s.Summary())
+}
+
+func TestStreamStatus_OpenAIResponsesOutcomes(t *testing.T) {
+	tests := []struct {
+		name  string
+		build func(*StreamStatus)
+		code  StreamAttemptCode
+		retry bool
+	}{
+		{
+			name: "empty eof",
+			build: func(status *StreamStatus) {
+				status.SetTransportEnd(StreamEndReasonEOF, nil)
+			},
+			code:  StreamAttemptEmptyResponse,
+			retry: true,
+		},
+		{
+			name: "malformed only",
+			build: func(status *StreamStatus) {
+				status.ObserveRawFrame()
+				status.RejectEvent(fmt.Errorf("bad json"))
+				status.SetTransportEnd(StreamEndReasonEOF, nil)
+			},
+			code:  StreamAttemptBadResponseBody,
+			retry: true,
+		},
+		{
+			name: "valid without terminal",
+			build: func(status *StreamStatus) {
+				status.ObserveRawFrame()
+				status.AcceptEvent("response.output_text.delta")
+				status.SetTransportEnd(StreamEndReasonEOF, nil)
+			},
+			code:  StreamAttemptIncomplete,
+			retry: true,
+		},
+		{
+			name: "completed then eof",
+			build: func(status *StreamStatus) {
+				status.ObserveRawFrame()
+				status.AcceptEvent("response.completed")
+				status.MarkTerminal(true, nil)
+				status.SetTransportEnd(StreamEndReasonEOF, nil)
+			},
+			code: StreamAttemptOK,
+		},
+		{
+			name: "downstream write failure",
+			build: func(status *StreamStatus) {
+				status.SetTransportEnd(StreamEndReasonWriteError, fmt.Errorf("broken pipe"))
+			},
+			code: StreamAttemptWriteError,
+		},
+		{
+			name: "handler failure wins over eof",
+			build: func(status *StreamStatus) {
+				status.ObserveRawFrame()
+				status.AcceptEvent("response.failed")
+				status.MarkTerminal(false, fmt.Errorf("failed"))
+				status.SetEndReason(StreamEndReasonHandlerStop, fmt.Errorf("failed"))
+				status.SetTransportEnd(StreamEndReasonEOF, nil)
+			},
+			code:  StreamAttemptFailed,
+			retry: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status := NewStreamStatus()
+			status.SetPolicy(StreamTerminationPolicyOpenAIResponses)
+			tt.build(status)
+			outcome := status.Finalize()
+			assert.Equal(t, tt.code, outcome.Code)
+			assert.Equal(t, tt.retry, outcome.RetryableBeforeCommit)
+		})
+	}
+}
+
+func TestStreamStatus_CommitDisablesRetry(t *testing.T) {
+	status := NewStreamStatus()
+	status.SetPolicy(StreamTerminationPolicyOpenAIResponses)
+	status.ObserveRawFrame()
+	status.AcceptEvent("response.output_text.delta")
+	status.MarkClientCommitted()
+	status.SetTransportEnd(StreamEndReasonEOF, nil)
+
+	outcome := status.Finalize()
+	assert.Equal(t, StreamAttemptIncomplete, outcome.Code)
+	assert.False(t, outcome.RetryableBeforeCommit)
 }

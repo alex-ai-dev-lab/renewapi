@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -245,10 +246,14 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 	}
 
 	if ledgerModeOwnsBalances(s.ledgerMode) {
+		channelID := common.GetContextKeyInt(c, constant.ContextKeyChannelId)
+		if s.relayInfo.ChannelMeta != nil && s.relayInfo.ChannelMeta.ChannelId > 0 {
+			channelID = s.relayInfo.ChannelMeta.ChannelId
+		}
 		reservation, err := model.ReserveBillingLedger(model.BillingReservation{
 			RequestID: s.relayInfo.RequestId, Kind: "request", Mode: s.ledgerMode,
 			FundingSource: s.funding.Source(), UserID: s.relayInfo.UserId,
-			TokenID: s.relayInfo.TokenId, ChannelID: s.relayInfo.ChannelId,
+			TokenID: s.relayInfo.TokenId, ChannelID: channelID,
 			Quota: int64(effectiveQuota), TokenUnlimited: s.relayInfo.TokenUnlimited,
 			Playground: s.relayInfo.IsPlayground, ApplyBalances: true,
 		})

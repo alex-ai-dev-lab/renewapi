@@ -495,6 +495,10 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	if info.AntiPoisonResponseProofNonce != "" && antipoison.ResponseProofEnabled(info) {
 		responseProof = antipoison.NewProofStreamValidator(info.AntiPoisonResponseProofNonce, antipoison.ResponseGuardConfig(info))
 	}
+	if info.StreamStatus == nil {
+		info.StreamStatus = relaycommon.NewStreamStatus()
+	}
+	info.StreamStatus.SetPolicy(relaycommon.StreamTerminationPolicyOpenAIResponses)
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 
@@ -502,7 +506,21 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		var streamResponse dto.ResponsesStreamResponse
 		if err := common.UnmarshalJsonStr(data, &streamResponse); err != nil {
 			logger.LogError(c, "failed to unmarshal stream response: "+err.Error())
-			sr.Error(err)
+			sr.Invalid(err)
+			return
+		}
+		streamResponse.Type = strings.TrimSpace(streamResponse.Type)
+		if streamResponse.Type == "" {
+			err := fmt.Errorf("responses stream event type is empty")
+			logger.LogError(c, err.Error())
+			sr.Invalid(err)
+			return
+		}
+		sr.Accept(streamResponse.Type)
+		if streamResponse.Type == "response.failed" || streamResponse.Type == "response.error" {
+			err := fmt.Errorf("responses stream failed: %s", streamResponse.Type)
+			streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway)
+			sr.Stop(err)
 			return
 		}
 		if info != nil && info.ResponsesRequestKind == dto.ResponsesCompactionTrigger {
@@ -599,7 +617,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 				for _, pending := range pendingResponsesData {
 					if err := sendResponsesStreamDataWithPreflight(c, info, preflightBuffer, pending.response, pending.data); err != nil {
 						streamErr = err
-						sr.Stop(err)
+						sr.StopWrite(err)
 						return
 					}
 				}
@@ -612,7 +630,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 					}
 					if err := sendResponsesStreamDataWithPreflight(c, info, preflightBuffer, streamResponse, data); err != nil {
 						streamErr = err
-						sr.Stop(err)
+						sr.StopWrite(err)
 						return
 					}
 				}
@@ -620,7 +638,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		} else {
 			if err := sendResponsesStreamDataWithPreflight(c, info, preflightBuffer, streamResponse, data); err != nil {
 				streamErr = err
-				sr.Stop(err)
+				sr.StopWrite(err)
 				return
 			}
 		}
@@ -648,6 +666,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 					c.Set("image_generation_call_size", streamResponse.Response.GetSize())
 				}
 			}
+			sr.Done()
 		case "response.output_text.delta":
 			// 处理输出文本
 			responseTextBuilder.WriteString(streamResponse.Delta)
@@ -667,6 +686,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	})
 	if streamErr != nil {
 		return nil, streamErr
+	}
+	if outcomeErr := responsesStreamOutcomeError(info); outcomeErr != nil {
+		return nil, outcomeErr
 	}
 	if info != nil && info.ResponsesRequestKind == dto.ResponsesCompactionTrigger && (!compactionItemSeen || !compactionCompleted) {
 		return nil, types.NewOpenAIError(fmt.Errorf("incomplete responses compaction stream"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
@@ -697,7 +719,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			if err := common.UnmarshalJsonStr(chunk, &streamResponse); err != nil {
 				return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 			}
-			sendResponsesStreamData(c, streamResponse, chunk)
+			if err := sendResponsesStreamData(c, streamResponse, chunk); err != nil {
+				return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry())
+			}
 		}
 	}
 
@@ -720,9 +744,48 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	return usage, nil
 }
 
+func responsesStreamOutcomeError(info *relaycommon.RelayInfo) *types.NewAPIError {
+	if info == nil || info.StreamStatus == nil {
+		return nil
+	}
+	outcome := info.StreamStatus.Outcome()
+	switch outcome.Code {
+	case relaycommon.StreamAttemptOK:
+		return nil
+	case relaycommon.StreamAttemptEmptyResponse:
+		return types.NewOpenAIError(
+			fmt.Errorf("empty stream response from upstream: %s", outcome.Summary),
+			types.ErrorCodeEmptyResponse,
+			http.StatusBadGateway,
+		)
+	case relaycommon.StreamAttemptTimeout:
+		status := http.StatusGatewayTimeout
+		return types.NewOpenAIError(
+			fmt.Errorf("responses stream timeout: %s", outcome.Summary),
+			types.ErrorCodeChannelResponseTimeExceeded,
+			status,
+		)
+	case relaycommon.StreamAttemptClientGone:
+		return types.NewErrorWithStatusCode(
+			fmt.Errorf("responses client disconnected: %s", outcome.Summary),
+			types.ErrorCodeBadResponse,
+			499,
+			types.ErrOptionWithSkipRetry(),
+		)
+	default:
+		return types.NewOpenAIError(
+			fmt.Errorf("invalid or incomplete stream response from upstream: %s", outcome.Summary),
+			types.ErrorCodeBadResponseBody,
+			http.StatusBadGateway,
+		)
+	}
+}
+
 func sendResponsesStreamDataWithPreflight(c *gin.Context, info *relaycommon.RelayInfo, buffer *antipoison.StreamPreflightBuffer, streamResponse dto.ResponsesStreamResponse, data string) *types.NewAPIError {
 	if buffer == nil {
-		sendResponsesStreamData(c, streamResponse, data)
+		if err := sendResponsesStreamData(c, streamResponse, data); err != nil {
+			return types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry())
+		}
 		return nil
 	}
 	chunks, result, err := buffer.Add(data, responsesStreamVisibleText(streamResponse))
@@ -739,7 +802,9 @@ func sendResponsesStreamDataWithPreflight(c *gin.Context, info *relaycommon.Rela
 		if err := common.UnmarshalJsonStr(chunk, &chunkResp); err != nil {
 			return types.NewError(err, types.ErrorCodeBadResponseBody)
 		}
-		sendResponsesStreamData(c, chunkResp, chunk)
+		if err := sendResponsesStreamData(c, chunkResp, chunk); err != nil {
+			return types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry())
+		}
 	}
 	_ = info
 	return nil

@@ -27,10 +27,13 @@ const (
 	ginKeyChannelAffinityMeta       = "channel_affinity_meta"
 	ginKeyChannelAffinityLogInfo    = "channel_affinity_log_info"
 	ginKeyChannelAffinitySkipRetry  = "channel_affinity_skip_retry_on_failure"
+	ginKeyChannelAffinityMatchedKey = "channel_affinity_matched_key"
+	ginKeyRelaySemanticSuccess      = "relay_semantic_success"
 	ginKeyCompactionResponseHashes  = "responses_compaction_response_hashes"
 
 	channelAffinityCacheNamespace           = "new-api:channel_affinity:v1"
 	channelAffinityMultiKeyIndexNamespace   = "new-api:channel_affinity_multi_key_index:v1"
+	channelAffinityNegativeNamespace        = "new-api:channel_affinity_negative:v1"
 	channelAffinityUsageCacheStatsNamespace = "new-api:channel_affinity_usage_cache_stats:v1"
 )
 
@@ -57,6 +60,11 @@ func GetPreferredChannelByCompactionAffinity(c *gin.Context, modelName, usingGro
 			return 0, false
 		}
 		if found {
+			if channelAffinityNegative(suffix, channelID) {
+				_, _ = getChannelAffinityCache().CompareAndDelete(suffix, channelID, intEqual)
+				continue
+			}
+			c.Set(ginKeyChannelAffinityMatchedKey, suffix)
 			if multiKeyIndex, indexFound := getChannelAffinityPreferredMultiKeyIndex(suffix); indexFound {
 				common.SetContextKey(c, constant.ContextKeyChannelPreferredMultiKeyChannelId, channelID)
 				common.SetContextKey(c, constant.ContextKeyChannelPreferredMultiKeyIndex, multiKeyIndex)
@@ -131,6 +139,8 @@ var (
 
 	channelAffinityMultiKeyIndexCacheOnce sync.Once
 	channelAffinityMultiKeyIndexCache     *cachex.HybridCache[int]
+	channelAffinityNegativeCacheOnce      sync.Once
+	channelAffinityNegativeCache          *cachex.HybridCache[int]
 
 	channelAffinityUsageCacheStatsOnce  sync.Once
 	channelAffinityUsageCacheStatsCache *cachex.HybridCache[ChannelAffinityUsageCacheCounters]
@@ -236,6 +246,30 @@ func getChannelAffinityMultiKeyIndexCache() *cachex.HybridCache[int] {
 		})
 	})
 	return channelAffinityMultiKeyIndexCache
+}
+
+func getChannelAffinityNegativeCache() *cachex.HybridCache[int] {
+	channelAffinityNegativeCacheOnce.Do(func() {
+		capacity := 100_000
+		if setting := operation_setting.GetChannelAffinitySetting(); setting != nil && setting.MaxEntries > 0 {
+			capacity = setting.MaxEntries
+		}
+		channelAffinityNegativeCache = cachex.NewHybridCache[int](cachex.HybridCacheConfig[int]{
+			Namespace: cachex.Namespace(channelAffinityNegativeNamespace),
+			Redis:     common.RDB,
+			RedisEnabled: func() bool {
+				return common.RedisEnabled && common.RDB != nil
+			},
+			RedisCodec: cachex.IntCodec{},
+			Memory: func() *hot.HotCache[string, int] {
+				return hot.NewHotCache[string, int](hot.LRU, capacity).
+					WithTTL(30 * time.Second).
+					WithJanitor().
+					Build()
+			},
+		})
+	})
+	return channelAffinityNegativeCache
 }
 
 func GetChannelAffinityCacheStats() ChannelAffinityCacheStats {
@@ -752,6 +786,11 @@ func GetPreferredChannelByAffinity(c *gin.Context, modelName string, usingGroup 
 			return 0, false
 		}
 		if found {
+			if channelAffinityNegative(cacheKeySuffix, channelID) {
+				_, _ = cache.CompareAndDelete(cacheKeySuffix, channelID, intEqual)
+				return 0, false
+			}
+			c.Set(ginKeyChannelAffinityMatchedKey, cacheKeySuffix)
 			if multiKeyIndex, indexFound := getChannelAffinityPreferredMultiKeyIndex(cacheKeySuffix); indexFound {
 				common.SetContextKey(c, constant.ContextKeyChannelPreferredMultiKeyChannelId, channelID)
 				common.SetContextKey(c, constant.ContextKeyChannelPreferredMultiKeyIndex, multiKeyIndex)
@@ -770,6 +809,107 @@ func channelAffinityRawCacheKey(cacheKey string) string {
 	}
 	prefix := channelAffinityCacheNamespace + ":"
 	return strings.TrimPrefix(cacheKey, prefix)
+}
+
+func channelAffinityNegativeKey(cacheKey string, channelID int) string {
+	cacheKey = channelAffinityRawCacheKey(cacheKey)
+	if cacheKey == "" || channelID <= 0 {
+		return ""
+	}
+	return cacheKey + "\nchannel:" + strconv.Itoa(channelID)
+}
+
+func channelAffinityNegative(cacheKey string, channelID int) bool {
+	key := channelAffinityNegativeKey(cacheKey, channelID)
+	if key == "" {
+		return false
+	}
+	value, found, err := getChannelAffinityNegativeCache().Get(key)
+	if err != nil {
+		common.SysError(fmt.Sprintf("channel affinity negative cache get failed: err=%v", err))
+		return false
+	}
+	return found && value == 1
+}
+
+func intEqual(a, b int) bool { return a == b }
+
+func currentChannelAffinityKey(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	if value, ok := c.Get(ginKeyChannelAffinityMatchedKey); ok {
+		if key, ok := value.(string); ok && strings.TrimSpace(key) != "" {
+			return channelAffinityRawCacheKey(key)
+		}
+	}
+	if meta, ok := getChannelAffinityMeta(c); ok {
+		return channelAffinityRawCacheKey(meta.CacheKey)
+	}
+	return ""
+}
+
+func ShouldAvoidChannelForSession(c *gin.Context, channelID int) bool {
+	return channelAffinityNegative(currentChannelAffinityKey(c), channelID)
+}
+
+func EvictCurrentChannelAffinityIfMatches(c *gin.Context, failedChannelID int) bool {
+	if c == nil || failedChannelID <= 0 {
+		return false
+	}
+	key := currentChannelAffinityKey(c)
+	if key == "" {
+		return false
+	}
+	deleted, err := getChannelAffinityCache().CompareAndDelete(key, failedChannelID, intEqual)
+	if err != nil {
+		common.SysError(fmt.Sprintf("channel affinity compare-delete failed: err=%v", err))
+		return false
+	}
+	if deleted && common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey) {
+		index := common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
+		if index >= 0 {
+			if _, err := getChannelAffinityMultiKeyIndexCache().CompareAndDelete(key, index, intEqual); err != nil {
+				common.SysError(fmt.Sprintf("channel affinity multi-key compare-delete failed: err=%v", err))
+			}
+		}
+	}
+	return deleted
+}
+
+func MarkChannelSessionNegative(c *gin.Context, channelID int) {
+	key := channelAffinityNegativeKey(currentChannelAffinityKey(c), channelID)
+	if key == "" {
+		return
+	}
+	ttlSeconds := 30
+	if setting := operation_setting.GetStreamRecoverySetting(); setting != nil {
+		if setting.SessionNegativeTTLSeconds <= 0 {
+			return
+		}
+		ttlSeconds = setting.SessionNegativeTTLSeconds
+	}
+	if err := getChannelAffinityNegativeCache().SetWithTTL(key, 1, time.Duration(ttlSeconds)*time.Second); err != nil {
+		common.SysError(fmt.Sprintf("channel affinity negative cache set failed: err=%v", err))
+	}
+}
+
+func clearChannelSessionNegative(c *gin.Context, channelID int) {
+	key := channelAffinityNegativeKey(currentChannelAffinityKey(c), channelID)
+	if key == "" {
+		return
+	}
+	_, _ = getChannelAffinityNegativeCache().CompareAndDelete(key, 1, intEqual)
+}
+
+func SetRelaySemanticSuccess(c *gin.Context, success bool) {
+	if c != nil {
+		c.Set(ginKeyRelaySemanticSuccess, success)
+	}
+}
+
+func RelaySemanticSuccess(c *gin.Context) bool {
+	return c != nil && c.GetBool(ginKeyRelaySemanticSuccess)
 }
 
 func getChannelAffinityPreferredMultiKeyIndex(cacheKey string) (int, bool) {
@@ -907,6 +1047,7 @@ func RecordChannelAffinity(c *gin.Context, channelID int) {
 	if err := cache.SetWithTTL(cacheKey, channelID, time.Duration(ttlSeconds)*time.Second); err != nil {
 		common.SysError(fmt.Sprintf("channel affinity cache set failed: key=%s, err=%v", cacheKey, err))
 	}
+	clearChannelSessionNegative(c, channelID)
 	if common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey) {
 		index := common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
 		if index >= 0 {

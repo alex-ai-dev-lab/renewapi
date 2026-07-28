@@ -56,6 +56,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	}
 
 	info.StreamStatus = relaycommon.NewStreamStatusFromExisting(info.StreamStatus)
+	c.Set(streamStatusContextKey, info.StreamStatus)
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
 	if streamingTimeout <= 0 {
 		streamingTimeout = 30 * time.Second
@@ -134,7 +135,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				if recovered := recover(); recovered != nil {
 					err := fmt.Errorf("ping panic: %v", recovered)
 					logger.LogError(c, err.Error())
-					info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonPanic, err)
+					info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonPanic, err)
 					abort()
 				}
 				logger.LogDebug(c, "ping goroutine exited")
@@ -146,12 +147,15 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			for {
 				select {
 				case <-pingTicker.C:
+					if !info.StreamStatus.IsClientCommitted() {
+						continue
+					}
 					writeMutex.Lock()
 					ExtendWriteDeadline(c)
 					err := PingData(c)
 					writeMutex.Unlock()
 					if err != nil {
-						info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonPingFail, err)
+						info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonPingFail, err)
 						abort()
 						return
 					}
@@ -163,7 +167,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 					return
 				case <-maxDuration.C:
 					err := fmt.Errorf("ping goroutine max duration reached")
-					info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonPingFail, err)
+					info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonPingFail, err)
 					abort()
 					return
 				}
@@ -177,7 +181,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			if recovered := recover(); recovered != nil {
 				err := fmt.Errorf("handler panic: %v", recovered)
 				logger.LogError(c, err.Error())
-				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonPanic, err)
+				info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonPanic, err)
 				abort()
 			}
 			close(handlerDone)
@@ -212,7 +216,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			if recovered := recover(); recovered != nil {
 				err := fmt.Errorf("scanner panic: %v", recovered)
 				logger.LogError(c, err.Error())
-				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonPanic, err)
+				info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonPanic, err)
 				abort()
 			}
 			close(dataChan)
@@ -227,7 +231,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			case <-ctx.Done():
 				return
 			case <-c.Request.Context().Done():
-				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+				info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
 				abort()
 				return
 			default:
@@ -243,7 +247,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			data := scanner.Text()
 			logger.LogDebug(c, "stream scanner data: %s", data)
 			if strings.HasPrefix(data, "[DONE]") {
-				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
+				info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonDone, nil)
 				return
 			}
 			if !strings.HasPrefix(data, "data:") {
@@ -254,9 +258,10 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				continue
 			}
 			if strings.HasPrefix(data, "[DONE]") {
-				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
+				info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonDone, nil)
 				return
 			}
+			info.StreamStatus.ObserveRawFrame()
 			if firstResponseObserved.CompareAndSwap(false, true) {
 				if !firstByteTimer.Stop() {
 					select {
@@ -274,38 +279,47 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			case <-ctx.Done():
 				return
 			case <-c.Request.Context().Done():
-				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+				info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
 				abort()
 				return
 			}
 		}
 
 		if err := scanner.Err(); err != nil && err != io.EOF {
+			if ctx.Err() != nil {
+				return
+			}
+			select {
+			case <-abortCh:
+				return
+			default:
+			}
 			if c.Request.Context().Err() == nil {
 				logger.LogError(c, "scanner error: "+err.Error())
-				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonScannerErr, err)
+				info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonScannerErr, err)
 			}
 			return
 		}
-		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
+		info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonEOF, nil)
 	})
 
 	select {
 	case <-handlerDone:
 	case <-abortCh:
 	case <-streamTimer.C:
-		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
+		info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonTimeout, nil)
 	case <-firstByteTimer.C:
 		if firstResponseObserved.Load() {
-			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
+			info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonTimeout, nil)
 		} else {
-			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonFirstByteTimeout, nil)
+			info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonFirstByteTimeout, nil)
 		}
 	case <-c.Request.Context().Done():
-		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+		info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
 	}
 
 	cleanup()
+	info.StreamStatus.Finalize()
 	if info.StreamStatus.IsNormalEnd() && !info.StreamStatus.HasErrors() {
 		logger.LogInfo(c, fmt.Sprintf("stream ended: %s", info.StreamStatus.Summary()))
 	} else {

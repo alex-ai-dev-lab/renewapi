@@ -12,9 +12,11 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/perf_metrics_setting"
+	"github.com/bytedance/gopkg/util/gopool"
 )
 
 var hotBuckets sync.Map
+var pendingSamples sync.WaitGroup
 
 // seriesSchema is a stable client cache/schema marker. Do not change it when
 // hiding fields or making response-only privacy hardening changes.
@@ -52,6 +54,18 @@ func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens i
 		OutputTokens: outputTokens,
 		GenerationMs: generationMs,
 	})
+}
+
+func RecordRelaySampleAsync(info *relaycommon.RelayInfo, success bool, outputTokens int64) {
+	pendingSamples.Add(1)
+	gopool.Go(func() {
+		defer pendingSamples.Done()
+		RecordRelaySample(info, success, outputTokens)
+	})
+}
+
+func WaitForPendingSamples() {
+	pendingSamples.Wait()
 }
 
 func Record(sample Sample) {

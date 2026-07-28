@@ -239,6 +239,70 @@ func TestGetPreferredChannelByAffinity_RequestHeaderKeySource(t *testing.T) {
 	require.Equal(t, buildChannelAffinityKeyHint(affinityValue), meta.KeyHint)
 }
 
+func TestEvictCurrentChannelAffinityUsesCompareAndDelete(t *testing.T) {
+	key := fmt.Sprintf("cas-evict-%d", time.Now().UnixNano())
+	cache := getChannelAffinityCache()
+	require.NoError(t, cache.SetWithTTL(key, 42, time.Minute))
+	t.Cleanup(func() { _, _ = cache.DeleteMany([]string{key}) })
+
+	ctx := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{
+		CacheKey:   channelAffinityCacheNamespace + ":" + key,
+		TTLSeconds: 60,
+	})
+	require.False(t, EvictCurrentChannelAffinityIfMatches(ctx, 41))
+	value, found, err := cache.Get(key)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, 42, value)
+
+	require.True(t, EvictCurrentChannelAffinityIfMatches(ctx, 42))
+	_, found, err = cache.Get(key)
+	require.NoError(t, err)
+	require.False(t, found)
+}
+
+func TestChannelSessionNegativeIsScopedToAffinityAndChannel(t *testing.T) {
+	key := fmt.Sprintf("negative-%d", time.Now().UnixNano())
+	ctx := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{
+		CacheKey:   channelAffinityCacheNamespace + ":" + key,
+		TTLSeconds: 60,
+	})
+	MarkChannelSessionNegative(ctx, 42)
+	require.True(t, ShouldAvoidChannelForSession(ctx, 42))
+	require.False(t, ShouldAvoidChannelForSession(ctx, 43))
+	clearChannelSessionNegative(ctx, 42)
+	require.False(t, ShouldAvoidChannelForSession(ctx, 42))
+}
+
+func TestRelaySemanticSuccessIsExplicit(t *testing.T) {
+	ctx := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{})
+	require.False(t, RelaySemanticSuccess(ctx))
+	SetRelaySemanticSuccess(ctx, true)
+	require.True(t, RelaySemanticSuccess(ctx))
+	SetRelaySemanticSuccess(ctx, false)
+	require.False(t, RelaySemanticSuccess(ctx))
+}
+
+func TestDistinctStreamFailureRequiresDifferentSessionFingerprints(t *testing.T) {
+	setting := operation_setting.GetStreamRecoverySetting()
+	old := *setting
+	t.Cleanup(func() { *setting = old })
+	setting.ChannelModelEscalationEnabled = true
+	setting.DistinctSessionThreshold = 3
+	setting.EvidenceWindowSeconds = 60
+
+	newContext := func(fingerprint string) *gin.Context {
+		return buildChannelAffinityTemplateContextForTest(channelAffinityMeta{KeyFingerprint: fingerprint})
+	}
+	channelID := int(time.Now().UnixNano()%1_000_000) + 1_000_000
+	modelName := fmt.Sprintf("gpt-distinct-%d", time.Now().UnixNano())
+	require.False(t, RecordDistinctStreamFailure(newContext("session-a"), channelID, modelName))
+	require.False(t, RecordDistinctStreamFailure(newContext("session-a"), channelID, modelName))
+	require.False(t, RecordDistinctStreamFailure(newContext("session-b"), channelID, modelName))
+	require.True(t, RecordDistinctStreamFailure(newContext("session-c"), channelID, modelName))
+	require.False(t, RecordDistinctStreamFailure(newContext("session-c"), channelID, modelName))
+}
+
 func TestChannelAffinityHitCodexTemplatePassHeadersEffective(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

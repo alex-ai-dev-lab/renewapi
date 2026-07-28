@@ -8,7 +8,9 @@ import (
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
+	"github.com/stretchr/testify/require"
 )
 
 func resetCompatChannelFailureTrackerForTest() {
@@ -103,4 +105,82 @@ func TestShouldCompatDisableChannel_DoesNotImmediatelyDisableTransientTransport5
 	if !shouldTrackCompatUpstream5xxFailure(err) {
 		t.Fatal("transient transport 502 should still be tracked for repeated-failure auto-disable")
 	}
+}
+
+func responsesStreamInfoForTest(status *relaycommon.StreamStatus) *relaycommon.RelayInfo {
+	return &relaycommon.RelayInfo{
+		IsStream:     true,
+		RelayFormat:  types.RelayFormatOpenAIResponses,
+		StreamStatus: status,
+	}
+}
+
+func TestCompatStreamRetryErrorResponsesOutcomeMapping(t *testing.T) {
+	empty := relaycommon.NewStreamStatus()
+	empty.SetPolicy(relaycommon.StreamTerminationPolicyOpenAIResponses)
+	empty.SetTransportEnd(relaycommon.StreamEndReasonEOF, nil)
+	empty.Finalize()
+	err := compatStreamRetryError(responsesStreamInfoForTest(empty))
+	if err == nil || err.GetErrorCode() != types.ErrorCodeEmptyResponse || err.StatusCode != http.StatusBadGateway {
+		t.Fatalf("empty outcome mapping = %#v", err)
+	}
+
+	incomplete := relaycommon.NewStreamStatus()
+	incomplete.SetPolicy(relaycommon.StreamTerminationPolicyOpenAIResponses)
+	incomplete.AcceptEvent("response.created")
+	incomplete.SetTransportEnd(relaycommon.StreamEndReasonEOF, nil)
+	incomplete.Finalize()
+	err = compatStreamRetryError(responsesStreamInfoForTest(incomplete))
+	if err == nil || err.GetErrorCode() != types.ErrorCodeBadResponseBody || err.StatusCode != http.StatusBadGateway {
+		t.Fatalf("incomplete outcome mapping = %#v", err)
+	}
+
+	timedOut := relaycommon.NewStreamStatus()
+	timedOut.SetPolicy(relaycommon.StreamTerminationPolicyOpenAIResponses)
+	timedOut.SetTransportEnd(relaycommon.StreamEndReasonFirstByteTimeout, nil)
+	timedOut.Finalize()
+	err = compatStreamRetryError(responsesStreamInfoForTest(timedOut))
+	if err == nil || err.StatusCode != http.StatusGatewayTimeout {
+		t.Fatalf("first-byte timeout mapping = %#v", err)
+	}
+}
+
+func TestShouldRetrySessionScopedStreamHonorsFlagLimitAndCommit(t *testing.T) {
+	setting := operation_setting.GetStreamRecoverySetting()
+	old := *setting
+	t.Cleanup(func() { *setting = old })
+	setting.Enabled = true
+	setting.EmptyStreamRetryLimit = 1
+
+	status := relaycommon.NewStreamStatus()
+	status.SetPolicy(relaycommon.StreamTerminationPolicyOpenAIResponses)
+	status.SetTransportEnd(relaycommon.StreamEndReasonEOF, nil)
+	status.Finalize()
+	info := responsesStreamInfoForTest(status)
+	if !shouldRetrySessionScopedStream(info, 0) {
+		t.Fatal("enabled pre-commit empty stream should retry")
+	}
+	if shouldRetrySessionScopedStream(info, 1) {
+		t.Fatal("retry limit must be enforced")
+	}
+	setting.Enabled = false
+	if shouldRetrySessionScopedStream(info, 0) {
+		t.Fatal("disabled recovery must not retry")
+	}
+	setting.Enabled = true
+	status.MarkClientCommitted()
+	if shouldRetrySessionScopedStream(info, 0) {
+		t.Fatal("committed response must never retry")
+	}
+}
+
+func TestClientScopedStreamFailureIsNotSessionRecovery(t *testing.T) {
+	status := relaycommon.NewStreamStatus()
+	status.SetPolicy(relaycommon.StreamTerminationPolicyOpenAIResponses)
+	status.SetTransportEnd(relaycommon.StreamEndReasonWriteError, errors.New("broken pipe"))
+	status.Finalize()
+	info := responsesStreamInfoForTest(status)
+	require.True(t, isClientScopedStreamFailure(info))
+	require.False(t, isSessionScopedStreamFailure(info))
+	require.False(t, shouldRetrySessionScopedStream(info, 0))
 }

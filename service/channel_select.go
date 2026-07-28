@@ -220,6 +220,9 @@ func channelMatchesRetryRequirements(param *RetryParam, channel *model.Channel) 
 	if param == nil || channel == nil {
 		return false
 	}
+	if ShouldAvoidChannelForSession(param.Ctx, channel.Id) {
+		return false
+	}
 	if param.RequireClaudeThinkingSupport && !ChannelSupportsClaudeThinking(channel) {
 		return false
 	}
@@ -418,4 +421,28 @@ func HasUntriedEnabledMultiKey(param *RetryParam, channel *model.Channel) bool {
 		return true
 	}
 	return false
+}
+
+func SelectUntriedEnabledMultiKey(param *RetryParam, channel *model.Channel) (string, int, bool, *types.NewAPIError) {
+	if param == nil || channel == nil || !channel.ChannelInfo.IsMultiKey {
+		return "", 0, false, nil
+	}
+	keys := channel.GetKeys()
+	tried := param.TriedMultiKeyIndexes[channel.Id]
+	if len(tried) == 0 {
+		return "", 0, false, nil
+	}
+	for index := range keys {
+		if tried != nil && tried[index] {
+			continue
+		}
+		key, selectedIndex, enabled, err := channel.GetEnabledKeyByIndex(index)
+		if err != nil {
+			return "", 0, false, err
+		}
+		if enabled {
+			return key, selectedIndex, true, nil
+		}
+	}
+	return "", 0, false, nil
 }

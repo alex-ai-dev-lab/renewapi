@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gorilla/websocket"
 
@@ -21,7 +23,11 @@ import (
 type HTTPClientOptions struct {
 	Proxy                 string
 	TLSInsecureSkipVerify bool
+	HTTPProtocol          string
+	HTTP2ConnectionShards int
 }
+
+const maxCachedHTTPClients = 256
 
 var (
 	httpClient              *http.Client
@@ -100,7 +106,7 @@ func GetSSRFProtectedHTTPClientWithOptions(options HTTPClientOptions) (*http.Cli
 		return GetHttpClientWithOptions(options)
 	}
 	options = normalizeHTTPClientOptions(options)
-	if options == (HTTPClientOptions{}) && ssrfProtectedHTTPClient != nil {
+	if isDefaultHTTPClientOptions(options) && ssrfProtectedHTTPClient != nil {
 		return ssrfProtectedHTTPClient, nil
 	}
 
@@ -116,6 +122,12 @@ func GetSSRFProtectedHTTPClientWithOptions(options HTTPClientOptions) (*http.Cli
 		return nil, err
 	}
 	proxyClientLock.Lock()
+	if existing, ok := protectedFetchClients[options]; ok {
+		proxyClientLock.Unlock()
+		closeHTTPClientIdleConnections(client)
+		return existing, nil
+	}
+	evictHTTPClientIfFull(protectedFetchClients)
 	protectedFetchClients[options] = client
 	proxyClientLock.Unlock()
 	return client, nil
@@ -134,9 +146,20 @@ func GetHttpClientWithProxy(proxyURL string) (*http.Client, error) {
 	return GetHttpClientWithOptions(HTTPClientOptions{Proxy: proxyURL})
 }
 
+func HTTPClientOptionsFromChannelSettings(settings dto.ChannelSettings) HTTPClientOptions {
+	return HTTPClientOptions{
+		Proxy: settings.Proxy, TLSInsecureSkipVerify: settings.TLSInsecureSkipVerify,
+		HTTPProtocol: settings.HTTPProtocol, HTTP2ConnectionShards: settings.HTTP2ConnectionShards,
+	}
+}
+
+func GetHttpClientWithChannelSettings(settings dto.ChannelSettings) (*http.Client, error) {
+	return GetHttpClientWithOptions(HTTPClientOptionsFromChannelSettings(settings))
+}
+
 func GetHttpClientWithOptions(options HTTPClientOptions) (*http.Client, error) {
 	options = normalizeHTTPClientOptions(options)
-	if options.Proxy == "" && !options.TLSInsecureSkipVerify {
+	if isDefaultHTTPClientOptions(options) {
 		if client := GetHttpClient(); client != nil {
 			return client, nil
 		}
@@ -155,9 +178,46 @@ func GetHttpClientWithOptions(options HTTPClientOptions) (*http.Client, error) {
 		return nil, err
 	}
 	proxyClientLock.Lock()
+	if existing, ok := proxyClients[options]; ok {
+		proxyClientLock.Unlock()
+		closeHTTPClientIdleConnections(client)
+		return existing, nil
+	}
+	evictHTTPClientIfFull(proxyClients)
 	proxyClients[options] = client
 	proxyClientLock.Unlock()
 	return client, nil
+}
+
+func InvalidateHTTPClientOptions(options HTTPClientOptions) {
+	options = normalizeHTTPClientOptions(options)
+	proxyClientLock.Lock()
+	clients := []*http.Client{proxyClients[options], protectedFetchClients[options]}
+	delete(proxyClients, options)
+	delete(protectedFetchClients, options)
+	proxyClientLock.Unlock()
+	for _, client := range clients {
+		closeHTTPClientIdleConnections(client)
+	}
+}
+
+func InvalidateHTTPClientSettings(settings dto.ChannelSettings) {
+	InvalidateHTTPClientOptions(HTTPClientOptionsFromChannelSettings(settings))
+}
+
+func NewWebSocketDialerWithChannelSettings(settings dto.ChannelSettings) (*websocket.Dialer, error) {
+	return NewWebSocketDialerWithOptions(HTTPClientOptionsFromChannelSettings(settings))
+}
+
+func evictHTTPClientIfFull(cache map[HTTPClientOptions]*http.Client) {
+	if len(cache) < maxCachedHTTPClients {
+		return
+	}
+	for key, client := range cache {
+		delete(cache, key)
+		closeHTTPClientIdleConnections(client)
+		return
+	}
 }
 
 // ResetProxyClientCache 清空代理客户端缓存并重建默认客户端，确保代理或全局 TLS 设置变更后立即生效。
@@ -198,12 +258,20 @@ func NewProxyHttpClient(proxyURL string) (*http.Client, error) {
 }
 
 func NewHttpClientWithOptions(options HTTPClientOptions) (*http.Client, error) {
+	options = normalizeHTTPClientOptions(options)
 	transport, err := newHTTPTransportWithOptions(options)
 	if err != nil {
 		return nil, err
 	}
+	var roundTripper http.RoundTripper = transport
+	policy := normalizeHTTPTransportPolicy(options.HTTPProtocol, options.HTTP2ConnectionShards)
+	if policy.Shards > 1 {
+		roundTripper = newShardedRoundTripper(policy.Shards, func() *http.Transport {
+			return transport.Clone()
+		})
+	}
 	client := &http.Client{
-		Transport:     transport,
+		Transport:     roundTripper,
 		CheckRedirect: checkRedirect,
 	}
 	if common.RelayTimeout > 0 {
@@ -230,7 +298,7 @@ func NewWebSocketDialerWithOptions(options HTTPClientOptions) (*websocket.Dialer
 			}
 			dialer.Proxy = nil
 			dialer.NetDialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return socksDialer.Dial(network, addr)
+				return dialSOCKS5Context(ctx, socksDialer, network, addr)
 			}
 		default:
 			return nil, unsupportedProxySchemeError(parsedURL.Scheme)
@@ -244,15 +312,31 @@ func NewWebSocketDialerWithOptions(options HTTPClientOptions) (*websocket.Dialer
 
 func normalizeHTTPClientOptions(options HTTPClientOptions) HTTPClientOptions {
 	options.Proxy = strings.TrimSpace(options.Proxy)
+	policy := normalizeHTTPTransportPolicy(options.HTTPProtocol, options.HTTP2ConnectionShards)
+	options.HTTPProtocol = policy.Protocol
+	options.HTTP2ConnectionShards = policy.Shards
 	return options
+}
+
+func isDefaultHTTPClientOptions(options HTTPClientOptions) bool {
+	return options.Proxy == "" && !options.TLSInsecureSkipVerify &&
+		options.HTTPProtocol == dto.HTTPProtocolAuto && options.HTTP2ConnectionShards == 1
 }
 
 func newHTTPTransportWithOptions(options HTTPClientOptions) (*http.Transport, error) {
 	options = normalizeHTTPClientOptions(options)
+	dialTimeout := boundedHTTPTimeout(common.RelayDialTimeout, 30)
+	tlsTimeout := boundedHTTPTimeout(common.RelayTLSHandshakeTimeout, 10)
+	idleTimeout := boundedHTTPTimeout(common.RelayIdleConnTimeout, 90)
+	netDialer := &net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}
 	transport := &http.Transport{
-		MaxIdleConns:        common.RelayMaxIdleConns,
-		MaxIdleConnsPerHost: common.RelayMaxIdleConnsPerHost,
-		ForceAttemptHTTP2:   true,
+		MaxIdleConns:          common.RelayMaxIdleConns,
+		MaxIdleConnsPerHost:   common.RelayMaxIdleConnsPerHost,
+		IdleConnTimeout:       idleTimeout,
+		TLSHandshakeTimeout:   tlsTimeout,
+		ExpectContinueTimeout: time.Second,
+		DialContext:           netDialer.DialContext,
+		ForceAttemptHTTP2:     true,
 	}
 	if options.Proxy == "" {
 		transport.Proxy = http.ProxyFromEnvironment // Support HTTP_PROXY, HTTPS_PROXY, NO_PROXY env vars
@@ -271,7 +355,7 @@ func newHTTPTransportWithOptions(options HTTPClientOptions) (*http.Transport, er
 			}
 			// proxy.SOCKS5 使用 tcp 参数，所有 TCP 连接包括 DNS 查询都将通过代理进行。行为与 socks5h 相同
 			transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return socksDialer.Dial(network, addr)
+				return dialSOCKS5Context(ctx, socksDialer, network, addr)
 			}
 		default:
 			return nil, unsupportedProxySchemeError(parsedURL.Scheme)
@@ -280,7 +364,15 @@ func newHTTPTransportWithOptions(options HTTPClientOptions) (*http.Transport, er
 	if shouldSkipTLSVerify(options) {
 		transport.TLSClientConfig = newInsecureTLSConfig()
 	}
+	applyHTTPTransportPolicy(transport, normalizeHTTPTransportPolicy(options.HTTPProtocol, options.HTTP2ConnectionShards))
 	return transport, nil
+}
+
+func boundedHTTPTimeout(seconds int, fallback int) time.Duration {
+	if seconds <= 0 {
+		seconds = fallback
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func shouldSkipTLSVerify(options HTTPClientOptions) bool {
@@ -294,10 +386,17 @@ func newInsecureTLSConfig() *tls.Config {
 }
 
 func parseProxyURL(proxyURL string) (*url.URL, error) {
-	return url.Parse(strings.TrimSpace(proxyURL))
+	parsed, err := url.Parse(strings.TrimSpace(proxyURL))
+	if err != nil {
+		return nil, err
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return nil, fmt.Errorf("proxy URL must include scheme and host")
+	}
+	return parsed, nil
 }
 
-func newSocks5Dialer(parsedURL *url.URL) (proxy.Dialer, error) {
+func newSocks5Dialer(parsedURL *url.URL) (proxy.ContextDialer, error) {
 	var auth *proxy.Auth
 	if parsedURL.User != nil {
 		auth = &proxy.Auth{
@@ -308,7 +407,23 @@ func newSocks5Dialer(parsedURL *url.URL) (proxy.Dialer, error) {
 			auth.Password = password
 		}
 	}
-	return proxy.SOCKS5("tcp", parsedURL.Host, auth, proxy.Direct)
+	dialer, err := proxy.SOCKS5("tcp", parsedURL.Host, auth, &net.Dialer{
+		Timeout: boundedHTTPTimeout(common.RelayDialTimeout, 30), KeepAlive: 30 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+	contextDialer, ok := dialer.(proxy.ContextDialer)
+	if !ok {
+		return nil, errors.New("SOCKS5 dialer does not support context cancellation")
+	}
+	return contextDialer, nil
+}
+
+func dialSOCKS5Context(ctx context.Context, dialer proxy.ContextDialer, network, addr string) (net.Conn, error) {
+	dialCtx, cancel := context.WithTimeout(ctx, boundedHTTPTimeout(common.RelayDialTimeout, 30))
+	defer cancel()
+	return dialer.DialContext(dialCtx, network, addr)
 }
 
 func unsupportedProxySchemeError(scheme string) error {

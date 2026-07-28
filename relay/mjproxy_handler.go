@@ -40,10 +40,7 @@ func RelayMidjourneyImage(c *gin.Context) {
 	if channel, err := model.CacheGetChannel(midjourneyTask.ChannelId); err == nil {
 		setting := channel.GetSetting()
 		proxyURL = setting.Proxy
-		clientOptions := service.HTTPClientOptions{
-			Proxy:                 setting.Proxy,
-			TLSInsecureSkipVerify: setting.TLSInsecureSkipVerify,
-		}
+		clientOptions := service.HTTPClientOptionsFromChannelSettings(setting)
 		if proxyURL == "" {
 			httpClient, err = service.GetSSRFProtectedHTTPClientWithOptions(clientOptions)
 		} else {

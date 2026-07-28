@@ -2,6 +2,7 @@ package aws
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +13,27 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNewAwsInvokeContextInheritsInboundCancellation(t *testing.T) {
+	previousTimeout := common.RelayTimeout
+	common.RelayTimeout = 0
+	t.Cleanup(func() { common.RelayTimeout = previousTimeout })
+
+	requestContext, cancelRequest := context.WithCancel(context.Background())
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil).WithContext(requestContext)
+
+	invokeContext, cancelInvoke := newAwsInvokeContext(ctx)
+	defer cancelInvoke()
+	cancelRequest()
+
+	select {
+	case <-invokeContext.Done():
+		require.ErrorIs(t, invokeContext.Err(), context.Canceled)
+	default:
+		t.Fatal("AWS invoke context was not canceled with the inbound request")
+	}
+}
 
 func TestDoAwsClientRequest_AppliesRuntimeHeaderOverrideToAnthropicBeta(t *testing.T) {
 	t.Parallel()

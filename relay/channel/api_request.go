@@ -697,14 +697,11 @@ func DoWssRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	applyManagedUpstreamUserAgent(&http.Request{Header: targetHeader, URL: mustParseURL(fullRequestURL)}, info)
 	targetHeader.Set("Content-Type", c.Request.Header.Get("Content-Type"))
 	applyHeaderRules(&http.Request{Header: targetHeader, URL: mustParseURL(fullRequestURL)}, info)
-	dialer, err := service.NewWebSocketDialerWithOptions(service.HTTPClientOptions{
-		Proxy:                 info.ChannelSetting.Proxy,
-		TLSInsecureSkipVerify: info.ChannelSetting.TLSInsecureSkipVerify,
-	})
+	dialer, err := service.NewWebSocketDialerWithChannelSettings(info.ChannelSetting)
 	if err != nil {
 		return nil, fmt.Errorf("new websocket dialer failed: %w", err)
 	}
-	targetConn, _, err := dialer.Dial(fullRequestURL, targetHeader)
+	targetConn, _, err := dialer.DialContext(c.Request.Context(), fullRequestURL, targetHeader)
 	if err != nil {
 		return nil, fmt.Errorf("dial failed to %s: %w", fullRequestURL, err)
 	}
@@ -797,10 +794,7 @@ func DoRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	return doRequest(c, req, info)
 }
 func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http.Response, error) {
-	client, err := service.GetHttpClientWithOptions(service.HTTPClientOptions{
-		Proxy:                 info.ChannelSetting.Proxy,
-		TLSInsecureSkipVerify: info.ChannelSetting.TLSInsecureSkipVerify,
-	})
+	client, err := service.GetHttpClientWithChannelSettings(info.ChannelSetting)
 	if err != nil {
 		return nil, fmt.Errorf("new http client failed: %w", err)
 	}
@@ -825,6 +819,9 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		}
 	}
 
+	if c != nil && c.Request != nil {
+		req = req.WithContext(c.Request.Context())
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		logger.LogError(c, "do request failed: "+err.Error())

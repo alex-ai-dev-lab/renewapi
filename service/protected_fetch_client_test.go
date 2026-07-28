@@ -9,8 +9,10 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/stretchr/testify/require"
 )
@@ -211,4 +213,24 @@ func TestProtectedFetchRoundTripperReusesTransportPerProxy(t *testing.T) {
 	require.Same(t, direct, roundTripper.transportFor(nil))
 	require.NotSame(t, direct, roundTripper.transportFor(proxyURL))
 	require.True(t, direct.ForceAttemptHTTP2)
+	require.Equal(t, boundedHTTPTimeout(common.RelayTLSHandshakeTimeout, 10), direct.TLSHandshakeTimeout)
+	require.Equal(t, boundedHTTPTimeout(common.RelayIdleConnTimeout, 90), direct.IdleConnTimeout)
+	require.Equal(t, time.Second, direct.ExpectContinueTimeout)
+}
+
+func TestProtectedFetchTransportAppliesHTTPPolicyAndShards(t *testing.T) {
+	client, err := newProtectedFetchHTTPClientWithOptions(HTTPClientOptions{
+		HTTPProtocol:          dto.HTTPProtocolHTTP1,
+		HTTP2ConnectionShards: 1,
+	})
+	require.NoError(t, err)
+	roundTripper := client.Transport.(*ssrfProtectedRoundTripper)
+	transport := roundTripper.transportFor(nil)
+	require.False(t, transport.ForceAttemptHTTP2)
+	require.NotNil(t, transport.TLSNextProto)
+
+	shardedClient, err := newProtectedFetchHTTPClientWithOptions(HTTPClientOptions{HTTP2ConnectionShards: 2})
+	require.NoError(t, err)
+	sharded := shardedClient.Transport.(*ssrfProtectedRoundTripper)
+	require.NotEqual(t, sharded.pickShard("https://example.com"), sharded.pickShard("https://example.com"))
 }

@@ -71,10 +71,7 @@ func VideoProxy(c *gin.Context) {
 
 	var videoURL string
 	setting := channel.GetSetting()
-	clientOptions := service.HTTPClientOptions{
-		Proxy:                 setting.Proxy,
-		TLSInsecureSkipVerify: setting.TLSInsecureSkipVerify,
-	}
+	clientOptions := service.HTTPClientOptionsFromChannelSettings(setting)
 	var client *http.Client
 	if setting.Proxy == "" {
 		client, err = service.GetSSRFProtectedHTTPClientWithOptions(clientOptions)

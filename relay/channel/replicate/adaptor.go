@@ -471,17 +471,14 @@ func uploadFileFromForm(c *gin.Context, info *relaycommon.RelayInfo, fieldCandid
 	}
 	uploadURL := relaycommon.GetFullRequestURL(baseURL, "/v1/files", info.ChannelType)
 
-	req, err := http.NewRequest(http.MethodPost, uploadURL, &body)
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, uploadURL, &body)
 	if err != nil {
 		return "", fmt.Errorf("replicate adaptor: create upload request failed: %w", err)
 	}
 	req.Header.Set("Content-Type", formContentType)
 	req.Header.Set("Authorization", "Bearer "+info.ApiKey)
 
-	client, err := service.GetHttpClientWithOptions(service.HTTPClientOptions{
-		Proxy:                 info.ChannelSetting.Proxy,
-		TLSInsecureSkipVerify: info.ChannelSetting.TLSInsecureSkipVerify,
-	})
+	client, err := service.GetHttpClientWithChannelSettings(info.ChannelSetting)
 	if err != nil {
 		return "", fmt.Errorf("replicate adaptor: create upload client failed: %w", err)
 	}

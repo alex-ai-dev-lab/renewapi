@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -31,9 +33,11 @@ type ssrfProtectedRoundTripper struct {
 	proxy             func(*http.Request) (*url.URL, error)
 	protectDirectDial bool
 	tlsInsecure       bool
+	policy            HTTPTransportPolicy
 
-	mutex      sync.Mutex
-	transports map[string]*http.Transport
+	mutex         sync.Mutex
+	transports    map[string]*http.Transport
+	shardCounters sync.Map
 }
 
 func currentFetchProtection() (*common.SSRFProtection, bool, error) {
@@ -66,7 +70,7 @@ func newProtectedFetchHTTPClient() *http.Client {
 
 func newProtectedFetchHTTPClientWithOptions(options HTTPClientOptions) (*http.Client, error) {
 	options = normalizeHTTPClientOptions(options)
-	netDialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+	netDialer := &net.Dialer{Timeout: boundedHTTPTimeout(common.RelayDialTimeout, 30), KeepAlive: 30 * time.Second}
 	dialContext := netDialer.DialContext
 	proxyFunc := http.ProxyFromEnvironment
 	protectDirectDial := true
@@ -87,7 +91,7 @@ func newProtectedFetchHTTPClientWithOptions(options HTTPClientOptions) (*http.Cl
 			proxyFunc = nil
 			protectDirectDial = false
 			dialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return socksDialer.Dial(network, addr)
+				return dialSOCKS5Context(ctx, socksDialer, network, addr)
 			}
 		default:
 			return nil, unsupportedProxySchemeError(parsedURL.Scheme)
@@ -98,6 +102,7 @@ func newProtectedFetchHTTPClientWithOptions(options HTTPClientOptions) (*http.Cl
 	roundTripper := client.Transport.(*ssrfProtectedRoundTripper)
 	roundTripper.protectDirectDial = protectDirectDial
 	roundTripper.tlsInsecure = shouldSkipTLSVerify(options)
+	roundTripper.policy = normalizeHTTPTransportPolicy(options.HTTPProtocol, options.HTTP2ConnectionShards)
 	return client, nil
 }
 
@@ -110,7 +115,7 @@ func newProtectedFetchHTTPClientWithProxy(resolver ssrfResolver, dialContext fun
 		resolver = net.DefaultResolver
 	}
 	if dialContext == nil {
-		netDialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+		netDialer := &net.Dialer{Timeout: boundedHTTPTimeout(common.RelayDialTimeout, 30), KeepAlive: 30 * time.Second}
 		dialContext = netDialer.DialContext
 	}
 	if getProtection == nil {
@@ -149,7 +154,8 @@ func (t *ssrfProtectedRoundTripper) RoundTrip(req *http.Request) (*http.Response
 			return nil, err
 		}
 	}
-	return t.transportFor(proxyURL).RoundTrip(req)
+	origin := strings.ToLower(req.URL.Scheme) + "://" + strings.ToLower(req.URL.Host)
+	return t.transportForShard(proxyURL, t.pickShard(origin)).RoundTrip(req)
 }
 
 func (t *ssrfProtectedRoundTripper) CloseIdleConnections() {
@@ -161,10 +167,23 @@ func (t *ssrfProtectedRoundTripper) CloseIdleConnections() {
 }
 
 func (t *ssrfProtectedRoundTripper) transportFor(proxyURL *url.URL) *http.Transport {
+	return t.transportForShard(proxyURL, 0)
+}
+
+func (t *ssrfProtectedRoundTripper) pickShard(origin string) int {
+	if t.policy.Shards <= 1 {
+		return 0
+	}
+	counter, _ := t.shardCounters.LoadOrStore(origin, &atomic.Uint32{})
+	return int((counter.(*atomic.Uint32).Add(1) - 1) % uint32(t.policy.Shards))
+}
+
+func (t *ssrfProtectedRoundTripper) transportForShard(proxyURL *url.URL, shard int) *http.Transport {
 	key := "direct"
 	if proxyURL != nil {
 		key = proxyURL.String()
 	}
+	key += fmt.Sprintf("|shard=%d", shard)
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if transport, ok := t.transports[key]; ok {
@@ -189,15 +208,19 @@ func (t *ssrfProtectedRoundTripper) newTransport(proxyURL *url.URL) *http.Transp
 		}
 	}
 	transport := &http.Transport{
-		MaxIdleConns:        common.RelayMaxIdleConns,
-		MaxIdleConnsPerHost: common.RelayMaxIdleConnsPerHost,
-		ForceAttemptHTTP2:   true,
-		Proxy:               proxyFunc,
-		DialContext:         dialContext,
+		MaxIdleConns:          common.RelayMaxIdleConns,
+		MaxIdleConnsPerHost:   common.RelayMaxIdleConnsPerHost,
+		IdleConnTimeout:       boundedHTTPTimeout(common.RelayIdleConnTimeout, 90),
+		TLSHandshakeTimeout:   boundedHTTPTimeout(common.RelayTLSHandshakeTimeout, 10),
+		ExpectContinueTimeout: time.Second,
+		ForceAttemptHTTP2:     true,
+		Proxy:                 proxyFunc,
+		DialContext:           dialContext,
 	}
 	if t.tlsInsecure {
 		transport.TLSClientConfig = newInsecureTLSConfig()
 	}
+	applyHTTPTransportPolicy(transport, t.policy)
 	return transport
 }
 

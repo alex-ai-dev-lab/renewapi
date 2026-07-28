@@ -1284,6 +1284,9 @@ func (channel *Channel) ValidateSettings() error {
 			return err
 		}
 	}
+	if err := channelParams.ValidateHTTPTransport(); err != nil {
+		return err
+	}
 	seenTargets := make(map[string]struct{}, len(channelParams.ModelProtocolOverrideTargets))
 	for _, target := range channelParams.ModelProtocolOverrideTargets {
 		target = strings.TrimSpace(target)

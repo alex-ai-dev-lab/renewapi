@@ -1,5 +1,10 @@
 package dto
 
+import (
+	"fmt"
+	"strings"
+)
+
 type ResponsesFunctionCallArgumentsFormat string
 
 const (
@@ -16,6 +21,10 @@ type ChannelSettings struct {
 	PassThroughBodyEnabled bool   `json:"pass_through_body_enabled,omitempty"`
 	SystemPrompt           string `json:"system_prompt,omitempty"`
 	SystemPromptOverride   bool   `json:"system_prompt_override,omitempty"`
+	// HTTPProtocol controls outbound negotiation: auto (default) or http1.
+	HTTPProtocol string `json:"http_protocol,omitempty"`
+	// HTTP2ConnectionShards spreads an origin across 1-8 independent pools.
+	HTTP2ConnectionShards int `json:"http2_connection_shards,omitempty"`
 
 	// User-Agent settings
 	UserAgentID       *int   `json:"user_agent_id,omitempty"`       // UA from user_agents table
@@ -72,6 +81,31 @@ type ChannelSettings struct {
 	// Shape check: validate response id/model/object/finish_reason against the
 	// protocol's known fingerprint. Nil = inherit global; default off.
 	AntiPoisonShapeCheckEnabled *bool `json:"anti_poison_shape_check_enabled,omitempty"`
+}
+
+const (
+	HTTPProtocolAuto         = "auto"
+	HTTPProtocolHTTP1        = "http1"
+	MaxHTTP2ConnectionShards = 8
+)
+
+func (s *ChannelSettings) ValidateHTTPTransport() error {
+	if s == nil {
+		return nil
+	}
+	protocol := strings.ToLower(strings.TrimSpace(s.HTTPProtocol))
+	switch protocol {
+	case "", HTTPProtocolAuto, HTTPProtocolHTTP1:
+	default:
+		return fmt.Errorf("invalid http_protocol: %s", s.HTTPProtocol)
+	}
+	if s.HTTP2ConnectionShards < 0 || s.HTTP2ConnectionShards > MaxHTTP2ConnectionShards {
+		return fmt.Errorf("invalid http2_connection_shards: %d", s.HTTP2ConnectionShards)
+	}
+	if protocol == HTTPProtocolHTTP1 && s.HTTP2ConnectionShards > 1 {
+		return fmt.Errorf("http2_connection_shards must be 1 when http_protocol is http1")
+	}
+	return nil
 }
 
 type VertexKeyType string

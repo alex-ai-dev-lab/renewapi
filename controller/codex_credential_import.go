@@ -87,7 +87,6 @@ func ImportCodexCredentialForChannel(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
-	service.ResetProxyClientCache()
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

@@ -1,7 +1,6 @@
 package volcengine
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -210,10 +209,7 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 	header := http.Header{}
 	header.Set("Authorization", fmt.Sprintf("Bearer;%s", token))
 
-	dialer, dialerErr := service.NewWebSocketDialerWithOptions(service.HTTPClientOptions{
-		Proxy:                 info.ChannelSetting.Proxy,
-		TLSInsecureSkipVerify: info.ChannelSetting.TLSInsecureSkipVerify,
-	})
+	dialer, dialerErr := service.NewWebSocketDialerWithChannelSettings(info.ChannelSetting)
 	if dialerErr != nil {
 		return nil, types.NewErrorWithStatusCode(
 			fmt.Errorf("failed to create websocket dialer: %w", dialerErr),
@@ -221,7 +217,7 @@ func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest V
 			http.StatusBadGateway,
 		)
 	}
-	conn, resp, dialErr := dialer.DialContext(context.Background(), requestURL, header)
+	conn, resp, dialErr := dialer.DialContext(c.Request.Context(), requestURL, header)
 	if dialErr != nil {
 		if resp != nil {
 			return nil, types.NewErrorWithStatusCode(

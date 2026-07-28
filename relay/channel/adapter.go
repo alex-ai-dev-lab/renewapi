@@ -1,6 +1,8 @@
 package channel
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -11,6 +13,25 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+var ErrUnsupportedCapability = errors.New("unsupported provider capability")
+
+type UnsupportedCapabilityError struct {
+	Provider   string
+	Capability string
+}
+
+func (e *UnsupportedCapabilityError) Error() string {
+	return fmt.Sprintf("provider %s does not support %s", e.Provider, e.Capability)
+}
+
+func (e *UnsupportedCapabilityError) Unwrap() error {
+	return ErrUnsupportedCapability
+}
+
+func NewUnsupportedCapabilityError(provider, capability string) error {
+	return &UnsupportedCapabilityError{Provider: provider, Capability: capability}
+}
 
 type Adaptor interface {
 	// Init IsStream bool

@@ -108,6 +108,26 @@ jobs:
             fi
           fi
 
+      - name: Verify changed JSON boundary
+        shell: bash
+        env:
+          INPUT_BASE_SHA: ${{ inputs.base_sha }}
+        run: |
+          set -euo pipefail
+          base="${INPUT_BASE_SHA:-$GITHUB_SHA^}"
+          added="$(git diff --unified=0 "$base" "$GITHUB_SHA" -- '*.go' | grep '^+' | grep -v '^+++' || true)"
+          violations="$(printf '%s\n' "$added" | grep -E '("encoding/json"|json\.(Marshal|Unmarshal|NewEncoder|NewDecoder)\()' || true)"
+          if [[ -n "$violations" ]]; then
+            printf '%s\n' 'New direct encoding/json usage is forbidden; use common.Marshal/common.Unmarshal and the shared JSON boundary:'
+            printf '%s\n' "$violations"
+            exit 1
+          fi
+
+      - name: Verify Go module integrity
+        run: |
+          go mod verify
+          go mod tidy -diff
+
       - name: Install default frontend dependencies
         working-directory: web/default
         run: bun install --frozen-lockfile
@@ -153,6 +173,7 @@ jobs:
         run: |
           go test -count=1 ./...
           go test -race -count=1 -run 'TestObservedCapability|TestManualUnknownFallsBack|TestChannelMatchesResponsesRequirement|TestPlanResponsesExecution|TestResponsesCompactionProbeModels' ./service ./controller
+          go test -race -count=1 ./relay/channel ./relay/channel/baidu ./relay/channel/openai ./relay/channel/claude ./relay/channel/gemini ./relay/channel/codex
           go vet ./...
           go build ./...
 

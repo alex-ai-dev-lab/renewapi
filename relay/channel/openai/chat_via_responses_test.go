@@ -16,7 +16,6 @@ import (
 )
 
 func TestOaiResponsesToChatStreamDoesNotDuplicateTerminalToolCall(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	body := strings.Join([]string{
 		`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}`,
 		`data: {"type":"response.function_call_arguments.delta","output_index":0,"item_id":"fc_1","delta":"{\"q\":\"x\"}"}`,

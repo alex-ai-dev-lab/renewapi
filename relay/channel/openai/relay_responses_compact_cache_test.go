@@ -12,7 +12,6 @@ import (
 )
 
 func TestResponsesCompactionPreservesCacheWriteTokens(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	resp := &http.Response{
 		StatusCode: http.StatusOK,

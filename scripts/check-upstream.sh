@@ -51,5 +51,5 @@ fi
 
 if $has_merge_base; then
   echo "fork diff since merge base:"
-  git diff --stat "$base..HEAD" -- . ':!legacy/patches/**'
+  git diff --stat "$base..HEAD" -- .
 fi

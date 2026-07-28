@@ -22,7 +22,6 @@ func TestOaiStreamPreflightBlocksBeforeReleasingFirstBytes(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Header:     make(http.Header),
 	}
-	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(rec)
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)

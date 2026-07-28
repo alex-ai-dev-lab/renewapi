@@ -331,7 +331,6 @@ func TestBuildOpenAIStyleUsageFromClaudeUsageDefaultsAggregateCacheCreationTo5m(
 }
 
 func TestClaudeAggregateStreamReplaysOnlyAfterValidation(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)

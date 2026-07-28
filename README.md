@@ -67,7 +67,7 @@ pkg/compat/          relay hooks, error normalization, schedulers, price sync
 relay/antipoison/    channel profiles, envelope checks, scanners, tool guard
 scripts/             build, push, deploy, rollback, upstream sync helpers
 docs/                fork-specific notes
-legacy/patches/      retained for audit only; not used by builds or runtime
+docs/migration-from-patch-repo.md  legacy patch hashes and recovery pointers
 ```
 
 ## Compatibility Layer

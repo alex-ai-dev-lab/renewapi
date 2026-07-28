@@ -56,5 +56,5 @@ if ($auditedRef -and $hasAuditedCommit) {
 
 if ($hasMergeBase) {
   Write-Host 'fork diff since merge base:'
-  git diff --stat "$($base.Trim())..HEAD" -- . ':!legacy/patches/**'
+  git diff --stat "$($base.Trim())..HEAD" -- .
 }

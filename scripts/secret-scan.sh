@@ -6,7 +6,6 @@ pattern='github_pat_|ghp_[A-Za-z0-9_]{20,}|gho_[A-Za-z0-9_]{20,}|ghu_[A-Za-z0-9_
 
 hits="$(git grep -nE "$pattern" -- . \
   ':!docs/**' \
-  ':!legacy/patches/**' \
   ':!.github/workflows/ci.yml' \
   ':!.github/workflows/security.yml' \
   ':!scripts/secret-scan.sh' \

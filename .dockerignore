@@ -1,7 +1,6 @@
 .git/
 .github/
 Token/
-legacy/patches/
 node_modules/
 web/node_modules/
 web/default/node_modules/

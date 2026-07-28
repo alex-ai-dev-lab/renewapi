@@ -33,7 +33,6 @@ func TestAggregateResponsesStreamBlocksEnvelopeOutsideText(t *testing.T) {
 		OriginModelName:               "gpt-test",
 		AntiPoisonAnswerEnvelopeNonce: "n1",
 	}
-	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	_, _, err := aggregateResponsesStreamToResponse(ctx, info, resp)
 	if err == nil || !errors.Is(err, antipoison.ErrEnvelopeOutsideText) {
@@ -42,7 +41,6 @@ func TestAggregateResponsesStreamBlocksEnvelopeOutsideText(t *testing.T) {
 }
 
 func TestResponsesHandlersPreserveCacheWriteTokens(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	payload := `{"id":"resp-test","object":"response","created_at":1,"model":"gpt-test","output":[],"usage":{"input_tokens":100,"output_tokens":5,"total_tokens":105,"input_tokens_details":{"cached_tokens":20,"cache_write_tokens":30}}}`
 	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

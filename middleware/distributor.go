@@ -30,6 +30,7 @@ type ModelRequest struct {
 	Group          string                         `json:"group,omitempty"`
 	Models         []string                       `json:"-"`
 	ProviderPolicy *service.ProviderRoutingPolicy `json:"-"`
+	RoutingRequest dto.Request                    `json:"-"`
 }
 
 func Distribute() func(c *gin.Context) {
@@ -79,9 +80,18 @@ func Distribute() func(c *gin.Context) {
 				abortWithOpenAiMessage(c, http.StatusForbidden, "channel is quarantined by anti-poison profile")
 				return
 			}
-			if !service.ChannelMatchesResponsesRequirement(channel, modelRequest.Model, responsesRequirement, nil) {
+			if !responsesRoutePlanEnabled(responsesRequirement) &&
+				!service.ChannelMatchesResponsesRequirement(channel, modelRequest.Model, responsesRequirement, modelRequest.RoutingRequest) {
 				abortWithOpenAiMessage(c, http.StatusBadRequest, "selected channel does not satisfy responses compaction capability")
 				return
+			}
+			if responsesRoutePlanEnabled(responsesRequirement) && shouldSelectChannel {
+				plannedChannel, planErr := buildDistributorResponsesRoutePlan(c, modelRequest, responsesRequirement, requiredContinuationModel, channel.Id)
+				if planErr != nil {
+					abortWithOpenAiMessage(c, http.StatusBadRequest, planErr.Error(), types.ErrorCodeModelNotFound)
+					return
+				}
+				channel = plannedChannel
 			}
 		} else {
 			// Select a channel for the user
@@ -131,12 +141,23 @@ func Distribute() func(c *gin.Context) {
 					}
 				}
 
+				if responsesRoutePlanEnabled(responsesRequirement) {
+					plannedChannel, planErr := buildDistributorResponsesRoutePlan(c, modelRequest, responsesRequirement, requiredContinuationModel, 0)
+					if planErr != nil {
+						showGroup := usingGroup
+						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorGetChannelFailed, map[string]any{"Group": showGroup, "Model": modelRequest.Model, "Error": planErr.Error()}), types.ErrorCodeModelNotFound)
+						return
+					}
+					channel = plannedChannel
+					selectGroup = common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+				}
+
 				preferredChannelID, found := service.GetPreferredChannelByCompactionAffinity(c, clientModel, usingGroup)
 				preferredByCompactionAffinity := found
-				if !found {
+				if channel == nil && !found {
 					preferredChannelID, found = service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup)
 				}
-				if found {
+				if channel == nil && found {
 					preferred, err := model.CacheGetChannel(preferredChannelID)
 					if err == nil && preferred != nil {
 						if preferred.Status != common.ChannelStatusEnabled {
@@ -357,12 +378,117 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 	}
 	c.Request.Body = io.NopCloser(storage)
 
-	return &ModelRequest{
+	modelRequest := &ModelRequest{
 		Model:          model,
 		Group:          group,
 		Models:         parseFallbackModelsFromJSON(requestBody, model),
 		ProviderPolicy: parseProviderRoutingPolicyFromJSON(requestBody),
-	}, nil
+	}
+	if strings.HasPrefix(c.Request.URL.Path, "/v1/responses") {
+		var routingRequest dto.Request
+		if strings.TrimSuffix(c.Request.URL.Path, "/") == "/v1/responses/compact" {
+			req := &dto.OpenAIResponsesCompactionRequest{}
+			if err := common.Unmarshal(requestBody, req); err != nil {
+				return nil, err
+			}
+			routingRequest = req
+		} else {
+			req := &dto.OpenAIResponsesRequest{}
+			if err := common.Unmarshal(requestBody, req); err != nil {
+				return nil, err
+			}
+			routingRequest = req
+		}
+		modelRequest.RoutingRequest = routingRequest
+		common.SetContextKey(c, constant.ContextKeyResponsesRoutingRequest, routingRequest)
+	}
+	return modelRequest, nil
+}
+
+func responsesRoutePlanEnabled(requirement *service.ResponsesRoutingRequirement) bool {
+	return requirement != nil && requirement.Kind != dto.ResponsesNormal &&
+		common.GetEnvOrDefaultBool("RESPONSES_COMPACTION_ROUTE_PLAN_ENABLED", false)
+}
+
+func buildDistributorResponsesRoutePlan(
+	c *gin.Context,
+	modelRequest *ModelRequest,
+	requirement *service.ResponsesRoutingRequirement,
+	requiredModel string,
+	pinnedChannelID int,
+) (*model.Channel, error) {
+	if c == nil || modelRequest == nil || modelRequest.RoutingRequest == nil || requirement == nil {
+		return nil, errors.New("responses route plan requires a fully decoded request")
+	}
+	usingGroup := strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
+	preferredChannelID, preferredByCompaction := service.GetPreferredChannelByCompactionAffinity(
+		c,
+		common.GetContextKeyString(c, constant.ContextKeyClientModel),
+		usingGroup,
+	)
+	preferredFound := preferredByCompaction
+	preferChannelFirst := preferredByCompaction
+	if !preferredFound {
+		preferredChannelID, preferredFound = service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup)
+		preferChannelFirst = preferredFound && !channelAffinityFallbackOnly()
+	}
+	params := service.ResponsesRelayRoutePlanParams{
+		Group:              usingGroup,
+		ClientModel:        common.GetContextKeyString(c, constant.ContextKeyClientModel),
+		PrimaryModel:       modelRequest.Model,
+		RequiredModel:      requiredModel,
+		PinnedChannelId:    pinnedChannelID,
+		PreferredChannelId: preferredChannelID,
+		PreferChannelFirst: preferChannelFirst,
+		Requirement:        requirement,
+		Request:            modelRequest.RoutingRequest,
+		ProviderPolicy:     modelRequest.ProviderPolicy,
+		TokenModelAllowed:  func(modelName string) bool { return distributorTokenAllowsModel(c, modelName) },
+	}
+	if strings.EqualFold(usingGroup, "auto") {
+		params.Group = ""
+		params.Groups = service.GetUserAutoGroup(common.GetContextKeyString(c, constant.ContextKeyUserGroup))
+	}
+	plan, err := service.BuildResponsesRelayRoutePlan(params)
+	if err != nil {
+		return nil, err
+	}
+	route, ok := plan.Current()
+	if !ok {
+		return nil, errors.New("responses route plan is empty")
+	}
+	channel, err := model.CacheGetChannel(route.PreferredChannelId)
+	if err != nil || channel == nil {
+		if err == nil {
+			err = errors.New("planned channel does not exist")
+		}
+		return nil, err
+	}
+	modelRequest.Model = route.RoutingModel
+	common.SetContextKey(c, constant.ContextKeyUsingGroup, route.Group)
+	if strings.EqualFold(usingGroup, "auto") {
+		common.SetContextKey(c, constant.ContextKeyAutoGroup, route.Group)
+	}
+	common.SetContextKey(c, constant.ContextKeyResponsesRelayRoutePlan, plan)
+	if preferredFound && route.PreferredChannelId == preferredChannelID {
+		service.MarkChannelAffinityUsed(c, route.Group, route.PreferredChannelId)
+	}
+	return channel, nil
+}
+
+func distributorTokenAllowsModel(c *gin.Context, modelName string) bool {
+	if !common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled) {
+		return true
+	}
+	raw, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
+	if !ok {
+		return false
+	}
+	limits, ok := raw.(map[string]bool)
+	if !ok {
+		return false
+	}
+	return limits[ratio_setting.FormatMatchingModelName(modelName)]
 }
 
 func parseFallbackModelsFromJSON(requestBody []byte, primaryModel string) []string {
@@ -583,6 +709,7 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		modelRequest.Group = req.Group
 		modelRequest.Models = req.Models
 		modelRequest.ProviderPolicy = req.ProviderPolicy
+		modelRequest.RoutingRequest = req.RoutingRequest
 	}
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/realtime") {
 		//wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01

@@ -270,6 +270,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 
 	relayInfo.SetEstimatePromptTokens(tokens)
+	if prepareErr := prepareDistributorResponsesRoutePlan(c, relayInfo); prepareErr != nil {
+		newAPIError = prepareErr
+		return
+	}
 
 	priceData, err := helper.ModelPriceHelper(c, relayInfo, tokens, meta)
 	if err != nil {
@@ -325,13 +329,16 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	relayInfo.LastError = nil
 	maxRetryTimes := compatRelayRetryBudget(relayInfo, relayFormat)
 
-	routePlan := service.NewRelayRoutePlan(
-		relayInfo.ClientModelName,
-		relayInfo.OriginModelName,
-		requiredModelName,
-		getFallbackModels(c, relayInfo.OriginModelName),
-	)
-	if responsesRequirement != nil && responsesRequirement.Kind != dto.ResponsesNormal &&
+	routePlan, distributorPlanned := savedResponsesRelayRoutePlan(c)
+	if !distributorPlanned {
+		routePlan = service.NewRelayRoutePlan(
+			relayInfo.ClientModelName,
+			relayInfo.OriginModelName,
+			requiredModelName,
+			getFallbackModels(c, relayInfo.OriginModelName),
+		)
+	}
+	if !distributorPlanned && responsesRequirement != nil && responsesRequirement.Kind != dto.ResponsesNormal &&
 		common.GetEnvOrDefaultBool("RESPONSES_COMPACTION_ROUTE_PLAN_ENABLED", false) {
 		concreteGroup := strings.TrimSpace(relayInfo.UsingGroup)
 		if concreteGroup == "" || strings.EqualFold(concreteGroup, "auto") {
@@ -361,8 +368,23 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if !ok {
 			break
 		}
+		previousGroup := relayInfo.UsingGroup
+		if route.Group != "" {
+			retryParam.TokenGroup = route.Group
+			relayInfo.UsingGroup = route.Group
+			common.SetContextKey(c, constant.ContextKeyUsingGroup, route.Group)
+			if strings.EqualFold(relayInfo.TokenGroup, "auto") {
+				common.SetContextKey(c, constant.ContextKeyAutoGroup, route.Group)
+			}
+		}
 		if routePlan.Position() > 0 {
-			if switchErr := switchRelayFallbackModel(c, relayInfo, retryParam, route.RoutingModel, tokens, meta); switchErr != nil {
+			var switchErr *types.NewAPIError
+			if strings.EqualFold(route.RoutingModel, relayInfo.OriginModelName) && !strings.EqualFold(previousGroup, relayInfo.UsingGroup) {
+				switchErr = reserveRelayFallbackPrice(c, relayInfo, tokens, meta)
+			} else {
+				switchErr = switchRelayFallbackModel(c, relayInfo, retryParam, route.RoutingModel, tokens, meta)
+			}
+			if switchErr != nil {
 				newAPIError = switchErr
 				// A token may forbid an optional fallback model while a later route
 				// returns to an allowed client model/channel combination. Skip only
@@ -372,9 +394,6 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				}
 				break
 			}
-		}
-		if route.Group != "" {
-			retryParam.TokenGroup = route.Group
 		}
 		retryParam.RequiredModelName = route.RequiredModel
 		retryParam.PreferredChannelId = route.PreferredChannelId
@@ -586,6 +605,88 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		gopool.Go(func() {
 			perfmetrics.RecordRelaySample(relayInfo, false, 0)
 		})
+	}
+}
+
+func savedResponsesRelayRoutePlan(c *gin.Context) (*service.RelayRoutePlan, bool) {
+	if c == nil {
+		return nil, false
+	}
+	raw, ok := common.GetContextKey(c, constant.ContextKeyResponsesRelayRoutePlan)
+	if !ok {
+		return nil, false
+	}
+	plan, ok := raw.(*service.RelayRoutePlan)
+	return plan, ok && plan != nil
+}
+
+// prepareDistributorResponsesRoutePlan defensively revalidates the distributor's
+// request-aware first choice after the canonical request DTO has been decoded by
+// the relay. If the first item is no longer valid, it advances and installs the
+// next candidate before pricing, pre-consumption, or any upstream call.
+func prepareDistributorResponsesRoutePlan(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
+	plan, ok := savedResponsesRelayRoutePlan(c)
+	if !ok || info == nil || info.Request == nil {
+		return nil
+	}
+	for {
+		route, exists := plan.Current()
+		if !exists {
+			return types.NewErrorWithStatusCode(
+				errors.New("responses route plan exhausted during request validation"),
+				types.ErrorCodeGetChannelFailed,
+				http.StatusServiceUnavailable,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+		channel, err := model.CacheGetChannel(route.PreferredChannelId)
+		valid := err == nil && channel != nil && channel.Status == common.ChannelStatusEnabled &&
+			service.ChannelAllowedForProduction(channel) && tokenAllowsRelayModel(c, route.RoutingModel) &&
+			model.IsChannelEnabledForGroupModel(route.Group, route.RoutingModel, channel.Id) &&
+			!model.IsChannelModelDisabledForGroup(channel.Id, route.Group, route.RoutingModel)
+		if valid && route.RequiredModel != "" && !strings.EqualFold(route.RequiredModel, route.RoutingModel) {
+			valid = model.IsChannelEnabledForGroupModel(route.Group, route.RequiredModel, channel.Id) &&
+				!model.IsChannelModelDisabledForGroup(channel.Id, route.Group, route.RequiredModel)
+		}
+		if valid {
+			requirement := &service.ResponsesRoutingRequirement{
+				Kind:                      info.ResponsesRequestKind,
+				ClientStream:              info.IsStream,
+				RequiredContinuationModel: route.RequiredModel,
+			}
+			valid = service.ChannelMatchesResponsesRequirement(channel, route.RoutingModel, requirement, info.Request)
+		}
+		if !valid {
+			if plan.Advance() {
+				continue
+			}
+			return types.NewErrorWithStatusCode(
+				errors.New("no channel/model candidate satisfies the decoded responses request"),
+				types.ErrorCodeGetChannelFailed,
+				http.StatusServiceUnavailable,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+
+		currentChannelID := common.GetContextKeyInt(c, constant.ContextKeyChannelId)
+		currentModel := common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
+		if currentChannelID != channel.Id || !strings.EqualFold(currentModel, route.RoutingModel) {
+			if setupErr := middleware.SetupContextForSelectedChannel(c, channel, route.RoutingModel); setupErr != nil {
+				if plan.Advance() {
+					continue
+				}
+				return setupErr
+			}
+		}
+		info.OriginModelName = route.RoutingModel
+		info.UsingGroup = route.Group
+		info.Request.SetModelName(route.RoutingModel)
+		common.SetContextKey(c, constant.ContextKeyOriginalModel, route.RoutingModel)
+		common.SetContextKey(c, constant.ContextKeyUsingGroup, route.Group)
+		if strings.EqualFold(info.TokenGroup, "auto") {
+			common.SetContextKey(c, constant.ContextKeyAutoGroup, route.Group)
+		}
+		return nil
 	}
 }
 
@@ -1078,6 +1179,14 @@ func switchRelayFallbackModel(c *gin.Context, info *relaycommon.RelayInfo, retry
 	retryParam.PreferredChannelId = 0
 	retryParam.LastSelectedChannelId = 0
 
+	if priceErr := reserveRelayFallbackPrice(c, info, promptTokens, meta); priceErr != nil {
+		return priceErr
+	}
+	logger.LogInfo(c, fmt.Sprintf("models fallback switched to model %s", modelName))
+	return nil
+}
+
+func reserveRelayFallbackPrice(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) *types.NewAPIError {
 	priceData, err := helper.ModelPriceHelper(c, info, promptTokens, meta)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
@@ -1087,7 +1196,6 @@ func switchRelayFallbackModel(c *gin.Context, info *relaycommon.RelayInfo, retry
 			return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 		}
 	}
-	logger.LogInfo(c, fmt.Sprintf("models fallback switched to model %s", modelName))
 	return nil
 }
 

@@ -32,14 +32,19 @@ type RelayRoutePlan struct {
 }
 
 type ResponsesRelayRoutePlanParams struct {
-	Group            string
-	ClientModel      string
-	PrimaryModel     string
-	RequiredModel    string
-	InitialChannelId int
-	Requirement      *ResponsesRoutingRequirement
-	Request          dto.Request
-	ProviderPolicy   *ProviderRoutingPolicy
+	Group              string
+	Groups             []string
+	ClientModel        string
+	PrimaryModel       string
+	RequiredModel      string
+	InitialChannelId   int
+	PinnedChannelId    int
+	PreferredChannelId int
+	PreferChannelFirst bool
+	Requirement        *ResponsesRoutingRequirement
+	Request            dto.Request
+	ProviderPolicy     *ProviderRoutingPolicy
+	TokenModelAllowed  func(string) bool
 }
 
 var relayRouteDottedVersionRE = regexp.MustCompile(`\d+(?:\.\d+)+`)
@@ -118,9 +123,50 @@ func BuildResponsesRelayRoutePlan(params ResponsesRelayRoutePlanParams) (*RelayR
 	params.ClientModel = strings.TrimSpace(params.ClientModel)
 	params.PrimaryModel = strings.TrimSpace(params.PrimaryModel)
 	params.RequiredModel = strings.TrimSpace(params.RequiredModel)
-	if params.Group == "" || params.PrimaryModel == "" || params.Requirement == nil {
+	groups := make([]string, 0, len(params.Groups)+1)
+	seenGroups := make(map[string]struct{}, len(params.Groups)+1)
+	for _, group := range append([]string{params.Group}, params.Groups...) {
+		group = strings.TrimSpace(group)
+		key := strings.ToLower(group)
+		if group == "" || key == "auto" {
+			continue
+		}
+		if _, exists := seenGroups[key]; exists {
+			continue
+		}
+		seenGroups[key] = struct{}{}
+		groups = append(groups, group)
+	}
+	if len(groups) == 0 || params.PrimaryModel == "" || params.Requirement == nil {
 		return nil, errors.New("responses route plan requires group, primary model, and capability requirement")
 	}
+	routes := make([]RelayModelRoles, 0, 16)
+	for _, group := range groups {
+		groupRoutes, err := buildResponsesRelayRoutesForGroup(params, group)
+		if err != nil {
+			return nil, err
+		}
+		routes = append(routes, groupRoutes...)
+	}
+	maxCandidates := common.GetEnvOrDefault("RESPONSES_COMPACTION_MAX_ROUTE_CANDIDATES", 12)
+	if maxCandidates > 0 && len(routes) > maxCandidates {
+		routes = routes[:maxCandidates]
+	}
+	if len(routes) == 0 {
+		return nil, errors.New("no channel/model candidate satisfies responses compaction requirements")
+	}
+	// Plans built after the distributor installed a context must retain the
+	// installed pair. Distributor-built plans leave InitialChannelId at zero and
+	// therefore select the actual highest-priority (channel, model) pair.
+	if params.InitialChannelId > 0 &&
+		(routes[0].PreferredChannelId != params.InitialChannelId ||
+			!strings.EqualFold(routes[0].RoutingModel, params.PrimaryModel)) {
+		return nil, errors.New("initial channel/model no longer satisfies responses compaction requirements")
+	}
+	return &RelayRoutePlan{routes: routes}, nil
+}
+
+func buildResponsesRelayRoutesForGroup(params ResponsesRelayRoutePlanParams, group string) ([]RelayModelRoles, error) {
 	channels := model.CacheGetAllChannels()
 	if len(channels) == 0 {
 		var err error
@@ -131,7 +177,10 @@ func BuildResponsesRelayRoutePlan(params ResponsesRelayRoutePlanParams) (*RelayR
 	}
 	filtered := make([]*model.Channel, 0, len(channels))
 	for _, channel := range channels {
-		if channel == nil || channel.Status != common.ChannelStatusEnabled || !channelContainsGroup(channel, params.Group) {
+		if channel == nil || channel.Status != common.ChannelStatusEnabled || !channelContainsGroup(channel, group) {
+			continue
+		}
+		if params.PinnedChannelId > 0 && channel.Id != params.PinnedChannelId {
 			continue
 		}
 		if !ChannelMatchesProviderRoutingPolicy(channel, params.ProviderPolicy) || !ChannelAllowedForProduction(channel) {
@@ -146,8 +195,22 @@ func BuildResponsesRelayRoutePlan(params ResponsesRelayRoutePlanParams) (*RelayR
 		if filtered[j].Id == params.InitialChannelId {
 			return false
 		}
+		if params.PreferChannelFirst {
+			if filtered[i].Id == params.PreferredChannelId {
+				return true
+			}
+			if filtered[j].Id == params.PreferredChannelId {
+				return false
+			}
+		}
 		if filtered[i].GetPriority() != filtered[j].GetPriority() {
 			return filtered[i].GetPriority() > filtered[j].GetPriority()
+		}
+		if filtered[i].Id == params.PreferredChannelId {
+			return true
+		}
+		if filtered[j].Id == params.PreferredChannelId {
+			return false
 		}
 		leftRank := ProviderRoutingOrderRank(filtered[i], params.ProviderPolicy)
 		rightRank := ProviderRoutingOrderRank(filtered[j], params.ProviderPolicy)
@@ -174,19 +237,28 @@ func BuildResponsesRelayRoutePlan(params ResponsesRelayRoutePlanParams) (*RelayR
 				continue
 			}
 			seen[key] = struct{}{}
+			if params.TokenModelAllowed != nil && !params.TokenModelAllowed(modelName) {
+				continue
+			}
+			requiredModel := relayRouteRequiredModel(params, modelName)
+			if requiredModel != "" && params.TokenModelAllowed != nil && !params.TokenModelAllowed(requiredModel) {
+				continue
+			}
 			if !allowCrossFamily && !strings.EqualFold(relayRouteModelFamily(modelName), primaryFamily) {
 				continue
 			}
-			if !model.IsChannelEnabledForGroupModel(params.Group, modelName, channel.Id) ||
-				model.IsChannelModelDisabledForGroup(channel.Id, params.Group, modelName) {
+			if !model.IsChannelEnabledForGroupModel(group, modelName, channel.Id) ||
+				model.IsChannelModelDisabledForGroup(channel.Id, group, modelName) {
 				continue
 			}
-			if params.RequiredModel != "" && !strings.EqualFold(params.RequiredModel, modelName) &&
-				(!model.IsChannelEnabledForGroupModel(params.Group, params.RequiredModel, channel.Id) ||
-					model.IsChannelModelDisabledForGroup(channel.Id, params.Group, params.RequiredModel)) {
+			if requiredModel != "" && !strings.EqualFold(requiredModel, modelName) &&
+				(!model.IsChannelEnabledForGroupModel(group, requiredModel, channel.Id) ||
+					model.IsChannelModelDisabledForGroup(channel.Id, group, requiredModel)) {
 				continue
 			}
-			if !ChannelMatchesResponsesRequirement(channel, modelName, params.Requirement, params.Request) {
+			requirement := *params.Requirement
+			requirement.RequiredContinuationModel = requiredModel
+			if !ChannelMatchesResponsesRequirement(channel, modelName, &requirement, params.Request) {
 				continue
 			}
 			candidates = append(candidates, modelName)
@@ -199,35 +271,34 @@ func BuildResponsesRelayRoutePlan(params ResponsesRelayRoutePlanParams) (*RelayR
 			}
 			return compareRelayRouteVersionDesc(candidates[i], candidates[j]) < 0
 		})
+		maxModelsPerChannel := common.GetEnvOrDefault("RESPONSES_COMPACTION_MAX_MODELS_PER_CHANNEL", 3)
+		if maxModelsPerChannel > 0 && len(candidates) > maxModelsPerChannel {
+			candidates = candidates[:maxModelsPerChannel]
+		}
 		for _, modelName := range candidates {
+			requiredModel := relayRouteRequiredModel(params, modelName)
 			routes = append(routes, RelayModelRoles{
 				ClientModel:            params.ClientModel,
 				RoutingModel:           modelName,
 				BillingModel:           modelName,
-				RequiredModel:          params.RequiredModel,
-				Group:                  params.Group,
+				RequiredModel:          requiredModel,
+				Group:                  group,
 				PreferredChannelId:     channel.Id,
 				StrictPreferredChannel: true,
 				RetryBudget:            routeRetryBudget(channel),
 			})
 		}
 	}
-	maxCandidates := common.GetEnvOrDefault("RESPONSES_COMPACTION_MAX_ROUTE_CANDIDATES", 12)
-	if maxCandidates > 0 && len(routes) > maxCandidates {
-		routes = routes[:maxCandidates]
+	return routes, nil
+}
+
+func relayRouteRequiredModel(params ResponsesRelayRoutePlanParams, routingModel string) string {
+	requiredModel := strings.TrimSpace(params.RequiredModel)
+	if requiredModel == "" && params.Requirement != nil && params.Requirement.Kind == dto.ResponsesCompactionTrigger &&
+		params.ClientModel != "" && !strings.EqualFold(params.ClientModel, routingModel) {
+		requiredModel = strings.TrimSpace(params.ClientModel)
 	}
-	if len(routes) == 0 {
-		return nil, errors.New("no channel/model candidate satisfies responses compaction requirements")
-	}
-	// The distributor has already installed the initial channel and model in the
-	// request context. Relay's first attempt reuses that context, so accepting a
-	// different first route would execute the plan against stale channel data.
-	if params.InitialChannelId > 0 &&
-		(routes[0].PreferredChannelId != params.InitialChannelId ||
-			!strings.EqualFold(routes[0].RoutingModel, params.PrimaryModel)) {
-		return nil, errors.New("initial channel/model no longer satisfies responses compaction requirements")
-	}
-	return &RelayRoutePlan{routes: routes}, nil
+	return requiredModel
 }
 
 func NewRelayRoutePlan(clientModel, primaryModel, requiredModel string, fallbackModels []string) *RelayRoutePlan {

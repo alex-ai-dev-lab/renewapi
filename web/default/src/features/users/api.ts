@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api } from '@/lib/api'
+import { api, type ApiRequestConfig } from '@/lib/api'
 import type {
   User,
   GetUsersParams,
@@ -144,8 +144,10 @@ export async function resetUserTwoFA(id: number): Promise<ApiResponse> {
 /**
  * Get all available groups
  */
-export async function getGroups(): Promise<ApiResponse<string[]>> {
-  const res = await api.get('/api/group/')
+export async function getGroups(
+  config: ApiRequestConfig = {}
+): Promise<ApiResponse<string[]>> {
+  const res = await api.get('/api/group/', config)
   return res.data
 }
 

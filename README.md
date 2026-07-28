@@ -37,7 +37,7 @@ flowchart LR
 | --- | --- |
 | Backend | Go, Gin, GORM v2 |
 | Frontend | `web/default`: React 19 + TypeScript + Rsbuild + Base UI + Tailwind |
-| Classic frontend | `web/classic`: React 18 + Vite + Semi Design |
+| Classic frontend | `web/classic`: React 18 + Vite + Semi Design; [retirement window](docs/classic-frontend-retirement.md) |
 | Frontend package manager | Bun |
 | Database | SQLite by default, MySQL and PostgreSQL supported |
 | Cache | Redis and in-process cache |

@@ -26,7 +26,7 @@ import {
 } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRight,
   HelpCircle,
@@ -106,22 +106,7 @@ import {
   SecureVerificationDialog,
   useSecureVerification,
 } from '@/features/auth/secure-verification'
-import {
-  fetchModels,
-  getAllModels,
-  getChannel,
-  getChannelModelRoutePreview,
-  getChannelKey,
-  getGroups,
-  getPrefillGroups,
-  getUserAgents,
-  normalizeCodexCredential,
-  preflightCodexCredential,
-  refreshCodexCredential,
-  type CodexCredentialCandidate,
-  type CodexCredentialPreflightResponse,
-  type ChannelModelRoutePreview,
-} from '../../api'
+import { fetchModels, getChannelKey } from '../../api'
 import {
   ADD_MODE_OPTIONS,
   CHANNEL_TYPE_OPTIONS,
@@ -131,7 +116,10 @@ import {
   FIELD_PLACEHOLDERS,
   MODEL_FETCHABLE_TYPES,
 } from '../../constants'
+import { useChannelEditorData } from '../../hooks/use-channel-editor-data'
 import { useChannelMutateForm } from '../../hooks/use-channel-mutate-form'
+import { useChannelRoutePreview } from '../../hooks/use-channel-route-preview'
+import { useCodexCredentialActions } from '../../hooks/use-codex-credential-actions'
 import {
   CHANNEL_FORM_DEFAULT_VALUES,
   channelFormSchema,
@@ -310,14 +298,6 @@ function SubHeading({ title, icon }: { title: string; icon?: ReactNode }) {
   )
 }
 
-function prettyJson(value: string) {
-  try {
-    return JSON.stringify(JSON.parse(value), null, 2)
-  } catch {
-    return value
-  }
-}
-
 export function ChannelMutateDrawer({
   open,
   onOpenChange,
@@ -326,23 +306,22 @@ export function ChannelMutateDrawer({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { setOpen } = useChannels()
+  const {
+    isEditing,
+    channelId,
+    channelData,
+    isChannelLoading,
+    isChannelError,
+    channelQueryError,
+    groupsData,
+    isLoadingGroups,
+    userAgentsData,
+    allModelsData,
+    prefillGroupsData,
+  } = useChannelEditorData(currentRow)
   const [fetchModelsDialogOpen, setFetchModelsDialogOpen] = useState(false)
   const [channelKey, setChannelKey] = useState<string | null>(null)
   const [isChannelKeyLoading, setIsChannelKeyLoading] = useState(false)
-  const [codexOAuthDialogOpen, setCodexOAuthDialogOpen] = useState(false)
-  const [isCodexCredentialRefreshing, setIsCodexCredentialRefreshing] =
-    useState(false)
-  const [codexCredentialCandidates, setCodexCredentialCandidates] = useState<
-    CodexCredentialCandidate[]
-  >([])
-  const [selectedCodexCredentialIndex, setSelectedCodexCredentialIndex] =
-    useState(0)
-  const [isCodexCredentialNormalizing, setIsCodexCredentialNormalizing] =
-    useState(false)
-  const [isCodexCredentialPreflighting, setIsCodexCredentialPreflighting] =
-    useState(false)
-  const [codexCredentialPreflight, setCodexCredentialPreflight] =
-    useState<CodexCredentialPreflightResponse | null>(null)
   const initialModelsRef = useRef<string[]>([])
   const initialModelMappingRef = useRef<string>('')
   const initialStatusCodeMappingRef = useRef<string>('')
@@ -359,51 +338,7 @@ export function ChannelMutateDrawer({
     ((action: MissingModelsAction) => void) | null
   >(null)
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false)
-  const [routePreviewModel, setRoutePreviewModel] = useState('')
-  const [routePreviewEndpoint, setRoutePreviewEndpoint] =
-    useState('openai-response')
-  const [routePreviewLoading, setRoutePreviewLoading] = useState(false)
-  const [routePreview, setRoutePreview] =
-    useState<ChannelModelRoutePreview['data']>()
   const [paramOverrideEditorOpen, setParamOverrideEditorOpen] = useState(false)
-
-  const isEditing = Boolean(currentRow)
-  const channelId = currentRow?.id ?? null
-
-  // Fetch channel details if editing
-  const {
-    data: channelData,
-    isLoading: isChannelLoading,
-    isError: isChannelError,
-    error: channelQueryError,
-  } = useQuery({
-    queryKey: channelsQueryKeys.detail(currentRow?.id || 0),
-    queryFn: () => getChannel(currentRow!.id),
-    enabled: isEditing && Boolean(currentRow?.id),
-  })
-
-  // Fetch available groups
-  const { data: groupsData, isLoading: isLoadingGroups } = useQuery({
-    queryKey: ['groups'],
-    queryFn: getGroups,
-  })
-
-  const { data: userAgentsData } = useQuery({
-    queryKey: ['user-agents'],
-    queryFn: getUserAgents,
-  })
-
-  // Fetch all available models
-  const { data: allModelsData } = useQuery({
-    queryKey: ['channel_models'],
-    queryFn: getAllModels,
-  })
-
-  // Fetch prefill model groups
-  const { data: prefillGroupsData } = useQuery({
-    queryKey: ['prefill_groups', 'model'],
-    queryFn: () => getPrefillGroups('model'),
-  })
 
   const { copyToClipboard } = useCopyToClipboard()
 
@@ -457,31 +392,35 @@ export function ChannelMutateDrawer({
     'upstream_model_update_check_enabled'
   )
   const currentSettings = form.watch('settings')
-
-  const previewModelRoute = useCallback(async () => {
-    if (!channelId || !routePreviewModel.trim()) return
-    setRoutePreviewLoading(true)
-    try {
-      const result = await getChannelModelRoutePreview(
-        channelId,
-        routePreviewModel.trim(),
-        routePreviewEndpoint
-      )
-      if (!result.success || !result.data) {
-        toast.error(result.message || t('Failed to preview model route'))
-        return
-      }
-      setRoutePreview(result.data)
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t('Failed to preview model route')
-      )
-    } finally {
-      setRoutePreviewLoading(false)
-    }
-  }, [channelId, routePreviewEndpoint, routePreviewModel, t])
+  const {
+    model: routePreviewModel,
+    setModel: setRoutePreviewModel,
+    endpoint: routePreviewEndpoint,
+    setEndpoint: setRoutePreviewEndpoint,
+    isLoading: routePreviewLoading,
+    preview: routePreview,
+    previewRoute: previewModelRoute,
+  } = useChannelRoutePreview(channelId)
+  const {
+    oauthDialogOpen: codexOAuthDialogOpen,
+    setOAuthDialogOpen: setCodexOAuthDialogOpen,
+    isRefreshing: isCodexCredentialRefreshing,
+    candidates: codexCredentialCandidates,
+    selectedIndex: selectedCodexCredentialIndex,
+    isNormalizing: isCodexCredentialNormalizing,
+    isPreflighting: isCodexCredentialPreflighting,
+    preflight: codexCredentialPreflight,
+    reset: resetCodexCredential,
+    applyCandidate: applyCodexCredentialCandidate,
+    refreshCredential: handleRefreshCodexCredential,
+    normalizeCredential: handleNormalizeCodexCredential,
+    preflightCredential: handlePreflightCodexCredential,
+    prepareForSubmit: prepareCodexCredentialForSubmit,
+  } = useCodexCredentialActions({
+    channelId,
+    enabled: currentType === 57,
+    form,
+  })
   const {
     unlocked: doubaoApiEditUnlocked,
     handleClick: handleApiConfigSecretClick,
@@ -727,11 +666,9 @@ export function ChannelMutateDrawer({
 
   useEffect(() => {
     if (currentType !== 57) {
-      setCodexCredentialCandidates([])
-      setSelectedCodexCredentialIndex(0)
-      setCodexCredentialPreflight(null)
+      resetCodexCredential()
     }
-  }, [currentType])
+  }, [currentType, resetCodexCredential])
 
   // Handle type change - set default values for specific types
   useEffect(() => {
@@ -836,118 +773,6 @@ export function ChannelMutateDrawer({
       }
     }
   }, [channelId, withVerification, fetchChannelKey])
-
-  const handleRefreshCodexCredential = useCallback(async () => {
-    if (!channelId) return
-    setIsCodexCredentialRefreshing(true)
-    try {
-      const res = await refreshCodexCredential(channelId)
-      if (!res.success) {
-        throw new Error(res.message || t('Failed to refresh credential'))
-      }
-      toast.success(t('Credential refreshed'))
-      queryClient.invalidateQueries({
-        queryKey: channelsQueryKeys.detail(channelId),
-      })
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('Refresh failed'))
-    } finally {
-      setIsCodexCredentialRefreshing(false)
-    }
-  }, [channelId, queryClient, t])
-
-  const applyCodexCredentialCandidate = useCallback(
-    (candidate: CodexCredentialCandidate) => {
-      form.setValue('key', prettyJson(candidate.key), {
-        shouldDirty: true,
-        shouldValidate: true,
-      })
-      setSelectedCodexCredentialIndex(candidate.index)
-      setCodexCredentialPreflight(null)
-      toast.success(t('Codex credential converted'))
-    },
-    [form, t]
-  )
-
-  const handleNormalizeCodexCredential = useCallback(async () => {
-    const input = form.getValues('key')?.trim()
-    if (!input) {
-      toast.info(t('Please paste a Codex credential first'))
-      return
-    }
-    setIsCodexCredentialNormalizing(true)
-    setCodexCredentialPreflight(null)
-    try {
-      const res = await normalizeCodexCredential(input)
-      if (!res.success) {
-        throw new Error(res.message || t('Failed to recognize credential'))
-      }
-      const candidates = res.data?.candidates || []
-      if (candidates.length === 0) {
-        throw new Error(t('No supported Codex credential found'))
-      }
-      setCodexCredentialCandidates(candidates)
-      setSelectedCodexCredentialIndex(candidates[0]?.index ?? 0)
-      if (candidates.length === 1) {
-        applyCodexCredentialCandidate(candidates[0])
-      } else {
-        toast.success(
-          t('Detected {{count}} Codex credentials', {
-            count: candidates.length,
-          })
-        )
-      }
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t('Credential recognition failed')
-      )
-    } finally {
-      setIsCodexCredentialNormalizing(false)
-    }
-  }, [applyCodexCredentialCandidate, form, t])
-
-  const handlePreflightCodexCredential = useCallback(async () => {
-    const input = form.getValues('key')?.trim() || ''
-    if (!input && !channelId) {
-      toast.info(t('Please paste a Codex credential first'))
-      return
-    }
-    setIsCodexCredentialPreflighting(true)
-    try {
-      const res = await preflightCodexCredential({
-        input,
-        candidate_index:
-          codexCredentialCandidates.length > 1
-            ? selectedCodexCredentialIndex
-            : undefined,
-        channel_id: channelId || undefined,
-        base_url: form.getValues('base_url') || '',
-        proxy: form.getValues('proxy') || '',
-        tls_insecure_skip_verify:
-          form.getValues('tls_insecure_skip_verify') === true,
-      })
-      setCodexCredentialPreflight(res)
-      if (res.success) {
-        toast.success(t('Codex credential preflight passed'))
-      } else {
-        toast.error(res.message || t('Codex credential preflight failed'))
-      }
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t('Preflight failed')
-      )
-    } finally {
-      setIsCodexCredentialPreflighting(false)
-    }
-  }, [
-    channelId,
-    codexCredentialCandidates.length,
-    form,
-    selectedCodexCredentialIndex,
-    t,
-  ])
 
   // Unified function to update models
   const updateModels = useCallback(
@@ -1162,29 +987,11 @@ export function ChannelMutateDrawer({
 
       if (data.type === 57 && data.key?.trim()) {
         try {
-          const res = await normalizeCodexCredential(data.key.trim())
-          if (!res.success) {
-            throw new Error(res.message || t('Failed to recognize credential'))
-          }
-          const candidates = res.data?.candidates || []
-          if (candidates.length !== 1) {
-            setCodexCredentialCandidates(candidates)
-            setSelectedCodexCredentialIndex(candidates[0]?.index ?? 0)
-            setCodexCredentialPreflight(null)
-            toast.info(
-              t(
-                'Detected multiple Codex credentials. Choose one before saving.'
-              )
-            )
-            return
-          }
-          data.key = candidates[0].key
-          form.setValue('key', prettyJson(candidates[0].key), {
-            shouldDirty: true,
-            shouldValidate: true,
-          })
-          setCodexCredentialCandidates(candidates)
-          setSelectedCodexCredentialIndex(candidates[0].index)
+          const candidate = await prepareCodexCredentialForSubmit(
+            data.key.trim()
+          )
+          if (!candidate) return
+          data.key = candidate.key
         } catch (error) {
           toast.error(
             error instanceof Error
@@ -1276,6 +1083,7 @@ export function ChannelMutateDrawer({
       confirmMissingModelMappings,
       confirmStatusCodeRisk,
       channelMutation,
+      prepareCodexCredentialForSubmit,
       t,
     ]
   )
@@ -1287,12 +1095,10 @@ export function ChannelMutateDrawer({
       if (!v) {
         form.reset(CHANNEL_FORM_DEFAULT_VALUES)
         setAdvancedSettingsOpen(false)
-        setCodexCredentialCandidates([])
-        setSelectedCodexCredentialIndex(0)
-        setCodexCredentialPreflight(null)
+        resetCodexCredential()
       }
     },
-    [onOpenChange, form]
+    [onOpenChange, form, resetCodexCredential]
   )
 
   const handleAdvancedSettingsOpenChange = useCallback((nextOpen: boolean) => {

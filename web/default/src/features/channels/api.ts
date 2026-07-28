@@ -156,8 +156,11 @@ export async function searchChannels(
 /**
  * Get single channel by ID
  */
-export async function getChannel(id: number): Promise<GetChannelResponse> {
-  const res = await api.get(`/api/channel/${id}`)
+export async function getChannel(
+  id: number,
+  config: ApiRequestConfig = {}
+): Promise<GetChannelResponse> {
+  const res = await api.get(`/api/channel/${id}`, config)
   return res.data
 }
 
@@ -253,12 +256,12 @@ export async function batchSetChannelTag(
   return res.data
 }
 
-export async function getUserAgents(): Promise<{
+export async function getUserAgents(config: ApiRequestConfig = {}): Promise<{
   success: boolean
   message?: string
   data?: UserAgentOption[]
 }> {
-  const res = await api.get('/api/user-agents/')
+  const res = await api.get('/api/user-agents/', config)
   return res.data
 }
 
@@ -701,12 +704,12 @@ export async function updateAllChannelsBalance(): Promise<{
 /**
  * Get all available models
  */
-export async function getAllModels(): Promise<{
+export async function getAllModels(config: ApiRequestConfig = {}): Promise<{
   success: boolean
   message?: string
   data?: Array<{ id: string; [key: string]: unknown }>
 }> {
-  const res = await api.get('/api/channel/models')
+  const res = await api.get('/api/channel/models', config)
   return res.data
 }
 
@@ -753,12 +756,16 @@ export const getGroups = getUserGroups
  * Get prefill groups for quick model selection
  */
 export async function getPrefillGroups(
-  type: 'model' | 'group' = 'model'
+  type: 'model' | 'group' = 'model',
+  config: ApiRequestConfig = {}
 ): Promise<{
   success: boolean
   message?: string
   data?: Array<{ id: number; name: string; items: string | string[] }>
 }> {
-  const res = await api.get('/api/prefill_group', { params: { type } })
+  const res = await api.get('/api/prefill_group', {
+    ...config,
+    params: { type },
+  })
   return res.data
 }

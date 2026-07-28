@@ -1430,6 +1430,7 @@ func prepareClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, clau
 		if convErr != nil {
 			return nil, nil, types.NewError(convErr, types.ErrorCodeBadResponseBody)
 		}
+		openaicompat.RestoreResponsesBridgeOutputFromContext(c, responsesResponse)
 		responseData, err = common.Marshal(responsesResponse)
 		if err != nil {
 			return nil, nil, types.NewError(err, types.ErrorCodeBadResponseBody)

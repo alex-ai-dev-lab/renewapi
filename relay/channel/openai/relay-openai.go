@@ -911,6 +911,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		if convErr != nil {
 			return nil, types.NewError(convErr, types.ErrorCodeBadResponseBody)
 		}
+		openaicompat.RestoreResponsesBridgeOutputFromContext(c, responsesResp)
 		responseBody, err = common.Marshal(responsesResp)
 		if err != nil {
 			return nil, types.NewError(err, types.ErrorCodeBadResponseBody)

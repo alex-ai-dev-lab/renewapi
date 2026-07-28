@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service/openaicompat"
 	"github.com/QuantumNous/new-api/types"
 )
 
@@ -119,10 +120,14 @@ func ValidateResponsesTextBridgeRequest(req *dto.OpenAIResponsesRequest) error {
 	if len(req.Store) > 0 && string(req.Store) != "false" && string(req.Store) != "null" {
 		return fmt.Errorf("Responses field store cannot be represented by the safe text bridge")
 	}
-	if err := validateResponsesInput(req.Input); err != nil {
+	prepared, _, err := openaicompat.PrepareResponsesRequestForTextBridge(req)
+	if err != nil {
 		return err
 	}
-	if err := validateResponsesFunctionTools(req.Tools); err != nil {
+	if err := validateResponsesInput(prepared.Input); err != nil {
+		return err
+	}
+	if err := validateResponsesFunctionTools(prepared.Tools); err != nil {
 		return err
 	}
 	return nil

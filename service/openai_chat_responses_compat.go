@@ -3,6 +3,7 @@ package service
 import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/service/openaicompat"
+	"github.com/gin-gonic/gin"
 )
 
 func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*dto.OpenAIResponsesRequest, error) {
@@ -11,6 +12,15 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 
 func ResponsesRequestToChatCompletionsRequest(req *dto.OpenAIResponsesRequest) (*dto.GeneralOpenAIRequest, error) {
 	return openaicompat.ResponsesRequestToChatCompletionsRequest(req)
+}
+
+func ResponsesRequestToChatCompletionsRequestForContext(c *gin.Context, req *dto.OpenAIResponsesRequest) (*dto.GeneralOpenAIRequest, error) {
+	out, mapping, err := openaicompat.ResponsesRequestToChatCompletionsRequestWithMapping(req)
+	if err != nil {
+		return nil, err
+	}
+	openaicompat.SetResponsesBridgeToolMapping(c, mapping)
+	return out, nil
 }
 
 func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesResponse, id string) (*dto.OpenAITextResponse, *dto.Usage, error) {

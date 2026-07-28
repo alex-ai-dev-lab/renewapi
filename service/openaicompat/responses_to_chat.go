@@ -11,12 +11,22 @@ import (
 )
 
 func ResponsesRequestToChatCompletionsRequest(req *dto.OpenAIResponsesRequest) (*dto.GeneralOpenAIRequest, error) {
+	out, _, err := ResponsesRequestToChatCompletionsRequestWithMapping(req)
+	return out, err
+}
+
+func ResponsesRequestToChatCompletionsRequestWithMapping(req *dto.OpenAIResponsesRequest) (*dto.GeneralOpenAIRequest, ResponsesBridgeToolMapping, error) {
 	if req == nil {
-		return nil, errors.New("request is nil")
+		return nil, ResponsesBridgeToolMapping{}, errors.New("request is nil")
 	}
 	if strings.TrimSpace(req.Model) == "" {
-		return nil, errors.New("model is required")
+		return nil, ResponsesBridgeToolMapping{}, errors.New("model is required")
 	}
+	prepared, mapping, err := PrepareResponsesRequestForTextBridge(req)
+	if err != nil {
+		return nil, ResponsesBridgeToolMapping{}, err
+	}
+	req = prepared
 
 	out := &dto.GeneralOpenAIRequest{
 		Model:         req.Model,
@@ -54,7 +64,7 @@ func ResponsesRequestToChatCompletionsRequest(req *dto.OpenAIResponsesRequest) (
 	if len(out.Messages) == 0 {
 		out.Messages = append(out.Messages, dto.Message{Role: "user", Content: ""})
 	}
-	return out, nil
+	return out, mapping, nil
 }
 
 func responsesInputToChatMessages(raw json.RawMessage) []dto.Message {
@@ -93,7 +103,12 @@ func responsesInputItemToChatMessages(item map[string]any) []dto.Message {
 			Role:       "tool",
 			ToolCallId: common.Interface2String(item["call_id"]),
 		}
-		msg.SetStringContent(common.Interface2String(item["output"]))
+		content := responsesContentToChatContent(item["output"], "tool")
+		if parts, ok := content.([]dto.MediaContent); ok {
+			msg.SetMediaContent(parts)
+		} else {
+			msg.Content = content
+		}
 		return []dto.Message{msg}
 	case "function_call":
 		call := dto.ToolCallRequest{

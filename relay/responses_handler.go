@@ -73,7 +73,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 				types.ErrOptionWithSkipRetry(),
 			)
 		}
-		chatReq, convErr := service.ResponsesRequestToChatCompletionsRequest(request)
+		chatReq, convErr := service.ResponsesRequestToChatCompletionsRequestForContext(c, request)
 		if convErr != nil {
 			return types.NewErrorWithStatusCode(convErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}

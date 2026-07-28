@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service/openaicompat"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -63,4 +64,26 @@ func TestResponsesStreamEmitterProducesTerminalEvent(t *testing.T) {
 	require.Contains(t, body, "event: response.completed")
 	require.Contains(t, body, `"arguments":"{\"id\":1}"`)
 	require.False(t, strings.Contains(body, "chat.completion.chunk"))
+}
+
+func TestResponsesStreamEmitterRestoresNamespaceInLifecycleAndTerminal(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest("POST", "/v1/responses", nil)
+	c.Set(common.RequestIdKey, "namespace-bridge-test")
+	openaicompat.SetResponsesBridgeToolMapping(c, openaicompat.ResponsesBridgeToolMapping{NamespaceTools: map[string]openaicompat.ResponsesNamespaceToolName{
+		"team__send": {Namespace: "team", Name: "send"},
+	}})
+	info := &relaycommon.RelayInfo{RelayFormat: types.RelayFormatOpenAIResponses, OriginModelName: "test-model"}
+	index := 0
+	chunk := &dto.ChatCompletionsStreamResponse{Id: "chatcmpl-namespace", Model: "test-model", Choices: []dto.ChatCompletionsStreamResponseChoice{{Index: 0, Delta: dto.ChatCompletionsStreamResponseChoiceDelta{ToolCalls: []dto.ToolCallResponse{{
+		Index: &index, ID: "call_1", Type: "function", Function: dto.FunctionResponse{Name: "team__send", Arguments: `{}`},
+	}}}}}}
+	require.NoError(t, EmitChatChunk(c, info, chunk))
+	require.NoError(t, CompleteChatStream(c, info, &dto.Usage{TotalTokens: 1}, "tool_calls"))
+
+	body := recorder.Body.String()
+	require.Equal(t, 3, strings.Count(body, `"namespace":"team"`), "added, done, and terminal output must all restore namespace")
+	require.NotContains(t, body, `"name":"team__send"`)
 }

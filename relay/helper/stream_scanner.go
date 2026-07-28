@@ -19,6 +19,8 @@ import (
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 const (
@@ -39,6 +41,32 @@ func NewStreamScanner(reader io.Reader) *bufio.Scanner {
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, InitialScannerBufferSize), getScannerBufferSize())
 	return scanner
+}
+
+// ParseSSEField accepts both the canonical "field: value" form and the
+// compact "field:value" form allowed by the SSE specification.
+func ParseSSEField(line, field string) (string, bool) {
+	prefix := field + ":"
+	if !strings.HasPrefix(line, prefix) {
+		return "", false
+	}
+	value := strings.TrimPrefix(line, prefix)
+	if strings.HasPrefix(value, " ") {
+		value = value[1:]
+	}
+	return strings.TrimSpace(value), true
+}
+
+func applySSEEventTypeFallback(data, eventType string) string {
+	eventType = strings.TrimSpace(eventType)
+	if eventType == "" || !gjson.Valid(data) || strings.TrimSpace(gjson.Get(data, "type").String()) != "" {
+		return data
+	}
+	updated, err := sjson.Set(data, "type", eventType)
+	if err != nil {
+		return data
+	}
+	return updated
 }
 
 // ExtendWriteDeadline prevents one slow client write from blocking stream
@@ -212,6 +240,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 
 	wg.Add(1)
 	common.RelayCtxGo(ctx, func() {
+		pendingEventType := ""
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				err := fmt.Errorf("scanner panic: %v", recovered)
@@ -244,16 +273,23 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				}
 			}
 			streamTimer.Reset(streamingTimeout)
-			data := scanner.Text()
-			logger.LogDebug(c, "stream scanner data: %s", data)
-			if strings.HasPrefix(data, "[DONE]") {
+			line := scanner.Text()
+			logger.LogDebug(c, "stream scanner data: %s", line)
+			if strings.HasPrefix(line, "[DONE]") {
 				info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonDone, nil)
 				return
 			}
-			if !strings.HasPrefix(data, "data:") {
+			if eventType, ok := ParseSSEField(line, "event"); ok {
+				pendingEventType = eventType
 				continue
 			}
-			data = strings.TrimSpace(data[5:])
+			data, ok := ParseSSEField(line, "data")
+			if !ok {
+				if strings.TrimSpace(line) == "" {
+					pendingEventType = ""
+				}
+				continue
+			}
 			if data == "" {
 				continue
 			}
@@ -261,6 +297,8 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonDone, nil)
 				return
 			}
+			data = applySSEEventTypeFallback(data, pendingEventType)
+			pendingEventType = ""
 			info.StreamStatus.ObserveRawFrame()
 			if firstResponseObserved.CompareAndSwap(false, true) {
 				if !firstByteTimer.Stop() {

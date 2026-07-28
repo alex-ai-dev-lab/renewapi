@@ -745,6 +745,38 @@ func TestStreamScannerHandler_StreamStatus_InitializedIfNil(t *testing.T) {
 	assert.NotNil(t, info.StreamStatus)
 }
 
+func TestStreamScannerHandlerCompactSSEAndEventTypeFallback(t *testing.T) {
+	t.Parallel()
+	body := "event:message_start\ndata:{\"message\":{\"id\":\"m1\"}}\n\n" +
+		"event: ignored\ndata: {\"type\":\"message_stop\"}\n\n" +
+		"data:[DONE]\n\n"
+	c, resp, info := setupStreamTest(t, strings.NewReader(body))
+	var got []string
+	StreamScannerHandler(c, resp, info, func(data string, _ *StreamResult) {
+		got = append(got, data)
+	})
+	require.Len(t, got, 2)
+	require.JSONEq(t, `{"type":"message_start","message":{"id":"m1"}}`, got[0])
+	require.JSONEq(t, `{"type":"message_stop"}`, got[1], "data.type must win over event field")
+}
+
+func TestParseSSEField(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		line, field, want string
+		ok                bool
+	}{
+		{"event: message_start", "event", "message_start", true},
+		{"event:message_start", "event", "message_start", true},
+		{"data:\t{\"ok\":true}", "data", `{"ok":true}`, true},
+		{"retry: 10", "data", "", false},
+	} {
+		got, ok := ParseSSEField(tc.line, tc.field)
+		require.Equal(t, tc.ok, ok)
+		require.Equal(t, tc.want, got)
+	}
+}
+
 func TestStreamScannerHandler_StreamStatus_PreInitialized(t *testing.T) {
 	t.Parallel()
 

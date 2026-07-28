@@ -39,6 +39,7 @@ type ResponsesStreamEmitter struct {
 	Usage          *dto.Usage
 	FinishReason   string
 	Completed      bool
+	ToolMapping    openaicompat.ResponsesBridgeToolMapping
 }
 
 func getEmitter(c *gin.Context, info *relaycommon.RelayInfo, chunk *dto.ChatCompletionsStreamResponse) *ResponsesStreamEmitter {
@@ -72,11 +73,12 @@ func getEmitter(c *gin.Context, info *relaycommon.RelayInfo, chunk *dto.ChatComp
 		created = common.GetTimestamp()
 	}
 	emitter := &ResponsesStreamEmitter{
-		ResponseID: responseID,
-		MessageID:  "msg_" + strings.TrimPrefix(responseID, "resp_"),
-		Model:      model,
-		CreatedAt:  created,
-		Tools:      make(map[int]*toolState),
+		ResponseID:  responseID,
+		MessageID:   "msg_" + strings.TrimPrefix(responseID, "resp_"),
+		Model:       model,
+		CreatedAt:   created,
+		Tools:       make(map[int]*toolState),
+		ToolMapping: openaicompat.GetResponsesBridgeToolMapping(c),
 	}
 	c.Set(emitterContextKey, emitter)
 	return emitter
@@ -138,7 +140,7 @@ func EmitChatChunk(c *gin.Context, info *relaycommon.RelayInfo, chunk *dto.ChatC
 				state.Started = true
 				if err := emitter.send(c, "response.output_item.added", map[string]any{
 					"output_index": emitter.toolOutputIndex(index),
-					"item":         map[string]any{"type": "function_call", "id": state.ItemID, "call_id": state.CallID, "name": state.Name, "arguments": "", "status": "in_progress"},
+					"item":         emitter.toolItem(state, "in_progress"),
 				}); err != nil {
 					return err
 				}
@@ -296,7 +298,12 @@ func (e *ResponsesStreamEmitter) messageItem(status string) map[string]any {
 }
 
 func (e *ResponsesStreamEmitter) toolItem(state *toolState, status string) map[string]any {
-	return map[string]any{"type": "function_call", "id": state.ItemID, "status": status, "call_id": state.CallID, "name": state.Name, "arguments": state.Arguments.String()}
+	item := map[string]any{"type": "function_call", "id": state.ItemID, "status": status, "call_id": state.CallID, "name": state.Name, "arguments": state.Arguments.String()}
+	if original, ok := e.ToolMapping.NamespaceTools[state.Name]; ok {
+		item["name"] = original.Name
+		item["namespace"] = original.Namespace
+	}
+	return item
 }
 
 func (e *ResponsesStreamEmitter) toolOutputIndex(toolIndex int) int {
@@ -334,7 +341,12 @@ func (e *ResponsesStreamEmitter) responseObject() (*dto.OpenAIResponsesResponse,
 	if e.Usage != nil {
 		chat.Usage = *e.Usage
 	}
-	return openaicompat.ChatResponseToResponses(chat)
+	response, err := openaicompat.ChatResponseToResponses(chat)
+	if err != nil {
+		return nil, err
+	}
+	openaicompat.RestoreResponsesBridgeOutput(response, e.ToolMapping)
+	return response, nil
 }
 
 func (e *ResponsesStreamEmitter) send(c *gin.Context, eventType string, fields map[string]any) error {

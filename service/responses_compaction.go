@@ -144,17 +144,24 @@ func channelSupportsRequiredContinuation(channel *model.Channel, compactionModel
 		return true
 	}
 	continuationModel := strings.TrimSpace(requirement.RequiredContinuationModel)
-	if continuationModel == "" || strings.EqualFold(continuationModel, compactionModel) {
+	if continuationModel == "" {
 		return true
 	}
-	if !channelAdvertisesRoutingModel(channel, continuationModel) {
-		return false
-	}
-	if responsesRouteCompatibilityForModel(channel, compactionModel) != responsesRouteCompatibilityForModel(channel, continuationModel) {
-		return false
+	if !strings.EqualFold(continuationModel, compactionModel) {
+		if !channelAdvertisesRoutingModel(channel, continuationModel) {
+			return false
+		}
+		if responsesRouteCompatibilityForModel(channel, compactionModel) != responsesRouteCompatibilityForModel(channel, continuationModel) {
+			return false
+		}
 	}
 	continuationRequirement := &ResponsesRoutingRequirement{Kind: dto.ResponsesCompactedContextContinuation}
 	return ChannelMatchesResponsesRequirement(channel, continuationModel, continuationRequirement, request)
+}
+
+func isConcreteCompactionCapability(capability dto.CompactionCapability) bool {
+	capability = dto.CompactionCapability(strings.ToLower(strings.TrimSpace(string(capability))))
+	return capability != "" && capability != dto.CompactionUnknown
 }
 
 func responseCapabilityRecord(channel *model.Channel, modelName string) (dto.ResponsesCompactionCapabilityRecord, bool) {
@@ -167,10 +174,19 @@ func responseCapabilityRecord(channel *model.Channel, modelName string) (dto.Res
 	}
 	clientModel := strings.TrimSuffix(modelName, "-openai-compact")
 	if record, ok := settings.ModelCapabilities[clientModel]; ok {
-		return record, true
+		if record.Capability == "" {
+			record.Capability = dto.CompactionUnknown
+		}
+		// An explicit unknown is a request to learn, not an authoritative
+		// capability declaration. Concrete operator declarations still win.
+		return record, isConcreteCompactionCapability(record.Capability)
 	}
 	if settings.DefaultCapability != nil {
-		return *settings.DefaultCapability, true
+		record := *settings.DefaultCapability
+		if record.Capability == "" {
+			record.Capability = dto.CompactionUnknown
+		}
+		return record, isConcreteCompactionCapability(record.Capability)
 	}
 	return dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionUnknown}, false
 }
@@ -248,13 +264,13 @@ func observedCompactionCapability(channel *model.Channel, modelName string) (dto
 func effectiveCompactionCapability(channel *model.Channel, modelName string) dto.ResponsesCompactionCapabilityRecord {
 	record, configured := responseCapabilityRecord(channel, modelName)
 	if configured {
-		if record.Capability == "" {
-			record.Capability = dto.CompactionUnknown
-		}
 		if record.RouteFingerprint != "" && !strings.EqualFold(record.RouteFingerprint, ResponsesRouteFingerprint(channel, modelName)) {
-			return dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionUnknown}
+			// A stale manual assertion is no longer authoritative. Fall through to
+			// route-scoped observed evidence before returning unknown.
+			configured = false
+		} else {
+			return record
 		}
-		return record
 	}
 	if observed, found := observedCompactionCapability(channel, modelName); found {
 		return observed
@@ -294,7 +310,7 @@ func ChannelMatchesResponsesRequirement(channel *model.Channel, modelName string
 		if record.Capability != dto.CompactionNativeV2 && record.Capability != dto.CompactionNativeV2AndLegacy {
 			return false
 		}
-		return !requirement.ClientStream || record.NativeStream
+		return !requirement.ClientStream || record.NativeStream || record.Capability == dto.CompactionNativeV2AndLegacy
 	case dto.ResponsesCompactEndpoint:
 		return record.Capability == dto.CompactionLegacy || record.Capability == dto.CompactionNativeV2AndLegacy
 	case dto.ResponsesCompactedContextContinuation:
@@ -329,7 +345,9 @@ func PlanResponsesExecution(kind dto.ResponsesRequestKind, record dto.ResponsesC
 		plan.StripTopLevel = []string{"stream", "stream_options"}
 		return plan, nil
 	case dto.ResponsesCompactionTrigger:
-		if record.Capability == dto.CompactionLegacy {
+		useLegacy := record.Capability == dto.CompactionLegacy ||
+			(record.Capability == dto.CompactionNativeV2AndLegacy && clientStream && !record.NativeStream)
+		if useLegacy {
 			plan.UpstreamPath = "/v1/responses/compact"
 			plan.UpstreamStream = false
 			plan.BridgeJSONToSSE = clientStream

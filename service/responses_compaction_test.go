@@ -28,6 +28,7 @@ func TestChannelMatchesResponsesRequirement(t *testing.T) {
 	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"native_v2"}}}`), "gpt-5.4", trigger, nil))
 	require.False(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"native_v2"}}}`), "gpt-5.4", streamTrigger, nil))
 	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"native_v2","native_stream":true,"continuation":true}}}`), "gpt-5.4", streamTrigger, nil))
+	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"native_v2_and_legacy"}}}`), "gpt-5.4", streamTrigger, nil))
 	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"native_v2","continuation":true}}}`), "gpt-5.4", continuation, nil))
 	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"legacy"}}}`), "gpt-5.4-openai-compact", legacyEndpoint, nil))
 	require.False(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeAnthropic, `{"responses_compaction":{"default_capability":{"capability":"native_v2_and_legacy","native_stream":true,"continuation":true}}}`), "gpt-5.4", trigger, nil))
@@ -121,6 +122,28 @@ func TestRoutedCompactionRequiresClientModelContinuationCapability(t *testing.T)
 	require.True(t, ChannelMatchesResponsesRequirement(channel, "gpt-5.6-sol", requirement, nil))
 }
 
+func TestRoutedCompactionRequiresContinuationWhenCandidateMatchesClientModel(t *testing.T) {
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+	channel := &model.Channel{Type: constant.ChannelTypeOpenAI, Models: "gpt-5.5"}
+	requirement := &ResponsesRoutingRequirement{
+		Kind:                      dto.ResponsesCompactionTrigger,
+		RequiredContinuationModel: "gpt-5.5",
+	}
+	channel.SetSetting(dto.ChannelSettings{ResponsesCompaction: &dto.ResponsesCompactionSettings{
+		ModelCapabilities: map[string]dto.ResponsesCompactionCapabilityRecord{
+			"gpt-5.5": {Capability: dto.CompactionNativeV2},
+		},
+	}})
+	require.False(t, ChannelMatchesResponsesRequirement(channel, "gpt-5.5", requirement, nil))
+
+	channel.SetSetting(dto.ChannelSettings{ResponsesCompaction: &dto.ResponsesCompactionSettings{
+		ModelCapabilities: map[string]dto.ResponsesCompactionCapabilityRecord{
+			"gpt-5.5": {Capability: dto.CompactionNativeV2, Continuation: true},
+		},
+	}})
+	require.True(t, ChannelMatchesResponsesRequirement(channel, "gpt-5.5", requirement, nil))
+}
+
 func TestResolveResponsesCompactionRoutingModel(t *testing.T) {
 	t.Setenv("RESPONSES_COMPACTION_MODEL", "gpt-5.6-sol")
 
@@ -188,6 +211,22 @@ func TestPlanResponsesExecution(t *testing.T) {
 	require.Equal(t, "/v1/responses", native.UpstreamPath)
 	require.True(t, native.UpstreamStream)
 	require.False(t, native.RemoveTriggerItem)
+
+	combinedLegacyStream, err := PlanResponsesExecution(dto.ResponsesCompactionTrigger, dto.ResponsesCompactionCapabilityRecord{
+		Capability: dto.CompactionNativeV2AndLegacy,
+	}, "gpt-5.4", true)
+	require.NoError(t, err)
+	require.Equal(t, "/v1/responses/compact", combinedLegacyStream.UpstreamPath)
+	require.True(t, combinedLegacyStream.BridgeJSONToSSE)
+	require.True(t, combinedLegacyStream.RemoveTriggerItem)
+
+	combinedNative, err := PlanResponsesExecution(dto.ResponsesCompactionTrigger, dto.ResponsesCompactionCapabilityRecord{
+		Capability:   dto.CompactionNativeV2AndLegacy,
+		NativeStream: true,
+	}, "gpt-5.4", true)
+	require.NoError(t, err)
+	require.Equal(t, "/v1/responses", combinedNative.UpstreamPath)
+	require.False(t, combinedNative.BridgeJSONToSSE)
 
 	_, err = PlanResponsesExecution(dto.ResponsesCompactionTrigger, dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionNativeV2}, "gpt-5.4", true)
 	require.Error(t, err)

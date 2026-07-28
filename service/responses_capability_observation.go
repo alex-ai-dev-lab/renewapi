@@ -1,7 +1,9 @@
 package service
 
 import (
+	"hash/fnv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -9,6 +11,15 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/types"
 )
+
+var responsesCapabilityObservationLocks [64]sync.Mutex
+
+func responsesCapabilityObservationLock(channelID int, modelName string) *sync.Mutex {
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(strings.ToLower(strings.TrimSpace(modelName))))
+	index := (uint32(channelID) ^ hash.Sum32()) % uint32(len(responsesCapabilityObservationLocks))
+	return &responsesCapabilityObservationLocks[index]
+}
 
 type ResponsesCapabilityAttempt struct {
 	Kind         dto.ResponsesRequestKind
@@ -128,14 +139,24 @@ func ObserveResponsesCapabilityAttempt(
 	if channel == nil || !outcome.Related || strings.TrimSpace(modelName) == "" {
 		return outcome
 	}
+	lock := responsesCapabilityObservationLock(channel.Id, modelName)
+	lock.Lock()
+	defer lock.Unlock()
 
 	now := time.Now()
 	record, _ := model.GetChannelModelCapability(channel.Id, modelName, model.ChannelCapabilityResponsesCompaction)
 	previousFingerprint := record.RouteFingerprint
+	currentFingerprint := ResponsesObservedRouteFingerprint(channel, modelName)
+	if !strings.EqualFold(previousFingerprint, currentFingerprint) {
+		// Facets are route-scoped. Never carry evidence from an old base URL,
+		// endpoint, mapping, or config version into the first observation of the
+		// new route.
+		record = model.ChannelModelCapability{}
+	}
 	record.ChannelId = channel.Id
 	record.ModelName = modelName
 	record.Capability = model.ChannelCapabilityResponsesCompaction
-	record.RouteFingerprint = ResponsesObservedRouteFingerprint(channel, modelName)
+	record.RouteFingerprint = currentFingerprint
 	record.Source = strings.TrimSpace(attempt.Source)
 	if record.Source == "" {
 		record.Source = "runtime"

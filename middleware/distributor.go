@@ -44,6 +44,7 @@ func Distribute() func(c *gin.Context) {
 		if modelRequest.ProviderPolicy != nil && !modelRequest.ProviderPolicy.Empty() {
 			common.SetContextKey(c, constant.ContextKeyProviderRoutingPolicy, modelRequest.ProviderPolicy)
 		}
+		responsesRequirement := responsesRoutingRequirement(c)
 		if len(modelRequest.Models) > 1 {
 			common.SetContextKey(c, constant.ContextKeyFallbackModels, modelRequest.Models)
 		}
@@ -64,6 +65,10 @@ func Distribute() func(c *gin.Context) {
 			}
 			if !service.ChannelAllowedForProduction(channel) {
 				abortWithOpenAiMessage(c, http.StatusForbidden, "channel is quarantined by anti-poison profile")
+				return
+			}
+			if !service.ChannelMatchesResponsesRequirement(channel, modelRequest.Model, responsesRequirement, nil) {
+				abortWithOpenAiMessage(c, http.StatusBadRequest, "selected channel does not satisfy responses compaction capability")
 				return
 			}
 		} else {
@@ -114,7 +119,11 @@ func Distribute() func(c *gin.Context) {
 					}
 				}
 
-				if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
+				preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup)
+				if !found {
+					preferredChannelID, found = service.GetPreferredChannelByCompactionAffinity(c, modelRequest.Model, usingGroup)
+				}
+				if found {
 					preferred, err := model.CacheGetChannel(preferredChannelID)
 					if err == nil && preferred != nil {
 						if preferred.Status != common.ChannelStatusEnabled {
@@ -125,13 +134,15 @@ func Distribute() func(c *gin.Context) {
 						} else if !service.ChannelMatchesProviderRoutingPolicy(preferred, modelRequest.ProviderPolicy) {
 							loggerMsg := fmt.Sprintf("affinity channel skipped by provider routing policy: channel=%d", preferred.Id)
 							common.SysLog(loggerMsg)
+						} else if !service.ChannelMatchesResponsesRequirement(preferred, modelRequest.Model, responsesRequirement, nil) {
+							common.SysLog(fmt.Sprintf("affinity channel skipped by responses compaction capability: channel=%d", preferred.Id))
 						} else if usingGroup == "auto" {
 							userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 							autoGroups := service.GetUserAutoGroup(userGroup)
 							for _, g := range autoGroups {
 								if model.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) &&
 									!model.IsChannelModelDisabledForGroup(preferred.Id, g, modelRequest.Model) {
-									if channelAffinityFallbackOnly() && higherPriorityChannelAvailable(g, modelRequest.Model, preferred, modelRequest.ProviderPolicy) {
+									if channelAffinityFallbackOnly() && higherPriorityChannelAvailable(g, modelRequest.Model, preferred, modelRequest.ProviderPolicy, responsesRequirement) {
 										common.SysLog(fmt.Sprintf("affinity channel deferred: higher priority channel available for group=%s model=%s affinity_channel=%d", g, modelRequest.Model, preferred.Id))
 									} else {
 										selectGroup = g
@@ -144,7 +155,7 @@ func Distribute() func(c *gin.Context) {
 							}
 						} else if model.IsChannelEnabledForGroupModel(usingGroup, modelRequest.Model, preferred.Id) &&
 							!model.IsChannelModelDisabledForGroup(preferred.Id, usingGroup, modelRequest.Model) {
-							if channelAffinityFallbackOnly() && higherPriorityChannelAvailable(usingGroup, modelRequest.Model, preferred, modelRequest.ProviderPolicy) {
+							if channelAffinityFallbackOnly() && higherPriorityChannelAvailable(usingGroup, modelRequest.Model, preferred, modelRequest.ProviderPolicy, responsesRequirement) {
 								common.SysLog(fmt.Sprintf("affinity channel deferred: higher priority channel available for group=%s model=%s affinity_channel=%d", usingGroup, modelRequest.Model, preferred.Id))
 							} else {
 								channel = preferred
@@ -169,6 +180,7 @@ func Distribute() func(c *gin.Context) {
 						RequireOpenAIResponsesSupport: requiresResponses,
 						ClientRelayFormat:             clientFormat,
 						ProviderRoutingPolicy:         modelRequest.ProviderPolicy,
+						ResponsesRequirement:          responsesRequirement,
 					})
 					if err != nil {
 						showGroup := usingGroup
@@ -199,6 +211,7 @@ func Distribute() func(c *gin.Context) {
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
 			service.RecordChannelAffinity(c, channel.Id)
+			service.RecordCompactionResponseAffinity(c, channel.Id, modelRequest.Model, common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
 		}
 	}
 }
@@ -219,7 +232,7 @@ func channelAffinityFallbackOnly() bool {
 // the same one Distribute uses to pick the actual channel. This keeps the fallback
 // decision consistent with the channel that would really be selected and avoids
 // issuing synchronous ability/channel DB queries on every affinity-preferred request.
-func higherPriorityChannelAvailable(group, modelName string, affinityChannel *model.Channel, policy *service.ProviderRoutingPolicy) bool {
+func higherPriorityChannelAvailable(group, modelName string, affinityChannel *model.Channel, policy *service.ProviderRoutingPolicy, requirement *service.ResponsesRoutingRequirement) bool {
 	if affinityChannel == nil {
 		return false
 	}
@@ -231,7 +244,25 @@ func higherPriorityChannelAvailable(group, modelName string, affinityChannel *mo
 	if err != nil || topChannel == nil {
 		return false
 	}
+	if !service.ChannelMatchesResponsesRequirement(topChannel, modelName, requirement, nil) {
+		return false
+	}
 	return topChannel.GetPriority() > affinityChannel.GetPriority()
+}
+
+func responsesRoutingRequirement(c *gin.Context) *service.ResponsesRoutingRequirement {
+	if c == nil || !strings.HasPrefix(c.Request.URL.Path, "/v1/responses") {
+		return nil
+	}
+	kindValue, ok := c.Get(service.ContextKeyResponsesRequestKind)
+	kind, valid := kindValue.(dto.ResponsesRequestKind)
+	if !ok || !valid {
+		kind = dto.ResponsesNormal
+		if strings.TrimSuffix(c.Request.URL.Path, "/") == "/v1/responses/compact" {
+			kind = dto.ResponsesCompactEndpoint
+		}
+	}
+	return &service.ResponsesRoutingRequirement{Kind: kind, ClientStream: c.GetBool("responses_client_stream")}
 }
 
 // getModelFromRequest 从请求中读取模型信息
@@ -267,6 +298,14 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 	}
 	if !gjson.ValidBytes(requestBody) {
 		return nil, errors.New("invalid JSON request body")
+	}
+	if strings.HasPrefix(c.Request.URL.Path, "/v1/responses") {
+		signals := service.InspectResponsesInput(requestBody)
+		kind := service.ClassifyResponsesRequest(c.Request.URL.Path, signals)
+		c.Set(service.ContextKeyResponsesRequestKind, kind)
+		c.Set(service.ContextKeyResponsesHasCompactedState, signals.HasCompactedContext)
+		c.Set(service.ContextKeyResponsesCompactedHashes, signals.CompactedContentHashes)
+		c.Set("responses_client_stream", gjson.GetBytes(requestBody, "stream").Bool())
 	}
 
 	values := gjson.GetManyBytes(requestBody, "model", "group")

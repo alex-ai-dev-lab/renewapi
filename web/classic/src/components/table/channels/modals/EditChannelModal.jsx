@@ -205,6 +205,7 @@ const EditChannelModal = (props) => {
     proxy: '',
     tls_insecure_skip_verify: false,
     pass_through_body_enabled: false,
+    responses_compaction: null,
     system_prompt: '',
     system_prompt_override: false,
     settings: '',
@@ -928,6 +929,7 @@ const EditChannelModal = (props) => {
             parsedSettings.tls_insecure_skip_verify === true;
           data.pass_through_body_enabled =
             parsedSettings.pass_through_body_enabled || false;
+          data.responses_compaction = parsedSettings.responses_compaction || null;
           data.system_prompt = parsedSettings.system_prompt || '';
           data.system_prompt_override =
             parsedSettings.system_prompt_override || false;
@@ -940,6 +942,7 @@ const EditChannelModal = (props) => {
           data.proxy = '';
           data.tls_insecure_skip_verify = false;
           data.pass_through_body_enabled = false;
+          data.responses_compaction = null;
           data.system_prompt = '';
           data.system_prompt_override = false;
         }
@@ -951,6 +954,7 @@ const EditChannelModal = (props) => {
         data.proxy = '';
         data.tls_insecure_skip_verify = false;
         data.pass_through_body_enabled = false;
+        data.responses_compaction = null;
         data.system_prompt = '';
         data.system_prompt_override = false;
       }
@@ -1067,6 +1071,7 @@ const EditChannelModal = (props) => {
         proxy: data.proxy,
         tls_insecure_skip_verify: data.tls_insecure_skip_verify,
         pass_through_body_enabled: data.pass_through_body_enabled,
+        responses_compaction: data.responses_compaction,
         system_prompt: data.system_prompt,
         system_prompt_override: data.system_prompt_override || false,
       });
@@ -1933,6 +1938,7 @@ const EditChannelModal = (props) => {
       tls_insecure_skip_verify:
         localInputs.tls_insecure_skip_verify === true,
       pass_through_body_enabled: localInputs.pass_through_body_enabled || false,
+      responses_compaction: localInputs.responses_compaction || undefined,
       system_prompt: localInputs.system_prompt || '',
       system_prompt_override: localInputs.system_prompt_override || false,
     };
@@ -2019,6 +2025,7 @@ const EditChannelModal = (props) => {
     delete localInputs.proxy;
     delete localInputs.tls_insecure_skip_verify;
     delete localInputs.pass_through_body_enabled;
+    delete localInputs.responses_compaction;
     delete localInputs.system_prompt;
     delete localInputs.system_prompt_override;
     delete localInputs.is_enterprise_account;

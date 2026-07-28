@@ -7,6 +7,39 @@ import (
 
 type ResponsesFunctionCallArgumentsFormat string
 
+type ResponsesRequestKind uint8
+
+const (
+	ResponsesNormal ResponsesRequestKind = iota
+	ResponsesCompactionTrigger
+	ResponsesCompactEndpoint
+	ResponsesCompactedContextContinuation
+)
+
+type CompactionCapability string
+
+const (
+	CompactionUnknown           CompactionCapability = "unknown"
+	CompactionDisabled          CompactionCapability = "disabled"
+	CompactionNativeV2          CompactionCapability = "native_v2"
+	CompactionLegacy            CompactionCapability = "legacy"
+	CompactionNativeV2AndLegacy CompactionCapability = "native_v2_and_legacy"
+)
+
+type ResponsesCompactionCapabilityRecord struct {
+	Capability         CompactionCapability `json:"capability,omitempty"`
+	NativeStream       bool                 `json:"native_stream,omitempty"`
+	Continuation       bool                 `json:"continuation,omitempty"`
+	PreferredTransport string               `json:"preferred_transport,omitempty"`
+	RouteFingerprint   string               `json:"route_fingerprint,omitempty"`
+	VerifiedAt         int64                `json:"verified_at,omitempty"`
+}
+
+type ResponsesCompactionSettings struct {
+	DefaultCapability *ResponsesCompactionCapabilityRecord           `json:"default_capability,omitempty"`
+	ModelCapabilities map[string]ResponsesCompactionCapabilityRecord `json:"model_capabilities,omitempty"`
+}
+
 const (
 	ResponsesFunctionCallArgumentsFormatAuto   ResponsesFunctionCallArgumentsFormat = "auto"
 	ResponsesFunctionCallArgumentsFormatString ResponsesFunctionCallArgumentsFormat = "string"
@@ -48,6 +81,7 @@ type ChannelSettings struct {
 	// auto keeps the official string format, except Codex and runtime fallback
 	// retries that require a JSON object.
 	ResponsesFunctionCallArgumentsFormat ResponsesFunctionCallArgumentsFormat `json:"responses_function_call_arguments_format,omitempty"`
+	ResponsesCompaction                  *ResponsesCompactionSettings         `json:"responses_compaction,omitempty"`
 
 	// Auto-test settings
 	AutoTestInterval        int    `json:"auto_test_interval,omitempty"`          // minutes, 0 = use global

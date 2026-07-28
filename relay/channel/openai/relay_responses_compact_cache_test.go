@@ -17,7 +17,7 @@ func TestResponsesCompactionPreservesCacheWriteTokens(t *testing.T) {
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Body: io.NopCloser(strings.NewReader(
-			`{"usage":{"input_tokens":100,"output_tokens":5,"total_tokens":105,"input_tokens_details":{"cached_tokens":20,"cache_write_tokens":30}}}`,
+			`{"object":"response.compaction","output":[{"type":"compaction","encrypted_content":"ciphertext"}],"usage":{"input_tokens":100,"output_tokens":5,"total_tokens":105,"input_tokens_details":{"cached_tokens":20,"cache_write_tokens":30}}}`,
 		)),
 	}
 	usage, apiErr := OaiResponsesCompactionHandler(ctx, resp)

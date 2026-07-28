@@ -32,6 +32,7 @@ type RetryParam struct {
 	ForceResponsesFunctionCallArgumentsObject bool
 	LastSelectedChannelId                     int
 	ProviderRoutingPolicy                     *ProviderRoutingPolicy
+	ResponsesRequirement                      *ResponsesRoutingRequirement
 }
 
 func (p *RetryParam) GetRetry() int {
@@ -220,6 +221,9 @@ func channelMatchesRetryRequirements(param *RetryParam, channel *model.Channel) 
 			return false
 		}
 	}
+	if !ChannelMatchesResponsesRequirement(channel, param.ModelName, param.ResponsesRequirement, param.Request) {
+		return false
+	}
 	if !antipoison.ProductionRoutingAllowed(channel.Id, channel.GetSetting()) {
 		return false
 	}
@@ -241,7 +245,7 @@ func getRandomSatisfiedChannelWithRequirements(param *RetryParam, group string, 
 	if param == nil {
 		return nil, errors.New("retry param is nil")
 	}
-	if !param.RequireClaudeThinkingSupport && !param.RequireOpenAIResponsesSupport {
+	if !param.RequireClaudeThinkingSupport && !param.RequireOpenAIResponsesSupport && param.ResponsesRequirement == nil {
 		return model.GetRandomSatisfiedChannelExcludingWithPolicy(group, param.ModelName, retry, param.ExcludedChannelIds, param.ProviderRoutingPolicy)
 	}
 	excluded := param.ExcludedChannelIds

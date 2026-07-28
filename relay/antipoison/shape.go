@@ -155,7 +155,7 @@ func ValidateResponsesResponseShape(resp *dto.OpenAIResponsesResponse, requestMo
 	}
 
 	// Validate object field
-	if resp.Object != "" && resp.Object != "response" {
+	if resp.Object != "" && resp.Object != "response" && resp.Object != "response.compaction" {
 		return shapeError("responses object invalid: %q", resp.Object)
 	}
 

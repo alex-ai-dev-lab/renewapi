@@ -4450,6 +4450,113 @@ export function ChannelMutateDrawer({
                           )}
                         />
 
+                        <FormField
+                          control={form.control}
+                          name='responses_compaction_capability'
+                          render={({ field }) => (
+                            <FormItem className='flex items-center justify-between gap-4 px-4 py-3'>
+                              <div className='space-y-0.5'>
+                                <FormLabel>
+                                  {t('Responses Compaction')}
+                                </FormLabel>
+                                <FormDescription>
+                                  {t('Verified upstream compaction transports')}
+                                </FormDescription>
+                              </div>
+                              <Select
+                                value={field.value || 'unknown'}
+                                onValueChange={field.onChange}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className='w-[200px]'>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent alignItemWithTrigger={false}>
+                                  <SelectGroup>
+                                    <SelectItem value='unknown'>
+                                      {t('Unknown')}
+                                    </SelectItem>
+                                    <SelectItem value='disabled'>
+                                      {t('Disabled')}
+                                    </SelectItem>
+                                    <SelectItem value='native_v2'>
+                                      {t('Native V2')}
+                                    </SelectItem>
+                                    <SelectItem value='legacy'>
+                                      {t('Legacy')}
+                                    </SelectItem>
+                                    <SelectItem value='native_v2_and_legacy'>
+                                      {t('Native V2 + Legacy')}
+                                    </SelectItem>
+                                  </SelectGroup>
+                                </SelectContent>
+                              </Select>
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name='responses_compaction_native_stream'
+                          render={({ field }) => (
+                            <FormItem className='flex items-center justify-between px-4 py-3'>
+                              <div className='space-y-0.5'>
+                                <FormLabel>{t('Native Stream')}</FormLabel>
+                                <FormDescription>
+                                  {t('Native compaction streaming is verified')}
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name='responses_compaction_continuation'
+                          render={({ field }) => (
+                            <FormItem className='flex items-center justify-between px-4 py-3'>
+                              <div className='space-y-0.5'>
+                                <FormLabel>{t('Continuation')}</FormLabel>
+                                <FormDescription>
+                                  {t('Compacted state replay is verified')}
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name='responses_compaction_route_fingerprint'
+                          render={({ field }) => (
+                            <FormItem className='px-4 py-3'>
+                              <FormLabel>{t('Route Fingerprint')}</FormLabel>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  value={field.value || ''}
+                                  placeholder={t('Leave empty for manual configuration')}
+                                  className='font-mono'
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
                         {currentType !== 57 && (
                           <>
                             <FormField

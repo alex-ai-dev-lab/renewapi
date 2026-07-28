@@ -286,6 +286,7 @@ type OpenAIResponsesResponse struct {
 	MaxOutputTokens    int                `json:"max_output_tokens"`
 	Model              string             `json:"model"`
 	Output             []ResponsesOutput  `json:"output"`
+	RawOutput          json.RawMessage    `json:"-"`
 	ParallelToolCalls  bool               `json:"parallel_tool_calls"`
 	PreviousResponseID json.RawMessage    `json:"previous_response_id"`
 	Reasoning          *Reasoning         `json:"reasoning"`
@@ -346,16 +347,17 @@ type IncompleteDetails struct {
 }
 
 type ResponsesOutput struct {
-	Type      string                   `json:"type"`
-	ID        string                   `json:"id"`
-	Status    string                   `json:"status"`
-	Role      string                   `json:"role"`
-	Content   []ResponsesOutputContent `json:"content"`
-	Quality   string                   `json:"quality"`
-	Size      string                   `json:"size"`
-	CallId    string                   `json:"call_id,omitempty"`
-	Name      string                   `json:"name,omitempty"`
-	Arguments json.RawMessage          `json:"arguments,omitempty"`
+	Type             string                   `json:"type"`
+	ID               string                   `json:"id"`
+	Status           string                   `json:"status"`
+	Role             string                   `json:"role"`
+	Content          []ResponsesOutputContent `json:"content"`
+	Quality          string                   `json:"quality"`
+	Size             string                   `json:"size"`
+	CallId           string                   `json:"call_id,omitempty"`
+	Name             string                   `json:"name,omitempty"`
+	Arguments        json.RawMessage          `json:"arguments,omitempty"`
+	EncryptedContent json.RawMessage          `json:"encrypted_content,omitempty"`
 }
 
 // ArgumentsString returns function call arguments in the string form expected by Chat Completions.

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -13,6 +15,10 @@ import (
 )
 
 var inMemoryRateLimiter common.InMemoryRateLimiter
+
+const panelRateLimitAppliedKey = "panel_rate_limit_applied"
+
+var panelRedisErrorLogUnix atomic.Int64
 
 var redisSlidingWindowRateLimitScript = redis.NewScript(`
 local key = KEYS[1]
@@ -31,6 +37,30 @@ local member = tostring(now_ms) .. '-' .. tostring(redis.call('INCR', key .. ':s
 redis.call('ZADD', key, now_ms, member)
 redis.call('EXPIRE', key, ttl_seconds)
 redis.call('EXPIRE', key .. ':seq', ttl_seconds)
+return 1
+`)
+
+var redisWeightedSlidingWindowRateLimitScript = redis.NewScript(`
+local key = KEYS[1]
+local max_requests = tonumber(ARGV[1])
+local weight = tonumber(ARGV[2])
+local window_ms = tonumber(ARGV[3])
+local ttl_seconds = tonumber(ARGV[4])
+local now = redis.call('TIME')
+local now_ms = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
+redis.call('ZREMRANGEBYSCORE', key, 0, now_ms - window_ms)
+local current = redis.call('ZCARD', key)
+if current + weight > max_requests then
+  redis.call('EXPIRE', key, ttl_seconds)
+  return 0
+end
+local seq_key = key .. ':seq'
+for i = 1, weight do
+  local member = tostring(now_ms) .. '-' .. tostring(redis.call('INCR', seq_key))
+  redis.call('ZADD', key, now_ms, member)
+end
+redis.call('EXPIRE', key, ttl_seconds)
+redis.call('EXPIRE', seq_key, ttl_seconds)
 return 1
 `)
 
@@ -97,6 +127,38 @@ func redisSlidingWindowAllow(ctx context.Context, rdb *redis.Client, key string,
 	}
 	windowMs := duration * 1000
 	res, err := redisSlidingWindowRateLimitScript.Run(ctx, rdb, []string{key}, maxRequestNum, windowMs, ttlSeconds).Result()
+	if err != nil {
+		return false, err
+	}
+	return redisScriptBool(res)
+}
+
+func redisWeightedSlidingWindowAllow(ctx context.Context, rdb *redis.Client, key string, maxRequestNum int, duration int64, expiration time.Duration, weight int) (bool, error) {
+	if maxRequestNum <= 0 {
+		return true, nil
+	}
+	if weight <= 0 {
+		weight = 1
+	}
+	if weight > maxRequestNum {
+		return false, nil
+	}
+	if duration <= 0 {
+		duration = 1
+	}
+	ttlSeconds := int64(expiration.Seconds())
+	if ttlSeconds <= 0 {
+		ttlSeconds = duration
+	}
+	res, err := redisWeightedSlidingWindowRateLimitScript.Run(
+		ctx,
+		rdb,
+		[]string{key},
+		maxRequestNum,
+		weight,
+		duration*1000,
+		ttlSeconds,
+	).Result()
 	if err != nil {
 		return false, err
 	}
@@ -256,4 +318,89 @@ func SearchRateLimit() func(c *gin.Context) {
 		return defNext
 	}
 	return userRateLimitFactory(common.SearchRateLimitNum, common.SearchRateLimitDuration, "SR")
+}
+
+func PanelRateLimit() func(c *gin.Context) {
+	if !common.PanelRateLimitEnable {
+		return defNext
+	}
+	return func(c *gin.Context) {
+		if enforcePanelRateLimit(c) {
+			c.Next()
+		}
+	}
+}
+
+func enforcePanelRateLimit(c *gin.Context) bool {
+	if !common.PanelRateLimitEnable || c.GetBool(panelRateLimitAppliedKey) {
+		return true
+	}
+	userID := c.GetInt("id")
+	if userID <= 0 {
+		c.Status(http.StatusUnauthorized)
+		c.Abort()
+		return false
+	}
+	c.Set(panelRateLimitAppliedKey, true)
+
+	class := "write"
+	limit := common.PanelWriteRateLimitNum
+	if c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead {
+		class = "read"
+		limit = common.PanelReadRateLimitNum
+	}
+	weight := panelRequestWeight(c)
+	key := fmt.Sprintf("rateLimit:panel:%s:user:%d", class, userID)
+	allowed := false
+	if common.RedisEnabled && common.RDB != nil {
+		var err error
+		allowed, err = redisWeightedSlidingWindowAllow(c.Request.Context(), common.RDB, key, limit, common.PanelRateLimitDuration, common.RateLimitKeyExpirationDuration, weight)
+		if err != nil {
+			logPanelRedisFallback(err)
+			allowed = localPanelRateLimit(key, limit, weight)
+		}
+	} else {
+		allowed = localPanelRateLimit(key, limit, weight)
+	}
+	if !allowed {
+		c.Status(http.StatusTooManyRequests)
+		c.Abort()
+		return false
+	}
+	return true
+}
+
+func localPanelRateLimit(key string, limit int, weight int) bool {
+	inMemoryRateLimiter.Init(common.RateLimitKeyExpirationDuration)
+	return inMemoryRateLimiter.RequestN(key, limit, common.PanelRateLimitDuration, weight)
+}
+
+func panelRequestWeight(c *gin.Context) int {
+	path := c.FullPath()
+	if path == "" {
+		path = c.Request.URL.Path
+	}
+	switch {
+	case strings.HasPrefix(path, "/api/stats/"):
+		return 5
+	case strings.HasSuffix(path, "/export"):
+		return 5
+	case strings.Contains(path, "/capabilities/") && strings.HasSuffix(path, "/probe"):
+		return 5
+	case strings.Contains(path, "/update_balance"), strings.Contains(path, "/fetch_models"), strings.Contains(path, "/test"):
+		return 5
+	case strings.Contains(path, "/search"), strings.HasPrefix(path, "/api/data/"), path == "/api/log/stat", strings.HasPrefix(path, "/api/performance/"):
+		return 3
+	default:
+		return 1
+	}
+}
+
+func logPanelRedisFallback(err error) {
+	now := time.Now().Unix()
+	last := panelRedisErrorLogUnix.Load()
+	if now-last < 30 || !panelRedisErrorLogUnix.CompareAndSwap(last, now) {
+		return
+	}
+	common.SysLog(fmt.Sprintf("panel rate limiter Redis error; using local fallback: %v", err))
 }

@@ -257,6 +257,11 @@ var (
 	SearchRateLimitEnable         = true
 	SearchRateLimitNum            = 10
 	SearchRateLimitDuration int64 = 60
+
+	PanelRateLimitEnable         = true
+	PanelReadRateLimitNum        = 120
+	PanelWriteRateLimitNum       = 40
+	PanelRateLimitDuration int64 = 60
 )
 
 var RateLimitKeyExpirationDuration = 20 * time.Minute

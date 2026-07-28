@@ -173,6 +173,9 @@ func authHelper(c *gin.Context, minRole int) {
 	c.Set("group", session.Get("group"))
 	c.Set("user_group", session.Get("group"))
 	c.Set("use_access_token", useAccessToken)
+	if minRole >= common.RoleAdminUser && !enforcePanelRateLimit(c) {
+		return
+	}
 
 	c.Next()
 }

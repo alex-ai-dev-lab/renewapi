@@ -43,27 +43,41 @@ func (l *InMemoryRateLimiter) clearExpiredItems() {
 
 // Request parameter duration's unit is seconds
 func (l *InMemoryRateLimiter) Request(key string, maxRequestNum int, duration int64) bool {
+	return l.RequestN(key, maxRequestNum, duration, 1)
+}
+
+// RequestN atomically consumes weight entries from a sliding-window budget.
+func (l *InMemoryRateLimiter) RequestN(key string, maxRequestNum int, duration int64, weight int) bool {
+	if maxRequestNum <= 0 {
+		return true
+	}
+	if weight <= 0 {
+		weight = 1
+	}
+	if weight > maxRequestNum {
+		return false
+	}
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 	// [old <-- new]
 	queue, ok := l.store[key]
 	now := time.Now().Unix()
 	if ok {
-		if len(*queue) < maxRequestNum {
-			*queue = append(*queue, now)
-			return true
-		} else {
-			if now-(*queue)[0] >= duration {
-				*queue = (*queue)[1:]
-				*queue = append(*queue, now)
-				return true
-			} else {
-				return false
-			}
+		firstValid := 0
+		for firstValid < len(*queue) && now-(*queue)[firstValid] >= duration {
+			firstValid++
+		}
+		if firstValid > 0 {
+			*queue = (*queue)[firstValid:]
+		}
+		if len(*queue)+weight > maxRequestNum {
+			return false
 		}
 	} else {
 		s := make([]int64, 0, maxRequestNum)
 		l.store[key] = &s
+	}
+	for range weight {
 		*(l.store[key]) = append(*(l.store[key]), now)
 	}
 	return true

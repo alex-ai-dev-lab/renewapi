@@ -129,6 +129,11 @@ func InitEnv() {
 	SearchRateLimitEnable = GetEnvOrDefaultBool("SEARCH_RATE_LIMIT_ENABLE", true)
 	SearchRateLimitNum = GetEnvOrDefault("SEARCH_RATE_LIMIT", 10)
 	SearchRateLimitDuration = int64(GetEnvOrDefault("SEARCH_RATE_LIMIT_DURATION", 60))
+
+	PanelRateLimitEnable = GetEnvOrDefaultBool("PANEL_RATE_LIMIT_ENABLE", true)
+	PanelReadRateLimitNum = GetEnvOrDefault("PANEL_READ_RATE_LIMIT", 120)
+	PanelWriteRateLimitNum = GetEnvOrDefault("PANEL_WRITE_RATE_LIMIT", 40)
+	PanelRateLimitDuration = int64(GetEnvOrDefault("PANEL_RATE_LIMIT_DURATION", 60))
 	initConstantEnv()
 }
 

@@ -175,6 +175,16 @@ func TestBuildTestRequestUsesCodexShapedResponsesRequest(t *testing.T) {
 	require.False(t, *responseRequest.Stream)
 }
 
+func TestExtractCompactionItemFromTestBodySupportsJSONAndSSE(t *testing.T) {
+	jsonBody := []byte(`{"object":"response.compaction","output":[{"type":"compaction_summary","encrypted_content":"opaque"}]}`)
+	item := extractCompactionItemFromTestBody(jsonBody, false)
+	require.JSONEq(t, `{"type":"compaction_summary","encrypted_content":"opaque"}`, string(item))
+
+	sseBody := []byte("data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"compaction_summary\",\"encrypted_content\":\"opaque-stream\"}}\n\n")
+	item = extractCompactionItemFromTestBody(sseBody, true)
+	require.JSONEq(t, `{"type":"compaction_summary","encrypted_content":"opaque-stream"}`, string(item))
+}
+
 func TestShouldUseStreamForChannelTestUsesStreamingTextEndpoints(t *testing.T) {
 	channel := &model.Channel{
 		Id:      77,

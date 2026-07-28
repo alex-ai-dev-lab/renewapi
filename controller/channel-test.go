@@ -42,15 +42,22 @@ import (
 )
 
 type testResult struct {
-	context      *gin.Context
-	localErr     error
-	newAPIError  *types.NewAPIError
-	firstByteMs  int64
-	totalMs      int64
-	requestBody  string
-	responseBody string
-	httpStatus   int
-	endpoint     string
+	context        *gin.Context
+	localErr       error
+	newAPIError    *types.NewAPIError
+	firstByteMs    int64
+	totalMs        int64
+	requestBody    string
+	responseBody   string
+	httpStatus     int
+	endpoint       string
+	compactionItem json.RawMessage
+}
+
+type channelTestRequestOverride struct {
+	Request  dto.Request
+	Kind     dto.ResponsesRequestKind
+	IsStream bool
 }
 
 const channelTestNoncePrefix = "NEWAPI_TEST_"
@@ -216,6 +223,10 @@ func resolveChannelTestUserID(c *gin.Context) (int, error) {
 }
 
 func testChannel(channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) testResult {
+	return testChannelWithRequest(channel, testUserID, testModel, endpointType, isStream, nil)
+}
+
+func testChannelWithRequest(channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool, override *channelTestRequestOverride) testResult {
 	tik := time.Now()
 	cfg := operation_setting.GetChannelTestSetting()
 	var unsupportedTestChannelTypes = []int{
@@ -283,6 +294,9 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 		if shouldUseStreamForChannelTest(channel, testModel, endpointType) {
 			isStream = true
 		}
+	}
+	if override != nil {
+		isStream = override.IsStream
 	}
 
 	requestPath := "/v1/chat/completions"
@@ -415,7 +429,18 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 	if channelTestNonceEnabledForChannel(channel) && channelTestRequestSupportsNonce(endpointType, testModel, channel) {
 		testNonce = newChannelTestNonce()
 	}
+	if override != nil {
+		testNonce = ""
+	}
 	request := buildTestRequest(testModel, endpointType, channel, isStream, testNonce)
+	if override != nil {
+		if override.Request == nil {
+			return testResult{localErr: errors.New("channel test request override is nil")}
+		}
+		request = override.Request
+		c.Set(service.ContextKeyResponsesRequestKind, override.Kind)
+		c.Set("responses_client_stream", override.IsStream)
+	}
 
 	info, err := relaycommon.GenRelayInfo(c, relayFormat, request, nil)
 
@@ -596,30 +621,32 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 			newAPIError: types.NewError(err, types.ErrorCodeJsonMarshalFailed),
 		}
 	}
-	if effort := strings.TrimSpace(cfg.ReasoningEffort); effort != "" && effort != "none" {
-		// Scope reasoning effort by relay format: chat completions use the
-		// top-level reasoning_effort field, while the Responses API nests it under
-		// reasoning.effort. Other formats (embedding/rerank/image) reject the
-		// field, so they are intentionally left untouched.
-		switch relayFormat {
-		case types.RelayFormatOpenAI:
-			if v, setErr := sjson.SetBytes(jsonData, "reasoning_effort", effort); setErr == nil {
-				jsonData = v
-			}
-		case types.RelayFormatOpenAIResponses, types.RelayFormatOpenAIResponsesCompaction:
-			if v, setErr := sjson.SetBytes(jsonData, "reasoning.effort", effort); setErr == nil {
-				jsonData = v
+	if override == nil {
+		if effort := strings.TrimSpace(cfg.ReasoningEffort); effort != "" && effort != "none" {
+			// Scope reasoning effort by relay format: chat completions use the
+			// top-level reasoning_effort field, while the Responses API nests it under
+			// reasoning.effort. Other formats (embedding/rerank/image) reject the
+			// field, so they are intentionally left untouched.
+			switch relayFormat {
+			case types.RelayFormatOpenAI:
+				if v, setErr := sjson.SetBytes(jsonData, "reasoning_effort", effort); setErr == nil {
+					jsonData = v
+				}
+			case types.RelayFormatOpenAIResponses, types.RelayFormatOpenAIResponsesCompaction:
+				if v, setErr := sjson.SetBytes(jsonData, "reasoning.effort", effort); setErr == nil {
+					jsonData = v
+				}
 			}
 		}
-	}
-	// The Responses/Codex request body is built from a raw Input payload that
-	// ignores the struct-level max tokens, so honor an explicitly configured
-	// positive MaxTokens here. It is left unset by default (0) to avoid starving
-	// reasoning models on these endpoints.
-	if relayFormat == types.RelayFormatOpenAIResponses || relayFormat == types.RelayFormatOpenAIResponsesCompaction {
-		if n := cfg.MaxTokens; n > 0 {
-			if v, setErr := sjson.SetBytes(jsonData, "max_output_tokens", n); setErr == nil {
-				jsonData = v
+		// The Responses/Codex request body is built from a raw Input payload that
+		// ignores the struct-level max tokens, so honor an explicitly configured
+		// positive MaxTokens here. It is left unset by default (0) to avoid starving
+		// reasoning models on these endpoints.
+		if relayFormat == types.RelayFormatOpenAIResponses || relayFormat == types.RelayFormatOpenAIResponsesCompaction {
+			if n := cfg.MaxTokens; n > 0 {
+				if v, setErr := sjson.SetBytes(jsonData, "max_output_tokens", n); setErr == nil {
+					jsonData = v
+				}
 			}
 		}
 	}
@@ -721,6 +748,7 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 		actualStream = true
 		info.IsStream = true
 	}
+	compactionItem := extractCompactionItemFromTestBody(respBody, actualStream)
 	usage, usageErr := coerceTestUsage(usageA, actualStream, info.GetEstimatePromptTokens())
 	if usageErr != nil {
 		return testResult{
@@ -766,15 +794,16 @@ func testChannel(channel *model.Channel, testUserID int, testModel string, endpo
 		httpStatus = httpResp.StatusCode
 	}
 	return testResult{
-		context:      c,
-		localErr:     nil,
-		newAPIError:  nil,
-		firstByteMs:  firstByteMs,
-		totalMs:      time.Since(tik).Milliseconds(),
-		requestBody:  sanitizeTestPayload(jsonData),
-		responseBody: sanitizeTestPayload(respBody),
-		httpStatus:   httpStatus,
-		endpoint:     endpointType,
+		context:        c,
+		localErr:       nil,
+		newAPIError:    nil,
+		firstByteMs:    firstByteMs,
+		totalMs:        time.Since(tik).Milliseconds(),
+		requestBody:    sanitizeTestPayload(jsonData),
+		responseBody:   sanitizeTestPayload(respBody),
+		httpStatus:     httpStatus,
+		endpoint:       endpointType,
+		compactionItem: compactionItem,
 	}
 }
 
@@ -856,6 +885,60 @@ func readTestResponseBody(body io.ReadCloser, isStream bool) ([]byte, error) {
 		return io.ReadAll(io.LimitReader(body, maxStreamLogBytes))
 	}
 	return io.ReadAll(body)
+}
+
+func extractCompactionItemFromJSON(body []byte) json.RawMessage {
+	if !gjson.ValidBytes(body) {
+		return nil
+	}
+	validItem := func(item gjson.Result) json.RawMessage {
+		itemType := item.Get("type").String()
+		if itemType != "compaction" && itemType != "context_compaction" && itemType != "compaction_summary" {
+			return nil
+		}
+		encrypted := item.Get("encrypted_content")
+		if encrypted.Type != gjson.String || encrypted.String() == "" {
+			return nil
+		}
+		return append(json.RawMessage(nil), item.Raw...)
+	}
+	if item := gjson.GetBytes(body, "item"); item.IsObject() {
+		if raw := validItem(item); len(raw) > 0 {
+			return raw
+		}
+	}
+	for _, path := range []string{"output", "response.output"} {
+		items := gjson.GetBytes(body, path)
+		if !items.IsArray() {
+			continue
+		}
+		var found json.RawMessage
+		items.ForEach(func(_, item gjson.Result) bool {
+			found = validItem(item)
+			return len(found) == 0
+		})
+		if len(found) > 0 {
+			return found
+		}
+	}
+	return nil
+}
+
+func extractCompactionItemFromTestBody(body []byte, isStream bool) json.RawMessage {
+	if !isStream {
+		return extractCompactionItemFromJSON(body)
+	}
+	for _, line := range bytes.Split(body, []byte{'\n'}) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, []byte("data:")) {
+			continue
+		}
+		data := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
+		if item := extractCompactionItemFromJSON(data); len(item) > 0 {
+			return item
+		}
+	}
+	return nil
 }
 
 func detectErrorFromTestResponseBody(respBody []byte) error {

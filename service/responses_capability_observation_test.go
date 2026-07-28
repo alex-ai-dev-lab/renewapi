@@ -145,6 +145,52 @@ func TestManualCapabilityOverridesObservedEvidence(t *testing.T) {
 	}, nil))
 }
 
+func TestNewerObservedFacetRefreshesMeasuredCapability(t *testing.T) {
+	setupResponsesCapabilityTestDB(t)
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+	channel := compactTestChannel()
+	channel.SetSetting(dto.ChannelSettings{ResponsesCompaction: &dto.ResponsesCompactionSettings{
+		ModelCapabilities: map[string]dto.ResponsesCompactionCapabilityRecord{
+			"gpt-5.5": {
+				Capability:   dto.CompactionNativeV2,
+				NativeStream: true,
+				Continuation: true,
+				VerifiedAt:   1,
+			},
+		},
+	}})
+
+	ObserveResponsesCapabilityAttempt(channel, "gpt-5.5", ResponsesCapabilityAttempt{
+		Kind:       dto.ResponsesCompactEndpoint,
+		UsedLegacy: true,
+		Source:     "probe",
+	}, nil)
+
+	record := EffectiveResponsesCompactionRecord(channel, "gpt-5.5")
+	require.Equal(t, dto.CompactionNativeV2AndLegacy, record.Capability)
+	require.True(t, record.NativeStream)
+	require.True(t, record.Continuation)
+	require.True(t, ChannelMatchesResponsesRequirement(channel, "gpt-5.5", &ResponsesRoutingRequirement{
+		Kind: dto.ResponsesCompactEndpoint,
+	}, nil))
+}
+
+func TestNewerObservedFacetDoesNotOverrideUntimestampedManualCapability(t *testing.T) {
+	setupResponsesCapabilityTestDB(t)
+	channel := compactTestChannel()
+	channel.SetSetting(dto.ChannelSettings{ResponsesCompaction: &dto.ResponsesCompactionSettings{
+		ModelCapabilities: map[string]dto.ResponsesCompactionCapabilityRecord{
+			"gpt-5.5": {Capability: dto.CompactionNativeV2},
+		},
+	}})
+	ObserveResponsesCapabilityAttempt(channel, "gpt-5.5", ResponsesCapabilityAttempt{
+		Kind:       dto.ResponsesCompactEndpoint,
+		UsedLegacy: true,
+		Source:     "probe",
+	}, nil)
+	require.Equal(t, dto.CompactionNativeV2, EffectiveResponsesCompactionRecord(channel, "gpt-5.5").Capability)
+}
+
 func TestManualUnknownFallsBackToObservedEvidence(t *testing.T) {
 	setupResponsesCapabilityTestDB(t)
 	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")

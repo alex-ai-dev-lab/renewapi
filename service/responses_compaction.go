@@ -261,6 +261,57 @@ func observedCompactionCapability(channel *model.Channel, modelName string) (dto
 	return record, true
 }
 
+func mergeMeasuredCompactionCapability(
+	channel *model.Channel,
+	modelName string,
+	measured dto.ResponsesCompactionCapabilityRecord,
+) (dto.ResponsesCompactionCapabilityRecord, bool) {
+	if channel == nil || measured.VerifiedAt <= 0 {
+		return dto.ResponsesCompactionCapabilityRecord{}, false
+	}
+	observed, found := model.GetChannelModelCapability(channel.Id, modelName, model.ChannelCapabilityResponsesCompaction)
+	if !found || observed.VerifiedAt < measured.VerifiedAt || observed.RouteFingerprint == "" ||
+		!strings.EqualFold(observed.RouteFingerprint, ResponsesObservedRouteFingerprint(channel, modelName)) {
+		return dto.ResponsesCompactionCapabilityRecord{}, false
+	}
+
+	legacy := measured.Capability == dto.CompactionLegacy || measured.Capability == dto.CompactionNativeV2AndLegacy
+	native := measured.Capability == dto.CompactionNativeV2 || measured.Capability == dto.CompactionNativeV2AndLegacy
+	applyFacet := func(status int, value *bool) {
+		switch status {
+		case model.ChannelCapabilityStatusSupported:
+			*value = true
+		case model.ChannelCapabilityStatusUnsupported:
+			*value = false
+		}
+	}
+	applyFacet(observed.LegacyStatus, &legacy)
+	applyFacet(observed.NativeStatus, &native)
+	applyFacet(observed.NativeStreamStatus, &measured.NativeStream)
+	applyFacet(observed.ContinuationStatus, &measured.Continuation)
+
+	switch {
+	case legacy && native:
+		measured.Capability = dto.CompactionNativeV2AndLegacy
+	case legacy:
+		measured.Capability = dto.CompactionLegacy
+	case native:
+		measured.Capability = dto.CompactionNativeV2
+	default:
+		measured.Capability = dto.CompactionDisabled
+	}
+	if native {
+		measured.PreferredTransport = "native_v2"
+	} else if legacy {
+		measured.PreferredTransport = "legacy"
+	} else {
+		measured.PreferredTransport = ""
+	}
+	measured.RouteFingerprint = observed.RouteFingerprint
+	measured.VerifiedAt = observed.VerifiedAt
+	return measured, true
+}
+
 func effectiveCompactionCapability(channel *model.Channel, modelName string) dto.ResponsesCompactionCapabilityRecord {
 	record, configured := responseCapabilityRecord(channel, modelName)
 	if configured {
@@ -269,6 +320,9 @@ func effectiveCompactionCapability(channel *model.Channel, modelName string) dto
 			// route-scoped observed evidence before returning unknown.
 			configured = false
 		} else {
+			if merged, ok := mergeMeasuredCompactionCapability(channel, modelName, record); ok {
+				return merged
+			}
 			return record
 		}
 	}

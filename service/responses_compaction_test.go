@@ -262,3 +262,26 @@ func TestValidateCompactionResponse(t *testing.T) {
 		require.Error(t, ValidateCompactionResponse(body), string(bytes.Clone(body)))
 	}
 }
+
+func TestValidateCompactionResponseLimits(t *testing.T) {
+	valid := []byte(`{"object":"response.compaction","output":[{"type":"compaction_summary","encrypted_content":"abcd"}],"usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}`)
+
+	t.Run("body", func(t *testing.T) {
+		t.Setenv("RESPONSES_COMPACTION_MAX_BODY_BYTES", "32")
+		require.ErrorContains(t, ValidateCompactionResponse(valid), "body size limit")
+	})
+	t.Run("items", func(t *testing.T) {
+		t.Setenv("RESPONSES_COMPACTION_MAX_ITEMS", "0")
+		require.ErrorContains(t, ValidateCompactionResponse(valid), "output item limit")
+	})
+	t.Run("per item encrypted", func(t *testing.T) {
+		t.Setenv("RESPONSES_COMPACTION_MAX_ENCRYPTED_BYTES", "3")
+		require.ErrorContains(t, ValidateCompactionResponse(valid), "encrypted_content size limit")
+	})
+	t.Run("total encrypted", func(t *testing.T) {
+		t.Setenv("RESPONSES_COMPACTION_MAX_ENCRYPTED_BYTES", "8")
+		t.Setenv("RESPONSES_COMPACTION_MAX_TOTAL_ENCRYPTED_BYTES", "6")
+		body := []byte(`{"object":"response.compaction","output":[{"type":"compaction_summary","encrypted_content":"abcd"},{"type":"compaction","encrypted_content":"efgh"}],"usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}`)
+		require.ErrorContains(t, ValidateCompactionResponse(body), "total encrypted_content size limit")
+	})
+}

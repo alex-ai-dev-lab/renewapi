@@ -506,6 +506,10 @@ func BuildResponsesCompactionRequestBody(body []byte, plan ResponsesExecutionPla
 }
 
 func ValidateCompactionResponse(body []byte) error {
+	maxBodyBytes := common.GetEnvOrDefault("RESPONSES_COMPACTION_MAX_BODY_BYTES", 16*1024*1024)
+	if maxBodyBytes > 0 && len(body) > maxBodyBytes {
+		return fmt.Errorf("compaction response body size limit exceeded")
+	}
 	if !gjson.ValidBytes(body) {
 		return fmt.Errorf("invalid compaction response JSON")
 	}
@@ -528,7 +532,9 @@ func ValidateCompactionResponse(body []byte) error {
 	}
 	maxItems := common.GetEnvOrDefault("RESPONSES_COMPACTION_MAX_ITEMS", 64)
 	maxEncrypted := common.GetEnvOrDefault("RESPONSES_COMPACTION_MAX_ENCRYPTED_BYTES", 8*1024*1024)
+	maxTotalEncrypted := common.GetEnvOrDefault("RESPONSES_COMPACTION_MAX_TOTAL_ENCRYPTED_BYTES", 12*1024*1024)
 	validItems := 0
+	totalEncryptedBytes := 0
 	items := output.Array()
 	if len(items) > maxItems {
 		return fmt.Errorf("compaction response output item limit exceeded")
@@ -547,6 +553,10 @@ func ValidateCompactionResponse(body []byte) error {
 		}
 		if len(encrypted.String()) > maxEncrypted {
 			return fmt.Errorf("compaction encrypted_content size limit exceeded")
+		}
+		totalEncryptedBytes += len(encrypted.String())
+		if maxTotalEncrypted > 0 && totalEncryptedBytes > maxTotalEncrypted {
+			return fmt.Errorf("compaction total encrypted_content size limit exceeded")
 		}
 		validItems++
 	}

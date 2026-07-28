@@ -47,3 +47,20 @@ func TestChannelModelCapabilityUpsertNormalizesAndCaches(t *testing.T) {
 	require.Positive(t, record.CreatedTime)
 	require.Positive(t, record.UpdatedTime)
 }
+
+func TestReloadChannelModelCapabilityCacheRetainsLastKnownGoodOnFailure(t *testing.T) {
+	setupChannelModelCapabilityTestDB(t)
+	require.NoError(t, UpsertChannelModelCapability(ChannelModelCapability{
+		ChannelId:        71,
+		ModelName:        "gpt-5.5",
+		Capability:       ChannelCapabilityResponsesCompaction,
+		NativeStatus:     ChannelCapabilityStatusSupported,
+		RouteFingerprint: "fingerprint",
+	}))
+	require.NoError(t, DB.Migrator().DropTable(&ChannelModelCapability{}))
+	require.Error(t, ReloadChannelModelCapabilityCacheWithError())
+
+	record, found := GetChannelModelCapability(71, "gpt-5.5", ChannelCapabilityResponsesCompaction)
+	require.True(t, found)
+	require.Equal(t, "fingerprint", record.RouteFingerprint)
+}

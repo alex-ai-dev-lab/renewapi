@@ -29,8 +29,9 @@ type ResponsesCapabilityAttempt struct {
 }
 
 type ResponsesCapabilityOutcome struct {
-	Related     bool
-	Unsupported bool
+	Related          bool
+	Unsupported      bool
+	PersistenceError error
 }
 
 func (a ResponsesCapabilityAttempt) Related() bool {
@@ -182,7 +183,7 @@ func ObserveResponsesCapabilityAttempt(
 		record.FailureCount = 0
 		record.LastStatusCode = 0
 		record.LastError = ""
-		_ = model.UpsertChannelModelCapability(record)
+		outcome.PersistenceError = persistObservedResponsesCapability(record)
 		return outcome
 	}
 
@@ -191,7 +192,7 @@ func ObserveResponsesCapabilityAttempt(
 			record.NextProbeAt = now.Add(6 * time.Hour).Unix()
 			record.LastStatusCode = err.StatusCode
 			record.LastError = common.LocalLogPreview(err.MaskSensitiveErrorWithStatusCode())
-			_ = model.UpsertChannelModelCapability(record)
+			outcome.PersistenceError = persistObservedResponsesCapability(record)
 		}
 		return outcome
 	}
@@ -207,8 +208,16 @@ func ObserveResponsesCapabilityAttempt(
 	} else {
 		record.BlockedUntil = 0
 	}
-	_ = model.UpsertChannelModelCapability(record)
+	outcome.PersistenceError = persistObservedResponsesCapability(record)
 	return outcome
+}
+
+func persistObservedResponsesCapability(record model.ChannelModelCapability) error {
+	if err := model.UpsertChannelModelCapability(record); err != nil {
+		common.SysError("failed to persist responses capability observation: " + err.Error())
+		return err
+	}
+	return nil
 }
 
 func observedCapabilityFacetDecision(channel *model.Channel, modelName string, requirement *ResponsesRoutingRequirement) (bool, bool) {

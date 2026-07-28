@@ -66,6 +66,19 @@ func TestObservedNativeCapabilityEnablesStrictRouting(t *testing.T) {
 	require.True(t, record.NativeStream)
 }
 
+func TestCapabilityObservationReturnsPersistenceFailure(t *testing.T) {
+	setupResponsesCapabilityTestDB(t)
+	sqlDB, err := model.DB.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
+
+	outcome := ObserveResponsesCapabilityAttempt(compactTestChannel(), "gpt-5.5", ResponsesCapabilityAttempt{
+		Kind:   dto.ResponsesCompactionTrigger,
+		Source: "probe",
+	}, nil)
+	require.Error(t, outcome.PersistenceError)
+}
+
 func TestObservedLegacyUnsupportedDoesNotBecomeChannelFailure(t *testing.T) {
 	setupResponsesCapabilityTestDB(t)
 	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -153,52 +154,80 @@ func probeResponsesCompactionCapabilities(channel *model.Channel, testUserID int
 			(strings.EqualFold(record.Source, "probe") || responsesCompactionObservationComplete(record)) {
 			continue
 		}
-		responsesCompactionProbeSemaphore <- struct{}{}
-		result := testChannel(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponseCompact), false)
-		<-responsesCompactionProbeSemaphore
-		if result.localErr != nil && result.newAPIError == nil {
-			common.SysLog(fmt.Sprintf("responses compaction probe skipped: channel=%d model=%s error=%s", channel.Id, modelName, result.localErr.Error()))
-			continue
+		if _, err := probeResponsesCompactionCapabilityModel(channel, testUserID, modelName); err != nil {
+			common.SysLog(fmt.Sprintf("responses compaction probe incomplete: channel=%d model=%s error=%s", channel.Id, modelName, err.Error()))
 		}
-		service.ObserveResponsesCapabilityAttempt(channel, modelName, service.ResponsesCapabilityAttempt{
-			Kind:       dto.ResponsesCompactEndpoint,
-			UsedLegacy: true,
-			Source:     "probe",
-		}, result.newAPIError)
+		time.Sleep(100 * time.Millisecond)
+	}
+}
 
-		nativeRequest, err := buildResponsesCompactionProbeRequest(modelName, false, nil)
-		if err != nil {
-			common.SysLog(fmt.Sprintf("responses native compaction probe skipped: channel=%d model=%s error=%s", channel.Id, modelName, err.Error()))
-			continue
-		}
-		responsesCompactionProbeSemaphore <- struct{}{}
-		nativeResult := testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), false, &channelTestRequestOverride{
-			Request: nativeRequest,
-			Kind:    dto.ResponsesCompactionTrigger,
-		})
-		<-responsesCompactionProbeSemaphore
-		service.ObserveResponsesCapabilityAttempt(channel, modelName, service.ResponsesCapabilityAttempt{
-			Kind:   dto.ResponsesCompactionTrigger,
-			Source: "probe",
-		}, nativeResult.newAPIError)
+func runResponsesCapabilityProbe(call func() testResult) testResult {
+	responsesCompactionProbeSemaphore <- struct{}{}
+	defer func() { <-responsesCompactionProbeSemaphore }()
+	return call()
+}
 
-		streamRequest, err := buildResponsesCompactionProbeRequest(modelName, true, nil)
-		if err != nil {
-			common.SysLog(fmt.Sprintf("responses native stream compaction probe skipped: channel=%d model=%s error=%s", channel.Id, modelName, err.Error()))
-			continue
+func observeResponsesCapabilityProbeResult(channel *model.Channel, modelName string, attempt service.ResponsesCapabilityAttempt, result testResult) error {
+	if result.localErr != nil {
+		if result.newAPIError != nil {
+			return errors.New(common.LocalLogPreview(result.newAPIError.MaskSensitiveErrorWithStatusCode()))
 		}
-		responsesCompactionProbeSemaphore <- struct{}{}
-		streamResult := testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), true, &channelTestRequestOverride{
-			Request:  streamRequest,
-			Kind:     dto.ResponsesCompactionTrigger,
-			IsStream: true,
+		return errors.New(common.LocalLogPreview(common.MaskSensitiveInfo(result.localErr.Error())))
+	}
+	outcome := service.ObserveResponsesCapabilityAttempt(channel, modelName, attempt, result.newAPIError)
+	return outcome.PersistenceError
+}
+
+func probeResponsesCompactionCapabilityModel(channel *model.Channel, testUserID int, modelName string) (model.ChannelModelCapability, error) {
+	if channel == nil {
+		return model.ChannelModelCapability{}, errors.New("channel is required")
+	}
+	modelName = strings.TrimSuffix(strings.TrimSpace(modelName), ratio_setting.CompactModelSuffix)
+	if modelName == "" {
+		return model.ChannelModelCapability{}, errors.New("model is required")
+	}
+	var probeErrors []error
+
+	legacyResult := runResponsesCapabilityProbe(func() testResult {
+		return testChannel(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponseCompact), false)
+	})
+	if err := observeResponsesCapabilityProbeResult(channel, modelName, service.ResponsesCapabilityAttempt{
+		Kind: dto.ResponsesCompactEndpoint, UsedLegacy: true, Source: "probe",
+	}, legacyResult); err != nil {
+		probeErrors = append(probeErrors, fmt.Errorf("legacy probe: %w", err))
+	}
+
+	nativeRequest, err := buildResponsesCompactionProbeRequest(modelName, false, nil)
+	if err != nil {
+		probeErrors = append(probeErrors, fmt.Errorf("native request: %w", err))
+	} else {
+		nativeResult := runResponsesCapabilityProbe(func() testResult {
+			return testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), false, &channelTestRequestOverride{
+				Request: nativeRequest, Kind: dto.ResponsesCompactionTrigger,
+			})
 		})
-		<-responsesCompactionProbeSemaphore
-		service.ObserveResponsesCapabilityAttempt(channel, modelName, service.ResponsesCapabilityAttempt{
-			Kind:         dto.ResponsesCompactionTrigger,
-			ClientStream: true,
-			Source:       "probe",
-		}, streamResult.newAPIError)
+		if err := observeResponsesCapabilityProbeResult(channel, modelName, service.ResponsesCapabilityAttempt{
+			Kind: dto.ResponsesCompactionTrigger, Source: "probe",
+		}, nativeResult); err != nil {
+			probeErrors = append(probeErrors, fmt.Errorf("native probe: %w", err))
+		}
+
+		streamRequest, buildErr := buildResponsesCompactionProbeRequest(modelName, true, nil)
+		var streamResult testResult
+		if buildErr != nil {
+			probeErrors = append(probeErrors, fmt.Errorf("native stream request: %w", buildErr))
+		} else {
+			streamResult = runResponsesCapabilityProbe(func() testResult {
+				return testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), true, &channelTestRequestOverride{
+					Request: streamRequest, Kind: dto.ResponsesCompactionTrigger, IsStream: true,
+				})
+			})
+			if err := observeResponsesCapabilityProbeResult(channel, modelName, service.ResponsesCapabilityAttempt{
+				Kind: dto.ResponsesCompactionTrigger, ClientStream: true, Source: "probe",
+			}, streamResult); err != nil {
+				probeErrors = append(probeErrors, fmt.Errorf("native stream probe: %w", err))
+			}
+		}
 
 		compactedItem := nativeResult.compactionItem
 		if len(compactedItem) == 0 {
@@ -206,21 +235,25 @@ func probeResponsesCompactionCapabilities(channel *model.Channel, testUserID int
 		}
 		if len(compactedItem) > 0 {
 			continuationRequest, buildErr := buildResponsesCompactionProbeRequest(modelName, false, compactedItem)
-			if buildErr == nil {
-				responsesCompactionProbeSemaphore <- struct{}{}
-				continuationResult := testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), false, &channelTestRequestOverride{
-					Request: continuationRequest,
-					Kind:    dto.ResponsesCompactedContextContinuation,
+			if buildErr != nil {
+				probeErrors = append(probeErrors, fmt.Errorf("continuation request: %w", buildErr))
+			} else {
+				continuationResult := runResponsesCapabilityProbe(func() testResult {
+					return testChannelWithRequest(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponse), false, &channelTestRequestOverride{
+						Request: continuationRequest, Kind: dto.ResponsesCompactedContextContinuation,
+					})
 				})
-				<-responsesCompactionProbeSemaphore
-				service.ObserveResponsesCapabilityAttempt(channel, modelName, service.ResponsesCapabilityAttempt{
-					Kind:   dto.ResponsesCompactedContextContinuation,
-					Source: "probe",
-				}, continuationResult.newAPIError)
+				if err := observeResponsesCapabilityProbeResult(channel, modelName, service.ResponsesCapabilityAttempt{
+					Kind: dto.ResponsesCompactedContextContinuation, Source: "probe",
+				}, continuationResult); err != nil {
+					probeErrors = append(probeErrors, fmt.Errorf("continuation probe: %w", err))
+				}
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
+
+	record, _ := model.GetChannelModelCapability(channel.Id, modelName, model.ChannelCapabilityResponsesCompaction)
+	return record, errors.Join(probeErrors...)
 }
 
 func (t *channelTestTracker) recordTest(channelID int) {

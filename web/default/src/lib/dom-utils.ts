@@ -32,3 +32,32 @@ export function applyFaviconToDom(url: string) {
     // Ignore malformed URLs
   }
 }
+
+export function resolveInternalRedirect(
+  target: string | undefined,
+  fallback = '/dashboard'
+): string {
+  if (typeof window === 'undefined' || !target) return fallback
+  try {
+    if (target.includes('\\')) return fallback
+    const resolved = new URL(target, window.location.origin)
+    if (resolved.origin !== window.location.origin) return fallback
+    if (!['http:', 'https:'].includes(resolved.protocol)) return fallback
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`
+  } catch {
+    return fallback
+  }
+}
+
+export function resolveHttpRedirect(target: string | undefined): string | null {
+  if (!target) return null
+  try {
+    const resolved = new URL(target)
+    if (resolved.protocol !== 'https:' && resolved.protocol !== 'http:') {
+      return null
+    }
+    return resolved.href
+  } catch {
+    return null
+  }
+}

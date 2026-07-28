@@ -24,9 +24,7 @@ export async function getCacheStats(): Promise<{
   message?: string
   data?: CacheStats
 }> {
-  const res = await api.get('/api/option/channel_affinity_cache', {
-    disableDuplicate: true,
-  } as Record<string, unknown>)
+  const res = await api.get('/api/option/channel_affinity_cache')
   return res.data
 }
 
@@ -57,7 +55,6 @@ export async function getAffinityUsageCache(params: {
 }): Promise<{ success: boolean; message?: string; data?: unknown }> {
   const res = await api.get('/api/log/channel_affinity_usage_cache', {
     params,
-    disableDuplicate: true,
-  } as Record<string, unknown>)
+  })
   return res.data
 }

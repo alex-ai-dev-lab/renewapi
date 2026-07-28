@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api } from '@/lib/api'
+import { api, type ApiRequestConfig } from '@/lib/api'
 import type { QuotaDataItem, UptimeGroupResult } from './types'
 
 // ============================================================================
@@ -36,12 +36,13 @@ export async function getUserQuotaDates(
     default_time?: string
     username?: string
   },
-  isAdmin = false
+  isAdmin = false,
+  config: ApiRequestConfig = {}
 ) {
   const endpoint = isAdmin ? '/api/data' : '/api/data/self'
   const res = await api.get<{ success: boolean; data: QuotaDataItem[] }>(
     endpoint,
-    { params }
+    { ...config, params }
   )
   return res.data
 }
@@ -62,9 +63,10 @@ export async function getUserQuotaDataByUsers(params: {
 }
 
 // Get uptime monitoring status for all services
-export async function getUptimeStatus() {
+export async function getUptimeStatus(config: ApiRequestConfig = {}) {
   const res = await api.get<{ success: boolean; data: UptimeGroupResult[] }>(
-    '/api/uptime/status'
+    '/api/uptime/status',
+    config
   )
   return res.data
 }

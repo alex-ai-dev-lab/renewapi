@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { resolveHttpRedirect } from '@/lib/dom-utils'
 import {
   PAYMENT_TYPES,
   DEFAULT_PRESET_MULTIPLIERS,
@@ -44,14 +45,18 @@ function isSafariBrowser(): boolean {
 export function submitPaymentForm(
   url: string,
   params: Record<string, unknown>
-): void {
+): boolean {
+  const paymentUrl = resolveHttpRedirect(url)
+  if (!paymentUrl) return false
+
   const form = document.createElement('form')
-  form.action = url
+  form.action = paymentUrl
   form.method = 'POST'
 
   // Don't open in new tab for Safari
   if (!isSafariBrowser()) {
     form.target = '_blank'
+    form.rel = 'noopener noreferrer'
   }
 
   // Add form parameters
@@ -66,6 +71,7 @@ export function submitPaymentForm(
   document.body.appendChild(form)
   form.submit()
   document.body.removeChild(form)
+  return true
 }
 
 /**

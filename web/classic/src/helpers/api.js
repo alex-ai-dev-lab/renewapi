@@ -26,85 +26,70 @@ import {
 import axios from 'axios';
 import { MESSAGE_ROLES } from '../constants/playground.constants';
 
-export let API = axios.create({
-  baseURL: import.meta.env.VITE_REACT_APP_SERVER_URL
-    ? import.meta.env.VITE_REACT_APP_SERVER_URL
-    : '',
-  headers: {
-    'New-API-User': getUserIdFromLocalStorage(),
-    'Cache-Control': 'no-store',
-  },
-});
+const timeoutByClass = {
+  interactive: 30000,
+  background: 60000,
+  export: 120000,
+  upload: 300000,
+};
 
-
-function redirectToOAuthUrl(url, options = {}) {
-  const { openInNewTab = false } = options;
-  const targetUrl = typeof url === 'string' ? url : url.toString();
-
-  if (openInNewTab) {
-    window.open(targetUrl, '_blank');
-    return;
-  }
-
-  window.location.assign(targetUrl);
-}
-
-
-function patchAPIInstance(instance) {
-  const originalGet = instance.get.bind(instance);
-  const inFlightGetRequests = new Map();
-
-  const genKey = (url, config = {}) => {
-    const params = config.params ? JSON.stringify(config.params) : '{}';
-    return `${url}?${params}`;
-  };
-
-  instance.get = (url, config = {}) => {
-    if (config?.disableDuplicate) {
-      return originalGet(url, config);
-    }
-
-    const key = genKey(url, config);
-    if (inFlightGetRequests.has(key)) {
-      return inFlightGetRequests.get(key);
-    }
-
-    const reqPromise = originalGet(url, config).finally(() => {
-      inFlightGetRequests.delete(key);
-    });
-
-    inFlightGetRequests.set(key, reqPromise);
-    return reqPromise;
-  };
-}
-
-patchAPIInstance(API);
-
-export function updateAPI() {
-  API = axios.create({
-    baseURL: import.meta.env.VITE_REACT_APP_SERVER_URL
-      ? import.meta.env.VITE_REACT_APP_SERVER_URL
-      : '',
+function createAPIInstance() {
+  const instance = axios.create({
+    baseURL: import.meta.env.VITE_REACT_APP_SERVER_URL || '',
     headers: {
       'New-API-User': getUserIdFromLocalStorage(),
       'Cache-Control': 'no-store',
     },
   });
 
-  patchAPIInstance(API);
+  instance.interceptors.request.use((config) => {
+    if (!config.timeout && config.timeoutClass) {
+      config.timeout = timeoutByClass[config.timeoutClass];
+    }
+    return config;
+  });
+
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.config && error.config.skipErrorHandler) {
+        return Promise.reject(error);
+      }
+      showError(error);
+      return Promise.reject(error);
+    },
+  );
+
+  return instance;
 }
 
-API.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // 如果请求配置中显式要求跳过全局错误处理，则不弹出默认错误提示
-    if (error.config && error.config.skipErrorHandler) {
-      return Promise.reject(error);
+export let API = createAPIInstance();
+
+function redirectToOAuthUrl(url, options = {}) {
+  const { openInNewTab = false } = options;
+  let targetUrl;
+  try {
+    const parsed = new URL(typeof url === 'string' ? url : url.toString());
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      throw new Error('unsupported OAuth URL protocol');
     }
-    showError(error);
-    return Promise.reject(error);
-  },
-);
+    targetUrl = parsed.href;
+  } catch {
+    showError('OAuth 配置错误：授权端点必须是有效的 HTTP(S) URL');
+    return;
+  }
+
+  if (openInNewTab) {
+    window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
+  window.location.assign(targetUrl);
+}
+
+export function updateAPI() {
+  API = createAPIInstance();
+}
 
 // playground
 

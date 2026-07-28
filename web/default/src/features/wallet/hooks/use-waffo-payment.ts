@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useCallback } from 'react'
 import i18next from 'i18next'
 import { toast } from 'sonner'
+import { resolveHttpRedirect } from '@/lib/dom-utils'
 import { requestWaffoPayment, isApiSuccess } from '../api'
 
 function getPaymentUrl(data: unknown): string | null {
@@ -61,7 +62,12 @@ export function useWaffoPayment() {
           const paymentUrl = getPaymentUrl(response.data)
 
           if (paymentUrl) {
-            window.open(paymentUrl, '_blank')
+            const safePaymentUrl = resolveHttpRedirect(paymentUrl)
+            if (!safePaymentUrl) {
+              toast.error(i18next.t('Invalid payment redirect URL'))
+              return false
+            }
+            window.open(safePaymentUrl, '_blank', 'noopener,noreferrer')
             toast.success(i18next.t('Redirecting to payment page...'))
             return true
           }

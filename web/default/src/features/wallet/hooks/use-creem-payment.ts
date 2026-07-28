@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useCallback } from 'react'
 import i18next from 'i18next'
 import { toast } from 'sonner'
+import { resolveHttpRedirect } from '@/lib/dom-utils'
 import { requestCreemPayment, isApiSuccess } from '../api'
 
 /**
@@ -36,7 +37,12 @@ export function useCreemPayment() {
       })
 
       if (isApiSuccess(response) && response.data?.checkout_url) {
-        window.open(response.data.checkout_url, '_blank')
+        const checkoutUrl = resolveHttpRedirect(response.data.checkout_url)
+        if (!checkoutUrl) {
+          toast.error(i18next.t('Invalid payment redirect URL'))
+          return false
+        }
+        window.open(checkoutUrl, '_blank', 'noopener,noreferrer')
         toast.success(i18next.t('Redirecting to Creem checkout...'))
         return true
       }

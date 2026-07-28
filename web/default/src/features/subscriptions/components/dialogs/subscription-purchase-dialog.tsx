@@ -16,11 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Crown, CalendarClock, Package } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { DEFAULT_CURRENCY_CONFIG } from '@/stores/system-config-store'
+import { resolveHttpRedirect } from '@/lib/dom-utils'
 import { formatQuota } from '@/lib/format'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -75,15 +76,17 @@ export function SubscriptionPurchaseDialog(props: Props) {
   const { t } = useTranslation()
   const { currency } = useSystemConfig()
   const [paying, setPaying] = useState(false)
-  const [selectedEpayMethod, setSelectedEpayMethod] = useState('')
-
-  useEffect(() => {
-    if (props.open && props.epayMethods && props.epayMethods.length > 0) {
-      setSelectedEpayMethod(props.epayMethods[0].type)
-    } else if (!props.open) {
-      setSelectedEpayMethod('')
-    }
-  }, [props.open, props.epayMethods])
+  const [selectedEpayMethodOverride, setSelectedEpayMethod] = useState('')
+  const availableEpayMethods = props.epayMethods || []
+  let selectedEpayMethod = ''
+  if (props.open) {
+    const overrideIsAvailable = availableEpayMethods.some(
+      (method) => method.type === selectedEpayMethodOverride
+    )
+    selectedEpayMethod = overrideIsAvailable
+      ? selectedEpayMethodOverride
+      : availableEpayMethods[0]?.type || ''
+  }
 
   const plan = props.plan?.plan
   if (!plan) return null
@@ -92,12 +95,10 @@ export function SubscriptionPurchaseDialog(props: Props) {
   const hasCreem = props.enableCreem && !!plan.creem_product_id
   const hasWaffoPancake =
     props.enableWaffoPancake && !!plan.waffo_pancake_product_id
-  const hasEpay =
-    props.enableOnlineTopUp && (props.epayMethods || []).length > 0
+  const hasEpay = props.enableOnlineTopUp && availableEpayMethods.length > 0
   const hasAnyPayment = hasStripe || hasCreem || hasWaffoPancake || hasEpay
   const selectedEpayMethodLabel =
-    (props.epayMethods || []).find((m) => m.type === selectedEpayMethod)
-      ?.name ||
+    availableEpayMethods.find((m) => m.type === selectedEpayMethod)?.name ||
     selectedEpayMethod ||
     t('Select payment method')
   const totalAmount = Number(plan.total_amount || 0)
@@ -121,7 +122,12 @@ export function SubscriptionPurchaseDialog(props: Props) {
     try {
       const res = await paySubscriptionStripe({ plan_id: plan.id })
       if (res.message === 'success' && res.data?.pay_link) {
-        window.open(res.data.pay_link, '_blank')
+        const paymentUrl = resolveHttpRedirect(res.data.pay_link)
+        if (!paymentUrl) {
+          toast.error(t('Invalid payment redirect URL'))
+          return
+        }
+        window.open(paymentUrl, '_blank', 'noopener,noreferrer')
         toast.success(t('Payment page opened'))
         props.onOpenChange(false)
       } else {
@@ -143,7 +149,12 @@ export function SubscriptionPurchaseDialog(props: Props) {
     try {
       const res = await paySubscriptionCreem({ plan_id: plan.id })
       if (res.message === 'success' && res.data?.checkout_url) {
-        window.open(res.data.checkout_url, '_blank')
+        const checkoutUrl = resolveHttpRedirect(res.data.checkout_url)
+        if (!checkoutUrl) {
+          toast.error(t('Invalid payment redirect URL'))
+          return
+        }
+        window.open(checkoutUrl, '_blank', 'noopener,noreferrer')
         toast.success(t('Payment page opened'))
         props.onOpenChange(false)
       } else {
@@ -167,8 +178,13 @@ export function SubscriptionPurchaseDialog(props: Props) {
     try {
       const res = await paySubscriptionWaffoPancake({ plan_id: plan.id })
       if (res.message === 'success' && res.data?.checkout_url) {
+        const checkoutUrl = resolveHttpRedirect(res.data.checkout_url)
+        if (!checkoutUrl) {
+          toast.error(t('Invalid payment redirect URL'))
+          return
+        }
         toast.success(t('Redirecting to payment page...'))
-        window.location.href = res.data.checkout_url
+        window.location.href = checkoutUrl
       } else {
         toast.error(
           res.message && res.message !== 'success'
@@ -199,11 +215,17 @@ export function SubscriptionPurchaseDialog(props: Props) {
         payment_method: selectedEpayMethod,
       })
       if (res.message === 'success' && res.url) {
+        const paymentUrl = resolveHttpRedirect(res.url)
+        if (!paymentUrl) {
+          toast.error(t('Invalid payment redirect URL'))
+          return
+        }
         const form = document.createElement('form')
-        form.action = res.url
+        form.action = paymentUrl
         form.method = 'POST'
         if (!isSafari) {
           form.target = '_blank'
+          form.rel = 'noopener noreferrer'
         }
         Object.entries(res.data || {}).forEach(([key, value]) => {
           const input = document.createElement('input')

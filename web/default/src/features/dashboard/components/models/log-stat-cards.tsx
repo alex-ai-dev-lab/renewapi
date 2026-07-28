@@ -70,7 +70,10 @@ export function LogStatCards(props: LogStatCardsProps) {
     const timeDiff = (timeRange.end_timestamp - timeRange.start_timestamp) / 60
     setTimeRangeMinutes(timeDiff)
 
-    getUserQuotaDates(buildQueryParams(timeRange, filters), isAdmin)
+    getUserQuotaDates(buildQueryParams(timeRange, filters), isAdmin, {
+      signal: abortController.signal,
+      timeoutClass: 'background',
+    })
       .then((res) => {
         if (abortController.signal.aborted) return
         const data = res?.data || []

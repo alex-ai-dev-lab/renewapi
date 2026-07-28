@@ -20,6 +20,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Download, Loader2, RefreshCcw, Terminal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { sanitizeDownloadFilename } from '@/lib/security-boundaries'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -136,7 +137,10 @@ export function ViewLogsDialog({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `deployment-${deploymentId}-${containerId || 'logs'}.txt`
+    a.download = sanitizeDownloadFilename(
+      `deployment-${deploymentId}-${containerId || 'logs'}.txt`,
+      'deployment-logs.txt'
+    )
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -304,7 +308,9 @@ export function ViewLogsDialog({
               {t('Please select a container')}
             </div>
           ) : !logsText.trim() ? (
-            <div className='text-muted-foreground py-8 text-center'>{t('No logs')}</div>
+            <div className='text-muted-foreground py-8 text-center'>
+              {t('No logs')}
+            </div>
           ) : (
             <div className='font-mono text-sm'>
               {logLines.map((line, idx) => (

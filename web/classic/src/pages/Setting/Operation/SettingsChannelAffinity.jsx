@@ -376,9 +376,7 @@ export default function SettingsChannelAffinity(props) {
   const refreshCacheStats = async () => {
     try {
       setCacheLoading(true);
-      const res = await API.get('/api/option/channel_affinity_cache', {
-        disableDuplicate: true,
-      });
+      const res = await API.get('/api/option/channel_affinity_cache');
       const { success, message, data } = res.data;
       if (!success) return showError(t(message));
       setCacheStats(data || {});

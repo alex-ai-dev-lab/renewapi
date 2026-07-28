@@ -88,6 +88,8 @@ import {
 } from '@douyinfe/semi-icons';
 
 const { Text, Title } = Typography;
+const MAX_CREDENTIAL_FILE_COUNT = 100;
+const MAX_CREDENTIAL_FILE_BYTES = 1024 * 1024;
 
 const MODEL_MAPPING_EXAMPLE = {
   'gpt-3.5-turbo': 'gpt-3.5-turbo-0125',
@@ -1600,6 +1602,32 @@ const EditChannelModal = (props) => {
   const handleVertexUploadChange = ({ fileList }) => {
     vertexErroredNames.current.clear();
     (async () => {
+      if (fileList.length > MAX_CREDENTIAL_FILE_COUNT) {
+        showError(t('密钥文件不能超过 100 个'));
+        setVertexFileList([]);
+        formApiRef.current?.setValue('vertex_files', []);
+        return;
+      }
+
+      const rejectedFile = fileList.find((item) => {
+        const file = item.fileInstance;
+        if (!file) return false;
+        const isJsonName = file.name.toLowerCase().endsWith('.json');
+        const isJsonType = !file.type || file.type === 'application/json';
+        return file.size > MAX_CREDENTIAL_FILE_BYTES || !isJsonName || !isJsonType;
+      });
+      if (rejectedFile) {
+        const file = rejectedFile.fileInstance;
+        const reason =
+          file.size > MAX_CREDENTIAL_FILE_BYTES
+            ? t('单个密钥文件不能超过 1 MiB')
+            : t('仅支持 JSON 密钥文件');
+        showError(`${rejectedFile.name}: ${reason}`);
+        setVertexFileList([]);
+        formApiRef.current?.setValue('vertex_files', []);
+        return;
+      }
+
       let validFiles = [];
       let keys = [];
       const errorNames = [];

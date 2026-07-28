@@ -25,7 +25,7 @@ declare module 'axios' {
   export interface AxiosRequestConfig {
     skipBusinessError?: boolean
     skipErrorHandler?: boolean
-    disableDuplicate?: boolean
+    timeoutClass?: 'interactive' | 'background' | 'export' | 'upload'
   }
 }
 
@@ -46,31 +46,6 @@ export const api = axios.create({
     'Cache-Control': 'no-store', // Prevent caching
   },
 })
-
-// ============================================================================
-// Request Deduplication
-// ============================================================================
-
-// Deduplicate concurrent GET requests to the same URL
-// Prevents multiple identical requests from being sent simultaneously
-const inFlightGet = new Map<string, Promise<unknown>>()
-const originalGet = api.get.bind(api)
-
-api.get = ((url: string, config: ApiRequestConfig = {}) => {
-  const disableDuplicate = config.disableDuplicate
-  if (disableDuplicate) return originalGet(url, config)
-
-  const params = config.params ? JSON.stringify(config.params) : '{}'
-  const key = `${url}?${params}`
-
-  // Return existing in-flight request if available
-  if (inFlightGet.has(key)) return inFlightGet.get(key)!
-
-  // Create new request and clean up after completion
-  const req = originalGet(url, config).finally(() => inFlightGet.delete(key))
-  inFlightGet.set(key, req)
-  return req
-}) as typeof api.get
 
 // ============================================================================
 // Response Interceptor
@@ -160,6 +135,15 @@ export function getCommonHeaders(): Record<string, string> {
 
 // Attach user ID header for all requests
 api.interceptors.request.use((config) => {
+  const timeoutByClass = {
+    interactive: 30_000,
+    background: 60_000,
+    export: 120_000,
+    upload: 300_000,
+  } as const
+  if (!config.timeout && config.timeoutClass) {
+    config.timeout = timeoutByClass[config.timeoutClass]
+  }
   const uid = getUserId()
   if (uid) {
     // Custom header for user identification

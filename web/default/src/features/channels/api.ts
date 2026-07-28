@@ -440,7 +440,7 @@ export async function getCodexUsage(
 ): Promise<CodexUsageResponse> {
   const res = await api.get(
     `/api/channel/${channelId}/codex/usage`,
-    channelActionConfig({ disableDuplicate: true })
+    channelActionConfig()
   )
   return res.data
 }
@@ -467,7 +467,7 @@ export async function preflightCodexCredential(data: {
   const res = await api.post(
     '/api/channel/codex/credential/preflight',
     data,
-    channelActionConfig({ disableDuplicate: true })
+    channelActionConfig()
   )
   return res.data
 }

@@ -28,6 +28,7 @@ import i18next from 'i18next'
 import { toast } from 'sonner'
 import { useAuthStore, type AuthUser } from '@/stores/auth-store'
 import { api, getSelf } from '@/lib/api'
+import { resolveInternalRedirect } from '@/lib/dom-utils'
 import { OAuthCallbackScreen } from '@/features/auth/components/oauth-callback-screen'
 import { OAUTH_BIND_STORAGE_KEY } from '@/features/auth/constants'
 
@@ -59,19 +60,18 @@ function OAuthCallback() {
   useEffect(() => {
     ;(async () => {
       const safeNavigate = (target: string) => {
-        navigate({ to: target as never, replace: true })
+        const safeTarget = resolveInternalRedirect(target, '/dashboard')
+        navigate({ to: safeTarget as never, replace: true })
         if (typeof window !== 'undefined') {
           setTimeout(() => {
-            const normalizedTarget = target.startsWith('/')
-              ? target
-              : `/${target}`
+            const normalizedTarget = safeTarget
             const currentPath =
               window.location.pathname + window.location.search
             if (
               currentPath !== normalizedTarget &&
               currentPath !== `${normalizedTarget}/`
             ) {
-              window.location.replace(target)
+              window.location.replace(safeTarget)
             }
           }, 100)
         }

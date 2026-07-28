@@ -134,9 +134,10 @@ export function useOverviewStats(
 ) {
   return useQuery({
     queryKey: ['overview-stats', timeRange],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const res = await api.get<{ success: boolean; data: OverviewStats }>(
-        `/api/stats/overview?time_range=${timeRange}`
+        `/api/stats/overview?time_range=${timeRange}`,
+        { signal, timeoutClass: 'background' }
       )
       return res.data.data
     },
@@ -151,9 +152,10 @@ export function useChannelStats(
 ) {
   return useQuery({
     queryKey: ['channel-stats', timeRange],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const res = await api.get<{ success: boolean; data: ChannelStat[] }>(
-        `/api/stats/channels?time_range=${timeRange}`
+        `/api/stats/channels?time_range=${timeRange}`,
+        { signal, timeoutClass: 'background' }
       )
       return res.data.data
     },
@@ -168,9 +170,10 @@ export function useModelStats(
 ) {
   return useQuery({
     queryKey: ['model-stats', timeRange],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const res = await api.get<{ success: boolean; data: ModelStat[] }>(
-        `/api/stats/models?time_range=${timeRange}`
+        `/api/stats/models?time_range=${timeRange}`,
+        { signal, timeoutClass: 'background' }
       )
       return res.data.data
     },
@@ -187,9 +190,10 @@ export function useModelTrendStats(
   return useQuery({
     queryKey: ['model-trend-stats', timeRange, modelName],
     enabled: Boolean(modelName),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const res = await api.get<{ success: boolean; data: TrendPoint[] }>(
-        `/api/stats/model-trend?time_range=${timeRange}&model_name=${encodeURIComponent(modelName ?? '')}`
+        `/api/stats/model-trend?time_range=${timeRange}&model_name=${encodeURIComponent(modelName ?? '')}`,
+        { signal, timeoutClass: 'background' }
       )
       return res.data.data
     },
@@ -204,9 +208,10 @@ export function useUserStats(
 ) {
   return useQuery({
     queryKey: ['user-stats', timeRange],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const res = await api.get<{ success: boolean; data: UserStat[] }>(
-        `/api/stats/users?time_range=${timeRange}`
+        `/api/stats/users?time_range=${timeRange}`,
+        { signal, timeoutClass: 'background' }
       )
       return res.data.data
     },
@@ -223,9 +228,10 @@ export function useUserTrendStats(
   return useQuery({
     queryKey: ['user-trend-stats', timeRange, userId],
     enabled: Boolean(userId && userId > 0),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const res = await api.get<{ success: boolean; data: TrendPoint[] }>(
-        `/api/stats/user-trend?time_range=${timeRange}&user_id=${userId}`
+        `/api/stats/user-trend?time_range=${timeRange}&user_id=${userId}`,
+        { signal, timeoutClass: 'background' }
       )
       return res.data.data
     },
@@ -242,9 +248,10 @@ export function useChannelUserStats(
   return useQuery({
     queryKey: ['channel-user-stats', timeRange, channelId],
     enabled: Boolean(channelId && channelId > 0),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const res = await api.get<{ success: boolean; data: ChannelUserStat[] }>(
-        `/api/stats/channel-users?time_range=${timeRange}&channel_id=${channelId}`
+        `/api/stats/channel-users?time_range=${timeRange}&channel_id=${channelId}`,
+        { signal, timeoutClass: 'background' }
       )
       return res.data.data
     },
@@ -261,9 +268,10 @@ export function useChannelTrendStats(
   return useQuery({
     queryKey: ['channel-trend-stats', timeRange, channelId],
     enabled: Boolean(channelId && channelId > 0),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const res = await api.get<{ success: boolean; data: TrendPoint[] }>(
-        `/api/stats/channel-trend?time_range=${timeRange}&channel_id=${channelId}`
+        `/api/stats/channel-trend?time_range=${timeRange}&channel_id=${channelId}`,
+        { signal, timeoutClass: 'background' }
       )
       return res.data.data
     },

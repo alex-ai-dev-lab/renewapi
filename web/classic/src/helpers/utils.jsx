@@ -281,8 +281,19 @@ export function downloadTextAsFile(text, filename) {
   let url = URL.createObjectURL(blob);
   let a = document.createElement('a');
   a.href = url;
-  a.download = filename;
+  a.download = sanitizeDownloadFilename(filename);
   a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function sanitizeDownloadFilename(filename, fallback = 'download.txt') {
+  const cleaned = String(filename || '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/[<>:"/\\|?*]/g, '_')
+    .replace(/[. ]+$/g, '')
+    .trim()
+    .slice(0, 120);
+  return cleaned || fallback;
 }
 
 export const verifyJSON = (str) => {

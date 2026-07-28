@@ -51,7 +51,10 @@ export function UptimePanel() {
   useEffect(() => {
     const abortController = new AbortController()
 
-    getUptimeStatus()
+    getUptimeStatus({
+      signal: abortController.signal,
+      timeoutClass: 'background',
+    })
       .then((res) => {
         if (abortController.signal.aborted) return
         setGroups(res?.data || [])
@@ -75,7 +78,10 @@ export function UptimePanel() {
     const abortController = new AbortController()
     setRefreshing(true)
 
-    getUptimeStatus()
+    getUptimeStatus({
+      signal: abortController.signal,
+      timeoutClass: 'background',
+    })
       .then((res) => {
         if (abortController.signal.aborted) return
         setGroups(res?.data || [])

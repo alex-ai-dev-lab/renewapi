@@ -49,6 +49,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { getLobeIcon } from '@/lib/lobe-icon'
+import { validateCredentialFiles } from '@/lib/security-boundaries'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { useHiddenClickUnlock } from '@/hooks/use-hidden-click-unlock'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -1847,6 +1848,20 @@ export function ChannelMutateDrawer({
 
                                   if (files.length === 0) {
                                     toast.info(t('Please upload key file(s)'))
+                                    return
+                                  }
+                                  const validation =
+                                    validateCredentialFiles(files)
+                                  if (!validation.valid) {
+                                    toast.error(
+                                      t(
+                                        'Credential file rejected: {{reason}} {{name}}',
+                                        {
+                                          reason: validation.reason,
+                                          name: validation.fileName || '',
+                                        }
+                                      )
+                                    )
                                     return
                                   }
 
@@ -4548,7 +4563,9 @@ export function ChannelMutateDrawer({
                                 <Input
                                   {...field}
                                   value={field.value || ''}
-                                  placeholder={t('Leave empty for manual configuration')}
+                                  placeholder={t(
+                                    'Leave empty for manual configuration'
+                                  )}
                                   className='font-mono'
                                 />
                               </FormControl>

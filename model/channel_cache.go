@@ -44,6 +44,9 @@ func ReloadChannelCache() error {
 	if err := DB.Find(&abilities).Error; err != nil {
 		return err
 	}
+	if err := ReloadChannelModelCapabilityCacheWithError(); err != nil {
+		common.SysError("failed to reload channel model capability cache; keeping last-known-good snapshot: " + err.Error())
+	}
 	groups := make(map[string]bool)
 	for _, ability := range abilities {
 		groups[ability.Group] = true

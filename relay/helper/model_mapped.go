@@ -1,11 +1,10 @@
 package helper
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
+	basecommon "github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -24,46 +23,39 @@ func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Reque
 	if isResponsesCompact && strings.HasSuffix(originModelName, ratio_setting.CompactModelSuffix) {
 		mappingModelName = strings.TrimSuffix(originModelName, ratio_setting.CompactModelSuffix)
 	}
+	if isResponsesCompact && info.ModelMappingRoute.ChannelId == info.ChannelId && info.ModelMappingRoute.Source != "" {
+		mappingModelName = info.ModelMappingRoute.Source
+	}
 
 	// map model name
 	modelMapping := c.GetString("model_mapping")
 	if modelMapping != "" && modelMapping != "{}" {
-		modelMap := make(map[string]string)
-		err := json.Unmarshal([]byte(modelMapping), &modelMap)
+		modelMap, err := basecommon.ParseModelMapping(modelMapping)
 		if err != nil {
 			return fmt.Errorf("unmarshal_model_mapping_failed")
 		}
-
-		// 支持链式模型重定向，最终使用链尾的模型
-		currentModel := mappingModelName
-		visitedModels := map[string]bool{
-			currentModel: true,
+		candidates, err := basecommon.ResolveModelMappingCandidates(modelMap, mappingModelName)
+		if err != nil {
+			return fmt.Errorf("model_mapping_contains_cycle: %w", err)
 		}
-		for {
-			if mappedModel, exists := modelMap[currentModel]; exists && mappedModel != "" {
-				// 模型重定向循环检测，避免无限循环
-				if visitedModels[mappedModel] {
-					if mappedModel == currentModel {
-						if currentModel == info.OriginModelName {
-							info.IsModelMapped = false
-							return nil
-						} else {
-							info.IsModelMapped = true
-							break
-						}
-					}
-					return errors.New("model_mapping_contains_cycle")
-				}
-				visitedModels[mappedModel] = true
-				currentModel = mappedModel
-				info.IsModelMapped = true
-			} else {
-				break
+		channelId := info.ChannelId
+		if info.ModelMappingRoute.ChannelId != channelId || info.ModelMappingRoute.Source != mappingModelName {
+			info.ModelMappingRoute = common.ModelMappingRouteCursor{
+				ChannelId:  channelId,
+				Source:     mappingModelName,
+				Candidates: append([]string(nil), candidates...),
 			}
 		}
-		if info.IsModelMapped {
-			info.UpstreamModelName = currentModel
+		if len(info.ModelMappingRoute.Candidates) > 0 {
+			if info.ModelMappingRoute.Index < 0 || info.ModelMappingRoute.Index >= len(info.ModelMappingRoute.Candidates) {
+				info.ModelMappingRoute.Index = 0
+			}
+			mappedModel := info.ModelMappingRoute.Candidates[info.ModelMappingRoute.Index]
+			info.IsModelMapped = mappedModel != mappingModelName
+			info.UpstreamModelName = mappedModel
 		}
+	} else if info.ModelMappingRoute.ChannelId != info.ChannelId {
+		info.ModelMappingRoute = common.ModelMappingRouteCursor{ChannelId: info.ChannelId, Source: mappingModelName}
 	}
 
 	if isResponsesCompact {
@@ -72,10 +64,24 @@ func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Reque
 			finalUpstreamModelName = info.UpstreamModelName
 		}
 		info.UpstreamModelName = finalUpstreamModelName
-		info.OriginModelName = ratio_setting.WithCompactModelSuffix(finalUpstreamModelName)
 	}
 	if request != nil {
 		request.SetModelName(info.UpstreamModelName)
 	}
 	return nil
+}
+
+// AdvanceModelMappingFallback advances to the next ordered upstream model for
+// the current channel without performing cross-channel selection.
+func AdvanceModelMappingFallback(info *common.RelayInfo) (string, string, bool) {
+	if info == nil || info.ChannelMeta == nil || info.ModelMappingRoute.ChannelId != info.ChannelId {
+		return "", "", false
+	}
+	next := info.ModelMappingRoute.Index + 1
+	if next >= len(info.ModelMappingRoute.Candidates) {
+		return "", "", false
+	}
+	previous := info.ModelMappingRoute.Candidates[info.ModelMappingRoute.Index]
+	info.ModelMappingRoute.Index = next
+	return previous, info.ModelMappingRoute.Candidates[next], true
 }

@@ -24,6 +24,7 @@ type RetryParam struct {
 	ExcludedChannelIds                        map[int]bool
 	TriedMultiKeyIndexes                      map[int]map[int]bool
 	PreferredChannelId                        int
+	StrictPreferredChannel                    bool
 	RequireClaudeThinkingSupport              bool
 	RequireOpenAIResponsesSupport             bool
 	ModelDefaultEndpoint                      string
@@ -116,6 +117,9 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			param.LastSelectedChannelId = preferred.Id
 			return preferred, selectGroup, nil
 		}
+	}
+	if param.StrictPreferredChannel && param.PreferredChannelId > 0 {
+		return nil, selectGroup, nil
 	}
 
 	if param.TokenGroup == "auto" {

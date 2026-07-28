@@ -651,9 +651,6 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		common.SetContextKey(c, constant.ContextKeyTokenGroup, modelRequest.Group)
 	}
 
-	if strings.HasPrefix(c.Request.URL.Path, "/v1/responses/compact") && modelRequest.Model != "" {
-		modelRequest.Model = ratio_setting.WithCompactModelSuffix(modelRequest.Model)
-	}
 	modelRequest.Model = service.ResolveLatestModelAlias(modelRequest.Model)
 	if len(modelRequest.Models) > 0 {
 		for i := range modelRequest.Models {

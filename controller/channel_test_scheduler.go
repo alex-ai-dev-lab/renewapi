@@ -3,15 +3,19 @@ package controller
 import (
 	"fmt"
 	"math"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 )
 
@@ -28,6 +32,90 @@ type channelTestTracker struct {
 var testTracking = &channelTestTracker{
 	channelLastTest:  make(map[int]time.Time),
 	channelFailCount: make(map[int]int),
+}
+
+var responsesCompactionProbeSemaphore = make(chan struct{}, 4)
+
+func responsesCompactionProbeModels(channel *model.Channel) []string {
+	if channel == nil {
+		return nil
+	}
+	seen := make(map[string]string)
+	add := func(modelName string) {
+		modelName = strings.TrimSpace(modelName)
+		if modelName == "" || strings.ContainsAny(modelName, "*?") {
+			return
+		}
+		modelName = strings.TrimSuffix(modelName, ratio_setting.CompactModelSuffix)
+		if modelName != "" {
+			seen[strings.ToLower(modelName)] = modelName
+		}
+	}
+
+	settings := channel.GetSetting().ResponsesCompaction
+	if settings != nil {
+		for modelName := range settings.ModelCapabilities {
+			add(modelName)
+		}
+		if settings.DefaultCapability != nil && channel.TestModel != nil {
+			add(*channel.TestModel)
+		}
+	}
+	for _, modelName := range channel.GetModels() {
+		if strings.HasSuffix(strings.ToLower(strings.TrimSpace(modelName)), ratio_setting.CompactModelSuffix) {
+			add(modelName)
+		}
+	}
+	if records, err := model.ListChannelModelCapabilities(channel.Id, model.ChannelCapabilityResponsesCompaction); err == nil {
+		for _, record := range records {
+			add(record.ModelName)
+		}
+	}
+	targetModel := strings.TrimSpace(common.GetEnvOrDefaultString("RESPONSES_COMPACTION_MODEL", ""))
+	if targetModel != "" {
+		for _, routingModel := range channel.GetRoutingModels() {
+			if strings.EqualFold(routingModel, targetModel) {
+				add(targetModel)
+				break
+			}
+		}
+	}
+
+	result := make([]string, 0, len(seen))
+	for _, modelName := range seen {
+		result = append(result, modelName)
+	}
+	sort.Strings(result)
+	maxModels := common.GetEnvOrDefault("RESPONSES_COMPACTION_PROBE_MAX_MODELS", 4)
+	if maxModels > 0 && len(result) > maxModels {
+		result = result[:maxModels]
+	}
+	return result
+}
+
+func probeResponsesCompactionCapabilities(channel *model.Channel, testUserID int) {
+	if !common.GetEnvOrDefaultBool("RESPONSES_COMPACTION_PROBE_ENABLED", false) {
+		return
+	}
+	for _, modelName := range responsesCompactionProbeModels(channel) {
+		if record, found := model.GetChannelModelCapability(channel.Id, modelName, model.ChannelCapabilityResponsesCompaction); found &&
+			record.NextProbeAt > common.GetTimestamp() {
+			continue
+		}
+		responsesCompactionProbeSemaphore <- struct{}{}
+		result := testChannel(channel, testUserID, modelName, string(constant.EndpointTypeOpenAIResponseCompact), false)
+		<-responsesCompactionProbeSemaphore
+		if result.localErr != nil && result.newAPIError == nil {
+			common.SysLog(fmt.Sprintf("responses compaction probe skipped: channel=%d model=%s error=%s", channel.Id, modelName, result.localErr.Error()))
+			continue
+		}
+		service.ObserveResponsesCapabilityAttempt(channel, modelName, service.ResponsesCapabilityAttempt{
+			Kind:       dto.ResponsesCompactEndpoint,
+			UsedLegacy: true,
+			Source:     "probe",
+		}, result.newAPIError)
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func (t *channelTestTracker) recordTest(channelID int) {
@@ -211,6 +299,7 @@ func testSingleChannelWithRetries(channel *model.Channel, testUserID int, retryC
 				common.GetContextKeyString(lastResult.context, constant.ContextKeyChannelKey),
 				channel.Name)
 		}
+		probeResponsesCompactionCapabilities(channel, testUserID)
 		return
 	}
 

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/stretchr/testify/require"
@@ -41,4 +42,21 @@ func TestIsClockInTestWindowSupportsSameDayWindow(t *testing.T) {
 	require.True(t, isClockInTestWindow("09:00", "09:00", "18:00"))
 	require.True(t, isClockInTestWindow("17:59", "09:00", "18:00"))
 	require.False(t, isClockInTestWindow("18:01", "09:00", "18:00"))
+}
+
+func TestResponsesCompactionProbeModelsStayExplicitlyScoped(t *testing.T) {
+	t.Setenv("RESPONSES_COMPACTION_MODEL", "gpt-5.7")
+	t.Setenv("RESPONSES_COMPACTION_PROBE_MAX_MODELS", "10")
+	channel := &model.Channel{
+		Models:    "unrelated-model,gpt-5.4-openai-compact,gpt-5.7",
+		TestModel: common.GetPointer("gpt-5.3"),
+	}
+	channel.SetSetting(dto.ChannelSettings{ResponsesCompaction: &dto.ResponsesCompactionSettings{
+		DefaultCapability: &dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionLegacy},
+		ModelCapabilities: map[string]dto.ResponsesCompactionCapabilityRecord{
+			"gpt-5.6": {Capability: dto.CompactionNativeV2},
+		},
+	}})
+
+	require.Equal(t, []string{"gpt-5.3", "gpt-5.4", "gpt-5.6", "gpt-5.7"}, responsesCompactionProbeModels(channel))
 }

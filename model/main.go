@@ -259,6 +259,9 @@ func migrateDB() error {
 	if err := runSchemaMigrationOnce("channel-config:v1", migrateChannelConfigV1); err != nil {
 		return err
 	}
+	if err := runSchemaMigrationOnce("responses-capability:v1", migrateResponsesCapabilityV1); err != nil {
+		return err
+	}
 	// Migrate price_amount column from float/double to decimal for existing tables
 	if err := runSchemaMigrationOnce("manual:subscription_plans.price_amount_decimal:v1", migrateSubscriptionPlanPriceAmount); err != nil {
 		return err
@@ -320,6 +323,9 @@ func migrateDBFast() error {
 		return err
 	}
 	if err := runSchemaMigrationOnce("channel-config:v1", migrateChannelConfigV1); err != nil {
+		return err
+	}
+	if err := runSchemaMigrationOnce("responses-capability:v1", migrateResponsesCapabilityV1); err != nil {
 		return err
 	}
 	if err := runSchemaMigrationOnce("manual:subscription_plans.price_amount_decimal:v1", migrateSubscriptionPlanPriceAmount); err != nil {
@@ -415,6 +421,10 @@ func migrateBillingLedgerV1() error {
 
 func migrateChannelConfigV1() error {
 	return DB.AutoMigrate(&Channel{}, &ConfigAudit{}, &ModelEndpoint{})
+}
+
+func migrateResponsesCapabilityV1() error {
+	return DB.AutoMigrate(&ChannelModelCapability{})
 }
 
 type sqliteColumnDef struct {

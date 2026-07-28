@@ -207,6 +207,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 			return nil, service.TaskErrorFromAPIError(apiErr)
 		}
 	}
+	if err := service.PrepareAsyncTaskBilling(info, platform); err != nil {
+		return nil, service.TaskErrorWrapper(err, "persist_pending_task_failed", http.StatusInternalServerError)
+	}
 
 	// 8. 构建请求体
 	requestBody, err := adaptor.BuildRequestBody(c, info)

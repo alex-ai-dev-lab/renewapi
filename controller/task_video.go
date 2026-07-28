@@ -124,10 +124,11 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 		taskResult = relaycommon.FailTaskInfo("upstream returned empty status")
 	}
 
-	// 记录原本的状态，防止重复退款
-	shouldRefund := false
-	quota := task.Quota
+	// 记录原本的状态，终态计费由 CAS 唯一赢家执行。
 	preStatus := task.Status
+	actualQuota := task.Quota
+	billingReason := ""
+	var billingClamp *common.QuotaClamp
 
 	task.Status = model.TaskStatus(taskResult.Status)
 	switch taskResult.Status {
@@ -149,8 +150,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 			task.FailReason = taskResult.Url
 		}
 
-		// 统一走任务计费服务，确保钱包、订阅、令牌额度和日志使用同一结算语义。
-		service.RecalculateTaskQuotaByTokens(ctx, task, taskResult.TotalTokens)
+		if quota, reason, clamp, ok := service.CalculateTaskQuotaByTokens(task, taskResult.TotalTokens); ok {
+			actualQuota, billingReason, billingClamp = quota, reason, clamp
+		}
 	case model.TaskStatusFailure:
 		logger.LogJson(ctx, fmt.Sprintf("Task %s failed", taskId), task)
 		task.Status = model.TaskStatusFailure
@@ -161,31 +163,23 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 		task.FailReason = taskResult.Reason
 		logger.LogInfo(ctx, fmt.Sprintf("Task %s failed: %s", task.TaskID, task.FailReason))
 		taskResult.Progress = "100%"
-		if quota != 0 {
-			if preStatus != model.TaskStatusFailure {
-				shouldRefund = true
-			} else {
-				logger.LogWarn(ctx, fmt.Sprintf("Task %s already in failure status, skip refund", task.TaskID))
-			}
-		}
+		billingReason = task.FailReason
 	default:
 		return fmt.Errorf("unknown task status %s for task %s", taskResult.Status, taskId)
 	}
 	if taskResult.Progress != "" {
 		task.Progress = taskResult.Progress
 	}
-	if err := task.Update(); err != nil {
-		common.SysLog("UpdateVideoTask task error: " + err.Error())
-		shouldRefund = false
-	}
-
-	if shouldRefund {
-		// 任务失败且之前状态不是失败才退还额度，防止重复退还
-		if err := model.IncreaseUserQuota(task.UserId, quota, false); err != nil {
-			logger.LogWarn(ctx, "Failed to increase user quota: "+err.Error())
+	if task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure {
+		won, err := service.FinalizeTaskBillingTransition(ctx, task, preStatus, actualQuota, billingReason, billingClamp)
+		if err != nil {
+			return fmt.Errorf("finalize video task billing: %w", err)
 		}
-		logContent := fmt.Sprintf("Video async task failed %s, refund %s", task.TaskID, logger.LogQuota(quota))
-		model.RecordLog(task.UserId, model.LogTypeSystem, logContent)
+		if !won {
+			logger.LogWarn(ctx, fmt.Sprintf("Task %s already transitioned, skip billing", task.TaskID))
+		}
+	} else if _, err := task.UpdateWithStatus(preStatus); err != nil {
+		common.SysLog("UpdateVideoTask task error: " + err.Error())
 	}
 
 	return nil

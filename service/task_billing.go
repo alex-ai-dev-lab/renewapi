@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -62,8 +63,10 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		Group:     info.UsingGroup,
 		Other:     other,
 	})
-	model.UpdateUserUsedQuotaAndRequestCount(info.UserId, info.PriceData.Quota)
-	model.UpdateChannelUsedQuota(info.ChannelId, info.PriceData.Quota)
+	if !BillingOwnsAccounting(info) {
+		model.UpdateUserUsedQuotaAndRequestCount(info.UserId, info.PriceData.Quota)
+		model.UpdateChannelUsedQuota(info.ChannelId, info.PriceData.Quota)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -99,13 +102,13 @@ func taskAdjustFunding(task *model.Task, delta int) error {
 
 // taskAdjustTokenQuota 调整任务的令牌额度，delta > 0 表示扣费，delta < 0 表示退还。
 // 需要通过 resolveTokenKey 运行时获取 key（不从 PrivateData 中读取）。
-func taskAdjustTokenQuota(ctx context.Context, task *model.Task, delta int) {
+func taskAdjustTokenQuota(ctx context.Context, task *model.Task, delta int) error {
 	if task.PrivateData.TokenId <= 0 || delta == 0 {
-		return
+		return nil
 	}
 	tokenKey := resolveTokenKey(ctx, task.PrivateData.TokenId, task.TaskID)
 	if tokenKey == "" {
-		return
+		return fmt.Errorf("token key is unavailable for task %s", task.TaskID)
 	}
 	var err error
 	if delta > 0 {
@@ -116,6 +119,175 @@ func taskAdjustTokenQuota(ctx context.Context, task *model.Task, delta int) {
 	if err != nil {
 		logger.LogWarn(ctx, fmt.Sprintf("调整令牌额度失败 (delta=%d, task=%s): %s", delta, task.TaskID, err.Error()))
 	}
+	return err
+}
+
+func recordTaskBillingAdjustment(task *model.Task, logType int, quota int, reason string, preConsumed int, actual int, clamps ...*common.QuotaClamp) {
+	other := taskBillingOther(task)
+	other["task_id"] = task.TaskID
+	other["reason"] = reason
+	other["pre_consumed_quota"] = preConsumed
+	other["actual_quota"] = actual
+	if task.BillingLedgerID > 0 {
+		other["billing_ledger_id"] = task.BillingLedgerID
+		other["billing_state"] = task.BillingState
+	}
+	for _, clamp := range clamps {
+		attachQuotaSaturationToOther(other, clamp)
+	}
+	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		UserId: task.UserId, LogType: logType, Content: reason, ChannelId: task.ChannelId,
+		ModelName: taskModelName(task), Quota: quota, TokenId: task.PrivateData.TokenId,
+		Group: task.Group, Other: other,
+	})
+}
+
+// FinalizeTaskBillingTransition makes the terminal task CAS and ledger mutation
+// one transaction. It returns won=false when another poller already transitioned
+// the task from fromStatus.
+func FinalizeTaskBillingTransition(ctx context.Context, task *model.Task, fromStatus model.TaskStatus, actualQuota int, reason string, clamps ...*common.QuotaClamp) (bool, error) {
+	if task == nil {
+		return false, errors.New("task is nil")
+	}
+	preConsumed := task.Quota
+	desired := model.BillingLedgerDesiredSettle
+	target := actualQuota
+	if task.Status == model.TaskStatusFailure {
+		desired = model.BillingLedgerDesiredRefund
+		target = 0
+	} else if task.Status != model.TaskStatusSuccess {
+		return false, fmt.Errorf("task %s is not terminal", task.TaskID)
+	}
+	if target < 0 {
+		return false, errors.New("task billing target cannot be negative")
+	}
+
+	won, ledger, err := model.UpdateTaskWithBilling(task, fromStatus, desired, int64(target), reason)
+	if err != nil {
+		if task.BillingLedgerID > 0 {
+			_ = model.MarkBillingLedgerForReconcile(task.BillingLedgerID, desired, int64(target), err)
+		}
+		return false, err
+	}
+	if !won {
+		return false, nil
+	}
+	if ledger != nil {
+		task.BillingLedgerID = ledger.ID
+		task.BillingState = ledger.State
+		task.BillingVersion = ledger.Version
+		if desired == model.BillingLedgerDesiredSettle {
+			task.Quota = int(ledger.AppliedQuota)
+		}
+		if ledger.Mode == BillingLedgerModeEnforce {
+			model.InvalidateBillingBalanceCaches(task.UserId, task.PrivateData.TokenId)
+			delta := target - preConsumed
+			if desired == model.BillingLedgerDesiredRefund {
+				recordTaskBillingAdjustment(task, model.LogTypeRefund, preConsumed, reason, preConsumed, 0, clamps...)
+			} else if delta != 0 {
+				logType, logQuota := model.LogTypeConsume, delta
+				if delta < 0 {
+					logType, logQuota = model.LogTypeRefund, -delta
+				}
+				recordTaskBillingAdjustment(task, logType, logQuota, reason, preConsumed, target, clamps...)
+			}
+			return true, nil
+		}
+	}
+
+	delta := target - preConsumed
+	if delta != 0 {
+		if err := taskAdjustFunding(task, delta); err != nil {
+			return true, err
+		}
+		if err := taskAdjustTokenQuota(ctx, task, delta); err != nil {
+			return true, err
+		}
+	}
+	if desired == model.BillingLedgerDesiredRefund {
+		recordTaskBillingAdjustment(task, model.LogTypeRefund, preConsumed, reason, preConsumed, 0, clamps...)
+	} else if delta != 0 {
+		logType, logQuota := model.LogTypeConsume, delta
+		if delta < 0 {
+			logType, logQuota = model.LogTypeRefund, -delta
+		}
+		recordTaskBillingAdjustment(task, logType, logQuota, reason, preConsumed, target, clamps...)
+	}
+	return true, nil
+}
+
+func FinalizeMidjourneyBillingTransition(ctx context.Context, task *model.Midjourney, fromStatus string, reason string) (bool, error) {
+	if task == nil {
+		return false, errors.New("midjourney task is nil")
+	}
+	preConsumed := task.Quota
+	desired := model.BillingLedgerDesiredSettle
+	target := int64(preConsumed)
+	if task.Status == string(model.TaskStatusFailure) {
+		desired = model.BillingLedgerDesiredRefund
+		target = 0
+	} else if task.Status != string(model.TaskStatusSuccess) {
+		return false, fmt.Errorf("midjourney task %s is not terminal", task.MjId)
+	}
+
+	won, ledger, err := model.UpdateMidjourneyWithBilling(task, fromStatus, desired, target, reason)
+	if err != nil {
+		if task.BillingLedgerID > 0 {
+			_ = model.MarkBillingLedgerForReconcile(task.BillingLedgerID, desired, target, err)
+		}
+		return false, err
+	}
+	if !won {
+		return false, nil
+	}
+	if ledger != nil {
+		task.BillingLedgerID = ledger.ID
+		task.BillingState = ledger.State
+		task.BillingVersion = ledger.Version
+		if ledger.Mode == BillingLedgerModeEnforce {
+			model.InvalidateBillingBalanceCaches(task.UserId, ledger.TokenID)
+			if desired == model.BillingLedgerDesiredRefund && preConsumed > 0 {
+				recordMidjourneyBillingAdjustment(task, ledger.TokenID, model.LogTypeRefund, preConsumed, reason)
+			}
+			return true, nil
+		}
+	}
+	if desired == model.BillingLedgerDesiredRefund && preConsumed > 0 {
+		if task.BillingSource == BillingSourceSubscription {
+			if err := model.PostConsumeUserSubscriptionDelta(task.SubscriptionID, int64(-preConsumed)); err != nil {
+				return true, err
+			}
+		} else if err := model.IncreaseUserQuota(task.UserId, preConsumed, false); err != nil {
+			return true, err
+		}
+		if task.TokenID > 0 {
+			key := resolveTokenKey(ctx, task.TokenID, task.MjId)
+			if key == "" {
+				return true, fmt.Errorf("token key is unavailable for midjourney task %s", task.MjId)
+			}
+			if err := model.IncreaseTokenQuota(task.TokenID, key, preConsumed); err != nil {
+				return true, err
+			}
+		}
+		recordMidjourneyBillingAdjustment(task, task.TokenID, model.LogTypeRefund, preConsumed, reason)
+	}
+	return true, nil
+}
+
+func recordMidjourneyBillingAdjustment(task *model.Midjourney, tokenID int, logType int, quota int, reason string) {
+	other := map[string]interface{}{
+		"task_id": task.MjId,
+		"reason":  reason,
+	}
+	if task.BillingLedgerID > 0 {
+		other["billing_ledger_id"] = task.BillingLedgerID
+		other["billing_state"] = task.BillingState
+	}
+	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		UserId: task.UserId, LogType: logType, Content: reason, ChannelId: task.ChannelId,
+		ModelName: CovertMjpActionToModelName(task.Action), Quota: quota, TokenId: tokenID,
+		Other: other,
+	})
 }
 
 // taskBillingOther 从 task 的 BillingContext 构建日志 Other 字段。
@@ -164,7 +336,9 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 	}
 
 	// 2. 退还令牌额度
-	taskAdjustTokenQuota(ctx, task, -quota)
+	if err := taskAdjustTokenQuota(ctx, task, -quota); err != nil {
+		return
+	}
 
 	// 3. 记录日志
 	other := taskBillingOther(task)
@@ -214,7 +388,9 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 	}
 
 	// 调整令牌额度
-	taskAdjustTokenQuota(ctx, task, quotaDelta)
+	if err := taskAdjustTokenQuota(ctx, task, quotaDelta); err != nil {
+		return
+	}
 
 	task.Quota = actualQuota
 	if err := task.UpdateQuota(); err != nil {
@@ -256,8 +432,19 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 // 当任务成功且返回了 totalTokens 时，根据模型倍率和分组倍率重新计算实际扣费额度，
 // 与预扣费的差额进行补扣或退还。支持钱包和订阅计费来源。
 func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTokens int) {
-	if totalTokens <= 0 {
+	actualQuota, reason, clamp, ok := CalculateTaskQuotaByTokens(task, totalTokens)
+	if !ok {
 		return
+	}
+	RecalculateTaskQuota(ctx, task, actualQuota, reason, clamp)
+	if clamp != nil {
+		logger.LogWarn(ctx, fmt.Sprintf("task quota saturation: task=%s kind=%s original=%g clamped=%d", task.TaskID, clamp.Kind, clamp.Original, clamp.Clamped))
+	}
+}
+
+func CalculateTaskQuotaByTokens(task *model.Task, totalTokens int) (int, string, *common.QuotaClamp, bool) {
+	if totalTokens <= 0 {
+		return 0, "", nil, false
 	}
 
 	modelName := taskModelName(task)
@@ -266,7 +453,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 	modelRatio, hasRatioSetting, _ := ratio_setting.GetModelRatio(modelName)
 	// 只有配置了倍率(非固定价格)时才按 token 重新计费
 	if !hasRatioSetting || modelRatio <= 0 {
-		return
+		return 0, "", nil, false
 	}
 
 	// 获取用户和组的倍率信息
@@ -278,7 +465,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 		}
 	}
 	if group == "" {
-		return
+		return 0, "", nil, false
 	}
 
 	groupRatio := ratio_setting.GetGroupRatio(group)
@@ -303,8 +490,5 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 	actualQuota, clamp := common.QuotaFromFloatChecked(float64(totalTokens) * modelRatio * finalGroupRatio * otherMultiplier)
 
 	reason := fmt.Sprintf("token重算：tokens=%d, modelRatio=%.2f, groupRatio=%.2f, otherMultiplier=%.4f", totalTokens, modelRatio, finalGroupRatio, otherMultiplier)
-	RecalculateTaskQuota(ctx, task, actualQuota, reason, clamp)
-	if clamp != nil {
-		logger.LogWarn(ctx, fmt.Sprintf("task quota saturation: task=%s kind=%s original=%g clamped=%d", task.TaskID, clamp.Kind, clamp.Original, clamp.Clamped))
-	}
+	return actualQuota, reason, clamp, true
 }

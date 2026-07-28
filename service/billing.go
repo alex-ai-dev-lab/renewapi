@@ -4,11 +4,22 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
+
+func BillingOwnsAccounting(relayInfo *relaycommon.RelayInfo) bool {
+	if relayInfo == nil || relayInfo.Billing == nil {
+		return false
+	}
+	session, ok := relayInfo.Billing.(*BillingSession)
+	return ok && session.ownsLedgerAccounting()
+}
 
 const (
 	BillingSourceWallet       = "wallet"
@@ -27,6 +38,73 @@ func PreConsumeBilling(c *gin.Context, preConsumedQuota int, relayInfo *relaycom
 	}
 	relayInfo.Billing = session
 	return nil
+}
+
+func PrepareAsyncTaskBilling(relayInfo *relaycommon.RelayInfo, platform constant.TaskPlatform) error {
+	if relayInfo == nil || relayInfo.Billing == nil {
+		return nil
+	}
+	session, ok := relayInfo.Billing.(*BillingSession)
+	if !ok || !session.ownsLedgerAccounting() {
+		return nil
+	}
+	task := model.InitTask(platform, relayInfo)
+	task.PrivateData.BillingSource = relayInfo.BillingSource
+	task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
+	task.PrivateData.TokenId = relayInfo.TokenId
+	task.PrivateData.BillingContext = &model.TaskBillingContext{
+		ModelPrice:      relayInfo.PriceData.ModelPrice,
+		GroupRatio:      relayInfo.PriceData.GroupRatioInfo.GroupRatio,
+		ModelRatio:      relayInfo.PriceData.ModelRatio,
+		OtherRatios:     relayInfo.PriceData.OtherRatios,
+		OriginModelName: relayInfo.OriginModelName,
+		PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
+	}
+	task.Quota = relayInfo.PriceData.Quota
+	task.Action = relayInfo.Action
+	return session.prepareTask(task)
+}
+
+// SettleBillingAndInsertTask atomically settles enforced ledger billing and
+// persists the local async task. Shadow/off modes retain the compatible path.
+func SettleBillingAndInsertTask(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuota int, task *model.Task) error {
+	if relayInfo == nil || task == nil {
+		return fmt.Errorf("billing relay info or task is nil")
+	}
+	if session, ok := relayInfo.Billing.(*BillingSession); ok && session.ownsLedgerAccounting() {
+		return session.settleWithTask(task, actualQuota)
+	}
+	if err := SettleBilling(ctx, relayInfo, actualQuota); err != nil {
+		return err
+	}
+	if session, ok := relayInfo.Billing.(*BillingSession); ok && session.ledgerID != 0 {
+		task.BillingLedgerID = session.ledgerID
+		if ledger, err := model.GetBillingLedger(session.ledgerID); err == nil {
+			task.BillingState = ledger.State
+			task.BillingVersion = ledger.Version
+		}
+	}
+	return task.Insert()
+}
+
+func SettleBillingAndInsertMidjourney(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuota int, task *model.Midjourney) error {
+	if relayInfo == nil || task == nil {
+		return fmt.Errorf("billing relay info or midjourney task is nil")
+	}
+	if session, ok := relayInfo.Billing.(*BillingSession); ok && session.ownsLedgerAccounting() {
+		return session.settleWithMidjourney(task, actualQuota)
+	}
+	if err := SettleBilling(ctx, relayInfo, actualQuota); err != nil {
+		return err
+	}
+	if session, ok := relayInfo.Billing.(*BillingSession); ok && session.ledgerID != 0 {
+		task.BillingLedgerID = session.ledgerID
+		if ledger, err := model.GetBillingLedger(session.ledgerID); err == nil {
+			task.BillingState = ledger.State
+			task.BillingVersion = ledger.Version
+		}
+	}
+	return task.Insert()
 }
 
 // ---------------------------------------------------------------------------

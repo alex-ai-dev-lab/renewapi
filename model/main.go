@@ -253,6 +253,9 @@ func InitLogDB() (err error) {
 }
 
 func migrateDB() error {
+	if err := runSchemaMigrationOnce("billing-ledger:v1", migrateBillingLedgerV1); err != nil {
+		return err
+	}
 	// Migrate price_amount column from float/double to decimal for existing tables
 	if err := runSchemaMigrationOnce("manual:subscription_plans.price_amount_decimal:v1", migrateSubscriptionPlanPriceAmount); err != nil {
 		return err
@@ -310,6 +313,9 @@ func migrateDB() error {
 }
 
 func migrateDBFast() error {
+	if err := runSchemaMigrationOnce("billing-ledger:v1", migrateBillingLedgerV1); err != nil {
+		return err
+	}
 	if err := runSchemaMigrationOnce("manual:subscription_plans.price_amount_decimal:v1", migrateSubscriptionPlanPriceAmount); err != nil {
 		return err
 	}
@@ -391,10 +397,14 @@ func migrateDBFast() error {
 }
 
 func migrateLOGDB() error {
-	if err := LOG_DB.AutoMigrate(&Log{}); err != nil {
+	if err := LOG_DB.AutoMigrate(&Log{}, &BillingAuditEvent{}); err != nil {
 		return err
 	}
 	return ensureLogCreatedAtIDIndex(LOG_DB)
+}
+
+func migrateBillingLedgerV1() error {
+	return DB.AutoMigrate(&BillingLedger{}, &BillingOutbox{}, &Task{}, &Midjourney{})
 }
 
 type sqliteColumnDef struct {

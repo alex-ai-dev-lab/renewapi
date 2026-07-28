@@ -60,6 +60,8 @@ var classicIndexPage []byte
 
 func main() {
 	startTime := time.Now()
+	workerCtx, stopWorkers := context.WithCancel(context.Background())
+	defer stopWorkers()
 
 	err := InitResources()
 	if err != nil {
@@ -132,6 +134,7 @@ func main() {
 
 	// Subscription quota reset task (daily/weekly/monthly/custom)
 	service.StartSubscriptionQuotaResetTask()
+	service.StartBillingReconciler(workerCtx)
 
 	// Client identity rotation worker
 	service.StartClientIdentityRotationWorker()
@@ -249,6 +252,7 @@ func main() {
 	select {
 	case sig := <-quit:
 		common.SysLog(fmt.Sprintf("received signal: %v, shutting down...", sig))
+		stopWorkers()
 	case listenErr := <-serverErr:
 		if listenErr != nil && !errors.Is(listenErr, http.ErrServerClosed) {
 			common.FatalLog("failed to start HTTP server: " + listenErr.Error())

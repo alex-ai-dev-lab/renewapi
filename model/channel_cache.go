@@ -20,18 +20,30 @@ var channelsIDM map[int]*Channel                     // all channels include dis
 var channelSyncLock sync.RWMutex
 
 func InitChannelCache() {
+	if err := ReloadChannelCache(); err != nil {
+		common.SysError("failed to reload channel cache: " + err.Error())
+	}
+}
+
+// ReloadChannelCache publishes a new snapshot only after all required queries
+// succeed, preserving the last-known-good cache during database failures.
+func ReloadChannelCache() error {
 	if !common.MemoryCacheEnabled {
-		return
+		return nil
 	}
 	newChannelId2channel := make(map[int]*Channel)
 	var channels []*Channel
-	DB.Find(&channels)
+	if err := DB.Find(&channels).Error; err != nil {
+		return err
+	}
 	ReloadChannelModelStatusCache()
 	for _, channel := range channels {
 		newChannelId2channel[channel.Id] = channel
 	}
 	var abilities []*Ability
-	DB.Find(&abilities)
+	if err := DB.Find(&abilities).Error; err != nil {
+		return err
+	}
 	groups := make(map[string]bool)
 	for _, ability := range abilities {
 		groups[ability.Group] = true
@@ -85,6 +97,7 @@ func InitChannelCache() {
 	channelsIDM = newChannelId2channel
 	channelSyncLock.Unlock()
 	common.SysLog("channels synced from database")
+	return nil
 }
 
 func SyncChannelCache(frequency int) {

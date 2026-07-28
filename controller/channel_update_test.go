@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -29,7 +30,7 @@ func setupChannelUpdateControllerTestDB(t *testing.T) *gorm.DB {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.ChannelModelStatus{}))
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.ChannelModelStatus{}, &model.ConfigAudit{}, &model.ModelEndpoint{}))
 	model.DB = db
 	common.MemoryCacheEnabled = false
 	common.RedisEnabled = false
@@ -104,6 +105,31 @@ func TestUpdateChannelStatusPatchPreservesExistingFields(t *testing.T) {
 	require.Equal(t, setting, *got.Setting)
 	require.Equal(t, otherSettings, got.OtherSettings)
 	require.Equal(t, channel.UsedQuota, got.UsedQuota)
+}
+
+func TestUpdateChannelConfigRequiresIfMatch(t *testing.T) {
+	db := setupChannelUpdateControllerTestDB(t)
+	channel := model.Channel{Type: 1, Key: "sk-test", Status: common.ChannelStatusEnabled, Name: "before", Models: "gpt-test", Group: "default"}
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, channel.AddAbilities(db))
+
+	router := gin.New()
+	router.PUT("/api/channel/:id/config", UpdateChannelConfig)
+	body, err := common.Marshal(map[string]any{"name": "after"})
+	require.NoError(t, err)
+	request := httptest.NewRequest(http.MethodPut, "/api/channel/"+strconv.Itoa(channel.Id)+"/config", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusPreconditionRequired, recorder.Code)
+
+	request = httptest.NewRequest(http.MethodPut, "/api/channel/"+strconv.Itoa(channel.Id)+"/config", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("If-Match", `"channel-1"`)
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	require.Equal(t, `"channel-2"`, recorder.Header().Get("ETag"))
 }
 
 func TestAddChannelRejectsNilChannelWithoutPanic(t *testing.T) {

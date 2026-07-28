@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/gemini"
 	"github.com/QuantumNous/new-api/relay/channel/ollama"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/channelconfig"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -476,6 +478,7 @@ func GetChannel(c *gin.Context) {
 		return
 	}
 	if channel != nil {
+		c.Header("ETag", fmt.Sprintf("\"channel-%d\"", channel.ConfigVersion))
 		clearChannelInfo(channel)
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -1007,8 +1010,42 @@ func DeleteChannelBatch(c *gin.Context) {
 
 type PatchChannel struct {
 	model.Channel
-	MultiKeyMode *string `json:"multi_key_mode"`
-	KeyMode      *string `json:"key_mode"` // 多key模式下密钥覆盖或者追加
+	MultiKeyMode          *string                 `json:"multi_key_mode"`
+	KeyMode               *string                 `json:"key_mode"` // legacy: append or replace
+	KeyAction             string                  `json:"key_action"`
+	ClearKey              bool                    `json:"clear_key"`
+	ModelEndpoints        *[]modelEndpointPayload `json:"model_endpoints"`
+	ChangeReason          string                  `json:"change_reason"`
+	ExpectedConfigVersion *int64                  `json:"expected_config_version"`
+}
+
+const requireChannelIfMatchKey = "require_channel_if_match"
+
+func parseChannelIfMatch(c *gin.Context, bodyVersion *int64) (*int64, error) {
+	header := strings.TrimSpace(c.GetHeader("If-Match"))
+	required := c.GetBool(requireChannelIfMatchKey)
+	if header == "" {
+		if required {
+			return nil, fmt.Errorf("If-Match header is required")
+		}
+		return bodyVersion, nil
+	}
+	header = strings.TrimSpace(strings.TrimPrefix(header, "W/"))
+	header = strings.Trim(header, "\"")
+	header = strings.TrimPrefix(header, "channel-")
+	version, err := strconv.ParseInt(header, 10, 64)
+	if err != nil || version <= 0 {
+		return nil, fmt.Errorf("invalid If-Match header")
+	}
+	if bodyVersion != nil && *bodyVersion != version {
+		return nil, fmt.Errorf("If-Match and expected_config_version disagree")
+	}
+	return &version, nil
+}
+
+func UpdateChannelConfig(c *gin.Context) {
+	c.Set(requireChannelIfMatchKey, true)
+	UpdateChannel(c)
 }
 
 func mergePatchChannelWithOrigin(channel *PatchChannel, origin *model.Channel, present map[string]json.RawMessage) {
@@ -1116,6 +1153,28 @@ func UpdateChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if pathID := strings.TrimSpace(c.Param("id")); pathID != "" {
+		parsedID, parseErr := strconv.Atoi(pathID)
+		if parseErr != nil || parsedID <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid channel id"})
+			return
+		}
+		if channel.Id != 0 && channel.Id != parsedID {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "path and body channel id disagree"})
+			return
+		}
+		channel.Id = parsedID
+	}
+	expectedVersion, err := parseChannelIfMatch(c, channel.ExpectedConfigVersion)
+	if err != nil {
+		c.JSON(http.StatusPreconditionRequired, gin.H{"success": false, "code": "IF_MATCH_REQUIRED", "message": err.Error()})
+		return
+	}
+	if expectedVersion == nil {
+		c.Header("Deprecation", "true")
+		c.Header("Warning", `299 - "Channel update without If-Match is deprecated"`)
+		common.SysLog(fmt.Sprintf("legacy channel config update without If-Match: channel_id=%d request_id=%s", channel.Id, c.GetString(common.RequestIdKey)))
+	}
 	// Preserve existing ChannelInfo to ensure multi-key channels keep correct state even if the client does not send ChannelInfo in the request.
 	if channel.Id <= 0 {
 		c.JSON(http.StatusOK, gin.H{
@@ -1170,6 +1229,11 @@ func UpdateChannel(c *gin.Context) {
 	// If the request explicitly specifies a new MultiKeyMode, apply it on top of the original info.
 	if channel.MultiKeyMode != nil && *channel.MultiKeyMode != "" {
 		channel.ChannelInfo.MultiKeyMode = constant.MultiKeyMode(*channel.MultiKeyMode)
+	}
+	keyAction := strings.TrimSpace(channel.KeyAction)
+	if keyAction == "append" {
+		mode := "append"
+		channel.KeyMode = &mode
 	}
 
 	// 处理多key模式下的密钥追加/覆盖逻辑
@@ -1252,20 +1316,74 @@ func UpdateChannel(c *gin.Context) {
 			// 覆盖模式：直接使用新密钥（默认行为，不需要特殊处理）
 		}
 	}
-	err = channel.Update()
+	updateKey := false
+	if _, provided := requestFields["key"]; provided {
+		updateKey = true
+	}
+	if channel.ClearKey || keyAction == "clear" {
+		if keyAction != "" && keyAction != "clear" {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "clear_key conflicts with key_action"})
+			return
+		}
+		channel.Key = ""
+		updateKey = true
+	} else if keyAction == "keep" {
+		if updateKey {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "key_action keep cannot include key"})
+			return
+		}
+	} else if keyAction != "" && keyAction != "replace" && keyAction != "append" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "unsupported key_action"})
+		return
+	}
+	if (keyAction == "replace" || keyAction == "append") && (!updateKey || strings.TrimSpace(channel.Key) == "") {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": fmt.Sprintf("key_action %s requires a non-empty key", keyAction)})
+		return
+	}
+
+	var endpoints []*model.ModelEndpoint
+	var endpointUpdate *[]*model.ModelEndpoint
+	if channel.ModelEndpoints != nil {
+		endpoints, err = normalizeModelEndpointPayloads(channel.Id, *channel.ModelEndpoints)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		endpointUpdate = &endpoints
+	}
+	presentFields := make(map[string]bool, len(requestFields))
+	for field := range requestFields {
+		presentFields[field] = true
+	}
+	result, err := channelconfig.Update(channelconfig.UpdateCommand{
+		Channel: &channel.Channel, ExpectedConfigVersion: expectedVersion, PresentFields: presentFields,
+		UpdateKey: updateKey, ModelEndpoints: endpointUpdate,
+		Audit: channelconfig.AuditMetadata{OperatorID: c.GetInt("id"), RequestID: c.GetString(common.RequestIdKey), Reason: channel.ChangeReason},
+	})
 	if err != nil {
+		if errors.Is(err, model.ErrChannelConfigConflict) {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "code": "CHANNEL_CONFIG_CONFLICT", "message": "渠道配置已被其他操作更新，请重新加载后再保存"})
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
-	model.InitChannelCache()
-	service.InvalidateHTTPClientSettings(originChannel.GetSetting())
-	service.InvalidateHTTPClientSettings(channel.GetSetting())
+	channel.Channel = *result.Channel
 	channel.Key = ""
 	clearChannelInfo(&channel.Channel)
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    channel,
+	status := http.StatusOK
+	if !result.CacheSynchronized {
+		status = http.StatusAccepted
+	}
+	c.Header("ETag", fmt.Sprintf("\"channel-%d\"", result.Channel.ConfigVersion))
+	c.JSON(status, gin.H{
+		"success":            true,
+		"message":            "",
+		"data":               channel,
+		"change_set":         result.ChangeSet,
+		"no_op":              result.NoOp,
+		"cache_synchronized": result.CacheSynchronized,
+		"warnings":           result.Warnings,
 	})
 	return
 }

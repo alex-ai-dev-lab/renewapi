@@ -57,8 +57,8 @@ func PrepareAsyncTaskBilling(relayInfo *relaycommon.RelayInfo, platform constant
 		GroupRatio:      relayInfo.PriceData.GroupRatioInfo.GroupRatio,
 		ModelRatio:      relayInfo.PriceData.ModelRatio,
 		OtherRatios:     relayInfo.PriceData.OtherRatios,
-		OriginModelName: relayInfo.OriginModelName,
-		PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
+		OriginModelName: relayInfo.BillingModel(),
+		PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.BillingModel()) || relayInfo.PriceData.UsePrice,
 	}
 	task.Quota = relayInfo.PriceData.Quota
 	task.Action = relayInfo.Action

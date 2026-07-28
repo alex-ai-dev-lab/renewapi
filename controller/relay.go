@@ -404,6 +404,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			}
 		}
 		retryParam.RequiredModelName = route.RequiredModel
+		relayInfo.RoutingModelName = route.RoutingModel
+		relayInfo.BillingModelName = route.BillingModel
 		retryParam.PreferredChannelId = route.PreferredChannelId
 		retryParam.StrictPreferredChannel = route.StrictPreferredChannel
 		retryParam.ExcludedChannelIds = make(map[int]bool)
@@ -759,6 +761,8 @@ func prepareDistributorResponsesRoutePlan(c *gin.Context, info *relaycommon.Rela
 			}
 		}
 		info.OriginModelName = route.RoutingModel
+		info.RoutingModelName = route.RoutingModel
+		info.BillingModelName = route.BillingModel
 		info.UsingGroup = route.Group
 		info.Request.SetModelName(route.RoutingModel)
 		common.SetContextKey(c, constant.ContextKeyOriginalModel, route.RoutingModel)
@@ -1315,6 +1319,7 @@ func switchRelayFallbackModel(c *gin.Context, info *relaycommon.RelayInfo, retry
 	}
 
 	info.OriginModelName = modelName
+	info.RoutingModelName = modelName
 	info.LastError = nil
 	info.RetryIndex = 0
 	if info.Request != nil {

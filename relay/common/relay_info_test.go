@@ -38,3 +38,18 @@ func TestRelayInfoGetFinalRequestRelayFormatNilReceiver(t *testing.T) {
 	var info *RelayInfo
 	require.Equal(t, types.RelayFormat(""), info.GetFinalRequestRelayFormat())
 }
+
+func TestRelayInfoModelRolesUseStableFallbacks(t *testing.T) {
+	info := &RelayInfo{
+		OriginModelName:  "routing",
+		ClientModelName:  "client",
+		MappedModelName:  "mapped",
+		BillingModelName: "client",
+		ChannelMeta:      &ChannelMeta{UpstreamModelName: "upstream"},
+	}
+	require.Equal(t, "client", info.ClientModel())
+	require.Equal(t, "routing", info.RoutingModel())
+	require.Equal(t, "mapped", info.MappedModel())
+	require.Equal(t, "upstream", info.UpstreamModel())
+	require.Equal(t, "client", info.BillingModel())
+}

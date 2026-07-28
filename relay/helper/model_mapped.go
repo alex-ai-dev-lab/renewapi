@@ -19,6 +19,8 @@ func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Reque
 
 	isResponsesCompact := info.RelayMode == relayconstant.RelayModeResponsesCompact
 	originModelName := info.OriginModelName
+	info.RoutingModelName = originModelName
+	info.MappedModelName = originModelName
 	mappingModelName := originModelName
 	if isResponsesCompact && strings.HasSuffix(originModelName, ratio_setting.CompactModelSuffix) {
 		mappingModelName = strings.TrimSuffix(originModelName, ratio_setting.CompactModelSuffix)
@@ -52,6 +54,7 @@ func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Reque
 			}
 			mappedModel := info.ModelMappingRoute.Candidates[info.ModelMappingRoute.Index]
 			info.IsModelMapped = mappedModel != mappingModelName
+			info.MappedModelName = mappedModel
 			info.UpstreamModelName = mappedModel
 		}
 	} else if info.ModelMappingRoute.ChannelId != info.ChannelId {
@@ -64,6 +67,7 @@ func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Reque
 			finalUpstreamModelName = info.UpstreamModelName
 		}
 		info.UpstreamModelName = finalUpstreamModelName
+		info.MappedModelName = finalUpstreamModelName
 	}
 	if request != nil {
 		request.SetModelName(info.UpstreamModelName)

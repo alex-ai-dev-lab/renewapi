@@ -280,7 +280,7 @@ func buildResponsesRelayRoutesForGroup(params ResponsesRelayRoutePlanParams, gro
 			routes = append(routes, RelayModelRoles{
 				ClientModel:            params.ClientModel,
 				RoutingModel:           modelName,
-				BillingModel:           modelName,
+				BillingModel:           params.ClientModel,
 				RequiredModel:          requiredModel,
 				Group:                  group,
 				PreferredChannelId:     channel.Id,
@@ -325,7 +325,7 @@ func NewRelayRoutePlan(clientModel, primaryModel, requiredModel string, fallback
 		routes = append(routes, RelayModelRoles{
 			ClientModel:   clientModel,
 			RoutingModel:  modelName,
-			BillingModel:  modelName,
+			BillingModel:  clientModel,
 			RequiredModel: strings.TrimSpace(requiredModel),
 		})
 	}

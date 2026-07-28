@@ -117,27 +117,31 @@ type RelayInfo struct {
 	IsPlayground                    bool
 	UsePrice                        bool
 	RelayMode                       int
-	OriginModelName                 string
-	ClientModelName                 string
-	RequestURLPath                  string
-	RequestHeaders                  map[string]string
-	ShouldIncludeUsage              bool
-	DisablePing                     bool // 是否禁止向下游发送自定义 Ping
-	ClientWs                        *websocket.Conn
-	TargetWs                        *websocket.Conn
-	InputAudioFormat                string
-	OutputAudioFormat               string
-	RealtimeTools                   []dto.RealTimeTool
-	IsFirstRequest                  bool
-	AudioUsage                      bool
-	ReasoningEffort                 string
-	UserSetting                     dto.UserSetting
-	UserEmail                       string
-	UserQuota                       int
-	RelayFormat                     types.RelayFormat
-	SendResponseCount               int
-	ReceivedResponseCount           int
-	FinalPreConsumedQuota           int // 最终预消耗的配额
+	// OriginModelName remains the compatibility alias for RoutingModelName.
+	OriginModelName       string
+	ClientModelName       string
+	RoutingModelName      string
+	MappedModelName       string
+	BillingModelName      string
+	RequestURLPath        string
+	RequestHeaders        map[string]string
+	ShouldIncludeUsage    bool
+	DisablePing           bool // 是否禁止向下游发送自定义 Ping
+	ClientWs              *websocket.Conn
+	TargetWs              *websocket.Conn
+	InputAudioFormat      string
+	OutputAudioFormat     string
+	RealtimeTools         []dto.RealTimeTool
+	IsFirstRequest        bool
+	AudioUsage            bool
+	ReasoningEffort       string
+	UserSetting           dto.UserSetting
+	UserEmail             string
+	UserQuota             int
+	RelayFormat           types.RelayFormat
+	SendResponseCount     int
+	ReceivedResponseCount int
+	FinalPreConsumedQuota int // 最终预消耗的配额
 	// ForcePreConsume 为 true 时禁用 BillingSession 的信任额度旁路，
 	// 强制预扣全额。用于异步任务（视频/音乐生成等），因为请求返回后任务仍在运行，
 	// 必须在提交前锁定全额。
@@ -289,12 +293,70 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	}
 
 	info.ChannelMeta = channelMeta
+	if info.RoutingModelName == "" {
+		info.RoutingModelName = info.OriginModelName
+	}
+	if info.BillingModelName == "" {
+		info.BillingModelName = info.ClientModel()
+	}
 
 	// reset some fields based on channel meta
 	// 重置某些字段，例如模型名称等
 	if info.Request != nil {
 		info.Request.SetModelName(info.OriginModelName)
 	}
+}
+
+func (info *RelayInfo) ClientModel() string {
+	if info == nil {
+		return ""
+	}
+	if model := strings.TrimSpace(info.ClientModelName); model != "" {
+		return model
+	}
+	return strings.TrimSpace(info.OriginModelName)
+}
+
+func (info *RelayInfo) RoutingModel() string {
+	if info == nil {
+		return ""
+	}
+	if model := strings.TrimSpace(info.RoutingModelName); model != "" {
+		return model
+	}
+	return strings.TrimSpace(info.OriginModelName)
+}
+
+func (info *RelayInfo) MappedModel() string {
+	if info == nil {
+		return ""
+	}
+	if model := strings.TrimSpace(info.MappedModelName); model != "" {
+		return model
+	}
+	return info.RoutingModel()
+}
+
+func (info *RelayInfo) UpstreamModel() string {
+	if info == nil {
+		return ""
+	}
+	if info.ChannelMeta != nil {
+		if model := strings.TrimSpace(info.UpstreamModelName); model != "" {
+			return model
+		}
+	}
+	return info.MappedModel()
+}
+
+func (info *RelayInfo) BillingModel() string {
+	if info == nil {
+		return ""
+	}
+	if model := strings.TrimSpace(info.BillingModelName); model != "" {
+		return model
+	}
+	return info.ClientModel()
 }
 
 func (info *RelayInfo) ToString() string {
@@ -571,6 +633,8 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 	if info.ClientModelName == "" {
 		info.ClientModelName = info.OriginModelName
 	}
+	info.RoutingModelName = info.OriginModelName
+	info.BillingModelName = info.ClientModelName
 
 	if info.RelayMode == relayconstant.RelayModeUnknown {
 		info.RelayMode = c.GetInt("relay_mode")

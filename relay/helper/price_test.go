@@ -60,3 +60,36 @@ func TestModelPriceHelperTieredUsesPreloadedRequestInput(t *testing.T) {
 	require.Equal(t, billing_setting.BillingModeTieredExpr, info.TieredBillingSnapshot.BillingMode)
 	require.Equal(t, common.QuotaPerUnit, info.TieredBillingSnapshot.QuotaPerUnit)
 }
+
+func TestModelPriceHelperUsesExplicitBillingModel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	saved := map[string]string{}
+	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
+		saved[key] = value
+		return nil
+	}))
+	t.Cleanup(func() { require.NoError(t, config.GlobalConfig.LoadFromDB(saved)) })
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.billing_mode": `{"client-priced":"tiered_expr"}`,
+		"billing_setting.billing_expr": `{"client-priced":"tier(\"client\", p * 4)"}`,
+	}))
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ctx.Set("group", "default")
+	info := &relaycommon.RelayInfo{
+		ClientModelName:     "client-priced",
+		RoutingModelName:    "routing-unpriced",
+		OriginModelName:     "routing-unpriced",
+		BillingModelName:    "client-priced",
+		UserGroup:           "default",
+		UsingGroup:          "default",
+		BillingRequestInput: &billingexpr.RequestInput{},
+	}
+
+	priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
+	require.NoError(t, err)
+	require.Equal(t, 2000, priceData.QuotaToPreConsume)
+	require.Equal(t, "client-priced", info.TieredBillingSnapshot.ModelName)
+}

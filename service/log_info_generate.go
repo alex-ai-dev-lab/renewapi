@@ -36,7 +36,7 @@ func attachQuotaSaturation(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, o
 	logger.LogWarn(ctx, fmt.Sprintf(
 		"quota saturation: op=%s kind=%s original=%g clamped=%d user=%d model=%s",
 		relayInfo.QuotaClamp.Op, relayInfo.QuotaClamp.Kind, relayInfo.QuotaClamp.Original,
-		relayInfo.QuotaClamp.Clamped, relayInfo.UserId, relayInfo.OriginModelName,
+		relayInfo.QuotaClamp.Clamped, relayInfo.UserId, relayInfo.BillingModel(),
 	))
 }
 
@@ -75,12 +75,12 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	}
 	if relayInfo.IsModelMapped {
 		other["is_model_mapped"] = true
-		other["upstream_model_name"] = relayInfo.UpstreamModelName
 	}
-	if relayInfo.ClientModelName != "" && !strings.EqualFold(relayInfo.ClientModelName, relayInfo.OriginModelName) {
-		other["client_model_name"] = relayInfo.ClientModelName
-		other["routing_model_name"] = relayInfo.OriginModelName
-	}
+	other["client_model_name"] = relayInfo.ClientModel()
+	other["routing_model_name"] = relayInfo.RoutingModel()
+	other["mapped_model_name"] = relayInfo.MappedModel()
+	other["upstream_model_name"] = relayInfo.UpstreamModel()
+	other["billing_model_name"] = relayInfo.BillingModel()
 
 	isSystemPromptOverwritten := common.GetContextKeyBool(ctx, constant.ContextKeySystemPromptOverride)
 	if isSystemPromptOverwritten {

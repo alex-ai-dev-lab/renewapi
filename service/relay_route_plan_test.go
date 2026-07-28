@@ -82,13 +82,14 @@ func TestRelayRoutePlanKeepsModelRolesSeparate(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "gpt-5.5", first.ClientModel)
 	require.Equal(t, "gpt-5.6-sol", first.RoutingModel)
-	require.Equal(t, "gpt-5.6-sol", first.BillingModel)
+	require.Equal(t, "gpt-5.5", first.BillingModel)
 	require.Equal(t, "gpt-5.5", first.RequiredModel)
 
 	require.True(t, plan.Advance())
 	second, ok := plan.Current()
 	require.True(t, ok)
 	require.Equal(t, "gpt-5.4", second.RoutingModel)
+	require.Equal(t, "gpt-5.5", second.BillingModel)
 	require.False(t, plan.Advance())
 }
 

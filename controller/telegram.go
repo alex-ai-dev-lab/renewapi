@@ -4,15 +4,24 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"io"
+	"errors"
 	"net/http"
+	"net/url"
 	"sort"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+)
+
+const (
+	telegramAuthorizationMaxAge     = 5 * time.Minute
+	telegramAuthorizationFutureSkew = 2 * time.Minute
 )
 
 func TelegramBind(c *gin.Context) {
@@ -24,22 +33,15 @@ func TelegramBind(c *gin.Context) {
 		return
 	}
 	params := c.Request.URL.Query()
-	if !checkTelegramAuthorization(params, common.TelegramBotToken) {
+	telegramId, err := verifyTelegramAuthorization(params, common.TelegramBotToken, time.Now())
+	if err != nil {
+		common.SysLog("TelegramBind authorization failed: " + err.Error())
 		c.JSON(200, gin.H{
 			"message": "无效的请求",
 			"success": false,
 		})
 		return
 	}
-	ids := params["id"]
-	if len(ids) == 0 || ids[0] == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"message": "缺少 Telegram id",
-			"success": false,
-		})
-		return
-	}
-	telegramId := ids[0]
 	if model.IsTelegramIdAlreadyTaken(telegramId) {
 		c.JSON(200, gin.H{
 			"message": "该 Telegram 账户已被绑定",
@@ -93,7 +95,9 @@ func TelegramLogin(c *gin.Context) {
 		return
 	}
 	params := c.Request.URL.Query()
-	if !checkTelegramAuthorization(params, common.TelegramBotToken) {
+	telegramId, err := verifyTelegramAuthorization(params, common.TelegramBotToken, time.Now())
+	if err != nil {
+		common.SysLog("TelegramLogin authorization failed: " + err.Error())
 		c.JSON(200, gin.H{
 			"message": "无效的请求",
 			"success": false,
@@ -101,15 +105,6 @@ func TelegramLogin(c *gin.Context) {
 		return
 	}
 
-	ids := params["id"]
-	if len(ids) == 0 || ids[0] == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"message": "缺少 Telegram id",
-			"success": false,
-		})
-		return
-	}
-	telegramId := ids[0]
 	user := model.User{TelegramId: telegramId}
 	if err := user.FillUserByTelegramId(); err != nil {
 		c.JSON(200, gin.H{
@@ -121,31 +116,43 @@ func TelegramLogin(c *gin.Context) {
 	setupLogin(&user, c)
 }
 
-func checkTelegramAuthorization(params map[string][]string, token string) bool {
-	strs := []string{}
-	var hash = ""
-	for k, v := range params {
-		if len(v) == 0 {
-			return false
-		}
-		if k == "hash" {
-			hash = v[0]
-			continue
-		}
-		strs = append(strs, k+"="+v[0])
+func verifyTelegramAuthorization(params url.Values, token string, now time.Time) (string, error) {
+	if token == "" {
+		return "", errors.New("telegram bot token is empty")
 	}
-	sort.Strings(strs)
-	var imploded = ""
-	for _, s := range strs {
-		if imploded != "" {
-			imploded += "\n"
+	for _, values := range params {
+		if len(values) != 1 {
+			return "", errors.New("telegram authorization contains duplicate parameters")
 		}
-		imploded += s
 	}
-	sha256hash := sha256.New()
-	io.WriteString(sha256hash, token)
-	hmachash := hmac.New(sha256.New, sha256hash.Sum(nil))
-	io.WriteString(hmachash, imploded)
-	ss := hex.EncodeToString(hmachash.Sum(nil))
-	return hmac.Equal([]byte(hash), []byte(ss))
+
+	telegramID := params.Get("id")
+	hash := params.Get("hash")
+	authDateText := params.Get("auth_date")
+	if telegramID == "" || hash == "" || authDateText == "" {
+		return "", errors.New("telegram authorization is incomplete")
+	}
+	authDate, err := strconv.ParseInt(authDateText, 10, 64)
+	if err != nil {
+		return "", errors.New("telegram authorization date is invalid")
+	}
+	if authDate < now.Add(-telegramAuthorizationMaxAge).Unix() || authDate > now.Add(telegramAuthorizationFutureSkew).Unix() {
+		return "", errors.New("telegram authorization has expired")
+	}
+
+	data := make([]string, 0, len(params)-1)
+	for key, values := range params {
+		if key != "hash" {
+			data = append(data, key+"="+values[0])
+		}
+	}
+	sort.Strings(data)
+	secret := sha256.Sum256([]byte(token))
+	mac := hmac.New(sha256.New, secret[:])
+	_, _ = mac.Write([]byte(strings.Join(data, "\n")))
+	providedHash, err := hex.DecodeString(hash)
+	if err != nil || !hmac.Equal(providedHash, mac.Sum(nil)) {
+		return "", errors.New("telegram authorization signature is invalid")
+	}
+	return telegramID, nil
 }

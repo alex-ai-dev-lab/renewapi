@@ -136,7 +136,11 @@ func DeleteUserOAuthBinding(userId, providerId int) error {
 
 // DeleteUserOAuthBindingsByUserId deletes all OAuth bindings for a user
 func DeleteUserOAuthBindingsByUserId(userId int) error {
-	return DB.Where("user_id = ?", userId).Delete(&UserOAuthBinding{}).Error
+	return deleteUserOAuthBindingsByUserId(DB, userId)
+}
+
+func deleteUserOAuthBindingsByUserId(tx *gorm.DB, userId int) error {
+	return tx.Unscoped().Where("user_id = ?", userId).Delete(&UserOAuthBinding{}).Error
 }
 
 // GetBindingCountByProviderId returns the number of bindings for a provider

@@ -216,12 +216,28 @@ func TokenOrUserAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		// Try session auth first (dashboard users)
 		session := sessions.Default(c)
-		if id := session.Get("id"); id != nil {
-			if status, ok := session.Get("status").(int); ok && status == common.UserStatusEnabled {
-				c.Set("id", id)
-				c.Next()
+		if rawID := session.Get("id"); rawID != nil {
+			userID, ok := rawID.(int)
+			if !ok || userID <= 0 {
+				c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": common.TranslateMessage(c, i18n.MsgAuthUserInfoInvalid)})
+				c.Abort()
 				return
 			}
+			user, err := model.GetUserCache(userID)
+			if err != nil {
+				common.SysLog(fmt.Sprintf("TokenOrUserAuth GetUserCache error for user %d: %v", userID, err))
+				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": common.TranslateMessage(c, i18n.MsgDatabaseError)})
+				c.Abort()
+				return
+			}
+			if user.Status != common.UserStatusEnabled {
+				c.JSON(http.StatusForbidden, gin.H{"success": false, "message": common.TranslateMessage(c, i18n.MsgAuthUserBanned)})
+				c.Abort()
+				return
+			}
+			c.Set("id", userID)
+			c.Next()
+			return
 		}
 		// Fall back to token auth (API clients)
 		TokenAuth()(c)

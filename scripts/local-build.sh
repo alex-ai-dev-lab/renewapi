@@ -6,7 +6,7 @@ version="${VERSION:-dev}"
 image="${NEWAPI_IMAGE:-ghcr.io/alex-ai-dev-lab/renewapi:$version}"
 commit="$(git -C "$root" rev-parse --short=12 HEAD)"
 date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-upstream="${UPSTREAM_REF:-4e570389dd433a717373ce9c9b822b59f5ed3d5d}"
+upstream="${UPSTREAM_REF:-c3db41407dd1a0662ef630c41de4ac0c48c83e3c}"
 platforms="${PLATFORMS:-linux/amd64,linux/arm64}"
 extra=()
 case "${1:-}" in

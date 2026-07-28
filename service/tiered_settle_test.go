@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/require"
 )
 
 // Claude Sonnet-style tiered expression: standard vs long-context
@@ -468,6 +469,19 @@ func TestBuildTieredTokenParams_GPT_WithCache(t *testing.T) {
 	if math.Abs(got-want) > 0.01 {
 		t.Fatalf("quota = %f, want %f", got, want)
 	}
+}
+
+func TestBuildTieredTokenParamsUsesNativeCacheWriteForCC(t *testing.T) {
+	usage := &dto.Usage{
+		PromptTokens: 100,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedCreationTokens: 70,
+			CacheWriteTokens:     90,
+		},
+	}
+	params := BuildTieredTokenParams(usage, false, map[string]bool{"cc": true})
+	require.Equal(t, float64(90), params.CC)
+	require.Equal(t, float64(10), params.P)
 }
 
 func TestBuildTieredTokenParams_GPT_NoCacheVar(t *testing.T) {

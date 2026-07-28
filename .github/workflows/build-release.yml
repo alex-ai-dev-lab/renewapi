@@ -26,7 +26,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  UPSTREAM_REF: 4e570389dd433a717373ce9c9b822b59f5ed3d5d
+  UPSTREAM_REF: c3db41407dd1a0662ef630c41de4ac0c48c83e3c
 
 jobs:
   build:

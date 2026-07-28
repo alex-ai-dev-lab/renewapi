@@ -172,6 +172,34 @@ func TestCacheWriteTokensTotal(t *testing.T) {
 	})
 }
 
+func TestCalculateTextQuotaSummaryBillsNativeCacheWriteWithoutNegativeBase(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-cache",
+		PriceData: types.PriceData{
+			ModelRatio:         1,
+			CompletionRatio:    1,
+			CacheRatio:         0.1,
+			CacheCreationRatio: 1.25,
+			GroupRatioInfo:     types.GroupRatioInfo{GroupRatio: 1},
+		},
+		StartTime: time.Now(),
+	}
+	usage := &dto.Usage{
+		PromptTokens: 100,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedTokens:         80,
+			CachedCreationTokens: 70,
+			CacheWriteTokens:     90,
+		},
+	}
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+	require.Equal(t, 90, summary.CacheCreationTokens)
+	// uncached=max(0,100-80-90)=0; cache read=8; cache write=112.5; rounded=121
+	require.Equal(t, 121, summary.Quota)
+}
+
 func TestCalculateTextQuotaSummaryHandlesLegacyClaudeDerivedOpenAIUsage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

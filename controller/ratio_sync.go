@@ -180,11 +180,13 @@ func getLocalPricingSyncData() map[string]any {
 }
 
 func FetchUpstreamRatios(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"success": false,
-		"message": "上游价格同步已关闭；模型价格仅通过 models.dev/api.json 官方定时同步",
-	})
-	return
+	if !legacyUpstreamRatioSyncEnabled() {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "上游价格同步已关闭；模型价格仅通过 models.dev/api.json 官方定时同步",
+		})
+		return
+	}
 
 	var req dto.UpstreamRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -577,6 +579,10 @@ func FetchUpstreamRatios(c *gin.Context) {
 			"test_results": testResults,
 		},
 	})
+}
+
+func legacyUpstreamRatioSyncEnabled() bool {
+	return false
 }
 
 func buildDifferences(localData map[string]any, successfulChannels []struct {

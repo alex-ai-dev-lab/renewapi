@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -19,6 +20,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+const defaultVideoProxyMaxBytes = 256 << 20
 
 // videoProxyError returns a standardized OpenAI-style error response.
 func videoProxyError(c *gin.Context, status int, errType, message string) {
@@ -175,9 +178,7 @@ func VideoProxy(c *gin.Context) {
 		return
 	}
 
-	service.CopyAllowedUpstreamHeaders(c, resp.Header)
-
-	c.Writer.Header().Set("Cache-Control", "public, max-age=86400")
+	copyVideoResponseHeaders(c, resp.Header)
 	c.Writer.WriteHeader(resp.StatusCode)
 	if _, err = io.Copy(c.Writer, resp.Body); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to stream video content: %s", err.Error()))
@@ -196,10 +197,21 @@ func writeVideoDataURL(c *gin.Context, dataURL string) error {
 		return fmt.Errorf("unsupported data url")
 	}
 
-	mimeType := strings.TrimPrefix(header, "data:")
-	mimeType = strings.TrimSuffix(mimeType, ";base64")
+	mimeType := strings.TrimSuffix(strings.TrimPrefix(header, "data:"), ";base64")
 	if mimeType == "" {
 		mimeType = "video/mp4"
+	}
+	parsedMimeType, _, err := mime.ParseMediaType(mimeType)
+	if err != nil {
+		return fmt.Errorf("invalid media type: %w", err)
+	}
+
+	maxBytes := common.GetEnvOrDefault("VIDEO_PROXY_MAX_BYTES", defaultVideoProxyMaxBytes)
+	if maxBytes <= 0 {
+		maxBytes = defaultVideoProxyMaxBytes
+	}
+	if decodedBase64Len(payload) > maxBytes {
+		return fmt.Errorf("video data exceeds %d byte limit", maxBytes)
 	}
 
 	videoBytes, err := base64.StdEncoding.DecodeString(payload)
@@ -210,9 +222,34 @@ func writeVideoDataURL(c *gin.Context, dataURL string) error {
 		}
 	}
 
-	c.Writer.Header().Set("Content-Type", mimeType)
-	c.Writer.Header().Set("Cache-Control", "public, max-age=86400")
+	if len(videoBytes) > maxBytes {
+		return fmt.Errorf("video data exceeds %d byte limit", maxBytes)
+	}
+	c.Writer.Header().Set("Content-Type", parsedMimeType)
+	setPrivateVideoHeaders(c)
 	c.Writer.WriteHeader(http.StatusOK)
 	_, err = c.Writer.Write(videoBytes)
 	return err
+}
+
+func decodedBase64Len(payload string) int {
+	decodedLen := base64.StdEncoding.DecodedLen(len(payload))
+	if strings.HasSuffix(payload, "==") {
+		return decodedLen - 2
+	}
+	if strings.HasSuffix(payload, "=") {
+		return decodedLen - 1
+	}
+	return decodedLen
+}
+
+func setPrivateVideoHeaders(c *gin.Context) {
+	c.Writer.Header().Set("Cache-Control", "private, no-store")
+	c.Writer.Header().Set("Pragma", "no-cache")
+	c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
+}
+
+func copyVideoResponseHeaders(c *gin.Context, upstream http.Header) {
+	service.CopyAllowedUpstreamHeaders(c, upstream)
+	setPrivateVideoHeaders(c)
 }

@@ -54,12 +54,12 @@ func GetTwoFAByUserId(userId int) (*TwoFA, error) {
 }
 
 // IsTwoFAEnabled 检查用户是否启用了2FA
-func IsTwoFAEnabled(userId int) bool {
+func IsTwoFAEnabled(userId int) (bool, error) {
 	twoFA, err := GetTwoFAByUserId(userId)
-	if err != nil || twoFA == nil {
-		return false
+	if err != nil {
+		return false, err
 	}
-	return twoFA.IsEnabled
+	return twoFA != nil && twoFA.IsEnabled, nil
 }
 
 // CreateTwoFA 创建2FA设置
@@ -120,15 +120,38 @@ func (t *TwoFA) ResetFailedAttempts() error {
 
 // IncrementFailedAttempts 增加失败尝试次数
 func (t *TwoFA) IncrementFailedAttempts() error {
-	t.FailedAttempts++
-
-	// 检查是否需要锁定
-	if t.FailedAttempts >= common.MaxFailAttempts {
-		lockUntil := time.Now().Add(time.Duration(common.LockoutDuration) * time.Second)
-		t.LockedUntil = &lockUntil
+	if t.Id == 0 {
+		return errors.New("2FA记录ID不能为空")
 	}
-
-	return t.Update()
+	const maxUpdateRetries = 5
+	for range maxUpdateRetries {
+		var current TwoFA
+		if err := DB.Select("id", "failed_attempts", "locked_until").First(&current, t.Id).Error; err != nil {
+			return err
+		}
+		now := time.Now()
+		if current.LockedUntil != nil && now.Before(*current.LockedUntil) {
+			t.FailedAttempts, t.LockedUntil = current.FailedAttempts, current.LockedUntil
+			return nil
+		}
+		nextAttempts := current.FailedAttempts + 1
+		nextLockedUntil := current.LockedUntil
+		if nextAttempts >= common.MaxFailAttempts {
+			lockUntil := now.Add(time.Duration(common.LockoutDuration) * time.Second)
+			nextLockedUntil = &lockUntil
+		}
+		result := DB.Model(&TwoFA{}).
+			Where("id = ? AND failed_attempts = ? AND (locked_until IS NULL OR locked_until <= ?)", current.Id, current.FailedAttempts, now).
+			Updates(map[string]interface{}{"failed_attempts": nextAttempts, "locked_until": nextLockedUntil})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 1 {
+			t.FailedAttempts, t.LockedUntil = nextAttempts, nextLockedUntil
+			return nil
+		}
+	}
+	return errors.New("更新2FA失败次数冲突，请重试")
 }
 
 // IsLocked 检查账户是否被锁定
@@ -186,16 +209,14 @@ func ValidateBackupCode(userId int, code string) (bool, error) {
 	// 验证备用码
 	for _, bc := range backupCodes {
 		if common.ValidatePasswordAndHash(normalizedCode, bc.CodeHash) {
-			// 标记为已使用
 			now := time.Now()
-			bc.IsUsed = true
-			bc.UsedAt = &now
-
-			if err := DB.Save(&bc).Error; err != nil {
-				return false, err
+			result := DB.Model(&TwoFABackupCode{}).
+				Where("id = ? AND is_used = ?", bc.Id, false).
+				Updates(map[string]interface{}{"is_used": true, "used_at": now})
+			if result.Error != nil {
+				return false, result.Error
 			}
-
-			return true, nil
+			return result.RowsAffected == 1, nil
 		}
 	}
 
@@ -240,9 +261,8 @@ func (t *TwoFA) ValidateTOTPAndUpdateUsage(code string) (bool, error) {
 
 	// 验证TOTP码
 	if !common.ValidateTOTPCode(t.Secret, code) {
-		// 增加失败次数
 		if err := t.IncrementFailedAttempts(); err != nil {
-			common.SysLog("更新2FA失败次数失败: " + err.Error())
+			return false, err
 		}
 		return false, nil
 	}
@@ -254,7 +274,7 @@ func (t *TwoFA) ValidateTOTPAndUpdateUsage(code string) (bool, error) {
 	t.LastUsedAt = &now
 
 	if err := t.Update(); err != nil {
-		common.SysLog("更新2FA使用记录失败: " + err.Error())
+		return false, err
 	}
 
 	return true, nil
@@ -274,9 +294,8 @@ func (t *TwoFA) ValidateBackupCodeAndUpdateUsage(code string) (bool, error) {
 	}
 
 	if !valid {
-		// 增加失败次数
 		if err := t.IncrementFailedAttempts(); err != nil {
-			common.SysLog("更新2FA失败次数失败: " + err.Error())
+			return false, err
 		}
 		return false, nil
 	}
@@ -288,7 +307,7 @@ func (t *TwoFA) ValidateBackupCodeAndUpdateUsage(code string) (bool, error) {
 	t.LastUsedAt = &now
 
 	if err := t.Update(); err != nil {
-		common.SysLog("更新2FA使用记录失败: " + err.Error())
+		return false, err
 	}
 
 	return true, nil

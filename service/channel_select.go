@@ -68,37 +68,21 @@ func (p *RetryParam) ResetRetryNextTry() {
 // 尝试获取一个满足要求的随机渠道。
 //
 // For "auto" tokenGroup with cross-group Retry enabled:
-// 对于启用了跨分组重试的 "auto" tokenGroup：
+// 对于启用了跳分组重试的 "auto" tokenGroup：
 //
-//   - Each group will exhaust all its priorities before moving to the next group.
+//   - Each group exhausts all its priorities before moving to the next group.
 //     每个分组会用完所有优先级后才会切换到下一个分组。
+//   - ContextKeyAutoGroupIndex records which group to resume from on the next retry.
+//     ContextKeyAutoGroupIndex 记录下次重试从哪个分组继续。
+//   - priorityRetry is the priority level inside the current group: it equals param.Retry
+//     while we stay in the same group, and is reset to 0 the moment we advance to a new one
+//     (param.SetRetry(0) keeps the outer relay loop in sync).
+//     priorityRetry 是当前分组内的优先级：留在同一分组时等于 param.Retry，
+//     一旦切换到新分组就重置为 0（同时 param.SetRetry(0) 保持外层重试循环一致）。
 //
-//   - Uses ContextKeyAutoGroupIndex to track current group index.
-//     使用 ContextKeyAutoGroupIndex 跟踪当前分组索引。
-//
-//   - Uses ContextKeyAutoGroupRetryIndex to track the global Retry count when current group started.
-//     使用 ContextKeyAutoGroupRetryIndex 跟踪当前分组开始时的全局重试次数。
-//
-//   - priorityRetry = Retry - startRetryIndex, represents the priority level within current group.
-//     priorityRetry = Retry - startRetryIndex，表示当前分组内的优先级级别。
-//
-//   - When GetRandomSatisfiedChannel returns nil (priorities exhausted), moves to next group.
-//     当 GetRandomSatisfiedChannel 返回 nil（优先级用完）时，切换到下一个分组。
-//
-// Example flow (2 groups, each with 2 priorities, RetryTimes=3):
-// 示例流程（2个分组，每个有2个优先级，RetryTimes=3）：
-//
-//	Retry=0: GroupA, priority0 (startRetryIndex=0, priorityRetry=0)
-//	         分组A, 优先级0
-//
-//	Retry=1: GroupA, priority1 (startRetryIndex=0, priorityRetry=1)
-//	         分组A, 优先级1
-//
-//	Retry=2: GroupA exhausted → GroupB, priority0 (startRetryIndex=2, priorityRetry=0)
-//	         分组A用完 → 分组B, 优先级0
-//
-//	Retry=3: GroupB, priority1 (startRetryIndex=2, priorityRetry=1)
-//	         分组B, 优先级1
+// 注意: 这里仍会写 ContextKeyAutoGroupRetryIndex，但本函数已不再读它——历史上的
+// startRetryIndex 算法（priorityRetry = Retry - startRetryIndex）已被上面的“切组就归零”
+// 方式取代。若确认其他包也不读该 key，应连同常量一并删除。
 func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, error) {
 	var channel *model.Channel
 	var err error
@@ -155,19 +139,27 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			}
 		}
 
+		// lastSelectErr 保留最后一个真实错误（DB/缓存异常）。以前这个 error 被直接丢弃，
+		// 导致下游无法区分“真的没有可用渠道”和“查渠道失败”。
+		var lastSelectErr error
 		for i := startGroupIndex; i < len(autoGroups); i++ {
 			autoGroup := autoGroups[i]
 			// Calculate priorityRetry for current group
 			// 计算当前分组的 priorityRetry
 			priorityRetry := param.GetRetry()
 			// If moved to a new group, reset priorityRetry and update startRetryIndex
-			// 如果切换到新分组，重置 priorityRetry 并更新 startRetryIndex
+			// 如果切换到新分组，重置 priorityRetry
 			if i > startGroupIndex {
 				priorityRetry = 0
 			}
 			logger.LogDebug(param.Ctx, "Auto selecting group: %s, priorityRetry: %d", autoGroup, priorityRetry)
 
-			channel, _ = getRandomSatisfiedChannelWithRequirements(param, autoGroup, priorityRetry)
+			var selectErr error
+			channel, selectErr = getRandomSatisfiedChannelWithRequirements(param, autoGroup, priorityRetry)
+			if selectErr != nil {
+				lastSelectErr = selectErr
+				logger.LogError(param.Ctx, "select channel failed in group %s for model %s: %v", autoGroup, param.ModelName, selectErr)
+			}
 			if channel == nil {
 				// Current group has no available channel for this model, try next group
 				// 当前分组没有该模型的可用渠道，尝试下一个分组
@@ -203,6 +195,11 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 				common.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, i)
 			}
 			break
+		}
+		// 所有分组都没选到渠道，且期间出过真实错误时，把错误往上报，
+		// 与非 auto 分支的行为保持一致。
+		if channel == nil && lastSelectErr != nil {
+			return nil, selectGroup, lastSelectErr
 		}
 	} else {
 		channel, err = getRandomSatisfiedChannelWithRequirements(param, param.TokenGroup, param.GetRetry())
@@ -260,6 +257,10 @@ func ChannelAllowedForProduction(channel *model.Channel) bool {
 		ChannelAntiPoisonCircuitAllowsProduction(channel.Id, channel.GetSetting())
 }
 
+// requirementFilterMaxAttempts 限制“拉一个渠道→不满要求→排除后重拉”的次数，
+// 避免在大量渠道都不满要求时死循环。
+const requirementFilterMaxAttempts = 64
+
 func getRandomSatisfiedChannelWithRequirements(param *RetryParam, group string, retry int) (*model.Channel, error) {
 	if param == nil {
 		return nil, errors.New("retry param is nil")
@@ -272,7 +273,7 @@ func getRandomSatisfiedChannelWithRequirements(param *RetryParam, group string, 
 		excluded = make(map[int]bool)
 		param.ExcludedChannelIds = excluded
 	}
-	for attempts := 0; attempts < 64; attempts++ {
+	for attempts := 0; attempts < requirementFilterMaxAttempts; attempts++ {
 		channel, err := model.GetRandomSatisfiedChannelExcludingWithPolicy(group, param.ModelName, retry, excluded, param.ProviderRoutingPolicy)
 		if err != nil || channel == nil {
 			return channel, err
@@ -282,6 +283,8 @@ func getRandomSatisfiedChannelWithRequirements(param *RetryParam, group string, 
 		}
 		excluded[channel.Id] = true
 	}
+	// 以前这里静默返回 nil, nil，与“真的没有渠道”完全无法区分。
+	logger.LogError(param.Ctx, "channel requirement filter exhausted %d attempts in group %s for model %s", requirementFilterMaxAttempts, group, param.ModelName)
 	return nil, nil
 }
 
@@ -423,15 +426,17 @@ func HasUntriedEnabledMultiKey(param *RetryParam, channel *model.Channel) bool {
 	return false
 }
 
+// SelectUntriedEnabledMultiKey 选一个本次请求还没用过、且处于启用状态的 key。
+// 入参语义与 HasUntriedEnabledMultiKey 一致：后者返回 true 时，这里就应该能选出来。
 func SelectUntriedEnabledMultiKey(param *RetryParam, channel *model.Channel) (string, int, bool, *types.NewAPIError) {
 	if param == nil || channel == nil || !channel.ChannelInfo.IsMultiKey {
 		return "", 0, false, nil
 	}
 	keys := channel.GetKeys()
 	tried := param.TriedMultiKeyIndexes[channel.Id]
-	if len(tried) == 0 {
-		return "", 0, false, nil
-	}
+	// 以前这里有一句 `if len(tried) == 0 { return "", 0, false, nil }`：
+	// tried 为空意味着一个 key 都还没试过，本应是“随便选”的情况，却反而直接
+	// 报未命中，与 HasUntriedEnabledMultiKey(tried 为空时返回 true) 相互矛盾。
 	for index := range keys {
 		if tried != nil && tried[index] {
 			continue

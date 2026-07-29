@@ -26,6 +26,35 @@ import type {
   ApiKeyFormData,
 } from './types'
 
+const DEFAULT_PAGE = 1
+const DEFAULT_PAGE_SIZE = 10
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * 仅在值真正存在时写入查询参数。
+ * 不能用 `if (value)`：那会把合法的 `0` / `'0'` 当成空值静默丢弃。
+ */
+function setIfPresent(
+  target: URLSearchParams,
+  key: string,
+  value: string | number | undefined | null
+) {
+  if (value === undefined || value === null) return
+  const str = String(value)
+  if (str === '') return
+  target.set(key, str)
+}
+
+/** 分页参数归一，避开 `p=NaN` / `size=0` 直接拼进 URL。 */
+function normalizePositiveInt(value: unknown, fallback: number): number {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num < 1) return fallback
+  return Math.floor(num)
+}
+
 // ============================================================================
 // API Key Management
 // ============================================================================
@@ -34,8 +63,12 @@ import type {
 export async function getApiKeys(
   params: GetApiKeysParams = {}
 ): Promise<GetApiKeysResponse> {
-  const { p = 1, size = 10 } = params
-  const res = await api.get(`/api/token/?p=${p}&size=${size}`)
+  const { p, size } = params
+  const queryParams = new URLSearchParams({
+    p: String(normalizePositiveInt(p, DEFAULT_PAGE)),
+    size: String(normalizePositiveInt(size, DEFAULT_PAGE_SIZE)),
+  })
+  const res = await api.get(`/api/token/?${queryParams.toString()}`)
   return res.data
 }
 
@@ -43,17 +76,22 @@ export async function getApiKeys(
 export async function searchApiKeys(
   params: SearchApiKeysParams
 ): Promise<GetApiKeysResponse> {
-  const { keyword = '', token = '', p, size } = params
+  const { keyword, token, p, size } = params
   const queryParams = new URLSearchParams()
-  if (keyword) queryParams.set('keyword', keyword)
-  if (token) queryParams.set('token', token)
-  if (p != null) queryParams.set('p', String(p))
-  if (size != null) queryParams.set('size', String(size))
+  setIfPresent(queryParams, 'keyword', keyword)
+  setIfPresent(queryParams, 'token', token)
+  setIfPresent(queryParams, 'p', p == null ? p : normalizePositiveInt(p, DEFAULT_PAGE))
+  setIfPresent(
+    queryParams,
+    'size',
+    size == null ? size : normalizePositiveInt(size, DEFAULT_PAGE_SIZE)
+  )
   const res = await api.get(`/api/token/search?${queryParams.toString()}`)
   return res.data
 }
 
 // Get single API key by ID
+// NOTE: 此处无尾斜杠，而 deleteApiKey 带尾斜杠，为后端路由注册遗留的不一致。
 export async function getApiKey(id: number): Promise<ApiResponse<ApiKey>> {
   const res = await api.get(`/api/token/${id}`)
   return res.data
@@ -90,6 +128,9 @@ export async function batchDeleteApiKeys(
 }
 
 // Update API key status (enable/disable)
+// 历史遗留：与 updateApiKey 共用 PUT /api/token/，仅靠查询参数
+// `status_only=true` 区分。一旦该标记丢失，这里仅带 { id, status }
+// 的 body 会被当成完整更新，造成名称/额度/模型白名单等字段被清空。
 export async function updateApiKeyStatus(
   id: number,
   status: number
@@ -99,6 +140,8 @@ export async function updateApiKeyStatus(
 }
 
 // Fetch the real (unmasked) key for a token by ID
+// 安全注意：返回明文密钥，客户端未包裹 lib/secure-verification.ts 的二次验证流程，
+// 仅依赖后端 middleware/secure_verification.go 是否已在该路由上启用。
 export async function fetchTokenKey(
   id: number
 ): Promise<{ success: boolean; message?: string; data?: { key: string } }> {

@@ -153,6 +153,7 @@ export async function createWaffoPancakeSubscriptionProduct(data: {
 
 // Returns the OnetimeProducts in the saved Pancake store; empty when the
 // gateway isn't fully configured.
+// NOTE: 这是一个纯查询却用 POST 的端点（历史遗留），无请求体。
 export async function listWaffoPancakeSubscriptionProductOptions(): Promise<
   ApiResponse<{
     store_id: string
@@ -169,28 +170,46 @@ export async function paySubscriptionEpay(
   data: SubscriptionPayRequest & { payment_method: string }
 ): Promise<SubscriptionPayResponse & { url?: string }> {
   const res = await api.post('/api/subscription/epay/pay', data)
-  return {
-    ...res.data,
-    url: res.data.url || (res as unknown as { url?: string }).url,
-  }
+  // 原实现还会回退到 `(res as { url?: string }).url`，axios 响应对象上不存在
+  // 顶层 url 字段，该分支永远为 undefined，属于早期 fetch 实现的断代码。
+  // SubscriptionPayResponse 自身已声明顶层 url，直接返回即可。
+  return res.data
 }
 
 // ============================================================================
 // User Self Subscriptions
 // ============================================================================
 
-export async function getSelfSubscriptions(): Promise<
-  ApiResponse<UserSubscriptionRecord[]>
-> {
-  const res = await api.get('/api/subscription/self')
-  return res.data
-}
-
+/**
+ * 获取当前用户的订阅完整负载。
+ * `/api/subscription/self` 返回的是 `SelfSubscriptionData` 对象
+ * （billing_preference + subscriptions + all_subscriptions）。
+ */
 export async function getSelfSubscriptionFull(): Promise<
   ApiResponse<SelfSubscriptionData>
 > {
   const res = await api.get('/api/subscription/self')
   return res.data
+}
+
+/**
+ * @deprecated 请直接用 `getSelfSubscriptionFull()`。
+ *
+ * 原实现与 `getSelfSubscriptionFull` 打同一个端点，却声明返回
+ * `ApiResponse<UserSubscriptionRecord[]>` —— 与实际负载矛盾，调用方拿到的
+ * `data` 是对象而非数组，`.map()` / `.length` 会报错或得到 undefined，
+ * 而 TypeScript 因为类型被手写断言过完全不报警。
+ * 现在从完整负载里取出 `subscriptions`，让声明的类型真正成立。
+ */
+export async function getSelfSubscriptions(): Promise<
+  ApiResponse<UserSubscriptionRecord[]>
+> {
+  const res = await getSelfSubscriptionFull()
+  return {
+    success: res.success,
+    message: res.message,
+    data: res.data?.subscriptions ?? [],
+  }
 }
 
 export async function getPublicPlans(): Promise<ApiResponse<PlanRecord[]>> {
@@ -207,6 +226,8 @@ export async function updateBillingPreference(
   return res.data
 }
 
+// NOTE: 与 features/users/api.ts 的 getGroups 重复，且这里是 `/api/group`
+// （无尾斜杠）而 users 模块是 `/api/group/`；建议后续收拢到共享层。
 export async function getGroups(): Promise<ApiResponse<string[]>> {
   const res = await api.get('/api/group')
   return res.data

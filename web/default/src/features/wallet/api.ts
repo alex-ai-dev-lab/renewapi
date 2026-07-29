@@ -40,15 +40,49 @@ import type {
   WaffoPancakePaymentResponse,
 } from './types'
 
+const DEFAULT_PAGE = 1
+const DEFAULT_PAGE_SIZE = 10
+
 // ============================================================================
 // Wallet API Functions
 // ============================================================================
 
 /**
  * Check if API response is successful
+ *
+ * 以 `success` 字段为唯一权威依据。旧字段 `message === 'success'` 仅在
+ * `success` 缺失（非 boolean）时作为兼容回退；否则 `success: false` +
+ * `message: 'success'` 的响应会被当成成功，在充值/兑换链路上直接造成资损。
  */
 export function isApiSuccess(response: ApiResponse): boolean {
-  return response.success === true || response.message === 'success'
+  if (typeof response?.success === 'boolean') return response.success
+  return response?.message === 'success'
+}
+
+function normalizePositiveInt(value: unknown, fallback: number): number {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num < 1) return fallback
+  return Math.floor(num)
+}
+
+/**
+ * 构造账单列表查询串。
+ * keyword 用 `!== undefined && !== ''` 判断：原来的 `if (keyword)` 会丢掉
+ * 字面值为 `'0'` 的合法关键词（如按订单号/金额 0 搜索）。
+ */
+function buildBillingHistoryParams(
+  page: number,
+  pageSize: number,
+  keyword?: string
+): URLSearchParams {
+  const params = new URLSearchParams({
+    p: String(normalizePositiveInt(page, DEFAULT_PAGE)),
+    page_size: String(normalizePositiveInt(pageSize, DEFAULT_PAGE_SIZE)),
+  })
+  if (keyword !== undefined && keyword !== '') {
+    params.set('keyword', keyword)
+  }
+  return params
 }
 
 /**
@@ -102,10 +136,9 @@ export async function requestPayment(
   const res = await api.post('/api/user/pay', request, {
     skipBusinessError: true,
   } as Record<string, unknown>)
-  return {
-    ...res.data,
-    url: res.data.url || (res as unknown as { url?: string }).url,
-  }
+  // 原实现还会回退到 `(res as { url?: string }).url`，但 axios 响应对象上不存在
+  // 顶层 url 字段，该分支永远为 undefined，属于无效的历史遗留。
+  return res.data
 }
 
 /**
@@ -194,13 +227,7 @@ export async function getUserBillingHistory(
   pageSize: number,
   keyword?: string
 ): Promise<ApiResponse<BillingHistoryResponse>> {
-  const params = new URLSearchParams({
-    p: page.toString(),
-    page_size: pageSize.toString(),
-  })
-  if (keyword) {
-    params.append('keyword', keyword)
-  }
+  const params = buildBillingHistoryParams(page, pageSize, keyword)
   const res = await api.get(`/api/user/topup/self?${params.toString()}`)
   return res.data
 }
@@ -213,13 +240,7 @@ export async function getAllBillingHistory(
   pageSize: number,
   keyword?: string
 ): Promise<ApiResponse<BillingHistoryResponse>> {
-  const params = new URLSearchParams({
-    p: page.toString(),
-    page_size: pageSize.toString(),
-  })
-  if (keyword) {
-    params.append('keyword', keyword)
-  }
+  const params = buildBillingHistoryParams(page, pageSize, keyword)
   const res = await api.get(`/api/user/topup?${params.toString()}`)
   return res.data
 }

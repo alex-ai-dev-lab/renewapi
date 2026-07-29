@@ -311,8 +311,15 @@ func setupEmptyStreamRecoveryDB(t *testing.T) *gorm.DB {
 
 	recovery := operation_setting.GetStreamRecoverySetting()
 	recovery.Enabled = true
+	recovery.PreCommitRetryEnabled = true
 	recovery.EmptyStreamRetryLimit = 1
+	recovery.SessionRouteRepairEnabled = true
+	recovery.PostCommitRouteRepairEnabled = true
 	recovery.SessionNegativeTTLSeconds = 90
+	recovery.UnknownFailureNegativeTTLSeconds = 30
+	recovery.KeyNegativeTTLSeconds = 90
+	recovery.MaxCrossRequestRouteChanges = 2
+	recovery.RecoveryChainWindowSeconds = 60
 	recovery.ChannelModelEscalationEnabled = false
 	affinity := operation_setting.GetChannelAffinitySetting()
 	affinity.Enabled = true

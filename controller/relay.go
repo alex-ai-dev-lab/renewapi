@@ -364,6 +364,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			Requirement:      responsesRequirement,
 			Request:          relayInfo.Request,
 			ProviderPolicy:   getProviderRoutingPolicy(c),
+			ChannelAllowed: func(channel *model.Channel) bool {
+				return channel != nil && !service.ShouldAvoidChannelForSession(c, channel.Id)
+			},
 		})
 		if planErr != nil {
 			newAPIError = types.NewError(planErr, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
@@ -416,7 +419,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			maxRetryTimes = compatRelayRetryBudget(relayInfo, relayFormat)
 		}
 		ordinaryRetryLimit := maxRetryTimes
-		if setting := operation_setting.GetStreamRecoverySetting(); relayInfo.IsStream && setting != nil && setting.Enabled && setting.EmptyStreamRetryLimit > 0 {
+		if setting := operation_setting.GetStreamRecoverySetting(); relayInfo.IsStream && setting != nil && setting.PreCommitRetryOn() && setting.EmptyStreamRetryLimit > 0 {
 			maxRetryTimes += setting.EmptyStreamRetryLimit
 		}
 		// Compat hook: OnSelectRetryParam (populates excludes/preferences).
@@ -512,6 +515,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				compat.Hooks().AfterChannelCall(c, relayInfo, channel, nil)
 				relayInfo.LastError = nil
 				service.SetRelaySemanticSuccess(c, true)
+				if service.ObserveSessionRecoverySuccess(c, channel.Id) {
+					service.RecordStreamRecoveryEvent(c, relayInfo, channel.Id, "recovered_next_request")
+				}
 				if streamRecoveryRetries > 0 {
 					service.RecordStreamRecoveryEvent(c, relayInfo, channel.Id, "recovered")
 				}
@@ -533,6 +539,13 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			relayInfo.LastError = newAPIError
 			streamRecoveryFailure := isSessionScopedStreamFailure(relayInfo)
 			streamClientFailure := isClientScopedStreamFailure(relayInfo)
+			sessionRecoveryDecision := service.SessionRecoveryDecision{}
+			if streamRecoveryFailure {
+				sessionRecoveryDecision = service.DecideSessionRecovery(
+					relayInfo.StreamStatus.Outcome(), newAPIError, relayInfo.Request,
+					channel.ChannelInfo.IsMultiKey, service.HasUntriedEnabledMultiKey(retryParam, channel),
+				)
+			}
 			if maybeRetryResponsesFunctionCallArgumentsAsObject(c, relayInfo, retryParam, channel, newAPIError) {
 				continue
 			}
@@ -558,16 +571,22 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				service.RecordStreamRecoveryEvent(c, relayInfo, channel.Id, "client_failure")
 			} else if streamRecoveryFailure {
 				service.RecordStreamRecoveryEvent(c, relayInfo, channel.Id, "detected")
-				if setting := operation_setting.GetStreamRecoverySetting(); setting != nil && setting.Enabled {
-					if service.EvictCurrentChannelAffinityIfMatches(c, channel.Id) {
-						service.RecordStreamRecoveryEvent(c, relayInfo, channel.Id, "affinity_evicted")
-					}
-					if !service.HasUntriedEnabledMultiKey(retryParam, channel) {
-						service.MarkChannelSessionNegative(c, channel.Id)
-						service.RecordStreamRecoveryEvent(c, relayInfo, channel.Id, "session_negative")
-					}
+				recoveryResult := service.ApplySessionRecovery(c, relayInfo, channel, sessionRecoveryDecision)
+				if recoveryResult.AffinityEvicted {
+					service.RecordStreamRecoveryEvent(c, relayInfo, channel.Id, "affinity_evicted")
+				} else if recoveryResult.AffinityCASMiss {
+					service.RecordStreamRecoveryEvent(c, relayInfo, channel.Id, "affinity_cas_miss")
 				}
-				if service.RecordDistinctStreamFailure(c, channel.Id, relayInfo.OriginModelName) {
+				if recoveryResult.ChannelNegative {
+					service.RecordStreamRecoveryEvent(c, relayInfo, channel.Id, "session_negative")
+				}
+				if recoveryResult.KeyNegative {
+					service.RecordStreamRecoveryEvent(c, relayInfo, channel.Id, "session_key_negative")
+				}
+				if recoveryResult.BudgetExhausted {
+					service.RecordStreamRecoveryEvent(c, relayInfo, channel.Id, "recovery_budget_exhausted")
+				}
+				if sessionRecoveryDecision.CountChannelHealth && service.RecordDistinctStreamFailure(c, channel.Id, relayInfo.OriginModelName) {
 					service.RecordRouterCooldownFailure(channel.Id, relayInfo, newAPIError)
 					service.RecordStreamRecoveryEvent(c, relayInfo, channel.Id, "channel_model_escalated")
 				}
@@ -613,7 +632,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				finalShouldRetry = false
 			}
 			if streamRecoveryFailure {
-				finalShouldRetry = finalShouldRetry && shouldRetrySessionScopedStream(relayInfo, streamRecoveryRetries)
+				finalShouldRetry = finalShouldRetry && sessionRecoveryDecision.RetryCurrentRequest && shouldRetrySessionScopedStream(relayInfo, streamRecoveryRetries)
 				if finalShouldRetry {
 					streamRecoveryRetries++
 					if service.HasUntriedEnabledMultiKey(retryParam, channel) {
@@ -724,6 +743,7 @@ func prepareDistributorResponsesRoutePlan(c *gin.Context, info *relaycommon.Rela
 		channel, err := model.CacheGetChannel(route.PreferredChannelId)
 		valid := err == nil && channel != nil && channel.Status == common.ChannelStatusEnabled &&
 			service.ChannelAllowedForProduction(channel) && tokenAllowsRelayModel(c, route.RoutingModel) &&
+			!service.ShouldAvoidChannelForSession(c, channel.Id) &&
 			model.IsChannelEnabledForGroupModel(route.Group, route.RoutingModel, channel.Id) &&
 			!model.IsChannelModelDisabledForGroup(channel.Id, route.Group, route.RoutingModel)
 		if valid && route.RequiredModel != "" && !strings.EqualFold(route.RequiredModel, route.RoutingModel) {
@@ -1182,7 +1202,7 @@ func shouldRetrySessionScopedStream(info *relaycommon.RelayInfo, recoveryRetries
 		return false
 	}
 	setting := operation_setting.GetStreamRecoverySetting()
-	if setting == nil || !setting.Enabled || setting.EmptyStreamRetryLimit <= 0 {
+	if setting == nil || !setting.PreCommitRetryOn() || setting.EmptyStreamRetryLimit <= 0 {
 		return false
 	}
 	return info.StreamStatus.Outcome().RetryableBeforeCommit && recoveryRetries < setting.EmptyStreamRetryLimit
@@ -1734,6 +1754,16 @@ func recordRelayErrorLog(c *gin.Context, riskChannelId int, err *types.NewAPIErr
 		adminInfo["multi_key_index"] = common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
 	}
 	service.AppendChannelAffinityAdminInfo(c, adminInfo)
+	service.AppendSessionRecoveryAdminInfo(c, adminInfo)
+	if recoveryInfo, ok := service.SessionRecoveryLogInfo(c); ok {
+		other["session_recovery"] = recoveryInfo
+		if scope, ok := recoveryInfo["failure_scope"].(string); ok && scope != "" {
+			other["failure_scope"] = scope
+		}
+		if policy, ok := recoveryInfo["billing_policy"].(string); ok && policy != "" {
+			other["billing_policy"] = policy
+		}
+	}
 	other["admin_info"] = adminInfo
 	startTime := common.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
 	if startTime.IsZero() {

@@ -253,6 +253,11 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
 	}
+	successChannelID := info.ChannelId
+	if selectedChannelID := common.GetContextKeyInt(c, appconstant.ContextKeyChannelId); selectedChannelID > 0 {
+		successChannelID = selectedChannelID
+	}
+	service.ObserveSessionRecoverySuccess(c, successChannelID)
 
 	usageDto := usage.(*dto.Usage)
 	if info.RelayMode == relayconstant.RelayModeResponsesCompact {

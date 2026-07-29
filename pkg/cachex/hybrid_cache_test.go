@@ -63,6 +63,41 @@ func TestHybridCacheCompareAndDeleteRedis(t *testing.T) {
 	require.False(t, found)
 }
 
+func TestHybridCacheCompareAndSwapMemory(t *testing.T) {
+	cache := NewHybridCache[int](HybridCacheConfig[int]{Namespace: "compare-swap-memory", Memory: func() *hot.HotCache[string, int] {
+		return hot.NewHotCache[string, int](hot.LRU, 8).Build()
+	}})
+	swapped, err := cache.CompareAndSwap("session", nil, 1, time.Minute, func(a, b int) bool { return a == b })
+	require.NoError(t, err)
+	require.True(t, swapped)
+	wrong := 2
+	swapped, err = cache.CompareAndSwap("session", &wrong, 3, time.Minute, func(a, b int) bool { return a == b })
+	require.NoError(t, err)
+	require.False(t, swapped)
+	expected := 1
+	swapped, err = cache.CompareAndSwap("session", &expected, 3, time.Minute, func(a, b int) bool { return a == b })
+	require.NoError(t, err)
+	require.True(t, swapped)
+}
+
+func TestHybridCacheCompareAndSwapRedis(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	cache := NewHybridCache[int](HybridCacheConfig[int]{Namespace: "compare-swap-redis", Redis: client, RedisCodec: IntCodec{}})
+	swapped, err := cache.CompareAndSwap("session", nil, 1, time.Minute, func(a, b int) bool { return a == b })
+	require.NoError(t, err)
+	require.True(t, swapped)
+	expected := 1
+	swapped, err = cache.CompareAndSwap("session", &expected, 3, time.Minute, func(a, b int) bool { return a == b })
+	require.NoError(t, err)
+	require.True(t, swapped)
+	value, found, err := cache.Get("session")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, 3, value)
+}
+
 func TestHybridCacheDeleteManySerializesWithCompareAndDelete(t *testing.T) {
 	cache := NewHybridCache[int](HybridCacheConfig[int]{
 		Namespace: "compare-delete-race-test",

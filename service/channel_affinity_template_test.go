@@ -261,6 +261,47 @@ func TestEvictCurrentChannelAffinityUsesCompareAndDelete(t *testing.T) {
 	require.False(t, found)
 }
 
+func TestLegacyAffinityReadDoesNotCreateTrustedV2Generation(t *testing.T) {
+	key := fmt.Sprintf("legacy-read-%d", time.Now().UnixNano())
+	legacyCache := getChannelAffinityCache()
+	v2Cache := getChannelAffinityRecordCache()
+	require.NoError(t, legacyCache.SetWithTTL(key, 42, time.Minute))
+	_, _ = v2Cache.DeleteMany([]string{key})
+	t.Cleanup(func() {
+		_, _ = legacyCache.DeleteMany([]string{key})
+		_, _ = v2Cache.DeleteMany([]string{key})
+	})
+
+	record, found, err := getAffinityRecord(key)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, 42, record.ChannelID)
+	require.Empty(t, record.Generation)
+	require.Zero(t, record.RecordedAt)
+	_, v2Found, err := v2Cache.Get(key)
+	require.NoError(t, err)
+	require.False(t, v2Found)
+}
+
+func TestOldFailureCannotDeleteNewSuccessOnSameChannel(t *testing.T) {
+	key := fmt.Sprintf("cas-generation-%d", time.Now().UnixNano())
+	oldRecord := ChannelAffinityRecord{ChannelID: 42, Generation: "old", RecordedAt: 1}
+	newRecord := ChannelAffinityRecord{ChannelID: 42, Generation: "new", RecordedAt: 2}
+	cache := getChannelAffinityRecordCache()
+	require.NoError(t, cache.SetWithTTL(key, oldRecord, time.Minute))
+	t.Cleanup(func() { _, _ = cache.DeleteMany([]string{key}) })
+
+	ctx := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{CacheKey: channelAffinityCacheNamespace + ":" + key, TTLSeconds: 60})
+	ctx.Set(ginKeyChannelAffinityMatchedKey, key)
+	ctx.Set(ginKeyChannelAffinityMatchedV2, oldRecord)
+	require.NoError(t, cache.SetWithTTL(key, newRecord, time.Minute))
+	require.False(t, EvictCurrentChannelAffinityIfMatches(ctx, 42))
+	value, found, err := cache.Get(key)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, newRecord, value)
+}
+
 func TestChannelSessionNegativeIsScopedToAffinityAndChannel(t *testing.T) {
 	key := fmt.Sprintf("negative-%d", time.Now().UnixNano())
 	ctx := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{

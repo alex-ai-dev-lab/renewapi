@@ -101,6 +101,7 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	}
 
 	AppendChannelAffinityAdminInfo(ctx, adminInfo)
+	AppendSessionRecoveryAdminInfo(ctx, adminInfo)
 
 	other["admin_info"] = adminInfo
 	appendRequestPath(ctx, relayInfo, other)
@@ -124,13 +125,18 @@ func appendStreamStatus(relayInfo *relaycommon.RelayInfo, other map[string]inter
 		return
 	}
 	ss := relayInfo.StreamStatus
+	outcome := ss.Outcome()
 	status := "ok"
 	if !ss.IsNormalEnd() || ss.HasErrors() {
 		status = "error"
 	}
 	streamInfo := map[string]interface{}{
-		"status":     status,
-		"end_reason": string(ss.EndReason),
+		"status": status, "end_reason": string(ss.EndReason),
+		"code": outcome.Code, "transport_end": outcome.TransportEnd, "semantic_end": outcome.SemanticEnd,
+		"raw_frames": outcome.RawFrameCount, "valid_events": outcome.ValidEventCount,
+		"invalid_events": outcome.InvalidEventCount, "forwarded_events": outcome.ForwardedEventCount,
+		"terminal_seen": outcome.TerminalSeen, "client_committed": outcome.ClientCommitted,
+		"retryable_precommit": outcome.RetryableBeforeCommit,
 	}
 	if ss.EndError != nil {
 		streamInfo["end_error"] = ss.EndError.Error()

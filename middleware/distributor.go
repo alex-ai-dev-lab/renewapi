@@ -444,6 +444,9 @@ func buildDistributorResponsesRoutePlan(
 		Request:            modelRequest.RoutingRequest,
 		ProviderPolicy:     modelRequest.ProviderPolicy,
 		TokenModelAllowed:  func(modelName string) bool { return distributorTokenAllowsModel(c, modelName) },
+		ChannelAllowed: func(channel *model.Channel) bool {
+			return channel != nil && !service.ShouldAvoidChannelForSession(c, channel.Id)
+		},
 	}
 	if strings.EqualFold(usingGroup, "auto") {
 		params.Group = ""

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -46,4 +47,17 @@ func TestGenerateTextOtherInfoRecordsExplicitIdentityWhenModelsMatch(t *testing.
 	require.Equal(t, "gpt-5.5", other["client_model_name"])
 	require.Equal(t, "gpt-5.5", other["routing_model_name"])
 	require.Equal(t, "gpt-5.5", other["billing_model_name"])
+}
+
+func TestGenerateTextOtherInfoIncludesSuccessfulSessionRecovery(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set(ginKeySessionRecoveryLogInfo, map[string]interface{}{
+		"action": "recovered_next_request", "previous_channel": 201, "channel_id": 205, "result": "success",
+	})
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
+	other := GenerateTextOtherInfo(ctx, info, 1, 1, 1, 0, 0, 0, 1)
+	adminInfo := other["admin_info"].(map[string]interface{})
+	recovery := adminInfo["session_recovery"].(map[string]interface{})
+	require.Equal(t, "recovered_next_request", recovery["action"])
+	require.Equal(t, "success", recovery["result"])
 }

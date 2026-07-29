@@ -176,6 +176,76 @@ return 0`
 	return deleted[full], nil
 }
 
+// CompareAndSwap stores replacement only when the current value matches
+// expected. A nil expected pointer means the key must not exist. Redis uses a
+// single Lua operation; memory uses the same per-key lock as Get/Set/Delete.
+func (c *HybridCache[V]) CompareAndSwap(key string, expected *V, replacement V, ttl time.Duration, equal func(V, V) bool) (bool, error) {
+	full := c.ns.FullKey(key)
+	if full == "" {
+		return false, nil
+	}
+	if expected != nil && equal == nil {
+		return false, errors.New("compare function is nil")
+	}
+	replacementRaw, err := c.redisCodecValue(replacement)
+	if err != nil {
+		return false, err
+	}
+
+	if c.redisOn() {
+		expectedRaw := ""
+		expectedPresent := "0"
+		if expected != nil {
+			expectedPresent = "1"
+			expectedRaw, err = c.redisCodec.Encode(*expected)
+			if err != nil {
+				return false, err
+			}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), defaultRedisOpTimeout)
+		defer cancel()
+		const script = `
+local current = redis.call("GET", KEYS[1])
+if ARGV[1] == "0" then
+  if current then return 0 end
+else
+  if current ~= ARGV[2] then return 0 end
+end
+redis.call("SET", KEYS[1], ARGV[3], "PX", ARGV[4])
+return 1`
+		ttlMillis := ttl.Milliseconds()
+		if ttlMillis <= 0 {
+			ttlMillis = 1
+		}
+		swapped, evalErr := c.redis.Eval(ctx, script, []string{full}, expectedPresent, expectedRaw, replacementRaw, ttlMillis).Int()
+		return swapped == 1, evalErr
+	}
+
+	lock := c.memoryLock(full)
+	lock.Lock()
+	defer lock.Unlock()
+	current, found, getErr := c.memCache().Get(full)
+	if getErr != nil {
+		return false, getErr
+	}
+	if expected == nil {
+		if found {
+			return false, nil
+		}
+	} else if !found || !equal(current, *expected) {
+		return false, nil
+	}
+	c.memCache().SetWithTTL(full, replacement, ttl)
+	return true, nil
+}
+
+func (c *HybridCache[V]) redisCodecValue(value V) (string, error) {
+	if c.redisOn() {
+		return c.redisCodec.Encode(value)
+	}
+	return "", nil
+}
+
 func (c *HybridCache[V]) memoryLock(key string) *sync.Mutex {
 	return &c.memLocks[c.memoryLockIndex(key)]
 }

@@ -16,6 +16,10 @@ type ConfigManager struct {
 	mutex   sync.RWMutex
 }
 
+type explicitConfigFieldTracker interface {
+	MarkExplicitConfigFields(map[string]string)
+}
+
 var GlobalConfig = NewConfigManager()
 
 func NewConfigManager() *ConfigManager {
@@ -46,6 +50,7 @@ func (cm *ConfigManager) LoadFromDB(options map[string]string) error {
 	for name, config := range cm.configs {
 		prefix := name + "."
 		configMap := make(map[string]string)
+		explicitFields := make(map[string]string)
 
 		// Newer settings pages may persist a whole JSON object under the
 		// module name (for example "anti_poison_setting"). Load that first,
@@ -55,6 +60,13 @@ func (cm *ConfigManager) LoadFromDB(options map[string]string) error {
 			if strings.HasPrefix(trimmed, "{") {
 				if err := json.Unmarshal([]byte(trimmed), config); err != nil {
 					common.SysError("failed to load json config " + name + ": " + err.Error())
+				} else {
+					var fields map[string]json.RawMessage
+					if err := common.Unmarshal([]byte(trimmed), &fields); err == nil {
+						for key := range fields {
+							explicitFields[key] = ""
+						}
+					}
 				}
 			}
 		}
@@ -64,6 +76,7 @@ func (cm *ConfigManager) LoadFromDB(options map[string]string) error {
 			if strings.HasPrefix(key, prefix) {
 				configKey := strings.TrimPrefix(key, prefix)
 				configMap[configKey] = value
+				explicitFields[configKey] = value
 			}
 		}
 
@@ -73,6 +86,9 @@ func (cm *ConfigManager) LoadFromDB(options map[string]string) error {
 				common.SysError("failed to update config " + name + ": " + err.Error())
 				continue
 			}
+		}
+		if tracker, ok := config.(explicitConfigFieldTracker); ok {
+			tracker.MarkExplicitConfigFields(explicitFields)
 		}
 	}
 

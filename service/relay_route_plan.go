@@ -45,6 +45,7 @@ type ResponsesRelayRoutePlanParams struct {
 	Request            dto.Request
 	ProviderPolicy     *ProviderRoutingPolicy
 	TokenModelAllowed  func(string) bool
+	ChannelAllowed     func(*model.Channel) bool
 }
 
 var relayRouteDottedVersionRE = regexp.MustCompile(`\d+(?:\.\d+)+`)
@@ -184,6 +185,9 @@ func buildResponsesRelayRoutesForGroup(params ResponsesRelayRoutePlanParams, gro
 			continue
 		}
 		if !ChannelMatchesProviderRoutingPolicy(channel, params.ProviderPolicy) || !ChannelAllowedForProduction(channel) {
+			continue
+		}
+		if params.ChannelAllowed != nil && !params.ChannelAllowed(channel) {
 			continue
 		}
 		filtered = append(filtered, channel)

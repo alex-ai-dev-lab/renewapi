@@ -137,6 +137,25 @@ func TestBuildResponsesRelayRoutePlanOrdersInitialExactThenVersionsAndChannels(t
 	})
 }
 
+func TestBuildResponsesRelayRoutePlanHonorsSessionChannelFilter(t *testing.T) {
+	capability := &dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionNativeV2, NativeStream: true, Continuation: true}
+	failed := routePlanTestChannel(201, "failed", "gpt-5.5", 20, capability)
+	healthy := routePlanTestChannel(205, "healthy", "gpt-5.5", 10, capability)
+	setupRelayRoutePlanTestDB(t, failed, healthy)
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+	plan, err := BuildResponsesRelayRoutePlan(ResponsesRelayRoutePlanParams{
+		Group: "default", ClientModel: "gpt-5.5", PrimaryModel: "gpt-5.5",
+		Requirement:    &ResponsesRoutingRequirement{Kind: dto.ResponsesCompactionTrigger, ClientStream: true},
+		ChannelAllowed: func(channel *model.Channel) bool { return channel.Id != failed.Id },
+	})
+	require.NoError(t, err)
+	entries := routePlanEntries(plan)
+	require.NotEmpty(t, entries)
+	for _, entry := range entries {
+		require.Equal(t, healthy.Id, entry.PreferredChannelId)
+	}
+}
+
 func TestBuildResponsesRelayRoutePlanSelectsHigherPriorityChannelAlternativeBeforeLowerPriorityExact(t *testing.T) {
 	supported := dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionNativeV2}
 	highPriority := routePlanTestChannel(71, "high-priority", "gpt-5.5,gpt-5.6", 20, nil)

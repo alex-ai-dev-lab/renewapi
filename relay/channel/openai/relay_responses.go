@@ -220,7 +220,12 @@ func aggregateCompactionResponsesStreamRaw(resp *http.Response) ([]byte, *dto.Us
 				completed = append([]byte(nil), response.Raw...)
 			}
 		case "response.failed", "response.error":
-			return nil, nil, types.NewOpenAIError(fmt.Errorf("responses stream failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+			var streamResponse dto.ResponsesStreamResponse
+			fallback := fmt.Errorf("responses stream failed: %s", typ)
+			if err := common.Unmarshal(data, &streamResponse); err != nil {
+				return nil, nil, types.NewOpenAIError(fallback, types.ErrorCodeBadResponse, http.StatusBadGateway)
+			}
+			return nil, nil, responsesStreamFailureError(&streamResponse, fallback)
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -519,7 +524,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		sr.Accept(streamResponse.Type)
 		if streamResponse.Type == "response.failed" || streamResponse.Type == "response.error" {
 			err := fmt.Errorf("responses stream failed: %s", streamResponse.Type)
-			streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway)
+			streamErr = responsesStreamFailureError(&streamResponse, err)
 			sr.Stop(err)
 			return
 		}
@@ -742,6 +747,21 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 
 	return usage, nil
+}
+
+func responsesStreamFailureError(streamResponse *dto.ResponsesStreamResponse, fallback error) *types.NewAPIError {
+	if streamResponse != nil && streamResponse.Response != nil {
+		if upstream := streamResponse.Response.GetOpenAIError(); upstream != nil {
+			if upstream.Code == nil || strings.TrimSpace(fmt.Sprint(upstream.Code)) == "" {
+				upstream.Code = strings.TrimSpace(upstream.Type)
+			}
+			if strings.TrimSpace(upstream.Message) == "" {
+				upstream.Message = fallback.Error()
+			}
+			return types.WithOpenAIError(*upstream, http.StatusBadGateway)
+		}
+	}
+	return types.NewOpenAIError(fallback, types.ErrorCodeBadResponse, http.StatusBadGateway)
 }
 
 func responsesStreamOutcomeError(info *relaycommon.RelayInfo) *types.NewAPIError {

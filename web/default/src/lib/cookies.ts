@@ -24,17 +24,45 @@ For commercial licensing, please contact support@quantumnous.com
 const DEFAULT_MAX_AGE = 60 * 60 * 24 * 7 // 7 days
 
 /**
+ * Shared attributes for every cookie we write.
+ *
+ * SameSite=Lax is the browser default in modern engines, but spelling it out
+ * keeps behaviour identical on older ones. Secure is only added on https so
+ * that http://localhost development still works.
+ */
+function cookieSecurityAttributes(): string {
+  const isSecureOrigin =
+    typeof window !== 'undefined' && window.location.protocol === 'https:'
+  return `; SameSite=Lax${isSecureOrigin ? '; Secure' : ''}`
+}
+
+function safeDecodeCookieComponent(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    // Cookies written by other tooling may contain invalid percent escapes.
+    return value
+  }
+}
+
+/**
  * Get a cookie value by name
  */
 export function getCookie(name: string): string | undefined {
   if (typeof document === 'undefined') return undefined
 
-  const value = `; ${document.cookie}`
-  const parts = value.split(`; ${name}=`)
-  if (parts.length === 2) {
-    const cookieValue = parts.pop()?.split(';').shift()
-    return cookieValue
+  const encodedName = encodeURIComponent(name)
+
+  // Do not match with `split('; ' + name + '=')` + `length === 2`: the same
+  // cookie name can legitimately appear more than once (different path or
+  // domain scopes), and that shape returned undefined in exactly that case.
+  for (const pair of document.cookie.split(';')) {
+    const separatorIndex = pair.indexOf('=')
+    if (separatorIndex < 0) continue
+    if (pair.slice(0, separatorIndex).trim() !== encodedName) continue
+    return safeDecodeCookieComponent(pair.slice(separatorIndex + 1).trim())
   }
+
   return undefined
 }
 
@@ -48,7 +76,12 @@ export function setCookie(
 ): void {
   if (typeof document === 'undefined') return
 
-  document.cookie = `${name}=${value}; path=/; max-age=${maxAge}`
+  // Both parts must be encoded: an unencoded ';' would truncate the value and
+  // allow arbitrary cookie attributes to be appended.
+  const encodedName = encodeURIComponent(name)
+  const encodedValue = encodeURIComponent(value)
+
+  document.cookie = `${encodedName}=${encodedValue}; path=/; max-age=${maxAge}${cookieSecurityAttributes()}`
 }
 
 /**
@@ -57,5 +90,7 @@ export function setCookie(
 export function removeCookie(name: string): void {
   if (typeof document === 'undefined') return
 
-  document.cookie = `${name}=; path=/; max-age=0`
+  // Attributes must match setCookie, otherwise the browser keeps the original
+  // cookie and only expires a differently scoped one.
+  document.cookie = `${encodeURIComponent(name)}=; path=/; max-age=0${cookieSecurityAttributes()}`
 }

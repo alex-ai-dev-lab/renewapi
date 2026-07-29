@@ -19,12 +19,21 @@ var inMemoryRateLimiter common.InMemoryRateLimiter
 const panelRateLimitAppliedKey = "panel_rate_limit_applied"
 
 var panelRedisErrorLogUnix atomic.Int64
+var rateLimitRedisErrorLogUnix atomic.Int64
+
+// rateLimitMemberNonce 生成 ZSET member 的唯一后缀。
+// 旧实现在 Lua 里用 INCR key..':seq' 做序号，但该 key 未声明在 KEYS 中，
+// Redis Cluster 下会直接 CROSSSLOT 报错。改由调用方传入 nonce，脚本只碰 KEYS[1]。
+func rateLimitMemberNonce() string {
+	return common.GetRandomString(12)
+}
 
 var redisSlidingWindowRateLimitScript = redis.NewScript(`
 local key = KEYS[1]
 local max_requests = tonumber(ARGV[1])
 local window_ms = tonumber(ARGV[2])
 local ttl_seconds = tonumber(ARGV[3])
+local nonce = ARGV[4]
 local now = redis.call('TIME')
 local now_ms = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
 redis.call('ZREMRANGEBYSCORE', key, 0, now_ms - window_ms)
@@ -33,10 +42,8 @@ if current >= max_requests then
   redis.call('EXPIRE', key, ttl_seconds)
   return 0
 end
-local member = tostring(now_ms) .. '-' .. tostring(redis.call('INCR', key .. ':seq'))
-redis.call('ZADD', key, now_ms, member)
+redis.call('ZADD', key, now_ms, tostring(now_ms) .. '-' .. nonce)
 redis.call('EXPIRE', key, ttl_seconds)
-redis.call('EXPIRE', key .. ':seq', ttl_seconds)
 return 1
 `)
 
@@ -46,6 +53,7 @@ local max_requests = tonumber(ARGV[1])
 local weight = tonumber(ARGV[2])
 local window_ms = tonumber(ARGV[3])
 local ttl_seconds = tonumber(ARGV[4])
+local nonce = ARGV[5]
 local now = redis.call('TIME')
 local now_ms = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
 redis.call('ZREMRANGEBYSCORE', key, 0, now_ms - window_ms)
@@ -54,13 +62,11 @@ if current + weight > max_requests then
   redis.call('EXPIRE', key, ttl_seconds)
   return 0
 end
-local seq_key = key .. ':seq'
+local prefix = tostring(now_ms) .. '-' .. nonce .. '-'
 for i = 1, weight do
-  local member = tostring(now_ms) .. '-' .. tostring(redis.call('INCR', seq_key))
-  redis.call('ZADD', key, now_ms, member)
+  redis.call('ZADD', key, now_ms, prefix .. tostring(i))
 end
 redis.call('EXPIRE', key, ttl_seconds)
-redis.call('EXPIRE', seq_key, ttl_seconds)
 return 1
 `)
 
@@ -84,13 +90,12 @@ var redisSlidingWindowRecordScript = redis.NewScript(`
 local key = KEYS[1]
 local window_ms = tonumber(ARGV[1])
 local ttl_seconds = tonumber(ARGV[2])
+local nonce = ARGV[3]
 local now = redis.call('TIME')
 local now_ms = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
 redis.call('ZREMRANGEBYSCORE', key, 0, now_ms - window_ms)
-local member = tostring(now_ms) .. '-' .. tostring(redis.call('INCR', key .. ':seq'))
-redis.call('ZADD', key, now_ms, member)
+redis.call('ZADD', key, now_ms, tostring(now_ms) .. '-' .. nonce)
 redis.call('EXPIRE', key, ttl_seconds)
-redis.call('EXPIRE', key .. ':seq', ttl_seconds)
 return 1
 `)
 
@@ -98,12 +103,23 @@ var defNext = func(c *gin.Context) {
 	c.Next()
 }
 
+// logRateLimitRedisError 限频输出限流器 Redis 错误，避免 Redis 抖动时刷爆 stdout。
+func logRateLimitRedisError(err error) {
+	now := time.Now().Unix()
+	last := rateLimitRedisErrorLogUnix.Load()
+	if now-last < 30 || !rateLimitRedisErrorLogUnix.CompareAndSwap(last, now) {
+		return
+	}
+	common.SysLog(fmt.Sprintf("rate limiter Redis error: %v", err))
+}
+
 func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
 	key := "rateLimit:" + mark + c.ClientIP()
 	allowed, err := redisSlidingWindowAllow(context.Background(), common.RDB, key, maxRequestNum, duration, common.RateLimitKeyExpirationDuration)
 	if err != nil {
-		fmt.Println(err.Error())
-		c.Status(http.StatusInternalServerError)
+		logRateLimitRedisError(err)
+		// 保持失效关闭，但依赖不可用应为 503 而非 500
+		c.Status(http.StatusServiceUnavailable)
 		c.Abort()
 		return
 	}
@@ -126,7 +142,7 @@ func redisSlidingWindowAllow(ctx context.Context, rdb *redis.Client, key string,
 		ttlSeconds = duration
 	}
 	windowMs := duration * 1000
-	res, err := redisSlidingWindowRateLimitScript.Run(ctx, rdb, []string{key}, maxRequestNum, windowMs, ttlSeconds).Result()
+	res, err := redisSlidingWindowRateLimitScript.Run(ctx, rdb, []string{key}, maxRequestNum, windowMs, ttlSeconds, rateLimitMemberNonce()).Result()
 	if err != nil {
 		return false, err
 	}
@@ -141,6 +157,7 @@ func redisWeightedSlidingWindowAllow(ctx context.Context, rdb *redis.Client, key
 		weight = 1
 	}
 	if weight > maxRequestNum {
+		// 阈值比单次权重还小时该接口会被永久 429，属于配置问题，保留原语义
 		return false, nil
 	}
 	if duration <= 0 {
@@ -158,6 +175,7 @@ func redisWeightedSlidingWindowAllow(ctx context.Context, rdb *redis.Client, key
 		weight,
 		duration*1000,
 		ttlSeconds,
+		rateLimitMemberNonce(),
 	).Result()
 	if err != nil {
 		return false, err
@@ -193,7 +211,7 @@ func redisSlidingWindowRecord(ctx context.Context, rdb *redis.Client, key string
 		ttlSeconds = duration
 	}
 	windowMs := duration * 1000
-	return redisSlidingWindowRecordScript.Run(ctx, rdb, []string{key}, windowMs, ttlSeconds).Err()
+	return redisSlidingWindowRecordScript.Run(ctx, rdb, []string{key}, windowMs, ttlSeconds, rateLimitMemberNonce()).Err()
 }
 
 func redisScriptBool(res interface{}) (bool, error) {
@@ -299,8 +317,8 @@ func userRateLimitFactory(maxRequestNum int, duration int64, mark string) func(c
 func userRedisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, key string) {
 	allowed, err := redisSlidingWindowAllow(context.Background(), common.RDB, key, maxRequestNum, duration, common.RateLimitKeyExpirationDuration)
 	if err != nil {
-		fmt.Println(err.Error())
-		c.Status(http.StatusInternalServerError)
+		logRateLimitRedisError(err)
+		c.Status(http.StatusServiceUnavailable)
 		c.Abort()
 		return
 	}

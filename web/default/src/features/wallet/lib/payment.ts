@@ -31,12 +31,15 @@ import type { PresetAmount, TopupInfo } from '../types'
 
 /**
  * Check if browser is Safari
+ *
+ * The previous form was `indexOf('Chrome') < 1`, which only means "no Chrome
+ * in the UA" by accident: indexOf returns -1 when absent, and index 0 is
+ * impossible because every UA string starts with "Mozilla/5.0". Spell the
+ * intent out so the check does not silently change meaning later.
  */
 function isSafariBrowser(): boolean {
-  return (
-    navigator.userAgent.indexOf('Safari') > -1 &&
-    navigator.userAgent.indexOf('Chrome') < 1
-  )
+  const userAgent = navigator.userAgent
+  return userAgent.indexOf('Safari') > -1 && userAgent.indexOf('Chrome') === -1
 }
 
 /**
@@ -56,6 +59,8 @@ export function submitPaymentForm(
   // Don't open in new tab for Safari
   if (!isSafariBrowser()) {
     form.target = '_blank'
+    // HTMLFormElement.rel is honoured for target=_blank submissions, but
+    // support is newer than window.open's noopener feature string.
     form.rel = 'noopener noreferrer'
   }
 
@@ -121,27 +126,66 @@ export function getDefaultPaymentType(topupInfo: TopupInfo | null): string {
 }
 
 /**
- * Get minimum topup amount from topup info
+ * Treat missing, non-finite and non-positive limits as "not configured".
+ *
+ * Without this guard an unset min_topup flows straight into
+ * generatePresetAmounts and produces NaN / 0 quick-select amounts.
  */
-export function getMinTopupAmount(topupInfo: TopupInfo | null): number {
+function configuredAmount(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : undefined
+}
+
+/**
+ * Get minimum topup amount from topup info
+ *
+ * Pass `paymentType` whenever the selected method is known: each channel has
+ * its own lower bound, so answering with "whichever channel is enabled first"
+ * lets the UI validate against a limit the backend will not use.
+ */
+export function getMinTopupAmount(
+  topupInfo: TopupInfo | null,
+  paymentType?: string
+): number {
   if (!topupInfo) {
     return DEFAULT_MIN_TOPUP
   }
 
+  switch (paymentType) {
+    case PAYMENT_TYPES.STRIPE:
+      return configuredAmount(topupInfo.stripe_min_topup) ?? DEFAULT_MIN_TOPUP
+    case PAYMENT_TYPES.WAFFO:
+      return configuredAmount(topupInfo.waffo_min_topup) ?? DEFAULT_MIN_TOPUP
+    case PAYMENT_TYPES.WAFFO_PANCAKE:
+      return (
+        configuredAmount(topupInfo.waffo_pancake_min_topup) ?? DEFAULT_MIN_TOPUP
+      )
+    case PAYMENT_TYPES.ALIPAY:
+    case PAYMENT_TYPES.WECHAT:
+      return configuredAmount(topupInfo.min_topup) ?? DEFAULT_MIN_TOPUP
+    default:
+      break
+  }
+
+  // Legacy behaviour for callers that do not know the payment type yet:
+  // report the lower bound of the first enabled channel.
   if (topupInfo.enable_online_topup) {
-    return topupInfo.min_topup
+    return configuredAmount(topupInfo.min_topup) ?? DEFAULT_MIN_TOPUP
   }
 
   if (topupInfo.enable_stripe_topup) {
-    return topupInfo.stripe_min_topup
+    return configuredAmount(topupInfo.stripe_min_topup) ?? DEFAULT_MIN_TOPUP
   }
 
   if (topupInfo.enable_waffo_topup) {
-    return topupInfo.waffo_min_topup || DEFAULT_MIN_TOPUP
+    return configuredAmount(topupInfo.waffo_min_topup) ?? DEFAULT_MIN_TOPUP
   }
 
   if (topupInfo.enable_waffo_pancake_topup) {
-    return topupInfo.waffo_pancake_min_topup || DEFAULT_MIN_TOPUP
+    return (
+      configuredAmount(topupInfo.waffo_pancake_min_topup) ?? DEFAULT_MIN_TOPUP
+    )
   }
 
   return DEFAULT_MIN_TOPUP
@@ -151,8 +195,12 @@ export function getMinTopupAmount(topupInfo: TopupInfo | null): number {
  * Generate preset amounts based on minimum topup
  */
 export function generatePresetAmounts(minAmount: number): PresetAmount[] {
+  const base = configuredAmount(minAmount) ?? DEFAULT_MIN_TOPUP
+
   return DEFAULT_PRESET_MULTIPLIERS.map((multiplier) => ({
-    value: minAmount * multiplier,
+    // Round to cents: a fractional minimum turns 0.1 * 3 into
+    // 0.30000000000000004, which then reaches the payment gateway verbatim.
+    value: Math.round(base * multiplier * 100) / 100,
   }))
 }
 
@@ -169,6 +217,9 @@ export function mergePresetAmounts(
 
   return amountOptions.map((amount) => ({
     value: amount,
+    // Note: `|| 1.0` also rewrites a configured discount of 0 into "no
+    // discount". Left as-is because a 0 multiplier would mean a free topup,
+    // which the backend does not model today.
     discount: discounts[amount] || 1.0,
   }))
 }

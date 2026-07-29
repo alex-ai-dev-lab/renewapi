@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import { getSelf } from '@/lib/api'
@@ -29,34 +29,59 @@ import { redeemTopupCode } from '../api'
 
 export function useRedemption() {
   const [redeeming, setRedeeming] = useState(false)
+  // `redeeming` 是异步 state，同一个 tick 内读不到最新值，
+  // 快速双击会把同一个兑换码提交两次（参见 use-payment 的同类修正）。
+  const redeemingRef = useRef(false)
 
   const redeemCode = useCallback(async (code: string): Promise<boolean> => {
-    if (!code || code.trim() === '') {
+    const trimmedCode = code?.trim() ?? ''
+    if (trimmedCode === '') {
       toast.error(i18next.t('Please enter a redemption code'))
       return false
     }
 
+    if (redeemingRef.current) return false
+    redeemingRef.current = true
+
     try {
       setRedeeming(true)
-      const response = await redeemTopupCode({ key: code })
+      // 原实现校验用 code.trim()、提交却用原始 code，
+      // 粘贴带首尾空白的兑换码时会直接被后端判为无效。
+      const response = await redeemTopupCode({ key: trimmedCode })
 
-      if (response.success && response.data) {
-        const quotaAdded = response.data
+      // 不能用 `response.success && response.data`：
+      // data 是本次兑换到的额度，它合法地可以是 0（零额度兑换码，
+      // 或后端不回传额度）。falsy 判断会在兑换码**已经被消耗**的情况下
+      // 提示「兑换失败」，用户会反复重试并认为额度丢了。
+      if (response.success) {
+        const quotaAdded = response.data ?? 0
         toast.success(
           i18next.t('Redemption successful! Added: {{quota}}', {
             quota: formatQuota(quotaAdded),
           })
         )
-        await getSelf()
+        // 刷新自身信息失败不影响兑换结果：原实现里 getSelf() 抛错会落到
+        // 外层 catch，导致已经兑换成功却弹出「兑换失败」。
+        try {
+          await getSelf()
+        } catch (error) {
+          console.error('[wallet] refresh self after redemption failed', error)
+        }
         return true
       }
 
       toast.error(response.message || i18next.t('Redemption failed'))
       return false
-    } catch (_error) {
-      toast.error(i18next.t('Redemption failed'))
+    } catch (error) {
+      console.error('[wallet] redeem code failed', error)
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : i18next.t('Redemption failed')
+      toast.error(message)
       return false
     } finally {
+      redeemingRef.current = false
       setRedeeming(false)
     }
   }, [])

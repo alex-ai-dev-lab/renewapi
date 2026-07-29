@@ -15,6 +15,10 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// maxRoutingRank 作为“排序权重未知”的最差 rank。不能用零值，否则 map 缺失的
+// 渠道会拿到 rank 0（最优）。
+const maxRoutingRank = int(^uint(0) >> 1)
+
 type Ability struct {
 	Group     string  `json:"group" gorm:"type:varchar(64);primaryKey;autoIncrement:false"`
 	Model     string  `json:"model" gorm:"type:varchar(255);primaryKey;autoIncrement:false"`
@@ -93,6 +97,9 @@ func GetChannelExcludingWithPolicy(group string, model string, retry int, exclud
 	}
 	abilities = filterChannelModelStatusAbilities(abilities)
 	abilities = filterRandomSelectableAbilities(abilities)
+	// 注意: filterProviderRoutingAbilities 会按 provider order rank 重排，破坏上面 SQL 的
+	// priority DESC 顺序。selectAbilitiesByRetryPriority 已改为自己按优先级降序，
+	// 不再依赖传入顺序。
 	abilities = filterProviderRoutingAbilities(abilities, policy)
 	if len(abilities) == 0 {
 		return nil, nil
@@ -123,6 +130,8 @@ func GetChannelExcludingWithPolicy(group string, model string, retry int, exclud
 	return &channel, err
 }
 
+// selectAbilitiesByRetryPriority 只保留“第 retry 高”的优先级桶。
+// retry=0 取最高优先级，每重试一次降一档，超出档数后停在最低档。
 func selectAbilitiesByRetryPriority(abilities []Ability, retry int) []Ability {
 	if len(abilities) == 0 {
 		return abilities
@@ -137,6 +146,10 @@ func selectAbilitiesByRetryPriority(abilities []Ability, retry int) []Ability {
 		seen[priority] = struct{}{}
 		priorities = append(priorities, priority)
 	}
+	// 以前这里直接沿用传入切片的遇见顺序，隐含假设“已经按 priority DESC 排好”。
+	// 但 filterProviderRoutingAbilities 会按 provider order rank 重排，一旦请求带了
+	// provider order 策略，retry → 优先级的映射就变成了任意顺序。这里显式降序。
+	sort.Slice(priorities, func(i, j int) bool { return priorities[i] > priorities[j] })
 	idx := retry
 	if idx < 0 {
 		idx = 0
@@ -248,7 +261,7 @@ func filterProviderRoutingAbilities(abilities []Ability, policy ChannelRoutingPo
 		}
 	}
 	sort.SliceStable(filtered, func(i, j int) bool {
-		return order[filtered[i].ChannelId] < order[filtered[j].ChannelId]
+		return routingRank(order, filtered[i].ChannelId) < routingRank(order, filtered[j].ChannelId)
 	})
 	return filtered
 }
@@ -271,19 +284,28 @@ func keepBestProviderRoutingAbilityOrderRank(abilities []Ability, policy Channel
 		ch := &channels[i]
 		order[ch.Id] = policy.OrderRank(ch)
 	}
-	bestRank := order[abilities[0].ChannelId]
+	// 以前这里直接用 order[id]，map 里没有的渠道（例如两次查询之间渠道被删）
+	// 会拿到零值 0，即“最优 rank”，反而把真正匹配策略的渠道挤掉。
+	bestRank := routingRank(order, abilities[0].ChannelId)
 	for _, ability := range abilities[1:] {
-		if rank := order[ability.ChannelId]; rank < bestRank {
+		if rank := routingRank(order, ability.ChannelId); rank < bestRank {
 			bestRank = rank
 		}
 	}
 	filtered := abilities[:0]
 	for _, ability := range abilities {
-		if order[ability.ChannelId] == bestRank {
+		if routingRank(order, ability.ChannelId) == bestRank {
 			filtered = append(filtered, ability)
 		}
 	}
 	return filtered
+}
+
+func routingRank(order map[int]int, channelID int) int {
+	if rank, ok := order[channelID]; ok {
+		return rank
+	}
+	return maxRoutingRank
 }
 
 func abilityPriority(ability Ability) int64 {
@@ -293,7 +315,10 @@ func abilityPriority(ability Ability) int64 {
 	return *ability.Priority
 }
 
-func (channel *Channel) AddAbilities(tx *gorm.DB) error {
+// buildAbilities 根据渠道当前的模型与分组展开出 ability 行。
+// AddAbilities 和 UpdateAbilities 以前各自抱了一份字字相同的展开逻辑，
+// 一边改漏另一边很容易让路由表与渠道配置脉络不一致。
+func (channel *Channel) buildAbilities() []Ability {
 	models_ := channel.GetRoutingModels()
 	groups_ := channel.GetGroups()
 	abilitySet := make(map[string]struct{})
@@ -305,7 +330,7 @@ func (channel *Channel) AddAbilities(tx *gorm.DB) error {
 				continue
 			}
 			abilitySet[key] = struct{}{}
-			ability := Ability{
+			abilities = append(abilities, Ability{
 				Group:     group,
 				Model:     model,
 				ChannelId: channel.Id,
@@ -313,10 +338,14 @@ func (channel *Channel) AddAbilities(tx *gorm.DB) error {
 				Priority:  channel.Priority,
 				Weight:    uint(channel.GetWeight()),
 				Tag:       channel.Tag,
-			}
-			abilities = append(abilities, ability)
+			})
 		}
 	}
+	return abilities
+}
+
+func (channel *Channel) AddAbilities(tx *gorm.DB) error {
+	abilities := channel.buildAbilities()
 	if len(abilities) == 0 {
 		return nil
 	}
@@ -334,6 +363,10 @@ func (channel *Channel) AddAbilities(tx *gorm.DB) error {
 	return nil
 }
 
+// DeleteAbilities 删除该渠道的全部 ability。
+// 注意: 与 AddAbilities(tx) 不对称——这里只走全局 DB，无法带入调用方的事务。
+// 在事务中调用它会造成“删除已提交、插入可回滚”的不一致，需要事务语义时
+// 请直接用 UpdateAbilities(tx)。
 func (channel *Channel) DeleteAbilities() error {
 	return DB.Where("channel_id = ?", channel.Id).Delete(&Ability{}).Error
 }
@@ -352,6 +385,8 @@ func (channel *Channel) UpdateAbilities(tx *gorm.DB) error {
 		defer func() {
 			if r := recover(); r != nil {
 				tx.Rollback()
+				// 以前这里只回滚不重抛，panic 被静默吃掉，调用方会以为更新成功。
+				panic(r)
 			}
 		}()
 	}
@@ -366,30 +401,7 @@ func (channel *Channel) UpdateAbilities(tx *gorm.DB) error {
 	}
 
 	// Then add new abilities
-	models_ := channel.GetRoutingModels()
-	groups_ := channel.GetGroups()
-	abilitySet := make(map[string]struct{})
-	abilities := make([]Ability, 0, len(models_))
-	for _, model := range models_ {
-		for _, group := range groups_ {
-			key := group + "|" + model
-			if _, exists := abilitySet[key]; exists {
-				continue
-			}
-			abilitySet[key] = struct{}{}
-			ability := Ability{
-				Group:     group,
-				Model:     model,
-				ChannelId: channel.Id,
-				Enabled:   channel.Status == common.ChannelStatusEnabled,
-				Priority:  channel.Priority,
-				Weight:    uint(channel.GetWeight()),
-				Tag:       channel.Tag,
-			}
-			abilities = append(abilities, ability)
-		}
-	}
-
+	abilities := channel.buildAbilities()
 	if len(abilities) > 0 {
 		for _, chunk := range lo.Chunk(abilities, 50) {
 			err = tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&chunk).Error
@@ -418,22 +430,33 @@ func UpdateAbilityStatusByTag(tag string, status bool) error {
 	return DB.Model(&Ability{}).Where("tag = ?", tag).Select("enabled").Update("enabled", status).Error
 }
 
+// UpdateAbilityByTag 批量修改同一标签下的 ability。
+// 以前这里组一个 Ability 结构体丢给 Updates，而 GORM 的 struct 更新会忽略零值：
+// priority=0 / weight=0 / newTag="" 都会被静默丢弃，管理员在面板上把权重或优先级
+// 改成 0 看上去成功，实际数据库没变。现在用 map 显式指定要写的列。
 func UpdateAbilityByTag(tag string, newTag *string, priority *int64, weight *uint) error {
-	ability := Ability{}
+	updates := make(map[string]interface{}, 3)
 	if newTag != nil {
-		ability.Tag = newTag
+		updates["tag"] = *newTag
 	}
 	if priority != nil {
-		ability.Priority = priority
+		updates["priority"] = *priority
 	}
 	if weight != nil {
-		ability.Weight = *weight
+		updates["weight"] = *weight
 	}
-	return DB.Model(&Ability{}).Where("tag = ?", tag).Updates(ability).Error
+	if len(updates) == 0 {
+		return nil
+	}
+	return DB.Model(&Ability{}).Where("tag = ?", tag).Updates(updates).Error
 }
 
 var fixLock = sync.Mutex{}
 
+// FixAbility 重建整张路由表。
+// 注意: 整个过程不在事务里（MySQL 的 TRUNCATE 本身就会隐式提交）。先清空再逐批重建，
+// 期间路由表是不完整的，失败批次对应的渠道会一直没有 ability——即“无可用渠道”。
+// 因此它只适合作为管理员手动修复入口，不能放到启动流程或定时任务里。
 func FixAbility() (int, int, error) {
 	lock := fixLock.TryLock()
 	if !lock {
@@ -466,16 +489,8 @@ func FixAbility() (int, int, error) {
 	}
 	successCount := 0
 	failCount := 0
+	// 表刚被清空，不需要再逐批 Delete 一次（以前那句 chunk 内 Delete 是早期实现的遗留）。
 	for _, chunk := range lo.Chunk(channels, 50) {
-		ids := lo.Map(chunk, func(c *Channel, _ int) int { return c.Id })
-		// Delete all abilities of this channel
-		err = DB.Where("channel_id IN ?", ids).Delete(&Ability{}).Error
-		if err != nil {
-			common.SysLog(fmt.Sprintf("Delete abilities failed: %s", err.Error()))
-			failCount += len(chunk)
-			continue
-		}
-		// Then add new abilities
 		for _, channel := range chunk {
 			err = channel.AddAbilities(nil)
 			if err != nil {

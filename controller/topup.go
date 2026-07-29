@@ -199,6 +199,10 @@ func getMinTopup() int64 {
 	return int64(minTopup)
 }
 
+// minPayMoney 是拉起支付所需的最小实付金额（元）。
+// 下单与试算两个接口必须使用同一阈值，否则会出现试算报错但下单成功（或反之）的不一致。
+const minPayMoney = 0.01
+
 func RequestEpay(c *gin.Context) {
 	var req EpayRequest
 	err := c.ShouldBindJSON(&req)
@@ -218,7 +222,7 @@ func RequestEpay(c *gin.Context) {
 		return
 	}
 	payMoney := getPayMoney(req.Amount, group)
-	if payMoney < 0.01 {
+	if payMoney < minPayMoney {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return
 	}
@@ -320,10 +324,22 @@ func UnlockOrder(tradeNo string) {
 	createLock.Unlock()
 }
 
+// writeEpayNotifyResponse 统一写回易支付 webhook 的应答体。
+// 只有写回 "success" 支付网关才会停止重试，因此必须在业务处理完成后才能调用并传 true。
+func writeEpayNotifyResponse(c *gin.Context, success bool) {
+	body := "fail"
+	if success {
+		body = "success"
+	}
+	if _, err := c.Writer.Write([]byte(body)); err != nil {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 webhook 响应写入失败 path=%q client_ip=%s body=%s error=%q", c.Request.RequestURI, c.ClientIP(), body, err.Error()))
+	}
+}
+
 func EpayNotify(c *gin.Context) {
 	if !isEpayWebhookEnabled() {
 		logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 webhook 被拒绝 reason=webhook_disabled path=%q client_ip=%s", c.Request.RequestURI, c.ClientIP()))
-		_, _ = c.Writer.Write([]byte("fail"))
+		writeEpayNotifyResponse(c, false)
 		return
 	}
 
@@ -333,7 +349,7 @@ func EpayNotify(c *gin.Context) {
 		// POST 请求：从 POST body 解析参数
 		if err := c.Request.ParseForm(); err != nil {
 			logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 webhook POST 表单解析失败 path=%q client_ip=%s error=%q", c.Request.RequestURI, c.ClientIP(), err.Error()))
-			_, _ = c.Writer.Write([]byte("fail"))
+			writeEpayNotifyResponse(c, false)
 			return
 		}
 		params = lo.Reduce(lo.Keys(c.Request.PostForm), func(r map[string]string, t string, i int) map[string]string {
@@ -351,54 +367,53 @@ func EpayNotify(c *gin.Context) {
 
 	if len(params) == 0 {
 		logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 webhook 参数为空 path=%q client_ip=%s", c.Request.RequestURI, c.ClientIP()))
-		_, _ = c.Writer.Write([]byte("fail"))
+		writeEpayNotifyResponse(c, false)
 		return
 	}
 	client := GetEpayClient()
 	if client == nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 client 未初始化 path=%q client_ip=%s", c.Request.RequestURI, c.ClientIP()))
-		_, err := c.Writer.Write([]byte("fail"))
-		if err != nil {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 webhook 响应写入失败 path=%q client_ip=%s error=%q", c.Request.RequestURI, c.ClientIP(), err.Error()))
-		}
-		return
-	}
-	verifyInfo, err := client.Verify(params)
-	if err == nil && verifyInfo.VerifyStatus {
-		logger.LogInfo(c.Request.Context(), fmt.Sprintf("易支付 webhook 验签成功 trade_no=%s callback_type=%s trade_status=%s client_ip=%s verify_info=%q", verifyInfo.ServiceTradeNo, verifyInfo.Type, verifyInfo.TradeStatus, c.ClientIP(), common.GetJsonString(verifyInfo)))
-		_, err := c.Writer.Write([]byte("success"))
-		if err != nil {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 webhook 响应写入失败 trade_no=%s client_ip=%s error=%q", verifyInfo.ServiceTradeNo, c.ClientIP(), err.Error()))
-		}
-	} else {
-		_, err := c.Writer.Write([]byte("fail"))
-		if err != nil {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("易支付 webhook 响应写入失败 path=%q client_ip=%s error=%q", c.Request.RequestURI, c.ClientIP(), err.Error()))
-		}
-		if err != nil {
-			logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 webhook 验签失败 path=%q client_ip=%s verify_error=%q", c.Request.RequestURI, c.ClientIP(), err.Error()))
-		} else {
-			logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 webhook 验签失败 path=%q client_ip=%s verify_status=false", c.Request.RequestURI, c.ClientIP()))
-		}
+		writeEpayNotifyResponse(c, false)
 		return
 	}
 
-	if verifyInfo.TradeStatus == epay.StatusTradeSuccess {
-		LockOrder(verifyInfo.ServiceTradeNo)
-		defer UnlockOrder(verifyInfo.ServiceTradeNo)
-		paidAmount, ok := extractEpayPaidAmount(params)
-		if !ok {
-			logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 回调缺少实付金额 trade_no=%s callback_type=%s client_ip=%s", verifyInfo.ServiceTradeNo, verifyInfo.Type, c.ClientIP()))
-			return
+	verifyInfo, verifyErr := client.Verify(params)
+	if verifyErr != nil || !verifyInfo.VerifyStatus {
+		// 注意：此处不能用内层 Write 的 err 覆盖验签 err，否则日志会丢掉真实失败原因
+		if verifyErr != nil {
+			logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 webhook 验签失败 path=%q client_ip=%s verify_error=%q", c.Request.RequestURI, c.ClientIP(), verifyErr.Error()))
+		} else {
+			logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 webhook 验签失败 path=%q client_ip=%s verify_status=false", c.Request.RequestURI, c.ClientIP()))
 		}
-		if err := model.CompleteEpayTopUpWithPaidAmount(verifyInfo.ServiceTradeNo, verifyInfo.Type, paidAmount, c.ClientIP()); err != nil {
-			logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 充值处理失败 trade_no=%s paid=%.2f callback_type=%s client_ip=%s error=%q", verifyInfo.ServiceTradeNo, paidAmount, verifyInfo.Type, c.ClientIP(), err.Error()))
-			return
-		}
-		logger.LogInfo(c.Request.Context(), fmt.Sprintf("易支付 充值成功 trade_no=%s paid=%.2f callback_type=%s client_ip=%s", verifyInfo.ServiceTradeNo, paidAmount, verifyInfo.Type, c.ClientIP()))
-	} else {
-		logger.LogInfo(c.Request.Context(), fmt.Sprintf("易支付 webhook 忽略事件 trade_no=%s callback_type=%s trade_status=%s client_ip=%s verify_info=%q", verifyInfo.ServiceTradeNo, verifyInfo.Type, verifyInfo.TradeStatus, c.ClientIP(), common.GetJsonString(verifyInfo)))
+		writeEpayNotifyResponse(c, false)
+		return
 	}
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("易支付 webhook 验签成功 trade_no=%s callback_type=%s trade_status=%s client_ip=%s verify_info=%q", verifyInfo.ServiceTradeNo, verifyInfo.Type, verifyInfo.TradeStatus, c.ClientIP(), common.GetJsonString(verifyInfo)))
+
+	if verifyInfo.TradeStatus != epay.StatusTradeSuccess {
+		logger.LogInfo(c.Request.Context(), fmt.Sprintf("易支付 webhook 忽略事件 trade_no=%s callback_type=%s trade_status=%s client_ip=%s verify_info=%q", verifyInfo.ServiceTradeNo, verifyInfo.Type, verifyInfo.TradeStatus, c.ClientIP(), common.GetJsonString(verifyInfo)))
+		// 非成功事件无需重试，显式 ack
+		writeEpayNotifyResponse(c, true)
+		return
+	}
+
+	LockOrder(verifyInfo.ServiceTradeNo)
+	defer UnlockOrder(verifyInfo.ServiceTradeNo)
+
+	paidAmount, ok := extractEpayPaidAmount(params)
+	if !ok {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 回调缺少实付金额 trade_no=%s callback_type=%s client_ip=%s", verifyInfo.ServiceTradeNo, verifyInfo.Type, c.ClientIP()))
+		writeEpayNotifyResponse(c, false)
+		return
+	}
+	if err := model.CompleteEpayTopUpWithPaidAmount(verifyInfo.ServiceTradeNo, verifyInfo.Type, paidAmount, c.ClientIP()); err != nil {
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 充值处理失败 trade_no=%s paid=%.2f callback_type=%s client_ip=%s error=%q", verifyInfo.ServiceTradeNo, paidAmount, verifyInfo.Type, c.ClientIP(), err.Error()))
+		// 入账失败必须返回 fail，保留支付网关的重试机会，否则会造成用户已付款但额度不到账
+		writeEpayNotifyResponse(c, false)
+		return
+	}
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("易支付 充值成功 trade_no=%s paid=%.2f callback_type=%s client_ip=%s", verifyInfo.ServiceTradeNo, paidAmount, verifyInfo.Type, c.ClientIP()))
+	writeEpayNotifyResponse(c, true)
 }
 
 func RequestAmount(c *gin.Context) {
@@ -420,7 +435,8 @@ func RequestAmount(c *gin.Context) {
 		return
 	}
 	payMoney := getPayMoney(req.Amount, group)
-	if payMoney <= 0.01 {
+	// 与 RequestEpay 保持同一阈值：原先这里是 <= 0.01，会把正好 0.01 元的试算当作失败但下单却能成功
+	if payMoney < minPayMoney {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return
 	}

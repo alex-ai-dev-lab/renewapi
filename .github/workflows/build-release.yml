@@ -16,6 +16,10 @@ on:
         description: "Optional release tag. Defaults to newapi-source-<image tag>."
         required: false
         type: string
+      base_sha:
+        description: "Optional base SHA used by changed-file quality checks."
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -183,6 +187,7 @@ jobs:
           INPUT_BASE_SHA: ${{ inputs.base_sha }}
         run: git diff --check "${INPUT_BASE_SHA:-$GITHUB_SHA^}" "$GITHUB_SHA"
   build:
+    needs: [quality, database-quality]
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.meta.outputs.image }}
@@ -271,10 +276,11 @@ jobs:
             -t "$IMAGE:$TAG-amd64-package" \
             .
           docker save "$IMAGE:$TAG-amd64-package" | gzip -9 > "release-assets/$TARBALL"
-          cp compose.yaml docker-compose.yml .env.example release-assets/
+          cp compose.yaml docker-compose.yml release-assets/
+          cp .env.example release-assets/default.env.example
           (
             cd release-assets
-            sha256sum "$TARBALL" compose.yaml docker-compose.yml .env.example > CHECKSUMS.txt
+            sha256sum "$TARBALL" compose.yaml docker-compose.yml default.env.example > CHECKSUMS.txt
           )
 
       - name: Prepare release notes
@@ -299,11 +305,32 @@ jobs:
           path: release-assets/
           retention-days: 7
 
+      - name: Download uploaded release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.tarball }}
+          path: uploaded-release-assets
+
+      - name: Verify uploaded release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f uploaded-release-assets/${{ steps.meta.outputs.tarball }}
+          test -f uploaded-release-assets/compose.yaml
+          test -f uploaded-release-assets/docker-compose.yml
+          test -f uploaded-release-assets/default.env.example
+          test -f uploaded-release-assets/CHECKSUMS.txt
+          (
+            cd uploaded-release-assets
+            sha256sum -c CHECKSUMS.txt
+          )
+
       - name: Create GitHub Release
         if: inputs.create_release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
           name: renewapi source image ${{ steps.meta.outputs.tag }}
           body_path: release-assets/RELEASE_NOTES.md
           draft: false
@@ -312,5 +339,15 @@ jobs:
             release-assets/${{ steps.meta.outputs.tarball }}
             release-assets/compose.yaml
             release-assets/docker-compose.yml
-            release-assets/.env.example
+            release-assets/default.env.example
             release-assets/CHECKSUMS.txt
+
+      - name: Verify release tag source commit
+        if: inputs.create_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          actual="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')"
+          test "$actual" = "$GITHUB_SHA"

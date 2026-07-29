@@ -12,6 +12,12 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// defaultChannelModelCooldownSeconds 是自动禁用时的冷却时间下限。
+// disabled_until = 0 在 isChannelModelStatusDisabled 里被当作“永久禁用”，
+// 而 isChannelModelStatusProbing 又要求 disabled_until > 0 才算可探活，
+// 于是一条 cooldown=0 的自动禁用会永远不被选中、也永远等不到成功恢复。
+const defaultChannelModelCooldownSeconds int64 = 60
+
 type ChannelModelStatus struct {
 	ChannelId      int    `json:"channel_id" gorm:"primaryKey;autoIncrement:false;index"`
 	Group          string `json:"group" gorm:"type:varchar(64);primaryKey;autoIncrement:false;default:'default'"`
@@ -58,6 +64,9 @@ type ChannelModelSuccessUpdate struct {
 	LastEndpoint  string
 }
 
+// channelModelStatusCache 是进程内缓存。
+// 注意: 写入只会更新当前实例，没有 Redis 广播也没有定时重载。
+// 多实例部署时，A 节点把某渠道+模型自动禁用，B 节点仍会继续往那里发请求。
 var channelModelStatusCache atomic.Pointer[sync.Map]
 
 func channelModelStatusCacheMap() *sync.Map {
@@ -71,6 +80,9 @@ func channelModelStatusCacheMap() *sync.Map {
 	return channelModelStatusCache.Load()
 }
 
+// normalizeChannelModelStatusGroup 把空分组与 "auto" 都归并到 "default"。
+// 注意这意味着 auto 分组下的失败会记到 default 分组头上，反之也一样，
+// 两个分组的模型级禁用状态是互相污染的。
 func normalizeChannelModelStatusGroup(group string) string {
 	group = strings.TrimSpace(group)
 	if group == "" || strings.EqualFold(group, "auto") {
@@ -112,10 +124,19 @@ func cacheDeleteChannelModelStatus(channelID int, group, modelName string) {
 	channelModelStatusCacheMap().Delete(channelModelStatusCacheKey(channelID, group, modelName))
 }
 
+// ReloadChannelModelStatusCache 全量重建进程内缓存。
+// 以前这里是 `_ = DB.Find(&records).Error`：查询失败时 records 为空，紧接着就用
+// 空 map 覆盖了旧缓存——所有模型级禁用（包括管理员手动禁用）静默失效，
+// 流量重新涌回已知坏掉的渠道。现在失败时保留旧缓存并告警。
 func ReloadChannelModelStatusCache() {
+	if DB == nil {
+		common.SysError("reload channel-model status cache skipped: DB is not initialized")
+		return
+	}
 	var records []ChannelModelStatus
-	if DB != nil {
-		_ = DB.Find(&records).Error
+	if err := DB.Find(&records).Error; err != nil {
+		common.SysError("reload channel-model status cache failed, keeping stale cache: " + err.Error())
+		return
 	}
 	next := &sync.Map{}
 	for _, record := range records {
@@ -128,6 +149,8 @@ func ReloadChannelModelStatusCache() {
 	channelModelStatusCache.Store(next)
 }
 
+// HasChannelModelStatusCached 仅在内存缓存开启时有意义；关闭时恒返回 false，
+// 调用方不能把它当成“数据库里没有这条记录”。
 func HasChannelModelStatusCached(channelID int, group, modelName string) bool {
 	if !common.MemoryCacheEnabled {
 		return false
@@ -141,6 +164,7 @@ func isChannelModelStatusDisabled(record ChannelModelStatus, now int64) bool {
 	case common.ChannelStatusManuallyDisabled:
 		return true
 	case common.ChannelStatusAutoDisabled:
+		// disabled_until <= 0 表示没有冷却终点，即永久禁用。
 		return record.DisabledUntil <= 0 || now < record.DisabledUntil
 	default:
 		return false
@@ -171,6 +195,7 @@ func IsChannelModelDisabledForGroup(channelID int, group, modelName string) bool
 	var status ChannelModelStatus
 	err := DB.Where("channel_id = ? AND "+commonGroupCol+" = ? AND model_name = ?", channelID, group, modelName).First(&status).Error
 	if err != nil {
+		// 注意: 这里把“记录不存在”与“数据库报错”同等对待，均视为未禁用（fail-open）。
 		return false
 	}
 	return isChannelModelStatusDisabled(status, now)
@@ -238,6 +263,8 @@ func ListChannelModelStatuses(channel *Channel) ([]ChannelModelStatusView, error
 	}
 
 	now := common.GetTimestamp()
+	// 注意: 这里用 GetModels()，而路由表（abilities）是用 GetRoutingModels() 展开的。
+	// 两者不一致时，仅存在于路由模型列表的条目会被标为 Configured=false。
 	views := make([]ChannelModelStatusView, 0, len(records)+len(channel.GetGroups())*len(channel.GetModels()))
 	seen := make(map[string]struct{}, len(records))
 	for _, group := range channel.GetGroups() {
@@ -248,6 +275,10 @@ func ListChannelModelStatuses(channel *Channel) ([]ChannelModelStatusView, error
 				continue
 			}
 			key := channelModelStatusKey(group, modelName)
+			if _, ok := seen[key]; ok {
+				// 分组归并（auto/空 → default）可能让两个分组撞到同一个 key，避免重复行。
+				continue
+			}
 			seen[key] = struct{}{}
 			record, ok := byKey[key]
 			if !ok {
@@ -282,6 +313,8 @@ func ListChannelModelStatuses(channel *Channel) ([]ChannelModelStatusView, error
 	return views, nil
 }
 
+// isChannelModelStatusProbing 只在冷却已到期时为真；因此 disabled_until=0 的自动禁用
+// 永远不会进入探活状态，面板上也看不出它正在被永久屏蔽。
 func isChannelModelStatusProbing(record ChannelModelStatus, now int64) bool {
 	return record.Status == common.ChannelStatusAutoDisabled &&
 		record.DisabledUntil > 0 &&
@@ -346,10 +379,17 @@ func UpsertChannelModelFailure(update ChannelModelFailureUpdate) error {
 	if update.FailureThreshold < 1 {
 		update.FailureThreshold = 1
 	}
+	// 只要本次失败有可能触发自动禁用，就必须有一个大于 0 的冷却终点，
+	// 否则写入 disabled_until=0，该条目会变成无法探活、也无法自愈的永久禁用：
+	// 路由不再选它 → 没有成功请求 → RecordChannelModelSuccess 永远不会被调用。
+	cooldownSeconds := update.CooldownSeconds
+	if cooldownSeconds <= 0 && (update.ForceDisabled || update.AutoDisableEligible) {
+		cooldownSeconds = defaultChannelModelCooldownSeconds
+	}
 	now := common.GetTimestamp()
 	disabledUntil := int64(0)
-	if update.CooldownSeconds > 0 {
-		disabledUntil = now + update.CooldownSeconds
+	if cooldownSeconds > 0 {
+		disabledUntil = now + cooldownSeconds
 	}
 	initialStatus := common.ChannelStatusEnabled
 	initialDisabledAt := int64(0)
@@ -435,6 +475,8 @@ func RecordChannelModelSuccess(update ChannelModelSuccessUpdate) error {
 			"",
 		),
 	}
+	// 注意: 这里只 UPDATE，不插入。RowsAffected==0 说明还没有过失败记录，
+	// 属于正常情况，不需要为每次成功请求都建一行。
 	tx := DB.Model(&ChannelModelStatus{}).
 		Where("channel_id = ? AND "+commonGroupCol+" = ? AND model_name = ?", update.ChannelId, update.Group, update.ModelName).
 		Updates(updates)
@@ -450,6 +492,10 @@ func RecordChannelModelSuccess(update ChannelModelSuccessUpdate) error {
 	return nil
 }
 
+// UpdateChannelModelStatus 手动设置某渠道+分组+模型的状态。
+// 注意: disabled_until 总是写 0。对 ChannelStatusManuallyDisabled 而言这是对的（手动禁用
+// 本就应该一直生效），但如果调用方传入 ChannelStatusAutoDisabled，得到的会是
+// 一条永不探活、永不自愈的自动禁用记录（参见 isChannelModelStatusDisabled）。
 func UpdateChannelModelStatus(channelID int, group, modelName string, status int, reason string, disabledBy string) error {
 	group = normalizeChannelModelStatusGroup(group)
 	modelName = normalizeChannelModelStatusName(modelName)

@@ -2,7 +2,6 @@ package model
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -82,7 +81,7 @@ func (user *User) SetAccessToken(token string) {
 func (user *User) GetSetting() dto.UserSetting {
 	setting := dto.UserSetting{}
 	if user.Setting != "" {
-		err := json.Unmarshal([]byte(user.Setting), &setting)
+		err := common.Unmarshal([]byte(user.Setting), &setting)
 		if err != nil {
 			common.SysLog("failed to unmarshal setting: " + err.Error())
 		}
@@ -91,7 +90,7 @@ func (user *User) GetSetting() dto.UserSetting {
 }
 
 func (user *User) SetSetting(setting dto.UserSetting) {
-	settingBytes, err := json.Marshal(setting)
+	settingBytes, err := common.Marshal(setting)
 	if err != nil {
 		common.SysLog("failed to marshal setting: " + err.Error())
 		return
@@ -152,7 +151,7 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 	// 普通用户不包含admin区域
 
 	// 转换为JSON字符串
-	configBytes, err := json.Marshal(defaultConfig)
+	configBytes, err := common.Marshal(defaultConfig)
 	if err != nil {
 		common.SysLog("生成默认边栏配置失败: " + err.Error())
 		return ""
@@ -258,7 +257,13 @@ func withNormalizedEmailLock(tx *gorm.DB, email string, fn func(tx *gorm.DB) err
 
 func GetMaxUserId() int {
 	var user User
-	DB.Unscoped().Last(&user)
+	// 显式按 id 倒序取第一条：Last() 依赖默认主键排序，语义不明确且在部分驱动下不稳定
+	if err := DB.Unscoped().Order("id desc").First(&user).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			common.SysLog("failed to get max user id: " + err.Error())
+		}
+		return 0
+	}
 	return user.Id
 }
 
@@ -271,6 +276,7 @@ func GetAllUsers(pageInfo *common.PageInfo) (users []*User, total int64, err err
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
+			panic(r)
 		}
 	}()
 
@@ -309,6 +315,7 @@ func SearchUsers(keyword string, group string, role *int, status *int, startIdx 
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
+			panic(r)
 		}
 	}()
 
@@ -317,11 +324,11 @@ func SearchUsers(keyword string, group string, role *int, status *int, startIdx 
 
 	// 构建搜索条件
 	likeCondition := "username LIKE ? OR email LIKE ? OR display_name LIKE ?"
-	likeArgs := []interface{}{"%" + keyword + "%", "%" + keyword + "%", "%" + keyword + "%"}
+	likeKeyword := "%" + escapeLikeKeyword(keyword) + "%"
+	likeArgs := []interface{}{likeKeyword, likeKeyword, likeKeyword}
 
 	// 尝试将关键字转换为整数ID
-	keywordInt, err := strconv.Atoi(keyword)
-	if err == nil {
+	if keywordInt, convErr := strconv.Atoi(keyword); convErr == nil {
 		// 如果是数字，同时搜索ID和其他字段
 		likeCondition = "id = ? OR " + likeCondition
 		likeArgs = append([]interface{}{keywordInt}, likeArgs...)
@@ -358,6 +365,14 @@ func SearchUsers(keyword string, group string, role *int, status *int, startIdx 
 	}
 
 	return users, total, nil
+}
+
+// escapeLikeKeyword 转义 LIKE 通配符，避免用户输入的 % / _ 被当作通配符导致全表匹配。
+func escapeLikeKeyword(keyword string) string {
+	keyword = strings.ReplaceAll(keyword, "\\", "\\\\")
+	keyword = strings.ReplaceAll(keyword, "%", "\\%")
+	keyword = strings.ReplaceAll(keyword, "_", "\\_")
+	return keyword
 }
 
 func GetUserById(id int, selectAll bool) (*User, error) {
@@ -420,11 +435,16 @@ func (user *User) TransferAffQuotaToQuota(quota int) error {
 	if tx.Error != nil {
 		return tx.Error
 	}
-	defer tx.Rollback() // 确保在函数退出时事务能回滚
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
 
 	// 加锁查询用户以确保数据一致性
-	err := lockForUpdate(tx).First(&user, user.Id).Error
-	if err != nil {
+	// 注意：user 本身已是 *User，此处必须传 user 而不是 &user（**User）
+	if err := lockForUpdate(tx).First(user, user.Id).Error; err != nil {
 		return err
 	}
 
@@ -433,17 +453,28 @@ func (user *User) TransferAffQuotaToQuota(quota int) error {
 		return errors.New("邀请额度不足！")
 	}
 
-	// 更新用户额度
-	user.AffQuota -= quota
-	user.Quota += quota
-
-	// 保存用户状态
-	if err := tx.Save(user).Error; err != nil {
+	// 使用原子表达式更新，避免 Save 整行回写覆盖并发写入的其他字段
+	if err := tx.Model(&User{}).Where("id = ?", user.Id).Updates(map[string]interface{}{
+		"aff_quota": gorm.Expr("aff_quota - ?", quota),
+		"quota":     gorm.Expr("quota + ?", quota),
+	}).Error; err != nil {
 		return err
 	}
 
 	// 提交事务
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	committed = true
+
+	user.AffQuota -= quota
+	user.Quota += quota
+
+	// 该路径此前完全绕过缓存同步，会导致 Redis 中的用户额度与数据库长期不一致
+	if err := invalidateUserCache(user.Id); err != nil {
+		common.SysLog("failed to invalidate user cache after aff quota transfer: " + err.Error())
+	}
+	return nil
 }
 
 func (user *User) prepareForInsert(tx *gorm.DB) error {
@@ -632,8 +663,14 @@ func (user *User) Edit(updatePassword bool) error {
 		updates["password"] = newUser.Password
 	}
 
-	DB.First(&user, user.Id)
-	if err = DB.Model(user).Updates(updates).Error; err != nil {
+	// 此前写作 DB.First(&user, user.Id)，传入的是 **User，且错误被静默忽略
+	if err = DB.First(user, "id = ?", user.Id).Error; err != nil {
+		return err
+	}
+	if err = DB.Model(&User{}).Where("id = ?", user.Id).Updates(updates).Error; err != nil {
+		return err
+	}
+	if err = DB.First(user, "id = ?", user.Id).Error; err != nil {
 		return err
 	}
 
@@ -747,24 +784,22 @@ func (user *User) FillUserById() error {
 	if user.Id == 0 {
 		return errors.New("id 为空！")
 	}
-	DB.Where(User{Id: user.Id}).First(user)
-	return nil
+	// 此前忽略了查询错误：记录不存在时仍返回 nil，调用方会拿到空 user 继续执行
+	return DB.Where(User{Id: user.Id}).First(user).Error
 }
 
 func (user *User) FillUserByEmail() error {
 	if user.Email == "" {
 		return errors.New("email 为空！")
 	}
-	DB.Where(User{Email: user.Email}).First(user)
-	return nil
+	return DB.Where(User{Email: user.Email}).First(user).Error
 }
 
 func (user *User) FillUserByGitHubId() error {
 	if user.GitHubId == "" {
 		return errors.New("GitHub id 为空！")
 	}
-	DB.Where(User{GitHubId: user.GitHubId}).First(user)
-	return nil
+	return DB.Where(User{GitHubId: user.GitHubId}).First(user).Error
 }
 
 // UpdateGitHubId updates the user's GitHub ID (used for migration from login to numeric ID)
@@ -779,24 +814,21 @@ func (user *User) FillUserByDiscordId() error {
 	if user.DiscordId == "" {
 		return errors.New("discord id 为空！")
 	}
-	DB.Where(User{DiscordId: user.DiscordId}).First(user)
-	return nil
+	return DB.Where(User{DiscordId: user.DiscordId}).First(user).Error
 }
 
 func (user *User) FillUserByOidcId() error {
 	if user.OidcId == "" {
 		return errors.New("oidc id 为空！")
 	}
-	DB.Where(User{OidcId: user.OidcId}).First(user)
-	return nil
+	return DB.Where(User{OidcId: user.OidcId}).First(user).Error
 }
 
 func (user *User) FillUserByWeChatId() error {
 	if user.WeChatId == "" {
 		return errors.New("WeChat id 为空！")
 	}
-	DB.Where(User{WeChatId: user.WeChatId}).First(user)
-	return nil
+	return DB.Where(User{WeChatId: user.WeChatId}).First(user).Error
 }
 
 func (user *User) FillUserByTelegramId() error {
@@ -807,7 +839,7 @@ func (user *User) FillUserByTelegramId() error {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return errors.New("该 Telegram 账户未绑定")
 	}
-	return nil
+	return err
 }
 
 func IsEmailAlreadyTaken(email string) bool {
@@ -834,24 +866,39 @@ func GetUniqueUserByEmail(email string) (*User, error) {
 	}
 }
 
+// isOAuthBindingTaken 统一判断某个第三方账号是否已被占用。
+// 原实现使用 Find(&User{}).RowsAffected == 1：当库中存在多条脏数据时会返回 false，
+// 从而允许重复绑定；查询出错时也会被当作“未占用”。此处改为 COUNT 判定并在出错时按已占用处理。
+func isOAuthBindingTaken(column string, value string) bool {
+	if value == "" {
+		return false
+	}
+	var count int64
+	if err := DB.Unscoped().Model(&User{}).Where(column+" = ?", value).Count(&count).Error; err != nil {
+		common.SysLog(fmt.Sprintf("failed to check %s binding uniqueness: %s", column, err.Error()))
+		return true
+	}
+	return count > 0
+}
+
 func IsWeChatIdAlreadyTaken(wechatId string) bool {
-	return DB.Unscoped().Where("wechat_id = ?", wechatId).Find(&User{}).RowsAffected == 1
+	return isOAuthBindingTaken("wechat_id", wechatId)
 }
 
 func IsGitHubIdAlreadyTaken(githubId string) bool {
-	return DB.Unscoped().Where("github_id = ?", githubId).Find(&User{}).RowsAffected == 1
+	return isOAuthBindingTaken("github_id", githubId)
 }
 
 func IsDiscordIdAlreadyTaken(discordId string) bool {
-	return DB.Unscoped().Where("discord_id = ?", discordId).Find(&User{}).RowsAffected == 1
+	return isOAuthBindingTaken("discord_id", discordId)
 }
 
 func IsOidcIdAlreadyTaken(oidcId string) bool {
-	return DB.Where("oidc_id = ?", oidcId).Find(&User{}).RowsAffected == 1
+	return isOAuthBindingTaken("oidc_id", oidcId)
 }
 
 func IsTelegramIdAlreadyTaken(telegramId string) bool {
-	return DB.Unscoped().Where("telegram_id = ?", telegramId).Find(&User{}).RowsAffected == 1
+	return isOAuthBindingTaken("telegram_id", telegramId)
 }
 
 func ResetUserPasswordByEmail(email string, password string) error {
@@ -882,36 +929,6 @@ func IsAdmin(userId int) bool {
 	}
 	return user.Role >= common.RoleAdminUser
 }
-
-//// IsUserEnabled checks user status from Redis first, falls back to DB if needed
-//func IsUserEnabled(id int, fromDB bool) (status bool, err error) {
-//	defer func() {
-//		// Update Redis cache asynchronously on successful DB read
-//		if shouldUpdateRedis(fromDB, err) {
-//			gopool.Go(func() {
-//				if err := updateUserStatusCache(id, status); err != nil {
-//					common.SysError("failed to update user status cache: " + err.Error())
-//				}
-//			})
-//		}
-//	}()
-//	if !fromDB && common.RedisEnabled {
-//		// Try Redis first
-//		status, err := getUserStatusCache(id)
-//		if err == nil {
-//			return status == common.UserStatusEnabled, nil
-//		}
-//		// Don't return error - fall through to DB
-//	}
-//	fromDB = true
-//	var user User
-//	err = DB.Where("id = ?", id).Select("status").Find(&user).Error
-//	if err != nil {
-//		return false, err
-//	}
-//
-//	return user.Status == common.UserStatusEnabled, nil
-//}
 
 func ValidateAccessToken(token string) (*User, error) {
 	if token == "" {
@@ -1066,6 +1083,8 @@ func increaseUserQuota(id int, quota int) (err error) {
 	return nil
 }
 
+// DecreaseUserQuota 扣减用户额度。
+// 注意：db 参数是历史遗留，扣减必须走原子 SQL，不能进入批量更新队列，因此该参数被忽略。
 func DecreaseUserQuota(id int, quota int, db bool) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
@@ -1107,11 +1126,6 @@ func DeltaUpdateUserQuota(id int, delta int) (err error) {
 	}
 }
 
-//func GetRootUserEmail() (email string) {
-//	DB.Model(&User{}).Where("role = ?", common.RoleRootUser).Select("email").Find(&email)
-//	return email
-//}
-
 func GetRootUser() (user *User) {
 	DB.Where("role = ?", common.RoleRootUser).First(&user)
 	return user
@@ -1143,11 +1157,6 @@ func updateUserUsedQuotaAndRequestCount(id int, quota int, count int) {
 		common.SysLog("failed to update user used quota and request count: " + err.Error())
 		return
 	}
-
-	//// 更新缓存
-	//if err := invalidateUserCache(id); err != nil {
-	//	common.SysError("failed to invalidate user cache: " + err.Error())
-	//}
 }
 
 func updateUserUsedQuota(id int, quota int) {
@@ -1197,9 +1206,7 @@ func GetUsernameById(id int, fromDB bool) (username string, err error) {
 }
 
 func IsLinuxDOIdAlreadyTaken(linuxDOId string) bool {
-	var user User
-	err := DB.Unscoped().Where("linux_do_id = ?", linuxDOId).First(&user).Error
-	return !errors.Is(err, gorm.ErrRecordNotFound)
+	return isOAuthBindingTaken("linux_do_id", linuxDOId)
 }
 
 func (user *User) FillUserByLinuxDOId() error {

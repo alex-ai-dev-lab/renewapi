@@ -34,6 +34,10 @@ export function getApiKeyFormSchema(t: TFunction) {
       expired_time: z.date().optional(),
       unlimited_quota: z.boolean(),
       model_limits: z.array(z.string()),
+      // Carries the token's stored model_limits_enabled flag through the form so
+      // it is not silently recomputed from the list length. Not rendered as a
+      // field; see transformFormDataToPayload.
+      model_limits_enabled: z.boolean().optional(),
       allow_ips: z.string().optional(),
       group: z.string().optional(),
       cross_group_retry: z.boolean().optional(),
@@ -69,6 +73,7 @@ export const API_KEY_FORM_DEFAULT_VALUES: ApiKeyFormValues = {
   expired_time: undefined,
   unlimited_quota: true,
   model_limits: [],
+  model_limits_enabled: false,
   allow_ips: '',
   group: DEFAULT_GROUP,
   cross_group_retry: true,
@@ -97,6 +102,9 @@ export function transformFormDataToPayload(
 ): ApiKeyFormData {
   return {
     name: data.name,
+    // NOTE: when unlimited_quota is on, the stored remaining quota is sent as 0.
+    // The backend ignores it while unlimited, but the original value is lost, so
+    // turning unlimited off later starts from whatever the form shows.
     remain_quota: data.unlimited_quota
       ? 0
       : parseQuotaFromDollars(data.remain_quota_dollars || 0),
@@ -104,10 +112,17 @@ export function transformFormDataToPayload(
       ? Math.floor(data.expired_time.getTime() / 1000)
       : -1,
     unlimited_quota: data.unlimited_quota,
-    model_limits_enabled: data.model_limits.length > 0,
+    // Keep the whitelist enabled when it was already enabled, even if the list
+    // is currently empty. Deriving this purely from the list length meant
+    // clearing the list turned a restricted token into an unrestricted one,
+    // which is the unsafe direction. An enabled-but-empty whitelist denies every
+    // model, so this fails closed.
+    model_limits_enabled: data.model_limits.length > 0 || !!data.model_limits_enabled,
     model_limits: data.model_limits.join(','),
     allow_ips: data.allow_ips || '',
     group: data.group || '',
+    // Only meaningful for the auto group; forced off otherwise, which silently
+    // discards the toggle when the group is changed away from auto.
     cross_group_retry: data.group === 'auto' ? !!data.cross_group_retry : false,
   }
 }
@@ -120,9 +135,10 @@ export function transformApiKeyToFormDefaults(
 ): ApiKeyFormValues {
   return {
     name: apiKey.name,
-    remain_quota_dollars: apiKey.unlimited_quota
-      ? 0
-      : quotaUnitsToDollars(apiKey.remain_quota),
+    // Always surface the stored remaining quota, including for unlimited tokens.
+    // Returning 0 for unlimited tokens meant unchecking "unlimited" in the edit
+    // dialog submitted a zero quota and instantly exhausted the token.
+    remain_quota_dollars: quotaUnitsToDollars(apiKey.remain_quota),
     expired_time:
       apiKey.expired_time > 0
         ? new Date(apiKey.expired_time * 1000)
@@ -131,6 +147,7 @@ export function transformApiKeyToFormDefaults(
     model_limits: apiKey.model_limits
       ? apiKey.model_limits.split(',').filter(Boolean)
       : [],
+    model_limits_enabled: apiKey.model_limits_enabled,
     allow_ips: apiKey.allow_ips || '',
     group: apiKey.group || DEFAULT_GROUP,
     cross_group_retry: !!apiKey.cross_group_retry,

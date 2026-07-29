@@ -31,6 +31,10 @@ type RelayRoutePlan struct {
 	index  int
 }
 
+// ResponsesRelayRoutePlanParams 里有三个含义相近的渠道 ID，注意区分：
+//   - PinnedChannelId: 硬过滤，只保留这一个渠道
+//   - InitialChannelId: distributor 已经安装到 context 的渠道，必须仍是计划的第一项
+//   - PreferredChannelId: 软偏好，默认只在同优先级内生效；PreferChannelFirst=true 时提到最前
 type ResponsesRelayRoutePlanParams struct {
 	Group              string
 	Groups             []string
@@ -48,9 +52,33 @@ type ResponsesRelayRoutePlanParams struct {
 	ChannelAllowed     func(*model.Channel) bool
 }
 
+// relayRoutePlanLimits 缓存一次请求内的环境变量取值。
+// 这些值原先是在每分组、甚至每渠道的循环体内反复读取的。
+type relayRoutePlanLimits struct {
+	maxCandidates       int
+	maxModelsPerChannel int
+	allowCrossFamily    bool
+}
+
+func loadRelayRoutePlanLimits() relayRoutePlanLimits {
+	return relayRoutePlanLimits{
+		maxCandidates:       common.GetEnvOrDefault("RESPONSES_COMPACTION_MAX_ROUTE_CANDIDATES", 12),
+		maxModelsPerChannel: common.GetEnvOrDefault("RESPONSES_COMPACTION_MAX_MODELS_PER_CHANNEL", 3),
+		allowCrossFamily:    common.GetEnvOrDefaultBool("RESPONSES_COMPACTION_CROSS_FAMILY_FALLBACK", false),
+	}
+}
+
 var relayRouteDottedVersionRE = regexp.MustCompile(`\d+(?:\.\d+)+`)
 var relayRouteDatedSuffixRE = regexp.MustCompile(`-\d{4}-\d{2}-\d{2}$`)
 
+// relayRouteModelFamily 把模型名归一到“家族”，用于禁止跨家族回退。
+// 局限性（默认 RESPONSES_COMPACTION_CROSS_FAMILY_FALLBACK=false 时影响很大）：
+//   - 只识别点号版本号，claude-3-5-sonnet 这种连字符版本号不会被归一，
+//     与 claude-3.5-sonnet 会被判成两个不同家族；
+//   - 只剥离 -YYYY-MM-DD 形式的日期后缀，-20240620 / -latest / -preview 都留在名字里，
+//     于是 xxx-20240620 与 xxx 也是两个家族。
+//
+// 结果是不少本该允许的同家族回退被静默丢弃。彻底修需要一份显式的家族映射表。
 func relayRouteModelFamily(modelName string) string {
 	normalized := strings.ToLower(strings.TrimSpace(modelName))
 	normalized = relayRouteDatedSuffixRE.ReplaceAllString(normalized, "")
@@ -67,6 +95,7 @@ func relayRouteVersion(modelName string) []int {
 	for _, part := range parts {
 		value, err := strconv.Atoi(part)
 		if err != nil {
+			// 正则已保证全是数字，这里只防御超长数字溢出。
 			return nil
 		}
 		version = append(version, value)
@@ -74,6 +103,8 @@ func relayRouteVersion(modelName string) []int {
 	return version
 }
 
+// compareRelayRouteVersionDesc 版本号降序比较。
+// 注意: 完全不含点号版本号的模型名 version 为 nil，会被当成全 0，即排在最后。
 func compareRelayRouteVersionDesc(left, right string) int {
 	a := relayRouteVersion(left)
 	b := relayRouteVersion(right)
@@ -108,6 +139,9 @@ func channelContainsGroup(channel *model.Channel, group string) bool {
 	return false
 }
 
+// routeRetryBudget 用 ChannelInfo.MultiKeySize 推算多 Key 重试预算。
+// 注意: service/channel_select.go 走的是 MultiKeyStatusList / GetEnabledKeyByIndex，
+// 两处口径不同——MultiKeySize 是写库时算好的计数，Key 列表变更后若未同步就会偏大。
 func routeRetryBudget(channel *model.Channel) int {
 	if channel == nil || !channel.ChannelInfo.IsMultiKey || channel.ChannelInfo.MultiKeySize <= 1 {
 		return 0
@@ -117,6 +151,17 @@ func routeRetryBudget(channel *model.Channel) int {
 		budget = common.RetryTimes
 	}
 	return budget
+}
+
+// resolveRelayRouteChannels 加载一次渠道列表。
+// 原先这段在每个分组的循环体里各执行一次，内存缓存未命中时相当于
+// 一个请求做 len(groups) 次 GetAllChannels 全表加载。
+func resolveRelayRouteChannels() ([]*model.Channel, error) {
+	channels := model.CacheGetAllChannels()
+	if len(channels) > 0 {
+		return channels, nil
+	}
+	return model.GetAllChannels(0, 0, true, false)
 }
 
 func BuildResponsesRelayRoutePlan(params ResponsesRelayRoutePlanParams) (*RelayRoutePlan, error) {
@@ -141,41 +186,107 @@ func BuildResponsesRelayRoutePlan(params ResponsesRelayRoutePlanParams) (*RelayR
 	if len(groups) == 0 || params.PrimaryModel == "" || params.Requirement == nil {
 		return nil, errors.New("responses route plan requires group, primary model, and capability requirement")
 	}
-	routes := make([]RelayModelRoles, 0, 16)
+	channels, err := resolveRelayRouteChannels()
+	if err != nil {
+		return nil, err
+	}
+	limits := loadRelayRoutePlanLimits()
+	groupRoutes := make([][]RelayModelRoles, 0, len(groups))
 	for _, group := range groups {
-		groupRoutes, err := buildResponsesRelayRoutesForGroup(params, group)
-		if err != nil {
-			return nil, err
-		}
-		routes = append(routes, groupRoutes...)
+		groupRoutes = append(groupRoutes, buildResponsesRelayRoutesForGroup(params, group, channels, limits))
 	}
-	maxCandidates := common.GetEnvOrDefault("RESPONSES_COMPACTION_MAX_ROUTE_CANDIDATES", 12)
-	if maxCandidates > 0 && len(routes) > maxCandidates {
-		routes = routes[:maxCandidates]
-	}
-	if len(routes) == 0 {
+	firstRoute, hasFirstRoute := firstRelayRoute(groupRoutes)
+	if !hasFirstRoute {
 		return nil, errors.New("no channel/model candidate satisfies responses compaction requirements")
 	}
 	// Plans built after the distributor installed a context must retain the
 	// installed pair. Distributor-built plans leave InitialChannelId at zero and
 	// therefore select the actual highest-priority (channel, model) pair.
+	//
+	// 这个校验必须在按预算截断之前做：否则一个完全合法的已安装渠道只要被
+	// maxCandidates 截掉，就会误报 "initial channel/model no longer satisfies"。
 	if params.InitialChannelId > 0 &&
-		(routes[0].PreferredChannelId != params.InitialChannelId ||
-			!strings.EqualFold(routes[0].RoutingModel, params.PrimaryModel)) {
+		(firstRoute.PreferredChannelId != params.InitialChannelId ||
+			!strings.EqualFold(firstRoute.RoutingModel, params.PrimaryModel)) {
 		return nil, errors.New("initial channel/model no longer satisfies responses compaction requirements")
+	}
+	routes := flattenRelayRoutesWithBudget(groupRoutes, limits.maxCandidates)
+	if len(routes) == 0 {
+		return nil, errors.New("no channel/model candidate satisfies responses compaction requirements")
 	}
 	return &RelayRoutePlan{routes: routes}, nil
 }
 
-func buildResponsesRelayRoutesForGroup(params ResponsesRelayRoutePlanParams, group string) ([]RelayModelRoles, error) {
-	channels := model.CacheGetAllChannels()
-	if len(channels) == 0 {
-		var err error
-		channels, err = model.GetAllChannels(0, 0, true, false)
-		if err != nil {
-			return nil, err
+func firstRelayRoute(groupRoutes [][]RelayModelRoles) (RelayModelRoles, bool) {
+	for _, routes := range groupRoutes {
+		if len(routes) > 0 {
+			return routes[0], true
 		}
 	}
+	return RelayModelRoles{}, false
+}
+
+// flattenRelayRoutesWithBudget 把各分组的候选拼成一个计划，同时尊重总名额上限。
+//
+// 旧实现是先无脑拼接再 routes[:maxCandidates]，于是只要第一个分组的候选数
+// 就够 maxCandidates（默认 12，配合每渠道 3 个模型只需 4 个渠道），
+// 后面所有后备分组永远拿不到一个名额——跨分组后备形同虚设。
+//
+// 现在先给每个分组分配 maxCandidates/len(groups) 的基础预算（至少 1），
+// 再按分组顺序用剩余名额补齐，保证每个非空分组都至少有一个候选。
+func flattenRelayRoutesWithBudget(groupRoutes [][]RelayModelRoles, maxCandidates int) []RelayModelRoles {
+	total := 0
+	for _, routes := range groupRoutes {
+		total += len(routes)
+	}
+	flat := make([]RelayModelRoles, 0, total)
+	if maxCandidates <= 0 || total <= maxCandidates {
+		for _, routes := range groupRoutes {
+			flat = append(flat, routes...)
+		}
+		return flat
+	}
+	perGroup := maxCandidates / len(groupRoutes)
+	if perGroup < 1 {
+		perGroup = 1
+	}
+	consumed := make([]int, len(groupRoutes))
+	for i, routes := range groupRoutes {
+		if len(flat) >= maxCandidates {
+			break
+		}
+		take := perGroup
+		if take > len(routes) {
+			take = len(routes)
+		}
+		if len(flat)+take > maxCandidates {
+			take = maxCandidates - len(flat)
+		}
+		flat = append(flat, routes[:take]...)
+		consumed[i] = take
+	}
+	for i, routes := range groupRoutes {
+		if len(flat) >= maxCandidates {
+			break
+		}
+		take := len(routes) - consumed[i]
+		if take <= 0 {
+			continue
+		}
+		if len(flat)+take > maxCandidates {
+			take = maxCandidates - len(flat)
+		}
+		flat = append(flat, routes[consumed[i]:consumed[i]+take]...)
+	}
+	return flat
+}
+
+func buildResponsesRelayRoutesForGroup(
+	params ResponsesRelayRoutePlanParams,
+	group string,
+	channels []*model.Channel,
+	limits relayRoutePlanLimits,
+) []RelayModelRoles {
 	filtered := make([]*model.Channel, 0, len(channels))
 	for _, channel := range channels {
 		if channel == nil || channel.Status != common.ChannelStatusEnabled || !channelContainsGroup(channel, group) {
@@ -224,7 +335,6 @@ func buildResponsesRelayRoutesForGroup(params ResponsesRelayRoutePlanParams, gro
 		return filtered[i].Id < filtered[j].Id
 	})
 
-	allowCrossFamily := common.GetEnvOrDefaultBool("RESPONSES_COMPACTION_CROSS_FAMILY_FALLBACK", false)
 	primaryFamily := relayRouteModelFamily(params.PrimaryModel)
 	routes := make([]RelayModelRoles, 0, 16)
 	for _, channel := range filtered {
@@ -248,7 +358,7 @@ func buildResponsesRelayRoutesForGroup(params ResponsesRelayRoutePlanParams, gro
 			if requiredModel != "" && params.TokenModelAllowed != nil && !params.TokenModelAllowed(requiredModel) {
 				continue
 			}
-			if !allowCrossFamily && !strings.EqualFold(relayRouteModelFamily(modelName), primaryFamily) {
+			if !limits.allowCrossFamily && !strings.EqualFold(relayRouteModelFamily(modelName), primaryFamily) {
 				continue
 			}
 			if !model.IsChannelEnabledForGroupModel(group, modelName, channel.Id) ||
@@ -275,9 +385,8 @@ func buildResponsesRelayRoutesForGroup(params ResponsesRelayRoutePlanParams, gro
 			}
 			return compareRelayRouteVersionDesc(candidates[i], candidates[j]) < 0
 		})
-		maxModelsPerChannel := common.GetEnvOrDefault("RESPONSES_COMPACTION_MAX_MODELS_PER_CHANNEL", 3)
-		if maxModelsPerChannel > 0 && len(candidates) > maxModelsPerChannel {
-			candidates = candidates[:maxModelsPerChannel]
+		if limits.maxModelsPerChannel > 0 && len(candidates) > limits.maxModelsPerChannel {
+			candidates = candidates[:limits.maxModelsPerChannel]
 		}
 		for _, modelName := range candidates {
 			requiredModel := relayRouteRequiredModel(params, modelName)
@@ -293,7 +402,7 @@ func buildResponsesRelayRoutesForGroup(params ResponsesRelayRoutePlanParams, gro
 			})
 		}
 	}
-	return routes, nil
+	return routes
 }
 
 func relayRouteRequiredModel(params ResponsesRelayRoutePlanParams, routingModel string) string {
@@ -333,6 +442,8 @@ func NewRelayRoutePlan(clientModel, primaryModel, requiredModel string, fallback
 			RequiredModel: strings.TrimSpace(requiredModel),
 		})
 	}
+	// 注意: primaryModel 与 fallbackModels 全为空时会返回一个零候选的计划，
+	// 调用方只能通过 Current() 返回 false 感知，这里不报错。
 	return &RelayRoutePlan{routes: routes}
 }
 

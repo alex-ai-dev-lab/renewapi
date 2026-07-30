@@ -16,8 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { getSelf } from '@/lib/api'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
@@ -30,7 +31,7 @@ import { TransferDialog } from './components/dialogs/transfer-dialog'
 import { RechargeFormCard } from './components/recharge-form-card'
 import { SubscriptionPlansCard } from './components/subscription-plans-card'
 import { WalletStatsCard } from './components/wallet-stats-card'
-import { DEFAULT_DISCOUNT_RATE } from './constants'
+import { DEFAULT_DISCOUNT_RATE, PAYMENT_TYPES } from './constants'
 import {
   useTopupInfo,
   usePayment,
@@ -73,6 +74,9 @@ export function Wallet(props: WalletProps) {
   const [selectedCreemProduct, setSelectedCreemProduct] =
     useState<CreemProduct | null>(null)
   const [showSubscriptionPanel, setShowSubscriptionPanel] = useState(true)
+  // 金额是否已初始化过。原实现用 `topupAmount === 0` 当哨兵，
+  // 用户把输入框清成 0 后初始化 effect 会再次触发、覆盖用户输入。
+  const amountInitializedRef = useRef(false)
 
   const { status } = useStatus()
   const { currency } = useSystemConfig()
@@ -132,15 +136,15 @@ export function Wallet(props: WalletProps) {
 
   // Initialize topup amount when topup info is loaded
   useEffect(() => {
-    if (topupInfo && topupAmount === 0) {
-      const minTopup = getMinTopupAmount(topupInfo)
-      setTopupAmount(minTopup)
+    if (!topupInfo || amountInitializedRef.current) return
+    amountInitializedRef.current = true
 
-      // Calculate initial payment amount with default payment type
-      const defaultPaymentType = getDefaultPaymentType(topupInfo)
-      calculatePaymentAmount(minTopup, defaultPaymentType)
-    }
-  }, [topupInfo, topupAmount, calculatePaymentAmount])
+    // 默认渠道的最低充值额：必须把 paymentType 传进去，否则拿到的是全局下限。
+    const defaultPaymentType = getDefaultPaymentType(topupInfo)
+    const minTopup = getMinTopupAmount(topupInfo, defaultPaymentType)
+    setTopupAmount(minTopup)
+    calculatePaymentAmount(minTopup, defaultPaymentType)
+  }, [topupInfo, calculatePaymentAmount])
 
   // Get current payment type (selected or default)
   const getCurrentPaymentType = useCallback(() => {
@@ -167,9 +171,15 @@ export function Wallet(props: WalletProps) {
     setPaymentLoading(method.type)
 
     try {
-      // Validate minimum topup
-      const minTopup = getMinTopupAmount(topupInfo)
-      if (topupAmount < minTopup) {
+      // Validate minimum topup for THIS payment method.
+      // 原实现调的是 getMinTopupAmount(topupInfo)，丢了 method.type，
+      // 于是 Stripe / Waffo 等渠道自己的最低额完全不生效。
+      const minTopup = getMinTopupAmount(topupInfo, method.type)
+      if (!Number.isFinite(topupAmount) || topupAmount < minTopup) {
+        // 原实现在这里静默 return，用户点了支付方式但什么也没发生。
+        toast.error(
+          t('Minimum topup amount is {{amount}}', { amount: minTopup })
+        )
         return
       }
 
@@ -235,6 +245,14 @@ export function Wallet(props: WalletProps) {
   }
 
   const handleWaffoMethodSelect = async (_method: unknown, index: number) => {
+    // Waffo 是唯一一个不走 PaymentConfirmDialog 的渠道，点一下直接下单；
+    // 原实现还完全跳过了最低充值额校验，这里至少把校验补上。
+    const minTopup = getMinTopupAmount(topupInfo, PAYMENT_TYPES.WAFFO)
+    if (!Number.isFinite(topupAmount) || topupAmount < minTopup) {
+      toast.error(t('Minimum topup amount is {{amount}}', { amount: minTopup }))
+      return
+    }
+
     const loadingKey = `waffo-${index}`
     setPaymentLoading(loadingKey)
 
@@ -246,6 +264,10 @@ export function Wallet(props: WalletProps) {
   }
 
   // Get discount rate for current topup amount
+  //
+  // NOTE: 这是精确 key 匹配，不是阶段查找。若后台配的折扣档为 100/500，
+  // 用户输入 150 时前端展示无折扣，而后端若按阶段结算则两边不一致。
+  // 本 PR 不改语义，仅标注（需先与后端对齐 discount 语义）。
   const getDiscountRate = useCallback(() => {
     return topupInfo?.discount?.[topupAmount] || DEFAULT_DISCOUNT_RATE
   }, [topupInfo, topupAmount])

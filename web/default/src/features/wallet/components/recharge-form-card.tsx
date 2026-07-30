@@ -116,12 +116,27 @@ export function RechargeFormCard({
     setLocalAmount(topupAmount.toString())
   }, [topupAmount])
 
+  // The whole topup pipeline (quote, preset pricing, order creation, and the
+  // backend order record) treats the amount as a whole number. The previous
+  // implementation did `parseInt(value) || 0`, which silently dropped the
+  // fractional part while the input box kept showing the typed text: typing
+  // "9.9" displayed 9.9 but quoted and charged 9. Normalize the visible text
+  // together with the reported value so what the user sees is what is ordered.
   const handleAmountChange = (value: string) => {
-    setLocalAmount(value)
-    const numValue = parseInt(value) || 0
-    if (numValue >= 0) {
-      onTopupAmountChange(numValue)
+    if (value.trim() === '') {
+      setLocalAmount('')
+      onTopupAmountChange(0)
+      return
     }
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      // Reject junk / negative input instead of coercing it to 0, which would
+      // wipe an amount the user already entered.
+      return
+    }
+    const normalized = Math.floor(parsed)
+    setLocalAmount(String(normalized))
+    onTopupAmountChange(normalized)
   }
 
   const hasConfigurableTopup =
@@ -134,6 +149,9 @@ export function RechargeFormCard({
     Array.isArray(topupInfo?.pay_methods) && topupInfo.pay_methods.length > 0
   const hasWaffoPaymentMethods =
     Array.isArray(waffoPayMethods) && waffoPayMethods.length > 0
+  // Global floor, used only for the input hint. Each method enforces its own
+  // `min_topup` below, so this number can be lower than the one that actually
+  // gates the button the user clicks.
   const minTopup = getMinTopupAmount(topupInfo)
   const redemptionEnabled = topupInfo?.enable_redemption !== false
 
@@ -256,11 +274,16 @@ export function RechargeFormCard({
                             )}
                           </div>
                           <div className='text-muted-foreground mt-1.5 w-full text-xs sm:mt-2'>
-                            Pay {formatCurrency(actualPrice)}
+                            {t('Pay {{amount}}', {
+                              amount: formatCurrency(actualPrice),
+                            })}
                             {hasDiscount && savedAmount > 0 && (
                               <span className='text-success'>
                                 {' '}
-                                • Save {formatCurrency(savedAmount)}
+                                •{' '}
+                                {t('Save {{amount}}', {
+                                  amount: formatCurrency(savedAmount),
+                                })}
                               </span>
                             )}
                           </div>
@@ -282,6 +305,8 @@ export function RechargeFormCard({
                   <Input
                     id='topup-amount'
                     type='number'
+                    inputMode='numeric'
+                    step={1}
                     value={localAmount}
                     onChange={(e) => handleAmountChange(e.target.value)}
                     min={minTopup}
@@ -310,8 +335,10 @@ export function RechargeFormCard({
                 {hasStandardPaymentMethods ? (
                   <div className='grid grid-cols-2 gap-1.5 sm:gap-3 lg:grid-cols-3'>
                     {topupInfo?.pay_methods?.map((method) => {
-                      const minTopup = method.min_topup || 0
-                      const disabled = minTopup > topupAmount
+                      // Renamed from `minTopup` so it no longer shadows the
+                      // global floor computed above.
+                      const methodMinTopup = method.min_topup || 0
+                      const disabled = methodMinTopup > topupAmount
 
                       const button = (
                         <Button
@@ -341,7 +368,7 @@ export function RechargeFormCard({
                             <TooltipTrigger render={button}></TooltipTrigger>
                             <TooltipContent>
                               {t('Minimum topup amount: {{amount}}', {
-                                amount: minTopup,
+                                amount: methodMinTopup,
                               })}
                             </TooltipContent>
                           </Tooltip>
@@ -385,14 +412,17 @@ export function RechargeFormCard({
                           >
                             {paymentLoading === loadingKey ? (
                               <Loader2 className='h-4 w-4 animate-spin' />
-                            ) : method.icon ? (
-                              <img
-                                src={method.icon}
-                                alt={method.name}
-                                className='h-4 w-4 object-contain'
-                              />
                             ) : (
-                              getPaymentIcon('waffo')
+                              // Was a bare <img src={method.icon}/>, bypassing
+                              // the http(s)-only check every other method icon
+                              // goes through. getPaymentIcon validates the URL
+                              // and falls back to the Waffo glyph.
+                              getPaymentIcon(
+                                'waffo',
+                                'h-4 w-4',
+                                method.icon,
+                                method.name
+                              )
                             )}
                             <span className='truncate'>{method.name}</span>
                           </Button>

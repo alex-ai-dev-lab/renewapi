@@ -28,6 +28,31 @@ import { formatDuration, formatResetPeriod } from '../lib'
 import type { PlanRecord } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+  CNY: '¥',
+}
+
+/**
+ * 按计划自己的币种渲染价格。
+ *
+ * 原实现硬编码 `${Number(price_amount || 0).toFixed(2)}` 的美元符号，
+ * 而计划 schema 里有 currency 字段（默认 USD，可为 EUR 等）：
+ * 一个 9.9 EUR 的计划在列表里会被展示成 “$9.90”。
+ */
+function formatPlanPrice(amount: unknown, currency?: string): string {
+  const numeric = Number(amount || 0)
+  const code = (currency || 'USD').toUpperCase()
+  const symbol = CURRENCY_SYMBOLS[code]
+  // 未收录的币种宁可显示 ISO 代码，也不能默默当成美元。
+  const prefix = symbol || `${code} `
+  if (!Number.isFinite(numeric)) return `${prefix}-`
+  return `${prefix}${numeric.toFixed(2)}`
+}
+
 export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
   const { t } = useTranslation()
 
@@ -74,7 +99,10 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
         ),
         cell: ({ row }) => (
           <span className='text-success font-semibold'>
-            ${Number(row.original.plan.price_amount || 0).toFixed(2)}
+            {formatPlanPrice(
+              row.original.plan.price_amount,
+              row.original.plan.currency
+            )}
           </span>
         ),
         size: 100,
@@ -175,6 +203,10 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
         size: 140,
       },
       {
+        // NOTE: 列名是「Received amount（已收金额）」，但取的是计划配置字段
+        // total_amount，且 0 被当成「Unlimited」、用 formatQuota（额度格式）渲染 ——
+        // 三个信号都说明它其实是「总额度/限额」而不是已收款。
+        // 本 PR 不改语义，需先与后端对齐 total_amount 含义再重命名列头。
         id: 'total_amount',
         meta: { label: t('Received amount'), mobileHidden: true },
         header: ({ column }) => (
@@ -184,7 +216,9 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
           const total = Number(row.original.plan.total_amount || 0)
           return (
             <span className='text-muted-foreground'>
-              {total > 0 ? formatQuota(total) : t('Unlimited')}
+              {Number.isFinite(total) && total > 0
+                ? formatQuota(total)
+                : t('Unlimited')}
             </span>
           )
         },

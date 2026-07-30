@@ -20,12 +20,29 @@ export function applyFaviconToDom(url: string) {
   if (typeof document === 'undefined' || !url) return
   try {
     const next = new URL(url, window.location.href).href
+    // The favicon URL comes from a server-side option, so apply the same
+    // protocol allowlist the payment/icon helpers use. Previously the resolved
+    // `next` was computed for comparison only and the raw, unvalidated `url`
+    // was written into the DOM.
+    const parsed = new URL(next)
+    const isAllowed =
+      parsed.protocol === 'https:' ||
+      parsed.protocol === 'http:' ||
+      next.startsWith('data:image/')
+    if (!isAllowed) return
     const existing =
       document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]')
-    if (existing.length === 1 && existing[0].href === next) return
+    // Was `existing.length === 1 && existing[0].href === next`, so a document
+    // that already had several icon links rebuilt them on every call.
+    if (
+      existing.length > 0 &&
+      Array.from(existing).every((l) => l.href === next)
+    ) {
+      return
+    }
     const link = document.createElement('link')
     link.rel = 'icon'
-    link.href = url
+    link.href = next
     existing.forEach((l) => l.remove())
     document.head.appendChild(link)
   } catch {
@@ -49,6 +66,19 @@ export function resolveInternalRedirect(
   }
 }
 
+/**
+ * Validates an absolute off-site URL before the app navigates to it.
+ *
+ * This is the single gate in front of every checkout redirect (the Stripe /
+ * Creem / Waffo / Waffo Pancake / e-pay hooks and the subscription purchase
+ * dialogs all funnel through it), so it is deliberately strict about what it
+ * hands back.
+ *
+ * NOTE: there is intentionally no host allowlist here - the target comes from
+ * server-side payment configuration, which is trusted. `http:` is still
+ * accepted because self-hosted e-pay gateways are commonly deployed without
+ * TLS; tightening either of those is a product decision, not a local fix.
+ */
 export function resolveHttpRedirect(target: string | undefined): string | null {
   if (!target) return null
   try {
@@ -56,6 +86,13 @@ export function resolveHttpRedirect(target: string | undefined): string | null {
     if (resolved.protocol !== 'https:' && resolved.protocol !== 'http:') {
       return null
     }
+    // Reject embedded credentials. `https://checkout.example.com@evil.io/pay`
+    // actually navigates to evil.io while reading as the real gateway, which is
+    // exactly the confusion a checkout redirect must not allow. This matches
+    // normalizeHttpIconUrl in features/wallet/lib/ui.tsx, which already refused
+    // userinfo - icon URLs were being validated more strictly than payment
+    // redirects.
+    if (resolved.username || resolved.password) return null
     return resolved.href
   } catch {
     return null

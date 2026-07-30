@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Crown, CalendarClock, Package } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -72,10 +72,49 @@ interface Props {
   onPurchaseSuccess?: () => void | Promise<void>
 }
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+  CNY: '¥',
+}
+
+/**
+ * 按计划币种渲染应付金额。
+ *
+ * 原实现写死 `${price}` 的美元符号，而计划有 currency 字段：
+ * 这是用户付款前看到的最后一个金额，币种显错直接导致争议。
+ */
+function formatPlanAmount(amount: unknown, currencyCode?: string): string {
+  const numeric = Number(amount || 0)
+  const code = (currencyCode || 'USD').toUpperCase()
+  const prefix = CURRENCY_SYMBOLS[code] || `${code} `
+  if (!Number.isFinite(numeric)) return `${prefix}-`
+  return `${prefix}${numeric.toFixed(2)}`
+}
+
+/** 四个第三方渠道用 message === 'success' 判成功，余额渠道用 success 字段，
+ * 口径不一致。这里统一收拢，并保留对旧行为的兼容。 */
+function isPaySuccess(res: { success?: boolean; message?: string }): boolean {
+  return res?.success === true || res?.message === 'success'
+}
+
+function payErrorMessage(
+  res: { message?: string } | undefined,
+  fallback: string
+): string {
+  const message = res?.message
+  return message && message !== 'success' ? message : fallback
+}
+
 export function SubscriptionPurchaseDialog(props: Props) {
   const { t } = useTranslation()
   const { currency } = useSystemConfig()
   const [paying, setPaying] = useState(false)
+  // paying 是异步 state：五个渠道的按钮都只靠它禁用，
+  // 快速双击或先点 Stripe 再点 Creem 仍可能下出两张订单。
+  const payingRef = useRef(false)
   const [selectedEpayMethodOverride, setSelectedEpayMethod] = useState('')
   const availableEpayMethods = props.epayMethods || []
   let selectedEpayMethod = ''
@@ -102,7 +141,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
     selectedEpayMethod ||
     t('Select payment method')
   const totalAmount = Number(plan.total_amount || 0)
-  const price = Number(plan.price_amount || 0).toFixed(2)
+  const priceLabel = formatPlanAmount(plan.price_amount, plan.currency)
   const quotaPerUnit =
     currency?.quotaPerUnit && currency.quotaPerUnit > 0
       ? currency.quotaPerUnit
@@ -117,85 +156,97 @@ export function SubscriptionPurchaseDialog(props: Props) {
     (props.purchaseLimit || 0) > 0 &&
     (props.purchaseCount || 0) >= (props.purchaseLimit || 0)
 
-  const handlePayStripe = async () => {
+  const beginPay = () => {
+    if (payingRef.current) return false
+    payingRef.current = true
     setPaying(true)
+    return true
+  }
+
+  const endPay = () => {
+    payingRef.current = false
+    setPaying(false)
+  }
+
+  const handlePayStripe = async () => {
+    if (!beginPay()) return
     try {
       const res = await paySubscriptionStripe({ plan_id: plan.id })
-      if (res.message === 'success' && res.data?.pay_link) {
+      if (isPaySuccess(res) && res.data?.pay_link) {
         const paymentUrl = resolveHttpRedirect(res.data.pay_link)
         if (!paymentUrl) {
           toast.error(t('Invalid payment redirect URL'))
           return
         }
-        window.open(paymentUrl, '_blank', 'noopener,noreferrer')
+        const opened = window.open(paymentUrl, '_blank', 'noopener,noreferrer')
+        if (!opened) {
+          toast.error(t('Please allow pop-ups to continue the payment'))
+          return
+        }
         toast.success(t('Payment page opened'))
         props.onOpenChange(false)
       } else {
-        toast.error(
-          res.message && res.message !== 'success'
-            ? res.message
-            : t('Payment request failed')
-        )
+        toast.error(payErrorMessage(res, t('Payment request failed')))
       }
     } catch {
       toast.error(t('Payment request failed'))
     } finally {
-      setPaying(false)
+      endPay()
     }
   }
 
   const handlePayCreem = async () => {
-    setPaying(true)
+    if (!beginPay()) return
     try {
       const res = await paySubscriptionCreem({ plan_id: plan.id })
-      if (res.message === 'success' && res.data?.checkout_url) {
+      if (isPaySuccess(res) && res.data?.checkout_url) {
         const checkoutUrl = resolveHttpRedirect(res.data.checkout_url)
         if (!checkoutUrl) {
           toast.error(t('Invalid payment redirect URL'))
           return
         }
-        window.open(checkoutUrl, '_blank', 'noopener,noreferrer')
+        const opened = window.open(checkoutUrl, '_blank', 'noopener,noreferrer')
+        if (!opened) {
+          toast.error(t('Please allow pop-ups to continue the payment'))
+          return
+        }
         toast.success(t('Payment page opened'))
         props.onOpenChange(false)
       } else {
-        toast.error(
-          res.message && res.message !== 'success'
-            ? res.message
-            : t('Payment request failed')
-        )
+        toast.error(payErrorMessage(res, t('Payment request failed')))
       }
     } catch {
       toast.error(t('Payment request failed'))
     } finally {
-      setPaying(false)
+      endPay()
     }
   }
 
   // In-tab redirect (not window.open) — user-gesture context is lost
   // across the await, so a popup would be blocked. Same as the wallet hook.
   const handlePayWaffoPancake = async () => {
-    setPaying(true)
+    if (!beginPay()) return
+    let redirecting = false
     try {
       const res = await paySubscriptionWaffoPancake({ plan_id: plan.id })
-      if (res.message === 'success' && res.data?.checkout_url) {
+      if (isPaySuccess(res) && res.data?.checkout_url) {
         const checkoutUrl = resolveHttpRedirect(res.data.checkout_url)
         if (!checkoutUrl) {
           toast.error(t('Invalid payment redirect URL'))
           return
         }
         toast.success(t('Redirecting to payment page...'))
+        redirecting = true
         window.location.href = checkoutUrl
       } else {
-        toast.error(
-          res.message && res.message !== 'success'
-            ? res.message
-            : t('Payment request failed')
-        )
+        toast.error(payErrorMessage(res, t('Payment request failed')))
       }
     } catch {
       toast.error(t('Payment request failed'))
     } finally {
-      setPaying(false)
+      // 同标签跳转是异步的：原实现在跳转前就解禁了按钮，
+      // 用户在白屏窗口里还能再点一次 → 重复下单（同 #40）。
+      if (!redirecting) endPay()
     }
   }
 
@@ -208,18 +259,21 @@ export function SubscriptionPurchaseDialog(props: Props) {
       toast.error(t('Please select a payment method'))
       return
     }
-    setPaying(true)
+    if (!beginPay()) return
     try {
       const res = await paySubscriptionEpay({
         plan_id: plan.id,
         payment_method: selectedEpayMethod,
       })
-      if (res.message === 'success' && res.url) {
+      if (isPaySuccess(res) && res.url) {
         const paymentUrl = resolveHttpRedirect(res.url)
         if (!paymentUrl) {
           toast.error(t('Invalid payment redirect URL'))
           return
         }
+        // NOTE: 这段表单拼装与 Safari 判断与
+        // features/wallet/lib/payment.ts 的 submitPaymentForm / isSafariBrowser
+        // 重复实现（历史遗留），应抽到共享层去重。
         const form = document.createElement('form')
         form.action = paymentUrl
         form.method = 'POST'
@@ -240,38 +294,30 @@ export function SubscriptionPurchaseDialog(props: Props) {
         toast.success(t('Payment initiated'))
         props.onOpenChange(false)
       } else {
-        toast.error(
-          res.message && res.message !== 'success'
-            ? res.message
-            : t('Payment request failed')
-        )
+        toast.error(payErrorMessage(res, t('Payment request failed')))
       }
     } catch {
       toast.error(t('Payment request failed'))
     } finally {
-      setPaying(false)
+      endPay()
     }
   }
 
   const handlePayBalance = async () => {
-    setPaying(true)
+    if (!beginPay()) return
     try {
       const res = await paySubscriptionBalance({ plan_id: plan.id })
-      if (res.success) {
+      if (isPaySuccess(res)) {
         toast.success(t('Subscription purchased successfully'))
         void props.onPurchaseSuccess?.()
         props.onOpenChange(false)
       } else {
-        toast.error(
-          res.message && res.message !== 'success'
-            ? res.message
-            : t('Payment request failed')
-        )
+        toast.error(payErrorMessage(res, t('Payment request failed')))
       }
     } catch {
       toast.error(t('Payment request failed'))
     } finally {
-      setPaying(false)
+      endPay()
     }
   }
 
@@ -312,6 +358,8 @@ export function SubscriptionPurchaseDialog(props: Props) {
                 <span className='text-sm'>{formatResetPeriod(plan, t)}</span>
               </div>
             )}
+            {/* NOTE: 列头「Received amount（已收金额）」与字段语义不符，
+                total_amount 实际是计划总额度/限额（0 = 不限）。同 #48。 */}
             <div className='flex items-center justify-between'>
               <span className='text-muted-foreground text-sm'>
                 {t('Received amount')}
@@ -332,7 +380,9 @@ export function SubscriptionPurchaseDialog(props: Props) {
             <Separator />
             <div className='flex items-center justify-between'>
               <span className='text-sm font-medium'>{t('Amount Due')}</span>
-              <span className='text-primary text-lg font-bold'>${price}</span>
+              <span className='text-primary text-lg font-bold'>
+                {priceLabel}
+              </span>
             </div>
           </div>
 

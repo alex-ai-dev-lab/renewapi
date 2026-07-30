@@ -59,6 +59,38 @@ import type {
 } from '@/features/subscriptions/types'
 import type { PaymentMethod, TopupInfo } from '../types'
 
+// TODO: merge with the identical tables in subscriptions-columns.tsx,
+// subscription-purchase-dialog.tsx and user-subscriptions-dialog.tsx into
+// lib/currency.ts. This is the fourth copy; see creem-products-section.tsx for
+// the currency-aware reference implementation.
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$',
+  CNY: '¥',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+  HKD: 'HK$',
+  TWD: 'NT$',
+  AUD: 'A$',
+  CAD: 'C$',
+  SGD: 'S$',
+  KRW: '₩',
+  BRL: 'R$',
+  INR: '₹',
+}
+
+// The plan price is the first price a user ever sees on the wallet page. It was
+// hard-coded to `$`, so a plan priced in CNY/EUR/... was advertised in the
+// wrong currency. Fall back to the ISO code when the symbol is unknown so the
+// amount is never shown bare.
+function formatPlanAmount(amount: unknown, currencyCode?: string): string {
+  const numeric = Number(amount)
+  const safe = Number.isFinite(numeric) ? numeric : 0
+  const code = (currencyCode || 'USD').toUpperCase()
+  const symbol = CURRENCY_SYMBOLS[code]
+  return symbol ? `${symbol}${safe.toFixed(2)}` : `${safe.toFixed(2)} ${code}`
+}
+
 interface SubscriptionPlansCardProps {
   topupInfo: TopupInfo | null
   onAvailabilityChange?: (available: boolean) => void
@@ -109,6 +141,11 @@ export function SubscriptionPlansCard({
     useState('subscription_first')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  // Distinguishes "the operator has no plans configured" (hide the card) from
+  // "we could not reach the server" (show an error with a retry). Previously
+  // both collapsed into `return null`, so a failing endpoint made the entire
+  // subscription section vanish and users concluded the feature did not exist.
+  const [loadFailed, setLoadFailed] = useState(false)
 
   const [purchaseOpen, setPurchaseOpen] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<PlanRecord | null>(null)
@@ -127,11 +164,15 @@ export function SubscriptionPlansCard({
       const res = await getPublicPlans()
       if (res.success) {
         setPlans(res.data || [])
+        return true
       }
-    } catch {
-      setPlans([])
+      toast.error(res.message || t('Failed to load subscription plans'))
+      return false
+    } catch (error) {
+      toast.error(t('Failed to load subscription plans'))
+      return false
     }
-  }, [])
+  }, [t])
 
   const fetchSelfSubscription = useCallback(async () => {
     try {
@@ -142,20 +183,29 @@ export function SubscriptionPlansCard({
         )
         setActiveSubscriptions(res.data.subscriptions || [])
         setAllSubscriptions(res.data.all_subscriptions || [])
+        return true
       }
-    } catch {
-      // ignore
+      toast.error(res.message || t('Failed to load your subscriptions'))
+      return false
+    } catch (error) {
+      toast.error(t('Failed to load your subscriptions'))
+      return false
     }
-  }, [])
+  }, [t])
+
+  const loadAll = useCallback(async () => {
+    setLoading(true)
+    const [plansOk, subsOk] = await Promise.all([
+      fetchPlans(),
+      fetchSelfSubscription(),
+    ])
+    setLoadFailed(!plansOk || !subsOk)
+    setLoading(false)
+  }, [fetchPlans, fetchSelfSubscription])
 
   useEffect(() => {
-    const init = async () => {
-      setLoading(true)
-      await Promise.all([fetchPlans(), fetchSelfSubscription()])
-      setLoading(false)
-    }
-    init()
-  }, [fetchPlans, fetchSelfSubscription])
+    loadAll()
+  }, [loadAll])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -195,6 +245,10 @@ export function SubscriptionPlansCard({
   const displayPref =
     disablePref && isSubPref ? 'wallet_first' : billingPreference
 
+  // NOTE: this counts every historical record for the plan, including expired
+  // and cancelled ones. If the backend only counts active subscriptions when
+  // enforcing max_purchase_per_user, the button below locks earlier than the
+  // server actually requires. Needs a backend confirmation before changing.
   const planPurchaseCountMap = useMemo(() => {
     const map = new Map<number, number>()
     for (const sub of allSubscriptions) {
@@ -248,6 +302,27 @@ export function SubscriptionPlansCard({
           </div>
         </CardContent>
       </Card>
+    )
+  }
+
+  // A failed load must not look like "this site has no subscriptions".
+  if (loadFailed && plans.length === 0 && !hasAny) {
+    return (
+      <TitledCard
+        title={t('Subscription Plans')}
+        description={t('Subscribe to a plan for model access')}
+        icon={<Crown className='h-4 w-4' />}
+      >
+        <div className='flex flex-col items-center gap-3 py-6'>
+          <p className='text-muted-foreground text-sm'>
+            {t('Failed to load subscription plans')}
+          </p>
+          <Button variant='outline' size='sm' onClick={loadAll}>
+            <RefreshCw className='mr-2 h-3.5 w-3.5' />
+            {t('Retry')}
+          </Button>
+        </div>
+      </TitledCard>
     )
   }
 
@@ -516,7 +591,10 @@ export function SubscriptionPlansCard({
               const plan = p?.plan
               if (!plan) return null
               const totalAmount = Number(plan.total_amount || 0)
-              const price = Number(plan.price_amount || 0).toFixed(2)
+              const priceLabel = formatPlanAmount(
+                plan.price_amount,
+                plan.currency
+              )
               const isPopular = index === 0 && plans.length > 1
               const limit = Number(plan.max_purchase_per_user || 0)
               const count = planPurchaseCountMap.get(plan.id) || 0
@@ -570,7 +648,7 @@ export function SubscriptionPlansCard({
 
                     <div className='py-2'>
                       <span className='text-primary text-2xl font-bold'>
-                        ${price}
+                        {priceLabel}
                       </span>
                     </div>
 

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { getTopupInfo } from '../api'
 import {
   generatePresetAmounts,
@@ -63,7 +63,11 @@ function parsePaymentMethods(
     )
     .map((item) => {
       const rawMinTopup = Number(item.min_topup)
-      const normalizedMinTopup = Number.isFinite(rawMinTopup) ? rawMinTopup : 0
+      // Number.isFinite(-5) 为 true，原实现会把负数最小充值额原样放过，
+      // 导致下游的金额下界校验彻底失效。
+      const normalizedMinTopup = Number.isFinite(rawMinTopup)
+        ? Math.max(0, rawMinTopup)
+        : 0
       const type = typeof item.type === 'string' ? item.type : ''
 
       return {
@@ -76,6 +80,7 @@ function parsePaymentMethods(
             : normalizedMinTopup,
       }
     })
+    // 'waffo' 被排除是因为它走单独的 waffo_pay_methods 字段，不属于通用支付方式列表。
     .filter((item) => item.name && item.type && item.type !== 'waffo')
 }
 
@@ -114,7 +119,9 @@ function parseCreemProducts(data: unknown): CreemProduct[] {
         currency,
       }
     })
-    .filter((item) => item.name && item.productId)
+    // 价格或额度解析失败（NaN -> 0）的条目原本会被保留并渲染成
+    // 「0 元充值」选项，点下去就是直接的资损；这里一并过滤掉。
+    .filter((item) => item.name && item.productId && item.price > 0)
 }
 
 function parseAmountOptions(data: unknown): number[] {
@@ -151,7 +158,15 @@ function parseDiscountMap(data: unknown): Record<number, number> {
       const numericKey = Number(key)
       const numericValue = Number(value)
 
-      if (Number.isFinite(numericKey) && Number.isFinite(numericValue)) {
+      // 折扣率必须为正数：原实现只校验 Number.isFinite，0 与负数都会进入
+      // 价格计算，算出 0 元或负金额订单（资损）。档位 key（充值金额）
+      // 同样必须为正数。
+      if (
+        Number.isFinite(numericKey) &&
+        numericKey > 0 &&
+        Number.isFinite(numericValue) &&
+        numericValue > 0
+      ) {
         result[numericKey] = numericValue
       }
 
@@ -165,12 +180,20 @@ export function useTopupInfo() {
   const [topupInfo, setTopupInfo] = useState<TopupInfo | null>(null)
   const [presetAmounts, setPresetAmounts] = useState<PresetAmount[]>([])
   const [loading, setLoading] = useState(true)
+  // 竞态保护：refetch 可以并发调用，旧请求晚返回时会覆盖新结果；
+  // 同时避开组件卸载后再 setState。
+  const requestIdRef = useRef(0)
+  const mountedRef = useRef(true)
 
-  const fetchTopupInfo = async () => {
+  const fetchTopupInfo = useCallback(async () => {
+    const requestId = ++requestIdRef.current
+    const isStale = () => !mountedRef.current || requestId !== requestIdRef.current
+
     try {
       setLoading(true)
 
       const response = await getTopupInfo()
+      if (isStale()) return
 
       if (!response.success || !response.data) {
         // eslint-disable-next-line no-console
@@ -201,21 +224,34 @@ export function useTopupInfo() {
         )
         setPresetAmounts(customPresets)
       } else {
+        // NOTE: 这里只传 topupInfo，没有 paymentType，所以拿到的是默认支付方式
+        // 的最小充值额（参见 lib/payment.ts 的 getMinTopupAmount 第二个参数）。
+        // 若用户随后选择了 min_topup 更高的渠道（如 Stripe），预设金额可能低于
+        // 该渠道下限，点击后被后端拒绝。彻底修正需要把当前 paymentType 下推到
+        // 本 hook，属于调用层改动，本 PR 不动。
         const minTopup = getMinTopupAmount(processedData)
         const defaultPresets = generatePresetAmounts(minTopup)
         setPresetAmounts(defaultPresets)
       }
     } catch (err) {
+      if (isStale()) return
       // eslint-disable-next-line no-console
       console.error('Failed to fetch topup info:', err)
     } finally {
-      setLoading(false)
+      if (!isStale()) {
+        setLoading(false)
+      }
     }
-  }
+  }, [])
 
   useEffect(() => {
+    mountedRef.current = true
     fetchTopupInfo()
-  }, [])
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [fetchTopupInfo])
 
   return {
     topupInfo,

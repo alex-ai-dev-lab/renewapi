@@ -24,6 +24,9 @@ import {
 } from '@/features/system-settings/hooks/use-system-options'
 import { type PlanRecord, type SubscriptionsDialogType } from '../types'
 
+// NOTE: 合规条款版本号硬编码在前端，与后端
+// `payment_setting.compliance_terms_version` 强耦合：后端升版后若忘了
+// 同步改这里，整个订阅管理页会永久锁死（版本号恒不相等）。
 const CURRENT_COMPLIANCE_TERMS_VERSION = 'v1'
 
 type SubscriptionsContextType = {
@@ -34,6 +37,12 @@ type SubscriptionsContextType = {
   refreshTrigger: number
   triggerRefresh: () => void
   complianceConfirmed: boolean
+  /**
+   * 系统配置是否仍在加载。加载期间 complianceConfirmed 必然为 false
+   * （getOptionValue 在 options 为 undefined 时直接返回 defaults），
+   * 调用方应用这个标志区分「真的未确认」与「还没加载完」。
+   */
+  complianceLoading: boolean
 }
 
 const SubscriptionsContext =
@@ -47,7 +56,7 @@ export function SubscriptionsProvider({
   const [open, setOpen] = useDialogState<SubscriptionsDialogType>(null)
   const [currentRow, setCurrentRow] = useState<PlanRecord | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const { data } = useSystemOptions()
+  const { data, isPending } = useSystemOptions()
   const complianceOptions = getOptionValue(data?.data, {
     'payment_setting.compliance_confirmed': false,
     'payment_setting.compliance_terms_version': '',
@@ -69,6 +78,7 @@ export function SubscriptionsProvider({
         refreshTrigger,
         triggerRefresh,
         complianceConfirmed,
+        complianceLoading: isPending,
       }}
     >
       {children}

@@ -22,8 +22,13 @@ For commercial licensing, please contact support@quantumnous.com
 
 /**
  * Generate affiliate registration link
+ *
+ * NOTE: aff 码必须经过 encodeURIComponent。原实现直接拼串，一旦 aff 码含有
+ * `&` / `#` / `?` 等字符，生成的链接会被截断或被追加额外的查询参数，
+ * 用户分享出去的链接就不再能正确归因。
  */
 export function generateAffiliateLink(affCode: string): string {
   if (typeof window === 'undefined') return ''
-  return `${window.location.origin}/sign-up?aff=${affCode}`
+  if (!affCode) return ''
+  return `${window.location.origin}/sign-up?aff=${encodeURIComponent(affCode)}`
 }

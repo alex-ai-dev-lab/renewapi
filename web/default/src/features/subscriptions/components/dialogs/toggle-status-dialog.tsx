@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -27,6 +27,8 @@ export function ToggleStatusDialog() {
   const { t } = useTranslation()
   const { open, setOpen, currentRow, triggerRefresh } = useSubscriptions()
   const [loading, setLoading] = useState(false)
+  // loading 是异步 state，快速双击仍可能发出两次 PATCH（一次停用、一次反向）。
+  const submittingRef = useRef(false)
 
   if (open !== 'toggle-status' || !currentRow) return null
 
@@ -39,6 +41,8 @@ export function ToggleStatusDialog() {
     : t('After enabling, the plan will be shown to users. Continue?')
 
   const handleConfirm = async () => {
+    if (submittingRef.current) return
+    submittingRef.current = true
     setLoading(true)
     try {
       const res = await patchPlanStatus(currentRow.plan.id, !isEnabled)
@@ -48,10 +52,19 @@ export function ToggleStatusDialog() {
         )
         triggerRefresh()
         setOpen(null)
+      } else {
+        // 原实现没有 else 分支：业务层拒绕（合规锁、权限不足等）时
+        // 弹窗不关、不刷新、也不报错，管理员只能反复点。
+        toast.error(res.message || t('Operation failed'))
       }
-    } catch {
-      toast.error(t('Operation failed'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error && error.message
+          ? error.message
+          : t('Operation failed')
+      )
     } finally {
+      submittingRef.current = false
       setLoading(false)
     }
   }

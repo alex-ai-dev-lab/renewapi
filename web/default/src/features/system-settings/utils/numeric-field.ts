@@ -48,10 +48,15 @@ export type SafeNumberFieldProps = {
  *   numeric validators (`z.number().min(...)`, `z.coerce.number()`, etc.)
  *   fail at submit time, so `form.handleSubmit` silently refuses to call
  *   `onSubmit` — the save button appears frozen with no toast and no error.
- * - The legacy Semi `InputNumber` avoids this by snapping the input back to
- *   the previous valid number. We replicate that behaviour by ignoring `NaN`
- *   updates: React's controlled-input reconciliation will restore the last
- *   valid value to the DOM on the next render.
+ *
+ * Empty vs. in-progress:
+ * - An empty field is a deliberate user action, not a parse failure. It is
+ *   written back as `undefined` so the field can actually be cleared and so
+ *   optional settings can be unset. Suppressing it (as this adapter used to)
+ *   left form state holding the previous number while the controlled input
+ *   re-rendered it into the DOM, making the field impossible to empty.
+ * - In-progress tokens (a lone `-`, a trailing `.`, `1e`) are still ignored:
+ *   they are transient keystrokes rather than a value the user settled on.
  *
  * Display:
  * - When the underlying state is not a finite number, the prop returns `''`
@@ -76,12 +81,21 @@ export function safeNumberFieldProps<
   const display: number | '' =
     typeof raw === 'number' && Number.isFinite(raw) ? raw : ''
 
+  const emit = field.onChange as (value: number | undefined) => void
+
   return {
     value: display,
     onChange: (event) => {
+      // `event.target.value` is the sanitized string: it is empty both when the
+      // user cleared the field and when the current text is not a valid
+      // number, so `valueAsNumber` alone cannot tell those two cases apart.
       const next = event.target.valueAsNumber
       if (Number.isFinite(next)) {
-        ;(field.onChange as (value: number) => void)(next)
+        emit(next)
+        return
+      }
+      if (event.target.value === '' && !event.target.validity.badInput) {
+        emit(undefined)
       }
     },
     onBlur: field.onBlur,

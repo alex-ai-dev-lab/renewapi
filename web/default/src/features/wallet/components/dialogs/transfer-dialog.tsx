@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -66,26 +66,57 @@ export function TransferDialog({
   const maximumAmount = quotaUnitsToDollars(availableQuota)
   const [amount, setAmount] = useState(minimumAmount)
   const transferQuota = parseQuotaFromDollars(amount)
+
+  // The backend only accepts transfers of at least one full unit. When the
+  // accumulated rewards are below that, the dialog used to open with a default
+  // amount that already exceeded the balance: the button stayed disabled with
+  // no explanation and `min` was greater than `max`.
+  const hasEnoughRewards = availableQuota >= minimumQuota
+  const isValidNumber = Number.isFinite(amount) && amount > 0
+  const belowMinimum = isValidNumber && transferQuota < minimumQuota
+  const aboveAvailable = isValidNumber && transferQuota > availableQuota
   const canTransfer =
-    Number.isFinite(amount) &&
-    transferQuota >= minimumQuota &&
-    transferQuota <= availableQuota
+    hasEnoughRewards && isValidNumber && !belowMinimum && !aboveAvailable
+
+  const submittingRef = useRef(false)
+  const wasOpenRef = useRef(false)
 
   useEffect(() => {
-    if (open) {
+    // Only seed the amount when the dialog transitions to open. Reacting to
+    // every `minimumAmount` change would wipe what the user typed whenever the
+    // system currency config is refreshed in the background.
+    if (open && !wasOpenRef.current) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAmount(minimumAmount)
     }
+    wasOpenRef.current = open
   }, [minimumAmount, open])
 
   const handleConfirm = async () => {
-    if (!canTransfer) return
+    if (!canTransfer || submittingRef.current) return
 
-    const success = await onConfirm(transferQuota)
-    if (success) {
-      onOpenChange(false)
+    submittingRef.current = true
+    try {
+      const success = await onConfirm(transferQuota)
+      if (success) {
+        onOpenChange(false)
+      }
+    } finally {
+      submittingRef.current = false
     }
   }
+
+  const errorMessage = !hasEnoughRewards
+    ? t('You need at least {{amount}} in rewards to transfer', {
+        amount: formatQuota(minimumQuota),
+      })
+    : aboveAvailable
+      ? t('Amount exceeds your available rewards')
+      : belowMinimum
+        ? t('Minimum transfer amount is {{amount}}', {
+            amount: formatQuota(minimumQuota),
+          })
+        : ''
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -122,13 +153,18 @@ export function TransferDialog({
               value={amount}
               onChange={(e) => setAmount(Number(e.target.value))}
               min={minimumAmount}
-              max={maximumAmount}
+              max={Math.max(minimumAmount, maximumAmount)}
               step={minimumAmount}
+              disabled={!hasEnoughRewards || transferring}
               className='font-mono text-lg'
             />
-            <p className='text-muted-foreground text-xs'>
-              {t('Minimum:')} {formatQuota(minimumQuota)}
-            </p>
+            {errorMessage ? (
+              <p className='text-destructive text-xs'>{errorMessage}</p>
+            ) : (
+              <p className='text-muted-foreground text-xs'>
+                {t('Minimum:')} {formatQuota(minimumQuota)}
+              </p>
+            )}
           </div>
         </div>
 

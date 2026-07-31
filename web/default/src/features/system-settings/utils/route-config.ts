@@ -51,6 +51,14 @@ export type SettingsRouteConfigOptions<
   routePath: string
   /** Whether to redirect to default section if no section is provided (default: false) */
   redirectToDefault?: boolean
+  /**
+   * How the section is encoded in the URL. Must match the `urlStyle` of the
+   * matching section registry, otherwise the redirect below sends users to a
+   * different URL shape than the one the sidebar links to.
+   * 'query' = `${routePath}?section=${id}`, 'path' = `${routePath}/${id}`
+   * (default: 'query')
+   */
+  urlStyle?: 'query' | 'path'
 }
 
 /**
@@ -83,6 +91,7 @@ export function createSettingsRouteConfig<
     component,
     routePath,
     redirectToDefault = false,
+    urlStyle = 'query',
   } = options
 
   const searchSchema = createSectionSearchSchema(sectionIds, defaultSection)
@@ -97,6 +106,9 @@ export function createSettingsRouteConfig<
         search?: { section?: TSectionId | string }
       }) => {
         if (!search?.section) {
+          if (urlStyle === 'path') {
+            throw redirect({ to: `${routePath}/${defaultSection}` })
+          }
           throw redirect({
             to: routePath,
             search: { section: defaultSection } as Record<string, unknown>,

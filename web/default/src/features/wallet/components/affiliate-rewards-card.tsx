@@ -30,6 +30,13 @@ interface AffiliateRewardsCardProps {
   user: UserWalletData | null
   affiliateLink: string
   onTransfer: () => void
+  /**
+   * Whether the administrator has confirmed the payment compliance terms.
+   * Defaults to false (fail-closed): if the caller forgets to pass the prop,
+   * or the backend response does not carry the flag, reward transfer stays
+   * disabled instead of silently allowing a money-moving action. This matches
+   * the system-wide default `payment_setting.compliance_confirmed: false`.
+   */
   complianceConfirmed?: boolean
   loading?: boolean
 }
@@ -38,7 +45,7 @@ export function AffiliateRewardsCard({
   user,
   affiliateLink,
   onTransfer,
-  complianceConfirmed = true,
+  complianceConfirmed = false,
   loading,
 }: AffiliateRewardsCardProps) {
   const { t } = useTranslation()

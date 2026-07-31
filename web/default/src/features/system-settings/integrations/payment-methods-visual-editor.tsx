@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useMemo } from 'react'
 import { Lightbulb, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -44,6 +45,30 @@ import {
 type PaymentMethodsVisualEditorProps = {
   value: string
   onChange: (value: string) => void
+}
+
+// The stored entry plus its position in the raw JSON array. Editing and
+// deleting must address the source index: (name, type) is not unique, so value
+// matching used to delete every duplicate at once and always edit the first.
+type IndexedPaymentMethod = PaymentMethodData & { sourceIndex: number }
+
+const isPaymentMethodData = (item: unknown): item is PaymentMethodData => {
+  if (typeof item !== 'object' || item === null) return false
+  const candidate = item as Partial<PaymentMethodData>
+  return (
+    typeof candidate.name === 'string' &&
+    typeof candidate.type === 'string' &&
+    typeof candidate.color === 'string'
+  )
+}
+
+// CSS variables cannot be resolved to a swatch color here, so they render
+// without a preview square. The stored value is never rewritten.
+const getColorPreview = (color: string) => {
+  if (!color || color.includes('var(--')) {
+    return null
+  }
+  return color
 }
 
 const PAYMENT_TEMPLATES = [
@@ -90,27 +115,20 @@ export function PaymentMethodsVisualEditor({
   const [searchText, setSearchText] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editData, setEditData] = useState<PaymentMethodData | null>(null)
+  const [editIndex, setEditIndex] = useState<number | null>(null)
 
-  const paymentMethods = useMemo(() => {
+  const paymentMethods = useMemo<IndexedPaymentMethod[]>(() => {
     const parsed = safeJsonParseWithValidation<unknown[]>(value, {
       fallback: [],
       validator: isArray,
-      validatorMessage: 'Payment methods must be a JSON array',
+      validatorMessage: t('Payment methods must be a JSON array'),
       context: 'payment methods',
     })
 
-    return parsed.filter(
-      (item): item is PaymentMethodData =>
-        typeof item === 'object' &&
-        item !== null &&
-        'name' in item &&
-        'type' in item &&
-        'color' in item &&
-        typeof item.name === 'string' &&
-        typeof item.type === 'string' &&
-        typeof item.color === 'string'
+    return parsed.flatMap((item, sourceIndex) =>
+      isPaymentMethodData(item) ? [{ ...item, sourceIndex }] : []
     )
-  }, [value])
+  }, [value, t])
 
   const filteredMethods = useMemo(() => {
     if (!searchText) return paymentMethods
@@ -122,99 +140,68 @@ export function PaymentMethodsVisualEditor({
     )
   }, [paymentMethods, searchText])
 
-  const handleSave = (data: PaymentMethodData) => {
-    const parsed = safeJsonParseWithValidation<unknown[]>(value, {
+  const parseCurrentArray = () =>
+    safeJsonParseWithValidation<unknown[]>(value, {
       fallback: [],
       validator: isArray,
       silent: true,
     })
 
-    const updatedArray = [...parsed]
+  const handleSave = (data: PaymentMethodData) => {
+    const updatedArray = [...parseCurrentArray()]
 
-    if (editData) {
-      const index = updatedArray.findIndex(
-        (item): item is PaymentMethodData =>
-          typeof item === 'object' &&
-          item !== null &&
-          'name' in item &&
-          'type' in item &&
-          item.name === editData.name &&
-          item.type === editData.type
-      )
-      if (index !== -1) {
-        updatedArray[index] = data
-      } else {
-        updatedArray.push(data)
-      }
+    if (
+      editIndex !== null &&
+      editIndex >= 0 &&
+      editIndex < updatedArray.length
+    ) {
+      updatedArray[editIndex] = data
     } else {
       updatedArray.push(data)
     }
 
     onChange(JSON.stringify(updatedArray, null, 2))
+    setEditIndex(null)
+    setEditData(null)
   }
 
-  const handleDelete = (method: PaymentMethodData) => {
-    const parsed = safeJsonParseWithValidation<unknown[]>(value, {
-      fallback: [],
-      validator: isArray,
-      silent: true,
-    })
-
-    const updatedArray = parsed.filter(
-      (item) =>
-        !(
-          typeof item === 'object' &&
-          item !== null &&
-          'name' in item &&
-          'type' in item &&
-          item.name === method.name &&
-          item.type === method.type
-        )
+  const handleDelete = (method: IndexedPaymentMethod) => {
+    const updatedArray = parseCurrentArray().filter(
+      (_item, index) => index !== method.sourceIndex
     )
 
     onChange(JSON.stringify(updatedArray, null, 2))
   }
 
-  const handleEdit = (method: PaymentMethodData) => {
-    setEditData(method)
+  const handleEdit = (method: IndexedPaymentMethod) => {
+    const { sourceIndex, ...data } = method
+    setEditData(data)
+    setEditIndex(sourceIndex)
     setDialogOpen(true)
   }
 
   const handleAdd = () => {
     setEditData(null)
+    setEditIndex(null)
     setDialogOpen(true)
   }
 
   const handleInsertTemplate = (template: PaymentMethodData) => {
-    const parsed = safeJsonParseWithValidation<unknown[]>(value, {
-      fallback: [],
-      validator: isArray,
-      silent: true,
-    })
+    const parsed = parseCurrentArray()
 
-    // Check if template already exists
     const exists = parsed.some(
       (item) =>
-        typeof item === 'object' &&
-        item !== null &&
-        'type' in item &&
-        'name' in item &&
+        isPaymentMethodData(item) &&
         item.type === template.type &&
         item.name === template.name
     )
 
-    if (!exists) {
-      parsed.push(template)
-      onChange(JSON.stringify(parsed, null, 2))
+    if (exists) {
+      toast.info(t('This payment method is already configured'))
+      return
     }
-  }
 
-  const getColorPreview = (color: string) => {
-    // For CSS variables, show a placeholder
-    if (color.includes('var(--')) {
-      return null
-    }
-    return color
+    onChange(JSON.stringify([...parsed, template], null, 2))
   }
 
   return (
@@ -303,10 +290,10 @@ export function PaymentMethodsVisualEditor({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredMethods.map((method, index) => {
+                {filteredMethods.map((method) => {
                   const colorPreview = getColorPreview(method.color)
                   return (
-                    <TableRow key={`${method.type}-${index}`}>
+                    <TableRow key={method.sourceIndex}>
                       <TableCell className='font-medium'>
                         {method.name}
                       </TableCell>
@@ -376,10 +363,10 @@ export function PaymentMethodsVisualEditor({
 
           {/* Mobile card view */}
           <div className='divide-y md:hidden'>
-            {filteredMethods.map((method, index) => {
+            {filteredMethods.map((method) => {
               const colorPreview = getColorPreview(method.color)
               return (
-                <div key={`${method.type}-${index}`} className='p-4'>
+                <div key={method.sourceIndex} className='p-4'>
                   <div className='mb-3 flex items-start justify-between'>
                     <div className='flex-1'>
                       <div className='mb-1 font-medium'>{method.name}</div>

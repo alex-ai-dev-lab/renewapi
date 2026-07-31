@@ -42,12 +42,27 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 
+// min_topup is persisted as a string inside the PayMethods JSON blob and is
+// consumed by getMinTopupAmount() with a bare Number() conversion. Without a
+// bound here an administrator could save "-1" or "abc" and either bypass the
+// global minimum topup or produce NaN in the recharge form.
+const isValidOptionalAmount = (value?: string) => {
+  if (!value || value.trim() === '') return true
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0
+}
+
 const createPaymentMethodDialogSchema = (t: (key: string) => string) =>
   z.object({
     name: z.string().min(1, t('Payment method name is required')),
     type: z.string().min(1, t('Payment method type is required')),
     color: z.string().min(1, t('Color is required')),
-    min_topup: z.string().optional(),
+    min_topup: z
+      .string()
+      .optional()
+      .refine(isValidOptionalAmount, {
+        message: t('Minimum top-up must be a number greater than 0'),
+      }),
   })
 
 type PaymentMethodDialogFormValues = z.infer<
@@ -74,8 +89,10 @@ const PAYMENT_TYPES = [
   { value: 'stripe', label: 'Stripe' },
 ]
 
+// CSS variables cannot be resolved into a swatch color here, so they render as
+// a neutral placeholder. The saved value is never rewritten.
 const getColorPreview = (color: string) => {
-  if (color.includes('var(--')) {
+  if (!color || color.includes('var(--')) {
     return null
   }
   return color
@@ -125,19 +142,7 @@ export function PaymentMethodDialog({
 
   const colorValue = form.watch('color')
 
-  const colorPreview = useMemo(() => {
-    if (!colorValue) return null
-    try {
-      // CSS variable previews use the neutral placeholder; the saved value stays intact.
-      // but we can detect common patterns
-      if (colorValue.includes('var(--')) {
-        return null // Can't preview CSS variables reliably
-      }
-      return colorValue
-    } catch {
-      return null
-    }
-  }, [colorValue])
+  const colorPreview = useMemo(() => getColorPreview(colorValue), [colorValue])
 
   useEffect(() => {
     if (editData) {
@@ -158,8 +163,9 @@ export function PaymentMethodDialog({
       type: values.type,
       color: values.color,
     }
-    if (values.min_topup && values.min_topup.trim() !== '') {
-      data.min_topup = values.min_topup
+    const minTopup = values.min_topup?.trim()
+    if (minTopup) {
+      data.min_topup = minTopup
     }
     onSave(data)
     form.reset()
@@ -268,6 +274,7 @@ export function PaymentMethodDialog({
                     <Input
                       type='number'
                       step='0.01'
+                      min='0'
                       placeholder={t('e.g., 50')}
                       {...field}
                     />

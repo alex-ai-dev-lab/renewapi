@@ -41,6 +41,11 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 
+// The lowest multiplier an administrator can configure. Without this bound a
+// typo such as 0.05 instead of 0.5 would silently charge every qualifying
+// topup at 5% of its price. Keep it in sync with the input's `min`.
+const MIN_DISCOUNT_RATE = 0.01
+
 const createAmountDiscountDialogSchema = (t: (key: string) => string) =>
   z.object({
     amount: z
@@ -50,6 +55,7 @@ const createAmountDiscountDialogSchema = (t: (key: string) => string) =>
     discountRate: z
       .number()
       .positive(t('Discount rate must be greater than 0'))
+      .min(MIN_DISCOUNT_RATE, t('Discount rate must be ≥ 0.01'))
       .max(1, t('Discount rate must be ≤ 1')),
   })
 
@@ -144,9 +150,10 @@ export function AmountDiscountDialog({
                       min='1'
                       placeholder={t('e.g., 100')}
                       {...field}
-                      onChange={(e) =>
-                        field.onChange(parseInt(e.target.value) || 0)
-                      }
+                      onChange={(e) => {
+                        const parsed = parseInt(e.target.value, 10)
+                        field.onChange(Number.isFinite(parsed) ? parsed : 0)
+                      }}
                       disabled={isEditMode}
                     />
                   </FormControl>
@@ -172,24 +179,24 @@ export function AmountDiscountDialog({
                     <Input
                       type='number'
                       step='0.01'
-                      min='0.01'
+                      min={MIN_DISCOUNT_RATE}
                       max='1'
                       placeholder={t('e.g., 0.95')}
                       {...field}
-                      onChange={(e) =>
-                        field.onChange(parseFloat(e.target.value) || 0)
-                      }
+                      onChange={(e) => {
+                        const parsed = parseFloat(e.target.value)
+                        field.onChange(Number.isFinite(parsed) ? parsed : 0)
+                      }}
                     />
                   </FormControl>
                   <FormDescription>
-                    {t('Final price multiplier (0.95 = 5% discount')}
+                    {t('Final price multiplier (0.95 = 5% discount)')}
                     {discountPercentage > 0 && (
                       <span className='text-success ml-1 font-medium'>
                         = {discountPercentage}
                         {t('% off')}
                       </span>
                     )}
-                    )
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

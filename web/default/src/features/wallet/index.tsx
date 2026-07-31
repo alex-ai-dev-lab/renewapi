@@ -88,6 +88,13 @@ export function Wallet(props: WalletProps) {
       ? 1
       : currency?.usdExchangeRate || 1
   }, [currency?.quotaDisplayType, currency?.usdExchangeRate])
+
+  // Compliance gate for money-moving actions. Treat anything other than an
+  // explicit `true` as "not confirmed": while topupInfo is still loading, or
+  // when the request failed, the flag is undefined and must NOT be read as
+  // confirmed (the previous `!== false` check did exactly that).
+  const paymentComplianceConfirmed =
+    topupInfo?.payment_compliance_confirmed === true
   const {
     amount: paymentAmount,
     calculating,
@@ -340,10 +347,8 @@ export function Wallet(props: WalletProps) {
               user={user}
               affiliateLink={affiliateLink}
               onTransfer={() => setTransferDialogOpen(true)}
-              complianceConfirmed={
-                topupInfo?.payment_compliance_confirmed !== false
-              }
-              loading={affiliateLoading}
+              complianceConfirmed={paymentComplianceConfirmed}
+              loading={affiliateLoading || topupLoading}
             />
           </div>
         </SectionPageLayout.Content>

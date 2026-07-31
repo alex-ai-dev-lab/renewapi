@@ -84,10 +84,26 @@ export function createSectionRegistry<
     return getSectionMeta(sectionId).build(settings, ...extraArgs)
   }
 
+  /**
+   * Resolve a section by id.
+   *
+   * An unknown id (stale bookmark, renamed section, hand-edited URL) falls
+   * back to `defaultSection` rather than to the first entry: those are only
+   * the same section by coincidence, and every other part of the routing
+   * layer treats `defaultSection` as the canonical landing section.
+   */
   function getSectionMeta(sectionId: SectionId) {
-    const section =
-      sections.find((item) => item.id === sectionId) ?? sections[0]
-    return section
+    const section = sections.find((item) => item.id === sectionId)
+    if (section) return section
+
+    const fallback =
+      sections.find((item) => item.id === defaultSection) ?? sections[0]
+    if (!fallback) {
+      throw new Error(
+        `Section registry for "${basePath}" was created without any sections`
+      )
+    }
+    return fallback
   }
 
   return {

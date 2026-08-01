@@ -44,6 +44,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { FormNavigationGuard } from '../components/form-navigation-guard'
 import {
   SettingsForm,
   SettingsSwitchContent,
@@ -56,13 +57,33 @@ import {
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 
-const schema = z.object({
+const valuesSchema = z.object({
   enabled: z.boolean(),
   minQuota: z.coerce.number().int().min(0),
   maxQuota: z.coerce.number().int().min(0),
 })
 
-type Values = z.infer<typeof schema>
+/**
+ * The two bounds are only meaningful relative to each other: the daily reward
+ * is drawn from [minQuota, maxQuota]. Validating them independently lets a
+ * maximum below the minimum save cleanly, which leaves the range inverted for
+ * every subsequent check-in. The refinement is attached to the resolver only,
+ * so importing a payload can still surface field-level errors without the
+ * cross-field rule throwing during Export/Import.
+ */
+const schema = valuesSchema.superRefine((values, ctx) => {
+  if (!values.enabled) return
+  if (values.maxQuota < values.minQuota) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['maxQuota'],
+      message:
+        'Maximum check-in quota must be greater than or equal to the minimum',
+    })
+  }
+})
+
+type Values = z.infer<typeof valuesSchema>
 
 type CheckinImportExportPayload = Partial<Values> & {
   BillingBasics?: {
@@ -206,7 +227,7 @@ export function CheckinSettingsSection({
       )
       if (maxQuota !== undefined) next.maxQuota = maxQuota
 
-      const parsed = schema.parse(next)
+      const parsed = valuesSchema.parse(next)
       form.setValue('enabled', parsed.enabled, {
         shouldDirty: true,
         shouldValidate: true,
@@ -233,6 +254,7 @@ export function CheckinSettingsSection({
 
   return (
     <SettingsSection title={t('Check-in Settings')}>
+      <FormNavigationGuard when={isDirty} />
       <Form {...form}>
         <SettingsForm onSubmit={form.handleSubmit(onSubmit)} autoComplete='off'>
           <SettingsPageActionsPortal>

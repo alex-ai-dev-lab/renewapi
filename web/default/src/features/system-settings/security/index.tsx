@@ -53,8 +53,10 @@ const defaultSecuritySettings: SecuritySettings = {
   'anti_poison_setting.max_guard_scan_bytes': 65536,
   'anti_poison_setting.downstream_proof_header': false,
   'anti_poison_setting.profiles': '{}',
-  'anti_poison_setting.channels':
-    '{"77":{"profile":"trusted"},"101":{"profile":"probation"},"94":{"profile":"quarantine"}}',
+  // Per-channel overrides must start empty: any entry here is rendered as the
+  // live configuration when the option is absent from the DB, and is persisted
+  // as-is once the section is saved.
+  'anti_poison_setting.channels': '{}',
 }
 
 export function SecuritySettings() {

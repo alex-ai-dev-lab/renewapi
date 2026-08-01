@@ -84,6 +84,133 @@ const passkeySchema = z.object({
   }),
 })
 
+const DOMAIN_PATTERN =
+  /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i
+
+/**
+ * The Relying Party ID is a bare domain, not a URL. A scheme, port or path
+ * here makes every WebAuthn ceremony fail in the browser.
+ */
+const isValidRelyingPartyId = (value: string): boolean =>
+  value === 'localhost' || DOMAIN_PATTERN.test(value)
+
+/**
+ * WebAuthn compares origins by exact string, so a trailing slash, a path or a
+ * missing scheme silently breaks authentication.
+ */
+const isExactOrigin = (value: string): boolean => {
+  let parsed: URL
+  try {
+    parsed = new URL(value)
+  } catch {
+    return false
+  }
+
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return false
+  }
+
+  return parsed.origin === value
+}
+
+const originHostname = (value: string): string | null => {
+  try {
+    return new URL(value).hostname
+  } catch {
+    return null
+  }
+}
+
+const splitOrigins = (value: string): string[] =>
+  value
+    .split('\n')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+
+/**
+ * Shape plus cross-field rules. Used only as the form resolver: the plain
+ * `passkeySchema` stays in charge of export/import parsing so those buttons
+ * never throw just because Passkey is half-configured.
+ */
+const passkeyFormSchema = passkeySchema.superRefine((value, ctx) => {
+  const passkey = value.passkey
+
+  if (!passkey.enabled) {
+    return
+  }
+
+  const relyingPartyId = passkey.rp_id.trim()
+
+  if (!relyingPartyId) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['passkey', 'rp_id'],
+      message: 'Relying Party ID is required when Passkey is enabled',
+    })
+  } else if (!isValidRelyingPartyId(relyingPartyId)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['passkey', 'rp_id'],
+      message:
+        'Relying Party ID must be a bare domain such as example.com, without scheme, port or path',
+    })
+  }
+
+  const origins = splitOrigins(passkey.origins)
+
+  if (origins.length === 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['passkey', 'origins'],
+      message: 'At least one allowed origin is required when Passkey is enabled',
+    })
+    return
+  }
+
+  const malformed = origins.filter((origin) => !isExactOrigin(origin))
+
+  if (malformed.length > 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['passkey', 'origins'],
+      message: `Each origin must be exact, such as https://example.com, with no trailing slash or path: ${malformed.join(', ')}`,
+    })
+    return
+  }
+
+  if (!passkey.allow_insecure_origin) {
+    const insecure = origins.filter((origin) => origin.startsWith('http://'))
+
+    if (insecure.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['passkey', 'origins'],
+        message: `Insecure origins require "Allow Insecure Origins": ${insecure.join(', ')}`,
+      })
+    }
+  }
+
+  if (relyingPartyId && isValidRelyingPartyId(relyingPartyId)) {
+    const offDomain = origins.filter((origin) => {
+      const hostname = originHostname(origin)
+      if (hostname === null) {
+        return false
+      }
+      return (
+        hostname !== relyingPartyId && !hostname.endsWith(`.${relyingPartyId}`)
+      )
+    })
+
+    if (offDomain.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['passkey', 'origins'],
+        message: `Origins must be on the Relying Party ID domain (${relyingPartyId}): ${offDomain.join(', ')}`,
+      })
+    }
+  }
+})
+
 type PasskeyFormInput = z.input<typeof passkeySchema>
 type PasskeyFormValues = z.output<typeof passkeySchema>
 
@@ -163,7 +290,7 @@ export function PasskeySection(props: PasskeySectionProps) {
   )
 
   const form = useForm<PasskeyFormInput, unknown, PasskeyFormValues>({
-    resolver: zodResolver(passkeySchema),
+    resolver: zodResolver(passkeyFormSchema),
     defaultValues: formDefaults,
   })
 

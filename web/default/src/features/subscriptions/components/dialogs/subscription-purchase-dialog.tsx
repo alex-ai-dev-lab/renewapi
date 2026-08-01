@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { GroupBadge } from '@/components/group-badge'
+import { openPaymentRedirect } from '@/features/wallet/lib/payment'
 import {
   paySubscriptionStripe,
   paySubscriptionCreem,
@@ -94,10 +95,15 @@ function formatPlanAmount(amount: unknown, currencyCode?: string): string {
   return `${prefix}${numeric.toFixed(2)}`
 }
 
-/** 四个第三方渠道用 message === 'success' 判成功，余额渠道用 success 字段，
- * 口径不一致。这里统一收拢，并保留对旧行为的兼容。 */
+/**
+ * Accept legacy message-only success responses, but never let an explicit
+ * `success: false` be overridden by a misleading `message: 'success'`.
+ */
 function isPaySuccess(res: { success?: boolean; message?: string }): boolean {
-  return res?.success === true || res?.message === 'success'
+  if (typeof res?.success === 'boolean') {
+    return res.success
+  }
+  return res?.message === 'success'
 }
 
 function payErrorMessage(
@@ -170,6 +176,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
 
   const handlePayStripe = async () => {
     if (!beginPay()) return
+    let redirecting = false
     try {
       const res = await paySubscriptionStripe({ plan_id: plan.id })
       if (isPaySuccess(res) && res.data?.pay_link) {
@@ -178,25 +185,22 @@ export function SubscriptionPurchaseDialog(props: Props) {
           toast.error(t('Invalid payment redirect URL'))
           return
         }
-        const opened = window.open(paymentUrl, '_blank', 'noopener,noreferrer')
-        if (!opened) {
-          toast.error(t('Please allow pop-ups to continue the payment'))
-          return
-        }
+        redirecting = openPaymentRedirect(paymentUrl) === 'same-tab'
         toast.success(t('Payment page opened'))
-        props.onOpenChange(false)
+        if (!redirecting) props.onOpenChange(false)
       } else {
         toast.error(payErrorMessage(res, t('Payment request failed')))
       }
     } catch {
       toast.error(t('Payment request failed'))
     } finally {
-      endPay()
+      if (!redirecting) endPay()
     }
   }
 
   const handlePayCreem = async () => {
     if (!beginPay()) return
+    let redirecting = false
     try {
       const res = await paySubscriptionCreem({ plan_id: plan.id })
       if (isPaySuccess(res) && res.data?.checkout_url) {
@@ -205,20 +209,16 @@ export function SubscriptionPurchaseDialog(props: Props) {
           toast.error(t('Invalid payment redirect URL'))
           return
         }
-        const opened = window.open(checkoutUrl, '_blank', 'noopener,noreferrer')
-        if (!opened) {
-          toast.error(t('Please allow pop-ups to continue the payment'))
-          return
-        }
+        redirecting = openPaymentRedirect(checkoutUrl) === 'same-tab'
         toast.success(t('Payment page opened'))
-        props.onOpenChange(false)
+        if (!redirecting) props.onOpenChange(false)
       } else {
         toast.error(payErrorMessage(res, t('Payment request failed')))
       }
     } catch {
       toast.error(t('Payment request failed'))
     } finally {
-      endPay()
+      if (!redirecting) endPay()
     }
   }
 

@@ -29,6 +29,24 @@ import type { PresetAmount, TopupInfo } from '../types'
 // Payment Processing Functions
 // ============================================================================
 
+export type PaymentRedirectResult = 'new-tab' | 'same-tab'
+
+/**
+ * Open a hosted checkout when possible, falling back to the current tab when
+ * the browser blocks a delayed popup. The order already exists by this point,
+ * so callers must treat both results as a successful handoff and must not
+ * offer a second submit path.
+ */
+export function openPaymentRedirect(url: string): PaymentRedirectResult {
+  const opened = window.open(url, '_blank', 'noopener,noreferrer')
+  if (opened) {
+    return 'new-tab'
+  }
+
+  window.location.href = url
+  return 'same-tab'
+}
+
 /**
  * Check if browser is Safari
  */

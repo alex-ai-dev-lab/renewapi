@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -158,7 +159,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			channel, selectErr = getRandomSatisfiedChannelWithRequirements(param, autoGroup, priorityRetry)
 			if selectErr != nil {
 				lastSelectErr = selectErr
-				logger.LogError(param.Ctx, "select channel failed in group %s for model %s: %v", autoGroup, param.ModelName, selectErr)
+				logger.LogError(param.Ctx, fmt.Sprintf("select channel failed in group %s for model %s: %v", autoGroup, param.ModelName, selectErr))
 			}
 			if channel == nil {
 				// Current group has no available channel for this model, try next group
@@ -284,7 +285,7 @@ func getRandomSatisfiedChannelWithRequirements(param *RetryParam, group string, 
 		excluded[channel.Id] = true
 	}
 	// 以前这里静默返回 nil, nil，与“真的没有渠道”完全无法区分。
-	logger.LogError(param.Ctx, "channel requirement filter exhausted %d attempts in group %s for model %s", requirementFilterMaxAttempts, group, param.ModelName)
+	logger.LogError(param.Ctx, fmt.Sprintf("channel requirement filter exhausted %d attempts in group %s for model %s", requirementFilterMaxAttempts, group, param.ModelName))
 	return nil, nil
 }
 
@@ -434,9 +435,11 @@ func SelectUntriedEnabledMultiKey(param *RetryParam, channel *model.Channel) (st
 	}
 	keys := channel.GetKeys()
 	tried := param.TriedMultiKeyIndexes[channel.Id]
-	// 以前这里有一句 `if len(tried) == 0 { return "", 0, false, nil }`：
-	// tried 为空意味着一个 key 都还没试过，本应是“随便选”的情况，却反而直接
-	// 报未命中，与 HasUntriedEnabledMultiKey(tried 为空时返回 true) 相互矛盾。
+	// 第一次选择必须保留渠道亲和/轮询已经选出的 key；这里只负责失败后的
+	// replacement，避免无故改变首个请求的 key。
+	if len(tried) == 0 {
+		return "", 0, false, nil
+	}
 	for index := range keys {
 		if tried != nil && tried[index] {
 			continue

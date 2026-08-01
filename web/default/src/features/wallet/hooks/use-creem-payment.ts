@@ -21,6 +21,7 @@ import i18next from 'i18next'
 import { toast } from 'sonner'
 import { resolveHttpRedirect } from '@/lib/dom-utils'
 import { requestCreemPayment, isApiSuccess } from '../api'
+import { openPaymentRedirect } from '../lib/payment'
 
 /**
  * Hook for handling Creem payment processing
@@ -41,6 +42,7 @@ export function useCreemPayment() {
     processingRef.current = true
 
     setProcessing(true)
+    let redirecting = false
     try {
       const response = await requestCreemPayment({
         product_id: productId,
@@ -61,14 +63,8 @@ export function useCreemPayment() {
         return false
       }
 
-      const opened = window.open(checkoutUrl, '_blank', 'noopener,noreferrer')
-      // 被浏览器弹窗拦截时 window.open 返回 null，原实现仍会提示
-      // 「正在跳转」并返回 true，用户什么都看不到。
-      if (!opened) {
-        toast.error(i18next.t('Please allow pop-ups to continue the payment'))
-        return false
-      }
-
+      const redirectResult = openPaymentRedirect(checkoutUrl)
+      redirecting = redirectResult === 'same-tab'
       toast.success(i18next.t('Redirecting to Creem checkout...'))
       return true
     } catch (error) {
@@ -81,8 +77,10 @@ export function useCreemPayment() {
       toast.error(message)
       return false
     } finally {
-      processingRef.current = false
-      setProcessing(false)
+      if (!redirecting) {
+        processingRef.current = false
+        setProcessing(false)
+      }
     }
   }, [])
 

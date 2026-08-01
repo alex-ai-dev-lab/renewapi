@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery } from '@tanstack/react-query'
@@ -95,6 +95,7 @@ export function UsersMutateDrawer({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoadingUser, setIsLoadingUser] = useState(false)
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
+  const userLoadRequestRef = useRef(0)
 
   // Fetch groups
   const { data: groupsData } = useQuery({
@@ -112,6 +113,12 @@ export function UsersMutateDrawer({
 
   // Load existing data when updating
   useEffect(() => {
+    const requestId = ++userLoadRequestRef.current
+    let active = true
+
+    const isCurrentRequest = () =>
+      active && userLoadRequestRef.current === requestId
+
     if (open && isUpdate && currentRow) {
       // Seed the form from the selected table row *before* awaiting the fetch.
       // form.reset() used to run only inside the success branch, so a slow or
@@ -125,6 +132,7 @@ export function UsersMutateDrawer({
       // For update, fetch fresh data
       getUser(currentRow.id)
         .then((result) => {
+          if (!isCurrentRequest()) return
           if (result.success && result.data) {
             form.reset(transformUserToFormDefaults(result.data))
           } else {
@@ -132,15 +140,20 @@ export function UsersMutateDrawer({
           }
         })
         .catch(() => {
+          if (!isCurrentRequest()) return
           toast.error(t(ERROR_MESSAGES.LOAD_FAILED))
         })
         .finally(() => {
-          setIsLoadingUser(false)
+          if (isCurrentRequest()) setIsLoadingUser(false)
         })
     } else if (open && !isUpdate) {
       // For create, reset to defaults
       form.reset(USER_FORM_DEFAULT_VALUES)
       setIsLoadingUser(false)
+    }
+
+    return () => {
+      active = false
     }
   }, [open, isUpdate, currentRow, form, t])
 

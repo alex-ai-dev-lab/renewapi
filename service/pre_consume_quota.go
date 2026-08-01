@@ -20,6 +20,31 @@ import (
 // 还原失败意味着用户被多扣了额度，属于直接资损，不能“打一行日志就算了”。
 const preConsumeRefundMaxAttempts = 3
 
+// refundPreConsumedAccount refunds the account-side leg of a pre-consume.
+// Keep this separate from the token leg: retrying both legs as one operation
+// can double-credit the account when the first attempt succeeded there but
+// failed while updating the token.
+func refundPreConsumedAccount(relayInfo *relaycommon.RelayInfo, quota int) error {
+	if relayInfo.BillingSource == BillingSourceSubscription {
+		if relayInfo.SubscriptionId == 0 {
+			return fmt.Errorf("missing subscription id for quota refund")
+		}
+		if err := model.PostConsumeUserSubscriptionDelta(relayInfo.SubscriptionId, -int64(quota)); err != nil {
+			return err
+		}
+		relayInfo.SubscriptionPostDelta -= int64(quota)
+		return nil
+	}
+	return model.IncreaseUserQuota(relayInfo.UserId, quota, false)
+}
+
+func refundPreConsumedToken(relayInfo *relaycommon.RelayInfo, quota int) error {
+	if relayInfo.IsPlayground {
+		return nil
+	}
+	return model.IncreaseTokenQuota(relayInfo.TokenId, relayInfo.TokenKey, quota)
+}
+
 func ReturnPreConsumedQuota(c *gin.Context, relayInfo *relaycommon.RelayInfo) {
 	if relayInfo == nil || relayInfo.FinalPreConsumedQuota == 0 {
 		return
@@ -31,15 +56,27 @@ func ReturnPreConsumedQuota(c *gin.Context, relayInfo *relaycommon.RelayInfo) {
 	relayInfoCopy := *relayInfo
 	gopool.Go(func() {
 		var lastErr error
+		accountRefunded := false
+		tokenRefunded := relayInfoCopy.IsPlayground
 		for attempt := 1; attempt <= preConsumeRefundMaxAttempts; attempt++ {
-			infoCopy := relayInfoCopy
-			lastErr = PostConsumeQuota(&infoCopy, -quota, 0, false)
-			if lastErr == nil {
+			if !accountRefunded {
+				lastErr = refundPreConsumedAccount(&relayInfoCopy, quota)
+				if lastErr == nil {
+					accountRefunded = true
+				}
+			}
+			if accountRefunded && !tokenRefunded {
+				lastErr = refundPreConsumedToken(&relayInfoCopy, quota)
+				if lastErr == nil {
+					tokenRefunded = true
+				}
+			}
+			if accountRefunded && tokenRefunded {
 				return
 			}
 			common.SysLog(fmt.Sprintf(
-				"error return pre-consumed quota (attempt %d/%d), user %d, token %d, quota %d: %s",
-				attempt, preConsumeRefundMaxAttempts, userId, tokenId, quota, lastErr.Error(),
+				"error return pre-consumed quota (attempt %d/%d), user %d, token %d, quota %d, account_refunded=%t, token_refunded=%t: %v",
+				attempt, preConsumeRefundMaxAttempts, userId, tokenId, quota, accountRefunded, tokenRefunded, lastErr,
 			))
 			if attempt < preConsumeRefundMaxAttempts {
 				time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)

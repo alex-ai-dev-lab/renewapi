@@ -53,7 +53,7 @@ function extractErrorPosition(
 
   // Try to extract position from error message
   // Format 1: "Unexpected token } in JSON at position 15"
-  const positionMatch = message.match(/at position (\\d+)/i)
+  const positionMatch = message.match(/at position (\d+)/i)
   if (positionMatch) {
     const position = parseInt(positionMatch[1], 10)
     const { line, column } = getLineAndColumn(jsonString, position)
@@ -61,7 +61,7 @@ function extractErrorPosition(
   }
 
   // Format 2: "JSON.parse: ... at line 2 column 3"
-  const lineColMatch = message.match(/at line (\\d+) column (\\d+)/i)
+  const lineColMatch = message.match(/at line (\d+) column (\d+)/i)
   if (lineColMatch) {
     return {
       line: parseInt(lineColMatch[1], 10),
@@ -76,7 +76,7 @@ function getLineAndColumn(
   text: string,
   position: number
 ): { line: number; column: number } {
-  const lines = text.substring(0, position).split('\\n')
+  const lines = text.substring(0, position).split('\n')
   return {
     line: lines.length,
     column: lines[lines.length - 1].length + 1,

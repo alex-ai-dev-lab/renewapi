@@ -100,14 +100,14 @@ export function getApiKeyFormDefaultValues(
 export function transformFormDataToPayload(
   data: ApiKeyFormValues
 ): ApiKeyFormData {
+  const remainQuota = parseQuotaFromDollars(data.remain_quota_dollars ?? 0)
+
   return {
     name: data.name,
-    // NOTE: when unlimited_quota is on, the stored remaining quota is sent as 0.
-    // The backend ignores it while unlimited, but the original value is lost, so
-    // turning unlimited off later starts from whatever the form shows.
-    remain_quota: data.unlimited_quota
-      ? 0
-      : parseQuotaFromDollars(data.remain_quota_dollars || 0),
+    // Keep the stored value even while unlimited is enabled. The backend does
+    // not spend it in that mode, and preserving it makes toggling unlimited off
+    // reversible instead of silently resetting the key to zero quota.
+    remain_quota: remainQuota,
     expired_time: data.expired_time
       ? Math.floor(data.expired_time.getTime() / 1000)
       : -1,
@@ -117,7 +117,8 @@ export function transformFormDataToPayload(
     // clearing the list turned a restricted token into an unrestricted one,
     // which is the unsafe direction. An enabled-but-empty whitelist denies every
     // model, so this fails closed.
-    model_limits_enabled: data.model_limits.length > 0 || !!data.model_limits_enabled,
+    model_limits_enabled:
+      data.model_limits.length > 0 || !!data.model_limits_enabled,
     model_limits: data.model_limits.join(','),
     allow_ips: data.allow_ips || '',
     group: data.group || '',

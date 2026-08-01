@@ -21,6 +21,7 @@ import i18next from 'i18next'
 import { toast } from 'sonner'
 import { resolveHttpRedirect } from '@/lib/dom-utils'
 import { requestWaffoPayment, isApiSuccess } from '../api'
+import { openPaymentRedirect } from '../lib/payment'
 
 function getPaymentUrl(data: unknown): string | null {
   if (!data || typeof data !== 'object') {
@@ -65,6 +66,7 @@ export function useWaffoPayment() {
       processingRef.current = true
 
       setProcessing(true)
+      let redirecting = false
 
       try {
         const response = await requestWaffoPayment({
@@ -79,24 +81,16 @@ export function useWaffoPayment() {
           return false
         }
 
-        const safePaymentUrl = resolveHttpRedirect(getPaymentUrl(response.data))
+        const safePaymentUrl = resolveHttpRedirect(
+          getPaymentUrl(response.data) ?? undefined
+        )
         if (!safePaymentUrl) {
           toast.error(i18next.t('Invalid payment redirect URL'))
           return false
         }
 
-        const opened = window.open(
-          safePaymentUrl,
-          '_blank',
-          'noopener,noreferrer'
-        )
-        // 弹窗被拦时 window.open 返回 null，原实现仍提示「正在跳转」并返回 true，
-        // 而订单已经创建。
-        if (!opened) {
-          toast.error(i18next.t('Please allow pop-ups to continue the payment'))
-          return false
-        }
-
+        const redirectResult = openPaymentRedirect(safePaymentUrl)
+        redirecting = redirectResult === 'same-tab'
         toast.success(i18next.t('Redirecting to payment page...'))
         return true
       } catch (error) {
@@ -109,8 +103,10 @@ export function useWaffoPayment() {
         toast.error(message)
         return false
       } finally {
-        processingRef.current = false
-        setProcessing(false)
+        if (!redirecting) {
+          processingRef.current = false
+          setProcessing(false)
+        }
       }
     },
     []

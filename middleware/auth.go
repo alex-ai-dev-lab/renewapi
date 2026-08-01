@@ -141,12 +141,18 @@ func authHelper(c *gin.Context, minRole int) {
 	}
 	// session 里的 status 是登录那一瞬的快照。封禁用户只会失效用户缓存，不会动 session，
 	// 所以只信 session 会让被封号的人持旧会话继续访问直到 session 过期。
-	// 这里以用户缓存为权威源重新校验；缓存/DB 不可用时退回 session 快照，
-	// 避免 Redis 抖动直接把所有人锁在外面。
+	// 这里以用户缓存为权威源重新校验；缓存/DB 不可用时必须 fail closed，
+	// 不能把可能已经失效的 session 快照当成授权依据。
 	if userCache, cacheErr := model.GetUserCache(userIdInt); cacheErr == nil {
 		statusInt = userCache.Status
 	} else {
 		common.SysLog(fmt.Sprintf("authHelper GetUserCache error for user %d: %v", userIdInt, cacheErr))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
+		})
+		c.Abort()
+		return
 	}
 	if statusInt == common.UserStatusDisabled {
 		c.JSON(http.StatusForbidden, gin.H{

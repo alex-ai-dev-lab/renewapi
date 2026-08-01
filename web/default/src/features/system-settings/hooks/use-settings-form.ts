@@ -211,6 +211,10 @@ export function useSettingsForm<T extends FieldValues>({
   // comparing against it would make the next effect run treat the stale cached
   // snapshot as a new server value and reset the form back to pre-save values.
   const serializedServerRef = useRef<string>(serializedDefaultsRef.current)
+  // A server snapshot observed while the form was dirty is not safe to apply
+  // merely because the form later becomes clean: it may be the stale cache
+  // value that preceded a successful save. Wait for a newer snapshot instead.
+  const deferredServerRef = useRef<string | null>(null)
   /* eslint-enable react-hooks/refs */
 
   useEffect(() => {
@@ -224,9 +228,15 @@ export function useSettingsForm<T extends FieldValues>({
       return
     }
 
-    // Never clobber unsaved edits. The snapshot stays unapplied so it can be
-    // picked up once the form is clean again.
+    // Never clobber unsaved edits. Keep the snapshot for comparison, but do
+    // not apply it merely because the form becomes clean after a local save or
+    // reset.
     if (form.formState.isDirty) {
+      deferredServerRef.current = serialized
+      return
+    }
+
+    if (deferredServerRef.current === serialized) {
       return
     }
 
@@ -282,6 +292,15 @@ export function useSettingsForm<T extends FieldValues>({
     baselineRef.current = flattenedValues
     defaultValuesRef.current = data
     serializedDefaultsRef.current = JSON.stringify(flattenedValues)
+    // Mark the cache snapshot currently being displayed as handled. It may
+    // still be older than `data`; allowing it through on the next effect would
+    // overwrite the values that were just saved.
+    if (expandedDefaults) {
+      serializedServerRef.current = JSON.stringify(
+        flattenValues(expandedDefaults as T)
+      )
+    }
+    deferredServerRef.current = null
     form.reset(data)
   }
 

@@ -23,12 +23,21 @@ import type { DefaultValues, FieldValues, UseFormReturn } from 'react-hook-form'
  * Reset a react-hook-form instance whenever the provided default values change.
  * Guards against naively resetting on every render by tracking the last
  * serialized snapshot of the defaults.
+ *
+ * A form that the user is currently editing is never reset: settings pages are
+ * fed by a cached query that can refetch at any time (window focus, cache
+ * expiry, a save performed in another tab), and resetting on that would wipe
+ * half-typed values with no warning. The snapshot is deliberately left
+ * unchanged while the form is dirty, so the newest values are applied as soon
+ * as the form becomes clean again (i.e. right after a successful save or an
+ * explicit reset).
  */
 export function useResetForm<TFieldValues extends FieldValues>(
   form: UseFormReturn<TFieldValues>,
   values: DefaultValues<TFieldValues> | undefined
 ) {
   const lastSerializedDefaults = useRef<string | null>(null)
+  const { isDirty } = form.formState
 
   useEffect(() => {
     if (!values) return
@@ -38,7 +47,11 @@ export function useResetForm<TFieldValues extends FieldValues>(
       return
     }
 
+    // Keep the stale snapshot: this effect runs again once `isDirty` flips
+    // back to false, and the incoming values are applied then.
+    if (isDirty) return
+
     form.reset(values)
     lastSerializedDefaults.current = serializedDefaults
-  }, [values, form])
+  }, [values, form, isDirty])
 }

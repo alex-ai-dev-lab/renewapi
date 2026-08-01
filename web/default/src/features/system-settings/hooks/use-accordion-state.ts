@@ -16,25 +16,75 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useEffect, useState, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-// Simple debounce implementation (no external dependencies)
-function debounce(
-  fn: (value: string[]) => void,
-  delay: number
-): ((value: string[]) => void) & { cancel: () => void } {
+type DebouncedSave = ((value: string[]) => void) & {
+  cancel: () => void
+  flush: () => void
+}
+
+// Simple debounce implementation (no external dependencies).
+// `flush` runs the pending call immediately, which is what unmount needs:
+// dropping it would silently lose the user's last toggle.
+function debounce(fn: (value: string[]) => void, delay: number): DebouncedSave {
   let timeoutId: ReturnType<typeof setTimeout> | null = null
+  let pendingValue: string[] | null = null
+
+  const clear = () => {
+    if (timeoutId) clearTimeout(timeoutId)
+    timeoutId = null
+  }
 
   const debounced = ((value: string[]) => {
-    if (timeoutId) clearTimeout(timeoutId)
-    timeoutId = setTimeout(() => fn(value), delay)
-  }) as ((value: string[]) => void) & { cancel: () => void }
+    pendingValue = value
+    clear()
+    timeoutId = setTimeout(() => {
+      timeoutId = null
+      const value = pendingValue
+      pendingValue = null
+      if (value) fn(value)
+    }, delay)
+  }) as DebouncedSave
 
   debounced.cancel = () => {
-    if (timeoutId) clearTimeout(timeoutId)
+    clear()
+    pendingValue = null
+  }
+
+  debounced.flush = () => {
+    clear()
+    const value = pendingValue
+    pendingValue = null
+    if (value) fn(value)
   }
 
   return debounced
+}
+
+// Anything may end up under this key: a stale format from an older release,
+// another tab, or a hand-edited value. Only a plain array of strings is a
+// usable accordion value, everything else falls back to "all collapsed".
+function readStoredItems(storageKey: string): string[] {
+  try {
+    const stored = localStorage.getItem(storageKey)
+    if (!stored) return []
+
+    const parsed: unknown = JSON.parse(stored)
+    if (
+      Array.isArray(parsed) &&
+      parsed.every((item) => typeof item === 'string')
+    ) {
+      return parsed as string[]
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `Failed to load accordion state from localStorage: ${storageKey}`,
+      error
+    )
+  }
+
+  return []
 }
 
 /**
@@ -43,24 +93,21 @@ function debounce(
  * Uses debounced writes to reduce I/O operations
  */
 export function useAccordionState(pageId: string) {
-  const [openItems, setOpenItems] = useState<string[]>([])
   const storageKey = `system-settings-${pageId}-accordion`
+  // Read synchronously so the first paint already shows the restored panels.
+  const [openItems, setOpenItems] = useState<string[]>(() =>
+    readStoredItems(storageKey)
+  )
+  const loadedKeyRef = useRef(storageKey)
 
-  // Initialize state from localStorage (immediate)
+  // Re-read when the page changes. The empty result matters as much as a hit:
+  // without it a page with no stored state would inherit the previous page's
+  // open panels.
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(storageKey)
-      if (stored) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setOpenItems(JSON.parse(stored))
-      }
-    } catch (_error) {
-      // eslint-disable-next-line no-console
-      console.error(
-        `Failed to load accordion state from localStorage: ${storageKey}`,
-        _error
-      )
-    }
+    if (loadedKeyRef.current === storageKey) return
+    loadedKeyRef.current = storageKey
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOpenItems(readStoredItems(storageKey))
   }, [storageKey])
 
   // Debounced save function (500ms delay)
@@ -69,21 +116,21 @@ export function useAccordionState(pageId: string) {
       debounce((value: string[]) => {
         try {
           localStorage.setItem(storageKey, JSON.stringify(value))
-        } catch (_error) {
+        } catch (error) {
           // eslint-disable-next-line no-console
           console.error(
             `Failed to save accordion state to localStorage: ${storageKey}`,
-            _error
+            error
           )
         }
       }, 500),
     [storageKey]
   )
 
-  // Cleanup on unmount
+  // Persist the pending toggle on unmount / page change instead of dropping it.
   useEffect(() => {
     return () => {
-      debouncedSave.cancel()
+      debouncedSave.flush()
     }
   }, [debouncedSave])
 

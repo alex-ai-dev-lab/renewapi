@@ -52,44 +52,16 @@ import {
   updateBillingPreference,
 } from '@/features/subscriptions/api'
 import { SubscriptionPurchaseDialog } from '@/features/subscriptions/components/dialogs/subscription-purchase-dialog'
-import { formatDuration, formatResetPeriod } from '@/features/subscriptions/lib'
+import {
+  formatDuration,
+  formatPlanAmount,
+  formatResetPeriod,
+} from '@/features/subscriptions/lib'
 import type {
   PlanRecord,
   UserSubscriptionRecord,
 } from '@/features/subscriptions/types'
 import type { PaymentMethod, TopupInfo } from '../types'
-
-// TODO: merge with the identical tables in subscriptions-columns.tsx,
-// subscription-purchase-dialog.tsx and user-subscriptions-dialog.tsx into
-// lib/currency.ts. This is the fourth copy; see creem-products-section.tsx for
-// the currency-aware reference implementation.
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$',
-  CNY: '¥',
-  EUR: '€',
-  GBP: '£',
-  JPY: '¥',
-  HKD: 'HK$',
-  TWD: 'NT$',
-  AUD: 'A$',
-  CAD: 'C$',
-  SGD: 'S$',
-  KRW: '₩',
-  BRL: 'R$',
-  INR: '₹',
-}
-
-// The plan price is the first price a user ever sees on the wallet page. It was
-// hard-coded to `$`, so a plan priced in CNY/EUR/... was advertised in the
-// wrong currency. Fall back to the ISO code when the symbol is unknown so the
-// amount is never shown bare.
-function formatPlanAmount(amount: unknown, currencyCode?: string): string {
-  const numeric = Number(amount)
-  const safe = Number.isFinite(numeric) ? numeric : 0
-  const code = (currencyCode || 'USD').toUpperCase()
-  const symbol = CURRENCY_SYMBOLS[code]
-  return symbol ? `${symbol}${safe.toFixed(2)}` : `${safe.toFixed(2)} ${code}`
-}
 
 interface SubscriptionPlansCardProps {
   topupInfo: TopupInfo | null

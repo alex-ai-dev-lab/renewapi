@@ -59,7 +59,7 @@ import {
   invalidateUserSubscription,
   deleteUserSubscription,
 } from '../../api'
-import { formatTimestamp } from '../../lib'
+import { formatPlanAmount, formatTimestamp } from '../../lib'
 import type { PlanRecord, UserSubscriptionRecord } from '../../types'
 
 interface Props {
@@ -67,26 +67,6 @@ interface Props {
   onOpenChange: (open: boolean) => void
   user: { id: number; username?: string } | null
   onSuccess?: () => void
-}
-
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-  JPY: '¥',
-  CNY: '¥',
-}
-
-/**
- * 按计划币种渲染价格。原实现两处写死 `$`，忽略 plan.currency（同 #48 / #49 / #52）。
- * TODO: 与 purchase dialog / columns 里的同名实现合并到 lib/currency.ts。
- */
-function formatPlanAmount(amount: unknown, currencyCode?: string): string {
-  const numeric = Number(amount || 0)
-  const code = (currencyCode || 'USD').toUpperCase()
-  const prefix = CURRENCY_SYMBOLS[code] || `${code} `
-  if (!Number.isFinite(numeric)) return `${prefix}-`
-  return `${prefix}${numeric.toFixed(2)}`
 }
 
 function SubscriptionStatusBadge(props: {
@@ -284,7 +264,8 @@ export function UserSubscriptionsDialog(props: Props) {
                     {plans.map((p) => (
                       <SelectItem key={p.plan.id} value={String(p.plan.id)}>
                         {p.plan.title} (
-                        {formatPlanAmount(p.plan.price_amount, p.plan.currency)})
+                        {formatPlanAmount(p.plan.price_amount, p.plan.currency)}
+                        )
                       </SelectItem>
                     ))}
                   </SelectGroup>

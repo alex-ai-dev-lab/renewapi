@@ -49,7 +49,8 @@ export function AmountOptionsVisualEditor({
 
     // Number(null), Number(''), Number([]) all evaluate to 0 and Number(true)
     // to 1, so a bare !isNaN(Number(item)) check used to turn junk entries into
-    // real recharge presets. Only finite positive values are accepted.
+    // real recharge presets. The backend stores amount_options as []int, so
+    // only finite positive integers are valid here.
     return parsed
       .filter(
         (item) =>
@@ -57,14 +58,17 @@ export function AmountOptionsVisualEditor({
           (typeof item === 'string' && item.trim() !== '')
       )
       .map(Number)
-      .filter((amount) => Number.isFinite(amount) && amount > 0)
+      .filter(
+        (amount) =>
+          Number.isFinite(amount) && Number.isInteger(amount) && amount > 0
+      )
       .sort((a, b) => a - b)
   }, [value, t])
 
   const handleAdd = () => {
-    const amount = parseFloat(newAmount)
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setErrorMessage(t('Enter an amount greater than 0'))
+    const amount = Number(newAmount.trim())
+    if (!Number.isFinite(amount) || !Number.isInteger(amount) || amount <= 0) {
+      setErrorMessage(t('Enter a positive integer amount'))
       return
     }
     if (amounts.includes(amount)) {
@@ -142,8 +146,8 @@ export function AmountOptionsVisualEditor({
           <Input
             id='new-amount'
             type='number'
-            step='0.01'
-            min='0'
+            step='1'
+            min='1'
             placeholder={t('e.g., 100')}
             value={newAmount}
             onChange={(e) => {

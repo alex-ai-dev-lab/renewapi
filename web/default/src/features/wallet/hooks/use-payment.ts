@@ -31,6 +31,7 @@ import {
 import {
   isStripePayment,
   isWaffoPancakePayment,
+  openPaymentRedirect,
   submitPaymentForm,
 } from '../lib'
 
@@ -97,8 +98,9 @@ export function usePayment() {
     async (topupAmount: number, paymentType: string) => {
       if (processingRef.current) return false
 
-      // TODO: 注意 Math.floor 会向下取整，而上方计价用的是未取整的原值，
-      // 若界面允许小数输入，展示价格与实际下单金额会不一致（待 UI 层限制整数）。
+      // The backend accepts integer top-up amounts. The recharge form normalizes
+      // fractional input before reaching this hook; keep this final guard for
+      // callers that use the hook directly.
       const orderAmount = Math.floor(topupAmount)
       if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
         toast.error(i18next.t('Payment request failed'))
@@ -138,7 +140,7 @@ export function usePayment() {
             toast.error(i18next.t('Invalid payment redirect URL'))
             return false
           }
-          window.open(paymentUrl, '_blank', 'noopener,noreferrer')
+          openPaymentRedirect(paymentUrl)
           toast.success(i18next.t('Redirecting to payment page...'))
           return true
         }

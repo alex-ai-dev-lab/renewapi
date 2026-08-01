@@ -19,7 +19,6 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useEffect, useCallback, useRef } from 'react'
 import i18next from 'i18next'
 import { toast } from 'sonner'
-import { getSelf } from '@/lib/api'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { getAffiliateCode, transferAffiliateQuota } from '../api'
 import { generateAffiliateLink } from '../lib'
@@ -90,14 +89,6 @@ export function useAffiliate() {
 
       if (response.success) {
         toast.success(response.message || i18next.t('Transfer successful'))
-        // 刷新自身信息失败不影响划转结果：原实现里 getSelf() 抛错会落到
-        // 外层 catch，导致额度已经划转成功却弹出「划转失败」。
-        try {
-          await getSelf()
-        } catch (error) {
-          // eslint-disable-next-line no-console
-          console.error('[wallet] refresh self after transfer failed', error)
-        }
         return true
       }
 

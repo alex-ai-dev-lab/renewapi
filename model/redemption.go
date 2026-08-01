@@ -49,14 +49,14 @@ func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total 
 }
 
 func SearchRedemptions(keyword string, startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
-	// 注意: keyword 直接拼到 LIKE 模式里, 其中的 % 与 _ 仍会被当作通配符。
-	// model/user.go 已引入统一的 LIKE 转义助手(单独 PR), 合入后应一并应用到这里,
-	// 本 PR 不重复定义以避免两个 PR 冲突。
+	// Keep wildcard characters in the search syntax under control. The shared
+	// helper uses ! as the escape character for cross-dialect consistency.
+	escapedKeyword := escapeLikeKeyword(keyword)
 	buildQuery := func() *gorm.DB {
 		if id, convErr := strconv.Atoi(keyword); convErr == nil {
-			return DB.Model(&Redemption{}).Where("id = ? OR name LIKE ?", id, keyword+"%")
+			return DB.Model(&Redemption{}).Where("id = ? OR name LIKE ? ESCAPE '!'", id, escapedKeyword+"%")
 		}
-		return DB.Model(&Redemption{}).Where("name LIKE ?", keyword+"%")
+		return DB.Model(&Redemption{}).Where("name LIKE ? ESCAPE '!'", escapedKeyword+"%")
 	}
 
 	if err = buildQuery().Count(&total).Error; err != nil {

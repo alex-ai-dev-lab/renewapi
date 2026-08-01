@@ -20,6 +20,34 @@ import type { TFunction } from 'i18next'
 import { formatTimestampToDate } from '@/lib/format'
 import type { SubscriptionPlan } from '../types'
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$',
+  CNY: '¥',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+  HKD: 'HK$',
+  TWD: 'NT$',
+  AUD: 'A$',
+  CAD: 'C$',
+  SGD: 'S$',
+  KRW: '₩',
+  BRL: 'R$',
+  INR: '₹',
+}
+
+/** Format a plan price without silently treating unknown currencies as USD. */
+export function formatPlanAmount(
+  amount: unknown,
+  currencyCode?: string
+): string {
+  const numeric = Number(amount)
+  const code = (currencyCode || 'USD').trim().toUpperCase()
+  const prefix = CURRENCY_SYMBOLS[code] || `${code} `
+  if (!Number.isFinite(numeric)) return `${prefix}-`
+  return `${prefix}${numeric.toFixed(2)}`
+}
+
 /**
  * 把秒数渲染成人读时长。
  *

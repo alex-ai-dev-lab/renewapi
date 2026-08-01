@@ -42,7 +42,10 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { GroupBadge } from '@/components/group-badge'
-import { openPaymentRedirect } from '@/features/wallet/lib/payment'
+import {
+  openPaymentRedirect,
+  submitPaymentForm,
+} from '@/features/wallet/lib/payment'
 import {
   paySubscriptionStripe,
   paySubscriptionCreem,
@@ -50,7 +53,7 @@ import {
   paySubscriptionWaffoPancake,
   paySubscriptionBalance,
 } from '../../api'
-import { formatDuration, formatResetPeriod } from '../../lib'
+import { formatDuration, formatPlanAmount, formatResetPeriod } from '../../lib'
 import type { PlanRecord } from '../../types'
 
 interface PaymentMethod {
@@ -71,28 +74,6 @@ interface Props {
   purchaseCount?: number
   userQuota?: number
   onPurchaseSuccess?: () => void | Promise<void>
-}
-
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-  JPY: '¥',
-  CNY: '¥',
-}
-
-/**
- * 按计划币种渲染应付金额。
- *
- * 原实现写死 `${price}` 的美元符号，而计划有 currency 字段：
- * 这是用户付款前看到的最后一个金额，币种显错直接导致争议。
- */
-function formatPlanAmount(amount: unknown, currencyCode?: string): string {
-  const numeric = Number(amount || 0)
-  const code = (currencyCode || 'USD').toUpperCase()
-  const prefix = CURRENCY_SYMBOLS[code] || `${code} `
-  if (!Number.isFinite(numeric)) return `${prefix}-`
-  return `${prefix}${numeric.toFixed(2)}`
 }
 
 /**
@@ -250,10 +231,6 @@ export function SubscriptionPurchaseDialog(props: Props) {
     }
   }
 
-  const isSafari =
-    typeof navigator !== 'undefined' &&
-    /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
-
   const handlePayEpay = async () => {
     if (!selectedEpayMethod) {
       toast.error(t('Please select a payment method'))
@@ -271,26 +248,10 @@ export function SubscriptionPurchaseDialog(props: Props) {
           toast.error(t('Invalid payment redirect URL'))
           return
         }
-        // NOTE: 这段表单拼装与 Safari 判断与
-        // features/wallet/lib/payment.ts 的 submitPaymentForm / isSafariBrowser
-        // 重复实现（历史遗留），应抽到共享层去重。
-        const form = document.createElement('form')
-        form.action = paymentUrl
-        form.method = 'POST'
-        if (!isSafari) {
-          form.target = '_blank'
-          form.rel = 'noopener noreferrer'
+        if (!submitPaymentForm(paymentUrl, res.data || {})) {
+          toast.error(t('Invalid payment redirect URL'))
+          return
         }
-        Object.entries(res.data || {}).forEach(([key, value]) => {
-          const input = document.createElement('input')
-          input.type = 'hidden'
-          input.name = key
-          input.value = String(value)
-          form.appendChild(input)
-        })
-        document.body.appendChild(form)
-        form.submit()
-        document.body.removeChild(form)
         toast.success(t('Payment initiated'))
         props.onOpenChange(false)
       } else {

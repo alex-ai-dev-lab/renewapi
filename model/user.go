@@ -323,7 +323,7 @@ func SearchUsers(keyword string, group string, role *int, status *int, startIdx 
 	query := tx.Unscoped().Model(&User{})
 
 	// 构建搜索条件
-	likeCondition := "username LIKE ? OR email LIKE ? OR display_name LIKE ?"
+	likeCondition := "username LIKE ? ESCAPE '!' OR email LIKE ? ESCAPE '!' OR display_name LIKE ? ESCAPE '!'"
 	likeKeyword := "%" + escapeLikeKeyword(keyword) + "%"
 	likeArgs := []interface{}{likeKeyword, likeKeyword, likeKeyword}
 
@@ -369,9 +369,12 @@ func SearchUsers(keyword string, group string, role *int, status *int, startIdx 
 
 // escapeLikeKeyword 转义 LIKE 通配符，避免用户输入的 % / _ 被当作通配符导致全表匹配。
 func escapeLikeKeyword(keyword string) string {
-	keyword = strings.ReplaceAll(keyword, "\\", "\\\\")
-	keyword = strings.ReplaceAll(keyword, "%", "\\%")
-	keyword = strings.ReplaceAll(keyword, "_", "\\_")
+	// Use a portable, explicit escape character. Backslash has different string
+	// literal rules across SQLite/MySQL/PostgreSQL, while ! is stable in all
+	// supported dialects.
+	keyword = strings.ReplaceAll(keyword, "!", "!!")
+	keyword = strings.ReplaceAll(keyword, "%", "!%")
+	keyword = strings.ReplaceAll(keyword, "_", "!_")
 	return keyword
 }
 

@@ -215,10 +215,10 @@ export function getMinTopupAmount(
 export function generatePresetAmounts(minAmount: number): PresetAmount[] {
   const base = configuredAmount(minAmount) ?? DEFAULT_MIN_TOPUP
 
+  // Top-up requests are int64 on the backend. Keep quick-select values on the
+  // same contract instead of showing a decimal that usePayment later floors.
   return DEFAULT_PRESET_MULTIPLIERS.map((multiplier) => ({
-    // Round to cents: a fractional minimum turns 0.1 * 3 into
-    // 0.30000000000000004, which then reaches the payment gateway verbatim.
-    value: Math.round(base * multiplier * 100) / 100,
+    value: Math.max(1, Math.round(base * multiplier)),
   }))
 }
 

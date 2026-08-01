@@ -56,32 +56,34 @@ function parsePaymentMethods(
   data: unknown,
   stripeMinTopup: number
 ): PaymentMethod[] {
-  return parseJsonArray(data)
-    .filter(
-      (item): item is Record<string, unknown> =>
-        !!item && typeof item === 'object'
-    )
-    .map((item) => {
-      const rawMinTopup = Number(item.min_topup)
-      // Number.isFinite(-5) 为 true，原实现会把负数最小充值额原样放过，
-      // 导致下游的金额下界校验彻底失效。
-      const normalizedMinTopup = Number.isFinite(rawMinTopup)
-        ? Math.max(0, rawMinTopup)
-        : 0
-      const type = typeof item.type === 'string' ? item.type : ''
+  return (
+    parseJsonArray(data)
+      .filter(
+        (item): item is Record<string, unknown> =>
+          !!item && typeof item === 'object'
+      )
+      .map((item) => {
+        const rawMinTopup = Number(item.min_topup)
+        // Number.isFinite(-5) 为 true，原实现会把负数最小充值额原样放过，
+        // 导致下游的金额下界校验彻底失效。
+        const normalizedMinTopup = Number.isFinite(rawMinTopup)
+          ? Math.max(0, rawMinTopup)
+          : 0
+        const type = typeof item.type === 'string' ? item.type : ''
 
-      return {
-        name: typeof item.name === 'string' ? item.name : '',
-        type,
-        color: typeof item.color === 'string' ? item.color : undefined,
-        min_topup:
-          type === 'stripe' && normalizedMinTopup <= 0
-            ? stripeMinTopup
-            : normalizedMinTopup,
-      }
-    })
-    // 'waffo' 被排除是因为它走单独的 waffo_pay_methods 字段，不属于通用支付方式列表。
-    .filter((item) => item.name && item.type && item.type !== 'waffo')
+        return {
+          name: typeof item.name === 'string' ? item.name : '',
+          type,
+          color: typeof item.color === 'string' ? item.color : undefined,
+          min_topup:
+            type === 'stripe' && normalizedMinTopup <= 0
+              ? stripeMinTopup
+              : normalizedMinTopup,
+        }
+      })
+      // 'waffo' 被排除是因为它走单独的 waffo_pay_methods 字段，不属于通用支付方式列表。
+      .filter((item) => item.name && item.type && item.type !== 'waffo')
+  )
 }
 
 function parseWaffoPayMethods(data: unknown): WaffoPayMethod[] {
@@ -102,32 +104,38 @@ function parseWaffoPayMethods(data: unknown): WaffoPayMethod[] {
 }
 
 function parseCreemProducts(data: unknown): CreemProduct[] {
-  return parseJsonArray(data)
-    .filter(
-      (item): item is Record<string, unknown> =>
-        !!item && typeof item === 'object'
-    )
-    .map((item) => {
-      const currency: CreemProduct['currency'] =
-        item.currency === 'EUR' ? 'EUR' : 'USD'
+  return (
+    parseJsonArray(data)
+      .filter(
+        (item): item is Record<string, unknown> =>
+          !!item && typeof item === 'object'
+      )
+      .map((item) => {
+        const currency: CreemProduct['currency'] =
+          item.currency === 'EUR' ? 'EUR' : 'USD'
 
-      return {
-        name: typeof item.name === 'string' ? item.name : '',
-        productId: typeof item.productId === 'string' ? item.productId : '',
-        price: Number(item.price) || 0,
-        quota: Number(item.quota) || 0,
-        currency,
-      }
-    })
-    // 价格或额度解析失败（NaN -> 0）的条目原本会被保留并渲染成
-    // 「0 元充值」选项，点下去就是直接的资损；这里一并过滤掉。
-    .filter((item) => item.name && item.productId && item.price > 0)
+        return {
+          name: typeof item.name === 'string' ? item.name : '',
+          productId: typeof item.productId === 'string' ? item.productId : '',
+          price: Number(item.price) || 0,
+          quota: Number(item.quota) || 0,
+          currency,
+        }
+      })
+      // 价格或额度解析失败（NaN -> 0）的条目原本会被保留并渲染成
+      // 「0 元充值」选项，点下去就是直接的资损；这里一并过滤掉。
+      .filter((item) => item.name && item.productId && item.price > 0)
+  )
 }
 
 function parseAmountOptions(data: unknown): number[] {
+  // The backend stores amount_options as []int and payment requests use int64;
+  // reject decimals here instead of rendering a value that will later be floored.
   return parseJsonArray(data)
     .map((item) => Number(item))
-    .filter((item) => Number.isFinite(item) && item > 0)
+    .filter(
+      (item) => Number.isFinite(item) && Number.isInteger(item) && item > 0
+    )
 }
 
 function parseDiscountMap(data: unknown): Record<number, number> {
@@ -163,6 +171,7 @@ function parseDiscountMap(data: unknown): Record<number, number> {
       // 同样必须为正数。
       if (
         Number.isFinite(numericKey) &&
+        Number.isInteger(numericKey) &&
         numericKey > 0 &&
         Number.isFinite(numericValue) &&
         numericValue > 0
@@ -187,7 +196,8 @@ export function useTopupInfo() {
 
   const fetchTopupInfo = useCallback(async () => {
     const requestId = ++requestIdRef.current
-    const isStale = () => !mountedRef.current || requestId !== requestIdRef.current
+    const isStale = () =>
+      !mountedRef.current || requestId !== requestIdRef.current
 
     try {
       setLoading(true)

@@ -24,34 +24,9 @@ import { DataTableColumnHeader } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
-import { formatDuration, formatResetPeriod } from '../lib'
+import { formatDuration, formatPlanAmount, formatResetPeriod } from '../lib'
 import type { PlanRecord } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
-
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-  JPY: '¥',
-  CNY: '¥',
-}
-
-/**
- * 按计划自己的币种渲染价格。
- *
- * 原实现硬编码 `${Number(price_amount || 0).toFixed(2)}` 的美元符号，
- * 而计划 schema 里有 currency 字段（默认 USD，可为 EUR 等）：
- * 一个 9.9 EUR 的计划在列表里会被展示成 “$9.90”。
- */
-function formatPlanPrice(amount: unknown, currency?: string): string {
-  const numeric = Number(amount || 0)
-  const code = (currency || 'USD').toUpperCase()
-  const symbol = CURRENCY_SYMBOLS[code]
-  // 未收录的币种宁可显示 ISO 代码，也不能默默当成美元。
-  const prefix = symbol || `${code} `
-  if (!Number.isFinite(numeric)) return `${prefix}-`
-  return `${prefix}${numeric.toFixed(2)}`
-}
 
 export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
   const { t } = useTranslation()
@@ -99,7 +74,7 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
         ),
         cell: ({ row }) => (
           <span className='text-success font-semibold'>
-            {formatPlanPrice(
+            {formatPlanAmount(
               row.original.plan.price_amount,
               row.original.plan.currency
             )}

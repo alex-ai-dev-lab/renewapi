@@ -19,7 +19,6 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useCallback, useRef } from 'react'
 import i18next from 'i18next'
 import { toast } from 'sonner'
-import { getSelf } from '@/lib/api'
 import { formatQuota } from '@/lib/format'
 import { redeemTopupCode } from '../api'
 
@@ -60,19 +59,13 @@ export function useRedemption() {
             quota: formatQuota(quotaAdded),
           })
         )
-        // 刷新自身信息失败不影响兑换结果：原实现里 getSelf() 抛错会落到
-        // 外层 catch，导致已经兑换成功却弹出「兑换失败」。
-        try {
-          await getSelf()
-        } catch (error) {
-          console.error('[wallet] refresh self after redemption failed', error)
-        }
         return true
       }
 
       toast.error(response.message || i18next.t('Redemption failed'))
       return false
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('[wallet] redeem code failed', error)
       const message =
         error instanceof Error && error.message

@@ -140,10 +140,17 @@ func PreConsumeQuota(c *gin.Context, preConsumedQuota int, relayInfo *relaycommo
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 		}
-		// FIXME: 此处令牌额度已扣、用户额度未扣, 两步不在同一事务内。
-		// 下面失败时令牌额度不会被回滚(对用户不利), 需要后续统一到一次事务或补偿流程。
+		// Token and account quota live in separate records, so they cannot share
+		// one database transaction. Compensate the token leg immediately if the
+		// account-side atomic debit loses a race or hits a database error.
 		err = model.DecreaseUserQuota(relayInfo.UserId, preConsumedQuota, false)
 		if err != nil {
+			if rollbackErr := refundPreConsumedToken(relayInfo, preConsumedQuota); rollbackErr != nil {
+				common.SysLog(fmt.Sprintf(
+					"[QUOTA_PRECONSUME_ROLLBACK_FAILED] user %d, token %d, quota %d, error: %v",
+					relayInfo.UserId, relayInfo.TokenId, preConsumedQuota, rollbackErr,
+				))
+			}
 			if errors.Is(err, model.ErrInsufficientQuota) {
 				// 并发下被别的请求先扣走了: 这是额度不足, 不是数据库故障。
 				// 原实现统一返回 UpdateDataError, 既误导用户也会让上层按“服务端错误”重试。

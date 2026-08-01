@@ -43,12 +43,20 @@ import { customOAuthFormSchema, type CustomOAuthProvider } from './types'
 
 const REDACTED_SECRET = '__SECRET_REDACTED__'
 
+const REDACTED_SECRET_IMPORT_ERROR =
+  'Client secret was redacted on export and this instance has no saved secret for this provider'
+
 type CustomOAuthImportPayload =
   | CustomOAuthProvider[]
   | {
       CustomOAuthProviders?: CustomOAuthProvider[]
       providers?: CustomOAuthProvider[]
     }
+
+type PreparedImport = {
+  payload: Omit<CustomOAuthProvider, 'id'>
+  existing?: CustomOAuthProvider
+}
 
 const redactProviderSecret = (
   provider: CustomOAuthProvider
@@ -69,7 +77,12 @@ const toProviderPayload = (
   ) {
     source.client_secret = existing.client_secret
   } else if (source.client_secret === REDACTED_SECRET) {
-    source.client_secret = ''
+    // There is no saved secret to restore. Writing the placeholder through
+    // would store a bogus secret, and blanking it would create a provider that
+    // looks enabled but can never complete a token exchange. importConfig
+    // reports this case up front; this throw keeps the helper safe for any
+    // other caller.
+    throw new Error(REDACTED_SECRET_IMPORT_ERROR)
   }
 
   const parsed = customOAuthFormSchema.parse(source)
@@ -177,24 +190,68 @@ export function CustomOAuthSection() {
       const existingBySlug = new Map(
         providers.map((provider) => [provider.slug, provider])
       )
+
+      // Every provider is written with its own request, so a failure halfway
+      // through leaves the earlier ones already persisted. Validate the whole
+      // payload before writing any of it.
+      const pending: PreparedImport[] = []
+      const missingSecrets: string[] = []
+      const invalidProviders: string[] = []
+
+      for (const provider of importProviders) {
+        const label =
+          (typeof provider?.slug === 'string' && provider.slug) ||
+          (typeof provider?.name === 'string' && provider.name) ||
+          t('Unnamed provider')
+        const existing =
+          typeof provider?.slug === 'string'
+            ? existingBySlug.get(provider.slug)
+            : undefined
+
+        if (!existing && provider?.client_secret === REDACTED_SECRET) {
+          missingSecrets.push(label)
+          continue
+        }
+
+        try {
+          pending.push({
+            payload: toProviderPayload(provider, existing),
+            existing,
+          })
+        } catch {
+          invalidProviders.push(label)
+        }
+      }
+
+      if (missingSecrets.length > 0) {
+        throw new Error(
+          t(
+            'These providers do not exist on this instance and their client secrets were redacted on export. Fill in the client secrets before importing: {{list}}',
+            { list: missingSecrets.join(', ') }
+          )
+        )
+      }
+
+      if (invalidProviders.length > 0) {
+        throw new Error(
+          t('These providers are missing required fields: {{list}}', {
+            list: invalidProviders.join(', '),
+          })
+        )
+      }
+
       let created = 0
       let updated = 0
 
-      for (const provider of importProviders) {
-        const existing =
-          typeof provider.slug === 'string'
-            ? existingBySlug.get(provider.slug)
-            : undefined
-        const payload = toProviderPayload(provider, existing)
-
-        if (existing) {
+      for (const item of pending) {
+        if (item.existing) {
           await updateProvider.mutateAsync({
-            id: existing.id,
-            data: payload,
+            id: item.existing.id,
+            data: item.payload,
           })
           updated += 1
         } else {
-          await createProvider.mutateAsync(payload)
+          await createProvider.mutateAsync(item.payload)
           created += 1
         }
       }

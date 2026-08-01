@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery } from '@tanstack/react-query'
@@ -75,6 +75,9 @@ import { type User } from '../types'
 import { UserQuotaDialog } from './user-quota-dialog'
 import { useUsers } from './users-provider'
 
+const PASSWORD_MIN_LENGTH = 8
+const PASSWORD_MAX_LENGTH = 20
+
 type UsersMutateDrawerProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -90,7 +93,9 @@ export function UsersMutateDrawer({
   const isUpdate = !!currentRow
   const { triggerRefresh } = useUsers()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoadingUser, setIsLoadingUser] = useState(false)
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
+  const userLoadRequestRef = useRef(0)
 
   // Fetch groups
   const { data: groupsData } = useQuery({
@@ -108,18 +113,49 @@ export function UsersMutateDrawer({
 
   // Load existing data when updating
   useEffect(() => {
+    const requestId = ++userLoadRequestRef.current
+    let active = true
+
+    const isCurrentRequest = () =>
+      active && userLoadRequestRef.current === requestId
+
     if (open && isUpdate && currentRow) {
-      // For update, fetch fresh data
-      getUser(currentRow.id).then((result) => {
-        if (result.success && result.data) {
-          form.reset(transformUserToFormDefaults(result.data))
-        }
+      // Seed the form from the selected table row *before* awaiting the fetch.
+      // form.reset() used to run only inside the success branch, so a slow or
+      // failed load left the previously edited user's group/remark in the form
+      // while the submit payload already carried the newly selected user's id.
+      form.reset({
+        ...USER_FORM_DEFAULT_VALUES,
+        ...transformUserToFormDefaults(currentRow),
       })
+      setIsLoadingUser(true)
+      // For update, fetch fresh data
+      getUser(currentRow.id)
+        .then((result) => {
+          if (!isCurrentRequest()) return
+          if (result.success && result.data) {
+            form.reset(transformUserToFormDefaults(result.data))
+          } else {
+            toast.error(result.message || t(ERROR_MESSAGES.LOAD_FAILED))
+          }
+        })
+        .catch(() => {
+          if (!isCurrentRequest()) return
+          toast.error(t(ERROR_MESSAGES.LOAD_FAILED))
+        })
+        .finally(() => {
+          if (isCurrentRequest()) setIsLoadingUser(false)
+        })
     } else if (open && !isUpdate) {
       // For create, reset to defaults
       form.reset(USER_FORM_DEFAULT_VALUES)
+      setIsLoadingUser(false)
     }
-  }, [open, isUpdate, currentRow, form])
+
+    return () => {
+      active = false
+    }
+  }, [open, isUpdate, currentRow, form, t])
 
   const { meta: currencyMeta } = getCurrencyDisplay()
   const currencyLabel = getCurrencyLabel()
@@ -128,9 +164,16 @@ export function UsersMutateDrawer({
   const currentQuotaRaw = form.watch('quota_dollars') || 0
 
   const onSubmit = async (data: UserFormValues) => {
-    if (!isUpdate) {
-      const passwordLength = data.password?.length || 0
-      if (passwordLength < 8 || passwordLength > 20) {
+    const passwordLength = data.password?.length || 0
+    // On create a password is mandatory. On update an empty value means "keep
+    // unchanged", but a non-empty one must satisfy the same length rules; the
+    // check used to be skipped entirely for updates, so an admin could set a
+    // 1-character password from this drawer.
+    if (!isUpdate || passwordLength > 0) {
+      if (
+        passwordLength < PASSWORD_MIN_LENGTH ||
+        passwordLength > PASSWORD_MAX_LENGTH
+      ) {
         form.setError('password', {
           type: 'manual',
           message: t('Password must be between 8 and 20 characters'),
@@ -171,9 +214,13 @@ export function UsersMutateDrawer({
 
   const refreshUserData = async () => {
     if (!currentRow) return
-    const result = await getUser(currentRow.id)
-    if (result.success && result.data) {
-      form.reset(transformUserToFormDefaults(result.data))
+    try {
+      const result = await getUser(currentRow.id)
+      if (result.success && result.data) {
+        form.reset(transformUserToFormDefaults(result.data))
+      }
+    } catch (_error) {
+      toast.error(t(ERROR_MESSAGES.LOAD_FAILED))
     }
     triggerRefresh()
   }
@@ -381,6 +428,7 @@ export function UsersMutateDrawer({
                           <Button
                             type='button'
                             variant='outline'
+                            disabled={isLoadingUser}
                             onClick={() => setQuotaDialogOpen(true)}
                           >
                             <Pencil className='mr-1 h-4 w-4' />
@@ -453,7 +501,11 @@ export function UsersMutateDrawer({
             <SheetClose render={<Button variant='outline' />}>
               {t('Close')}
             </SheetClose>
-            <Button form='user-form' type='submit' disabled={isSubmitting}>
+            <Button
+              form='user-form'
+              type='submit'
+              disabled={isSubmitting || isLoadingUser}
+            >
               {isSubmitting ? t('Saving...') : t('Save changes')}
             </Button>
           </SheetFooter>

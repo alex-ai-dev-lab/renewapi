@@ -16,11 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import { resolveHttpRedirect } from '@/lib/dom-utils'
 import { requestWaffoPayment, isApiSuccess } from '../api'
+import { openPaymentRedirect } from '../lib/payment'
 
 function getPaymentUrl(data: unknown): string | null {
   if (!data || typeof data !== 'object') {
@@ -47,39 +48,65 @@ function getErrorMessage(message: string | undefined, data: unknown): string {
  */
 export function useWaffoPayment() {
   const [processing, setProcessing] = useState(false)
+  // `processing` 是异步 state，同一个 tick 内读不到最新值，
+  // 快速双击会重复下单（参见 use-payment / use-creem-payment）。
+  const processingRef = useRef(false)
 
   const processWaffoPayment = useCallback(
     async (topupAmount: number, payMethodIndex?: number) => {
+      // 原实现直接 Math.floor(topupAmount) 就发出去：
+      // Math.floor(NaN) === NaN，0 / 负数也一样会上路，完全依赖后端校验。
+      const orderAmount = Math.floor(topupAmount)
+      if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
+        toast.error(i18next.t('Payment request failed'))
+        return false
+      }
+
+      if (processingRef.current) return false
+      processingRef.current = true
+
       setProcessing(true)
+      let redirecting = false
 
       try {
         const response = await requestWaffoPayment({
-          amount: Math.floor(topupAmount),
+          amount: orderAmount,
           pay_method_index: payMethodIndex,
         })
 
-        if (isApiSuccess(response)) {
-          const paymentUrl = getPaymentUrl(response.data)
-
-          if (paymentUrl) {
-            const safePaymentUrl = resolveHttpRedirect(paymentUrl)
-            if (!safePaymentUrl) {
-              toast.error(i18next.t('Invalid payment redirect URL'))
-              return false
-            }
-            window.open(safePaymentUrl, '_blank', 'noopener,noreferrer')
-            toast.success(i18next.t('Redirecting to payment page...'))
-            return true
-          }
+        // 原实现把「业务失败」与「成功但缺 payment_url」合并到同一个 error 分支，
+        // 后者的 message 很可能就是 'success'，用户会看到写着 “success” 的报错。
+        if (!isApiSuccess(response)) {
+          toast.error(getErrorMessage(response.message, response.data))
+          return false
         }
 
-        toast.error(getErrorMessage(response.message, response.data))
-        return false
-      } catch (_error) {
-        toast.error(i18next.t('Payment request failed'))
+        const safePaymentUrl = resolveHttpRedirect(
+          getPaymentUrl(response.data) ?? undefined
+        )
+        if (!safePaymentUrl) {
+          toast.error(i18next.t('Invalid payment redirect URL'))
+          return false
+        }
+
+        const redirectResult = openPaymentRedirect(safePaymentUrl)
+        redirecting = redirectResult === 'same-tab'
+        toast.success(i18next.t('Redirecting to payment page...'))
+        return true
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('[wallet] waffo payment request failed', error)
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : i18next.t('Payment request failed')
+        toast.error(message)
         return false
       } finally {
-        setProcessing(false)
+        if (!redirecting) {
+          processingRef.current = false
+          setProcessing(false)
+        }
       }
     },
     []

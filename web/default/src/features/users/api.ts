@@ -28,6 +28,31 @@ import type {
   ApiResponse,
 } from './types'
 
+const DEFAULT_PAGE = 1
+const DEFAULT_PAGE_SIZE = 10
+
+/**
+ * 仅在值非空时写入查询参数。
+ * 注意不能用 `if (value)` 判断：`0` 是合法的 role（游客）/ status 值，
+ * 会被 falsy 判断静默丢掉，导致筛选失效、返回全量数据。
+ */
+function setIfPresent(
+  target: URLSearchParams,
+  key: string,
+  value: string | number | undefined | null
+) {
+  if (value === undefined || value === null) return
+  const str = String(value)
+  if (str === '') return
+  target.set(key, str)
+}
+
+function normalizePositiveInt(value: unknown, fallback: number): number {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num < 1) return fallback
+  return Math.floor(num)
+}
+
 // ============================================================================
 // User Management APIs
 // ============================================================================
@@ -38,13 +63,19 @@ import type {
 export async function getUsers(
   params: GetUsersParams = {}
 ): Promise<GetUsersResponse> {
-  const { p = 1, page_size = 10 } = params
-  const res = await api.get(`/api/user/?p=${p}&page_size=${page_size}`)
+  const { p = DEFAULT_PAGE, page_size = DEFAULT_PAGE_SIZE } = params
+  const queryParams = new URLSearchParams()
+  queryParams.set('p', String(normalizePositiveInt(p, DEFAULT_PAGE)))
+  queryParams.set(
+    'page_size',
+    String(normalizePositiveInt(page_size, DEFAULT_PAGE_SIZE))
+  )
+  const res = await api.get(`/api/user/?${queryParams.toString()}`)
   return res.data
 }
 
 /**
- * Search users by keyword or group
+ * Search users by keyword / group / role / status
  */
 export async function searchUsers(
   params: SearchUsersParams
@@ -54,16 +85,19 @@ export async function searchUsers(
     group = '',
     role = '',
     status = '',
-    p = 1,
-    page_size = 10,
+    p = DEFAULT_PAGE,
+    page_size = DEFAULT_PAGE_SIZE,
   } = params
   const queryParams = new URLSearchParams()
-  queryParams.set('keyword', keyword)
-  queryParams.set('group', group)
-  if (role) queryParams.set('role', role)
-  if (status) queryParams.set('status', status)
-  queryParams.set('p', String(p))
-  queryParams.set('page_size', String(page_size))
+  setIfPresent(queryParams, 'keyword', keyword)
+  setIfPresent(queryParams, 'group', group)
+  setIfPresent(queryParams, 'role', role)
+  setIfPresent(queryParams, 'status', status)
+  queryParams.set('p', String(normalizePositiveInt(p, DEFAULT_PAGE)))
+  queryParams.set(
+    'page_size',
+    String(normalizePositiveInt(page_size, DEFAULT_PAGE_SIZE))
+  )
   const res = await api.get(`/api/user/search?${queryParams.toString()}`)
   return res.data
 }
@@ -97,7 +131,8 @@ export async function updateUser(
 }
 
 /**
- * Delete a single user (hard delete)
+ * Delete a single user.
+ * 注：服务端 User 带 gorm.DeletedAt，此处为软删除，不是原注释所说的 hard delete。
  */
 export async function deleteUser(id: number): Promise<ApiResponse> {
   const res = await api.delete(`/api/user/${id}/`)
@@ -106,6 +141,9 @@ export async function deleteUser(id: number): Promise<ApiResponse> {
 
 /**
  * Manage user (promote, demote, enable, disable, delete)
+ *
+ * 历史遗留：升降权 / 启禁用 / 删除 / 调额共用同一个 POST /api/user/manage
+ * 端点，仅靠 body 字段分发。语义混杂且审计日志粒度差，后端拆分后应同步调整。
  */
 export async function manageUser(
   id: number,
@@ -117,6 +155,7 @@ export async function manageUser(
 
 /**
  * Adjust user quota atomically (add/subtract/override)
+ * 同上：与 manageUser 共用 /api/user/manage。
  */
 export async function adjustUserQuota(
   payload: ManageUserQuotaPayload
@@ -179,7 +218,9 @@ export async function adminClearUserBinding(
   userId: number,
   bindingType: string
 ): Promise<ApiResponse> {
-  const res = await api.delete(`/api/user/${userId}/bindings/${bindingType}`)
+  const res = await api.delete(
+    `/api/user/${userId}/bindings/${encodeURIComponent(bindingType)}`
+  )
   return res.data
 }
 
@@ -191,7 +232,7 @@ export async function adminUnbindCustomOAuth(
   providerId: string
 ): Promise<ApiResponse> {
   const res = await api.delete(
-    `/api/user/${userId}/oauth/bindings/${providerId}`
+    `/api/user/${userId}/oauth/bindings/${encodeURIComponent(providerId)}`
   )
   return res.data
 }

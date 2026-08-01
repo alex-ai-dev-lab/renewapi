@@ -40,6 +40,9 @@ interface JsonErrorPosition {
   position?: number
 }
 
+const isBlankValue = (value: string | undefined | null): boolean =>
+  !value || value.trim() === ''
+
 function extractErrorPosition(
   error: unknown,
   jsonString: string
@@ -89,17 +92,18 @@ function formatErrorDescription(
   const position = extractErrorPosition(error, jsonString)
   const message = error.message
 
-  // Check if it's a "missing comma" type error
-  const isMissingCommaError =
+  // A missing separator is the most common cause of these messages, but the
+  // reported position is where parsing stopped, not necessarily where the
+  // mistake is. Keep the hint neutral instead of blaming a specific line.
+  const mayBeMissingSeparator =
     message.includes("Expected ','") ||
     message.includes('Expected property name') ||
     message.includes('Unexpected string')
 
   if (position.line && position.column) {
-    let hint = ''
-    if (isMissingCommaError && position.line > 1) {
-      hint = ` (check line ${position.line - 1} for missing comma)`
-    }
+    const hint = mayBeMissingSeparator
+      ? ' (a missing comma before this point is a common cause)'
+      : ''
     return `Error at line ${position.line}, column ${position.column}: ${message}${hint}`
   }
 
@@ -116,17 +120,18 @@ export function safeJsonParse<T = unknown>(
 ): T {
   const { fallback, silent = false, context } = options
 
-  if (!value || value.trim() === '') {
+  if (isBlankValue(value)) {
     return (fallback ?? null) as T
   }
 
-  const trimmedValue = value.trim()
+  const trimmedValue = (value as string).trim()
 
   try {
     return JSON.parse(trimmedValue) as T
   } catch (error) {
-    // Log error for debugging in development
-    if (import.meta.env.DEV && !silent) {
+    // Malformed stored settings are a production problem too, so this is not
+    // gated on DEV. Callers that expect invalid input pass silent: true.
+    if (!silent) {
       const message = context
         ? `Failed to parse ${context}`
         : 'Invalid JSON format'
@@ -149,11 +154,18 @@ export function safeJsonParseWithValidation<T>(
     context,
     silent = false,
   } = options
-  const parsed = safeJsonParse(value, { fallback, silent: true, context })
+
+  // An empty field is a normal "not configured yet" state, not invalid data.
+  if (isBlankValue(value)) {
+    return fallback
+  }
+
+  // Forward `silent` instead of always suppressing: a syntax error carries the
+  // line/column detail that the validation message below cannot reconstruct.
+  const parsed = safeJsonParse(value, { fallback, silent, context })
 
   if (!validator(parsed)) {
-    // Log error for debugging in development
-    if (import.meta.env.DEV && !silent) {
+    if (!silent) {
       const message =
         validatorMessage ??
         (context ? `Invalid ${context} structure` : 'Invalid data structure')
@@ -169,12 +181,12 @@ export function safeJsonParseWithValidation<T>(
 export function tryJsonParse<T = unknown>(
   value: string | undefined | null
 ): JsonParseResult<T> {
-  if (!value || value.trim() === '') {
+  if (isBlankValue(value)) {
     return { success: false, error: 'Empty value' }
   }
 
   try {
-    const data = JSON.parse(value.trim()) as T
+    const data = JSON.parse((value as string).trim()) as T
     return { success: true, data }
   } catch (error) {
     return {

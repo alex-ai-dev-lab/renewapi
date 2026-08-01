@@ -16,44 +16,71 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import { resolveHttpRedirect } from '@/lib/dom-utils'
 import { requestCreemPayment, isApiSuccess } from '../api'
+import { openPaymentRedirect } from '../lib/payment'
 
 /**
  * Hook for handling Creem payment processing
  */
 export function useCreemPayment() {
   const [processing, setProcessing] = useState(false)
+  // `processing` 是异步 state，同一个 tick 内读不到最新值，
+  // 快速双击会向 Creem 重复下单（参见 use-payment 的同类修正）。
+  const processingRef = useRef(false)
 
   const processCreemPayment = useCallback(async (productId: string) => {
+    if (!productId) {
+      toast.error(i18next.t('Payment request failed'))
+      return false
+    }
+
+    if (processingRef.current) return false
+    processingRef.current = true
+
     setProcessing(true)
+    let redirecting = false
     try {
       const response = await requestCreemPayment({
         product_id: productId,
         payment_method: 'creem',
       })
 
-      if (isApiSuccess(response) && response.data?.checkout_url) {
-        const checkoutUrl = resolveHttpRedirect(response.data.checkout_url)
-        if (!checkoutUrl) {
-          toast.error(i18next.t('Invalid payment redirect URL'))
-          return false
-        }
-        window.open(checkoutUrl, '_blank', 'noopener,noreferrer')
-        toast.success(i18next.t('Redirecting to Creem checkout...'))
-        return true
+      // 原实现把「业务失败」与「成功但缺 checkout_url」合并到同一个 error 分支，
+      // 那时 response.message 很可能就是 'success'，用户会看到一个写着
+      // “success” 的红色错误提示。现在分开处理。
+      if (!isApiSuccess(response)) {
+        toast.error(response.message || i18next.t('Payment request failed'))
+        return false
       }
 
-      toast.error(response.message || i18next.t('Payment request failed'))
-      return false
-    } catch (_error) {
-      toast.error(i18next.t('Payment request failed'))
+      const checkoutUrl = resolveHttpRedirect(response.data?.checkout_url)
+      if (!checkoutUrl) {
+        toast.error(i18next.t('Invalid payment redirect URL'))
+        return false
+      }
+
+      const redirectResult = openPaymentRedirect(checkoutUrl)
+      redirecting = redirectResult === 'same-tab'
+      toast.success(i18next.t('Redirecting to Creem checkout...'))
+      return true
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[wallet] creem payment request failed', error)
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : i18next.t('Payment request failed')
+      toast.error(message)
       return false
     } finally {
-      setProcessing(false)
+      if (!redirecting) {
+        processingRef.current = false
+        setProcessing(false)
+      }
     }
   }, [])
 

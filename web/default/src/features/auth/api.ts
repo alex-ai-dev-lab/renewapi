@@ -26,6 +26,8 @@ import type {
   ApiResponse,
 } from './types'
 
+const GITHUB_OAUTH_AUTHORIZE_URL = 'https://github.com/login/oauth/authorize'
+
 // ============================================================================
 // Authentication APIs
 // ============================================================================
@@ -36,13 +38,15 @@ import type {
 
 // User login with username and password
 export async function login(payload: LoginPayload) {
-  const turnstile = payload.turnstile ?? ''
   const res = await api.post<LoginResponse>(
-    `/api/user/login?turnstile=${turnstile}`,
+    '/api/user/login',
     {
       username: payload.username,
       password: payload.password,
-    }
+    },
+    // Use axios params so the token is percent-encoded, matching register().
+    // The previous template string interpolated it into the query verbatim.
+    { params: { turnstile: payload.turnstile ?? '' } }
   )
   return res.data
 }
@@ -78,10 +82,25 @@ export async function sendPasswordResetEmail(
 // OAuth
 // ----------------------------------------------------------------------------
 
-// Start GitHub OAuth flow
+/**
+ * Start GitHub OAuth flow
+ *
+ * Deprecated: this duplicates buildGitHubOAuthUrl + handleGitHubOAuth in
+ * `@/lib/oauth`, which is the implementation the sign-in screen uses. Kept as a
+ * thin wrapper so existing callers keep working; migrate them to `@/lib/oauth`
+ * and delete this function.
+ */
 export async function githubOAuthStart(clientId: string, state: string) {
-  const url = `https://github.com/login/oauth/authorize?client_id=${clientId}&state=${state}&scope=user:email`
-  window.open(url)
+  // Build with URL/searchParams instead of string concatenation: clientId and
+  // state went into the query unencoded before.
+  const url = new URL(GITHUB_OAUTH_AUTHORIZE_URL)
+  url.searchParams.set('client_id', clientId)
+  url.searchParams.set('state', state)
+  url.searchParams.set('scope', 'user:email')
+
+  // noopener/noreferrer: without them the opened page can reach back through
+  // window.opener and navigate this tab (reverse tabnabbing).
+  window.open(url.toString(), '_blank', 'noopener,noreferrer')
 }
 
 // Get OAuth state for CSRF protection

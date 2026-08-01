@@ -62,6 +62,12 @@ func Distribute() func(c *gin.Context) {
 			common.SetContextKey(c, constant.ContextKeyFallbackModels, modelRequest.Models)
 		}
 		if ok {
+			// A token pinned to a specific channel still has to respect its own
+			// model whitelist. Requests that do not select a channel (task fetch,
+			// notify, ...) carry no model name, so the whitelist cannot apply.
+			if shouldSelectChannel && !enforceTokenModelLimit(c, clientModel) {
+				return
+			}
 			id, err := strconv.Atoi(channelId.(string))
 			if err != nil {
 				abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId))
@@ -96,24 +102,8 @@ func Distribute() func(c *gin.Context) {
 		} else {
 			// Select a channel for the user
 			// check token model mapping
-			modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
-			if modelLimitEnable {
-				s, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
-				if !ok {
-					// token model limit is empty, all models are not allowed
-					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenNoModelAccess))
-					return
-				}
-				var tokenModelLimit map[string]bool
-				tokenModelLimit, ok = s.(map[string]bool)
-				if !ok {
-					tokenModelLimit = map[string]bool{}
-				}
-				matchName := ratio_setting.FormatMatchingModelName(clientModel) // match gpts & thinking-*
-				if _, ok := tokenModelLimit[matchName]; !ok {
-					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenModelForbidden, map[string]any{"Model": clientModel}))
-					return
-				}
+			if !enforceTokenModelLimit(c, clientModel) {
+				return
 			}
 
 			if shouldSelectChannel {
@@ -253,6 +243,35 @@ func Distribute() func(c *gin.Context) {
 			service.RecordCompactionResponseAffinity(c, finalChannelID, clientModel, common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
 		}
 	}
+}
+
+// enforceTokenModelLimit checks the requested model against the model whitelist
+// carried by the API token. It aborts the request and reports false when the
+// model is not allowed, so callers must return immediately.
+//
+// This must run on every path that ends up relaying a request, including tokens
+// that pin a specific channel id: the pinned channel decides where the request
+// goes, never which models the token may reach.
+func enforceTokenModelLimit(c *gin.Context, clientModel string) bool {
+	if !common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled) {
+		return true
+	}
+	s, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
+	if !ok {
+		// token model limit is empty, all models are not allowed
+		abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenNoModelAccess))
+		return false
+	}
+	tokenModelLimit, ok := s.(map[string]bool)
+	if !ok {
+		tokenModelLimit = map[string]bool{}
+	}
+	matchName := ratio_setting.FormatMatchingModelName(clientModel) // match gpts & thinking-*
+	if _, ok := tokenModelLimit[matchName]; !ok {
+		abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenModelForbidden, map[string]any{"Model": clientModel}))
+		return false
+	}
+	return true
 }
 
 // channelAffinityFallbackOnly reports whether channel affinity should only be used

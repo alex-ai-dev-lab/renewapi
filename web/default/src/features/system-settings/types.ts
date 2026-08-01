@@ -371,6 +371,7 @@ export type SecuritySettings = {
   'anti_poison_setting.strip_guard_output': boolean
   'anti_poison_setting.signed_header_audit_enabled': boolean
   'anti_poison_setting.signed_header_audit_secret': string
+  'anti_poison_setting.signed_header_audit_secret_configured': boolean
   'anti_poison_setting.max_guard_scan_bytes': number
   'anti_poison_setting.downstream_proof_header': boolean
   'anti_poison_setting.profiles': string

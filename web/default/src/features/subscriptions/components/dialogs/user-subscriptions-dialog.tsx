@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -59,7 +59,7 @@ import {
   invalidateUserSubscription,
   deleteUserSubscription,
 } from '../../api'
-import { formatTimestamp } from '../../lib'
+import { formatPlanAmount, formatTimestamp } from '../../lib'
 import type { PlanRecord, UserSubscriptionRecord } from '../../types'
 
 interface Props {
@@ -106,6 +106,11 @@ export function UserSubscriptionsDialog(props: Props) {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false)
+  // creating / actionLoading 都是异步 state：双击「添加订阅」会给同一用户
+  // 挂两份订阅（白送额度），双击确认则会发两次作废/删除。
+  const creatingRef = useRef(false)
+  const actionRef = useRef(false)
   const [plans, setPlans] = useState<PlanRecord[]>([])
   const [subs, setSubs] = useState<UserSubscriptionRecord[]>([])
   const [selectedPlanId, setSelectedPlanId] = useState<string>('')
@@ -130,8 +135,17 @@ export function UserSubscriptionsDialog(props: Props) {
         getAdminPlans(),
         getUserSubscriptions(props.user.id),
       ])
-      if (plansRes.success) setPlans(plansRes.data || [])
-      if (subsRes.success) setSubs(subsRes.data || [])
+      if (plansRes.success) {
+        setPlans(plansRes.data || [])
+      } else {
+        // 原实现业务层失败时静默：下拉框空空如也，看不出是「没计划」还是「拉失败」。
+        toast.error(plansRes.message || t('Loading failed'))
+      }
+      if (subsRes.success) {
+        setSubs(subsRes.data || [])
+      } else {
+        toast.error(subsRes.message || t('Loading failed'))
+      }
     } catch {
       toast.error(t('Loading failed'))
     } finally {
@@ -151,6 +165,8 @@ export function UserSubscriptionsDialog(props: Props) {
       toast.error(t('Please select a subscription plan'))
       return
     }
+    if (creatingRef.current) return
+    creatingRef.current = true
     setCreating(true)
     try {
       const res = await createUserSubscription(props.user.id, {
@@ -161,16 +177,26 @@ export function UserSubscriptionsDialog(props: Props) {
         setSelectedPlanId('')
         await loadData()
         props.onSuccess?.()
+      } else {
+        toast.error(res.message || t('Request failed'))
       }
-    } catch {
-      toast.error(t('Request failed'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error && error.message
+          ? error.message
+          : t('Request failed')
+      )
     } finally {
+      creatingRef.current = false
       setCreating(false)
     }
   }
 
   const handleConfirmAction = async () => {
     if (!confirmAction) return
+    if (actionRef.current) return
+    actionRef.current = true
+    setActionLoading(true)
     try {
       if (confirmAction.type === 'invalidate') {
         const res = await invalidateUserSubscription(confirmAction.subId)
@@ -178,6 +204,8 @@ export function UserSubscriptionsDialog(props: Props) {
           toast.success(res.data?.message || t('Has been invalidated'))
           await loadData()
           props.onSuccess?.()
+        } else {
+          toast.error(res.message || t('Operation failed'))
         }
       } else {
         const res = await deleteUserSubscription(confirmAction.subId)
@@ -185,11 +213,19 @@ export function UserSubscriptionsDialog(props: Props) {
           toast.success(t('Deleted'))
           await loadData()
           props.onSuccess?.()
+        } else {
+          toast.error(res.message || t('Operation failed'))
         }
       }
-    } catch {
-      toast.error(t('Operation failed'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error && error.message
+          ? error.message
+          : t('Operation failed')
+      )
     } finally {
+      actionRef.current = false
+      setActionLoading(false)
       setConfirmAction(null)
     }
   }
@@ -211,12 +247,10 @@ export function UserSubscriptionsDialog(props: Props) {
                 items={[
                   ...plans.map((p) => ({
                     value: String(p.plan.id),
-                    label: (
-                      <>
-                        {p.plan.title}($
-                        {Number(p.plan.price_amount || 0).toFixed(2)})
-                      </>
-                    ),
+                    label: `${p.plan.title} (${formatPlanAmount(
+                      p.plan.price_amount,
+                      p.plan.currency
+                    )})`,
                   })),
                 ]}
                 value={selectedPlanId}
@@ -229,8 +263,9 @@ export function UserSubscriptionsDialog(props: Props) {
                   <SelectGroup>
                     {plans.map((p) => (
                       <SelectItem key={p.plan.id} value={String(p.plan.id)}>
-                        {p.plan.title} ($
-                        {Number(p.plan.price_amount || 0).toFixed(2)})
+                        {p.plan.title} (
+                        {formatPlanAmount(p.plan.price_amount, p.plan.currency)}
+                        )
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -320,7 +355,7 @@ export function UserSubscriptionsDialog(props: Props) {
                               <Button
                                 size='sm'
                                 variant='outline'
-                                disabled={!isActive}
+                                disabled={!isActive || actionLoading}
                                 onClick={() =>
                                   setConfirmAction({
                                     type: 'invalidate',
@@ -333,6 +368,7 @@ export function UserSubscriptionsDialog(props: Props) {
                               <Button
                                 size='sm'
                                 variant='destructive'
+                                disabled={actionLoading}
                                 onClick={() =>
                                   setConfirmAction({
                                     type: 'delete',
@@ -359,6 +395,7 @@ export function UserSubscriptionsDialog(props: Props) {
         <ConfirmDialog
           open
           onOpenChange={(v) => !v && setConfirmAction(null)}
+          isLoading={actionLoading}
           title={
             confirmAction.type === 'invalidate'
               ? t('Confirm invalidate')

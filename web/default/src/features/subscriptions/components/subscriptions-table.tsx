@@ -27,6 +27,8 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { DataTablePage } from '@/components/data-table'
 import { getAdminPlans } from '../api'
 import { useSubscriptionsColumns } from './subscriptions-columns'
@@ -39,10 +41,17 @@ export function SubscriptionsTable() {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
+    // NOTE: 把递增计数器拼进 queryKey 等于每次刷新都新建一个缓存条目，
+    // 旧条目要等 gcTime 才回收；正确做法是 invalidateQueries（已记入 PR）。
     queryKey: ['admin-subscription-plans', refreshTrigger],
     queryFn: async () => {
       const result = await getAdminPlans()
+      // 原实现直接 `result.data || []`：业务层失败（success=false）也会被
+      // 当成「空列表」，管理员会误以为订阅计划被清空了。
+      if (result && result.success === false) {
+        throw new Error(result.message || 'Failed to load subscription plans')
+      }
       return result.data || []
     },
     placeholderData: (prev) => prev,
@@ -60,6 +69,25 @@ export function SubscriptionsTable() {
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
   })
+
+  // 拉取失败且手头没有任何数据时，绝不能渲染成「暂无订阅计划」。
+  if (isError && plans.length === 0) {
+    return (
+      <Alert variant='destructive'>
+        <AlertDescription className='flex items-center justify-between gap-4'>
+          <span>{t('Failed to load subscription plans')}</span>
+          <Button
+            size='sm'
+            variant='outline'
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            {t('Retry')}
+          </Button>
+        </AlertDescription>
+      </Alert>
+    )
+  }
 
   return (
     <DataTablePage

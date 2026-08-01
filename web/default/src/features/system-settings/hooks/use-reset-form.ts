@@ -21,24 +21,47 @@ import type { DefaultValues, FieldValues, UseFormReturn } from 'react-hook-form'
 
 /**
  * Reset a react-hook-form instance whenever the provided default values change.
- * Guards against naively resetting on every render by tracking the last
- * serialized snapshot of the defaults.
+ * Guards against naively resetting on every render by tracking serialized
+ * snapshots of the defaults.
+ *
+ * A form that the user is currently editing is never reset: settings pages are
+ * fed by a cached query that can refetch at any time (window focus, cache
+ * expiry, a save performed in another tab), and resetting on that would wipe
+ * half-typed values with no warning. A snapshot first observed while dirty is
+ * deliberately not applied just because the form later becomes clean: it may
+ * be the stale query value that preceded a successful save. A later server
+ * snapshot is still applied once the form is clean.
  */
 export function useResetForm<TFieldValues extends FieldValues>(
   form: UseFormReturn<TFieldValues>,
   values: DefaultValues<TFieldValues> | undefined
 ) {
-  const lastSerializedDefaults = useRef<string | null>(null)
+  const lastAppliedSerializedDefaults = useRef<string | null>(null)
+  const deferredSerializedDefaults = useRef<string | null>(null)
+  const { isDirty } = form.formState
 
   useEffect(() => {
     if (!values) return
 
     const serializedDefaults = JSON.stringify(values)
-    if (serializedDefaults === lastSerializedDefaults.current) {
+    if (serializedDefaults === lastAppliedSerializedDefaults.current) {
+      return
+    }
+
+    if (isDirty) {
+      deferredSerializedDefaults.current = serializedDefaults
+      return
+    }
+
+    // Do not apply a snapshot that arrived during the edit. The caller may
+    // have just reset the form to the successfully saved local values while
+    // the query cache still exposes that older snapshot.
+    if (deferredSerializedDefaults.current === serializedDefaults) {
       return
     }
 
     form.reset(values)
-    lastSerializedDefaults.current = serializedDefaults
-  }, [values, form])
+    lastAppliedSerializedDefaults.current = serializedDefaults
+    deferredSerializedDefaults.current = null
+  }, [values, form, isDirty])
 }

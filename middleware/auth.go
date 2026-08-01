@@ -22,6 +22,14 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	// authVersionFingerprint 随 Auth-Version 响应头下发，用于防止不同 newapi 版本的
+	// 前后端混用。值本身无意义，只要前后端一致；改动前先确认前端已同步。
+	authVersionFingerprint = "864b7076dbcd0a3c01b5520316720ebf"
+	// specificChannelVersionFingerprint 同上，用于“指定渠道”能力的版本握手。
+	specificChannelVersionFingerprint = "701e3ae1dc3f7975556d354e0675168d004891c8"
+)
+
 func validUserInfo(username string, role int) bool {
 	// check username is empty
 	if strings.TrimSpace(username) == "" {
@@ -131,6 +139,21 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
+	// session 里的 status 是登录那一瞬的快照。封禁用户只会失效用户缓存，不会动 session，
+	// 所以只信 session 会让被封号的人持旧会话继续访问直到 session 过期。
+	// 这里以用户缓存为权威源重新校验；缓存/DB 不可用时必须 fail closed，
+	// 不能把可能已经失效的 session 快照当成授权依据。
+	if userCache, cacheErr := model.GetUserCache(userIdInt); cacheErr == nil {
+		statusInt = userCache.Status
+	} else {
+		common.SysLog(fmt.Sprintf("authHelper GetUserCache error for user %d: %v", userIdInt, cacheErr))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
+		})
+		c.Abort()
+		return
+	}
 	if statusInt == common.UserStatusDisabled {
 		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,
@@ -166,12 +189,22 @@ func authHelper(c *gin.Context, minRole int) {
 		return
 	}
 	// 防止不同newapi版本冲突，导致数据不通用
-	c.Header("Auth-Version", "864b7076dbcd0a3c01b5520316720ebf")
+	c.Header("Auth-Version", authVersionFingerprint)
+	// access token 路径下根本没有 session，session.Get("group") 永远是 nil，
+	// 于是下游从 c.Get("group") 拿到空分组。这里在缺失时从用户缓存补齐。
+	groupValue := session.Get("group")
+	if groupValue == nil {
+		if userCache, cacheErr := model.GetUserCache(userIdInt); cacheErr == nil {
+			groupValue = userCache.Group
+		} else {
+			common.SysLog(fmt.Sprintf("authHelper resolve group failed for user %d: %v", userIdInt, cacheErr))
+		}
+	}
 	c.Set("username", username)
 	c.Set("role", role)
 	c.Set("id", id)
-	c.Set("group", session.Get("group"))
-	c.Set("user_group", session.Get("group"))
+	c.Set("group", groupValue)
+	c.Set("user_group", groupValue)
 	c.Set("use_access_token", useAccessToken)
 	if minRole >= common.RoleAdminUser && !enforcePanelRateLimit(c) {
 		return
@@ -209,8 +242,10 @@ func RootAuth() func(c *gin.Context) {
 	}
 }
 
+// Deprecated: WssAuth 是一个空实现，不做任何验证。WebSocket 路由实际靠 TokenAuth
+// （它会从 Sec-WebSocket-Protocol 里取 openai-insecure-api-key）。不要把它当成认证
+// 中间件挂到任何路由上；确认无引用后应直接删除。
 func WssAuth(c *gin.Context) {
-
 }
 
 // TokenOrUserAuth allows either session-based user auth or API token auth.
@@ -248,7 +283,7 @@ func TokenOrUserAuth() func(c *gin.Context) {
 }
 
 // TokenAuthReadOnly 宽松版本的令牌认证中间件，用于只读查询接口。
-// 允许已过期或已耗尽的令牌查询历史数据，但显式禁用的令牌会被拒绝。
+// 允许已过期或已耗尽的令牌查询历史数据，但显式禁用的令牌会被拒绍。
 // 仍然检查用户是否被封禁。
 func TokenAuthReadOnly() func(c *gin.Context) {
 	return func(c *gin.Context) {
@@ -265,8 +300,9 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 			key = strings.TrimSpace(key[7:])
 		}
 		key = strings.TrimPrefix(key, "sk-")
-		parts := strings.Split(key, "-")
-		key = parts[0]
+		// 注意: 这个切分是协议的一部分而不是 bug——`sk-<key>-<channelId>` 里第二段
+		// 用于指定渠道(见 SetupContextForToken)。只读接口不需要渠道后缀，丢弃即可。
+		key = strings.Split(key, "-")[0]
 
 		token, err := model.GetTokenByKey(key, false)
 		if err != nil {
@@ -350,6 +386,8 @@ func TokenAuth() func(c *gin.Context) {
 			}
 		}
 		// gemini api 从query中获取key
+		// 注意: 从 query 取 key 是 Gemini 官方协议要求，不能去掉；但 URL 会被反向代理、
+		// 网关、浏览器历史记下。部署时应确保访问日志对 ?key= 做脉络脉。
 		if strings.HasPrefix(c.Request.URL.Path, "/v1beta/models") ||
 			strings.HasPrefix(c.Request.URL.Path, "/v1beta/openai/models") ||
 			strings.HasPrefix(c.Request.URL.Path, "/v1/models/") {
@@ -402,6 +440,8 @@ func TokenAuth() func(c *gin.Context) {
 
 		allowIps := token.GetIpLimits()
 		if len(allowIps) > 0 {
+			// 注意: c.ClientIP() 依赖 Gin 的可信代理配置。若 TrustedProxies 配得太宽，
+			// X-Forwarded-For 可被伪造，令牌 IP 白名单会被绕过。
 			clientIp := c.ClientIP()
 			logger.LogDebug(c, "Token has IP restrictions, checking client IP %s", clientIp)
 			ip := net.ParseIP(clientIp)
@@ -409,7 +449,7 @@ func TokenAuth() func(c *gin.Context) {
 				abortWithOpenAiMessage(c, http.StatusForbidden, "无法解析客户端 IP 地址")
 				return
 			}
-			if common.IsIpInCIDRList(ip, allowIps) == false {
+			if !common.IsIpInCIDRList(ip, allowIps) {
 				abortWithOpenAiMessage(c, http.StatusForbidden, "您的 IP 不在令牌允许访问的列表中", types.ErrorCodeAccessDenied)
 				return
 			}
@@ -482,10 +522,12 @@ func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) e
 	common.SetContextKey(c, constant.ContextKeyTokenTPMLimit, token.TPMLimit)
 	common.SetContextKey(c, constant.ContextKeyTokenConcurrencyLimit, token.ConcurrencyLimit)
 	if len(parts) > 1 {
+		// 注意: IsAdmin 每次都直接打库(无缓存)。只有带了渠道后缀的请求会走到这里，
+		// 量小时可接受；若这条路径转热，需要给 role 加缓存。
 		if model.IsAdmin(token.UserId) {
 			c.Set("specific_channel_id", parts[1])
 		} else {
-			c.Header("specific_channel_version", "701e3ae1dc3f7975556d354e0675168d004891c8")
+			c.Header("specific_channel_version", specificChannelVersionFingerprint)
 			abortWithOpenAiMessage(c, http.StatusForbidden, "普通用户不支持指定渠道")
 			return fmt.Errorf("普通用户不支持指定渠道")
 		}

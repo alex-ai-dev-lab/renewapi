@@ -52,7 +52,11 @@ import {
   updateBillingPreference,
 } from '@/features/subscriptions/api'
 import { SubscriptionPurchaseDialog } from '@/features/subscriptions/components/dialogs/subscription-purchase-dialog'
-import { formatDuration, formatResetPeriod } from '@/features/subscriptions/lib'
+import {
+  formatDuration,
+  formatPlanAmount,
+  formatResetPeriod,
+} from '@/features/subscriptions/lib'
 import type {
   PlanRecord,
   UserSubscriptionRecord,
@@ -109,6 +113,11 @@ export function SubscriptionPlansCard({
     useState('subscription_first')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  // Distinguishes "the operator has no plans configured" (hide the card) from
+  // "we could not reach the server" (show an error with a retry). Previously
+  // both collapsed into `return null`, so a failing endpoint made the entire
+  // subscription section vanish and users concluded the feature did not exist.
+  const [loadFailed, setLoadFailed] = useState(false)
 
   const [purchaseOpen, setPurchaseOpen] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<PlanRecord | null>(null)
@@ -127,11 +136,15 @@ export function SubscriptionPlansCard({
       const res = await getPublicPlans()
       if (res.success) {
         setPlans(res.data || [])
+        return true
       }
-    } catch {
-      setPlans([])
+      toast.error(res.message || t('Failed to load subscription plans'))
+      return false
+    } catch (error) {
+      toast.error(t('Failed to load subscription plans'))
+      return false
     }
-  }, [])
+  }, [t])
 
   const fetchSelfSubscription = useCallback(async () => {
     try {
@@ -142,20 +155,29 @@ export function SubscriptionPlansCard({
         )
         setActiveSubscriptions(res.data.subscriptions || [])
         setAllSubscriptions(res.data.all_subscriptions || [])
+        return true
       }
-    } catch {
-      // ignore
+      toast.error(res.message || t('Failed to load your subscriptions'))
+      return false
+    } catch (error) {
+      toast.error(t('Failed to load your subscriptions'))
+      return false
     }
-  }, [])
+  }, [t])
+
+  const loadAll = useCallback(async () => {
+    setLoading(true)
+    const [plansOk, subsOk] = await Promise.all([
+      fetchPlans(),
+      fetchSelfSubscription(),
+    ])
+    setLoadFailed(!plansOk || !subsOk)
+    setLoading(false)
+  }, [fetchPlans, fetchSelfSubscription])
 
   useEffect(() => {
-    const init = async () => {
-      setLoading(true)
-      await Promise.all([fetchPlans(), fetchSelfSubscription()])
-      setLoading(false)
-    }
-    init()
-  }, [fetchPlans, fetchSelfSubscription])
+    loadAll()
+  }, [loadAll])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -195,6 +217,10 @@ export function SubscriptionPlansCard({
   const displayPref =
     disablePref && isSubPref ? 'wallet_first' : billingPreference
 
+  // NOTE: this counts every historical record for the plan, including expired
+  // and cancelled ones. If the backend only counts active subscriptions when
+  // enforcing max_purchase_per_user, the button below locks earlier than the
+  // server actually requires. Needs a backend confirmation before changing.
   const planPurchaseCountMap = useMemo(() => {
     const map = new Map<number, number>()
     for (const sub of allSubscriptions) {
@@ -248,6 +274,27 @@ export function SubscriptionPlansCard({
           </div>
         </CardContent>
       </Card>
+    )
+  }
+
+  // A failed load must not look like "this site has no subscriptions".
+  if (loadFailed && plans.length === 0 && !hasAny) {
+    return (
+      <TitledCard
+        title={t('Subscription Plans')}
+        description={t('Subscribe to a plan for model access')}
+        icon={<Crown className='h-4 w-4' />}
+      >
+        <div className='flex flex-col items-center gap-3 py-6'>
+          <p className='text-muted-foreground text-sm'>
+            {t('Failed to load subscription plans')}
+          </p>
+          <Button variant='outline' size='sm' onClick={loadAll}>
+            <RefreshCw className='mr-2 h-3.5 w-3.5' />
+            {t('Retry')}
+          </Button>
+        </div>
+      </TitledCard>
     )
   }
 
@@ -516,7 +563,10 @@ export function SubscriptionPlansCard({
               const plan = p?.plan
               if (!plan) return null
               const totalAmount = Number(plan.total_amount || 0)
-              const price = Number(plan.price_amount || 0).toFixed(2)
+              const priceLabel = formatPlanAmount(
+                plan.price_amount,
+                plan.currency
+              )
               const isPopular = index === 0 && plans.length > 1
               const limit = Number(plan.max_purchase_per_user || 0)
               const count = planPurchaseCountMap.get(plan.id) || 0
@@ -570,7 +620,7 @@ export function SubscriptionPlansCard({
 
                     <div className='py-2'>
                       <span className='text-primary text-2xl font-bold'>
-                        ${price}
+                        {priceLabel}
                       </span>
                     </div>
 

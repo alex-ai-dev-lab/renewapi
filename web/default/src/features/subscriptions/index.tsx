@@ -30,7 +30,7 @@ import { SubscriptionsTable } from './components/subscriptions-table'
 
 function SubscriptionsContent() {
   const { t } = useTranslation()
-  const { complianceConfirmed } = useSubscriptions()
+  const { complianceConfirmed, complianceLoading } = useSubscriptions()
 
   return (
     <>
@@ -52,7 +52,11 @@ function SubscriptionsContent() {
           </div>
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          {!complianceConfirmed ? (
+          {/*
+            系统配置还在加载时 complianceConfirmed 必然为 false，
+            原实现会在首屏闪现一条红色「合规未确认」告警。
+          */}
+          {!complianceLoading && !complianceConfirmed ? (
             <Alert variant='destructive' className='mb-4'>
               <AlertDescription>
                 {t(

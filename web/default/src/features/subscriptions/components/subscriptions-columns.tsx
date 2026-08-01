@@ -24,7 +24,7 @@ import { DataTableColumnHeader } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
-import { formatDuration, formatResetPeriod } from '../lib'
+import { formatDuration, formatPlanAmount, formatResetPeriod } from '../lib'
 import type { PlanRecord } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
 
@@ -74,7 +74,10 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
         ),
         cell: ({ row }) => (
           <span className='text-success font-semibold'>
-            ${Number(row.original.plan.price_amount || 0).toFixed(2)}
+            {formatPlanAmount(
+              row.original.plan.price_amount,
+              row.original.plan.currency
+            )}
           </span>
         ),
         size: 100,
@@ -175,6 +178,10 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
         size: 140,
       },
       {
+        // NOTE: 列名是「Received amount（已收金额）」，但取的是计划配置字段
+        // total_amount，且 0 被当成「Unlimited」、用 formatQuota（额度格式）渲染 ——
+        // 三个信号都说明它其实是「总额度/限额」而不是已收款。
+        // 本 PR 不改语义，需先与后端对齐 total_amount 含义再重命名列头。
         id: 'total_amount',
         meta: { label: t('Received amount'), mobileHidden: true },
         header: ({ column }) => (
@@ -184,7 +191,9 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
           const total = Number(row.original.plan.total_amount || 0)
           return (
             <span className='text-muted-foreground'>
-              {total > 0 ? formatQuota(total) : t('Unlimited')}
+              {Number.isFinite(total) && total > 0
+                ? formatQuota(total)
+                : t('Unlimited')}
             </span>
           )
         },

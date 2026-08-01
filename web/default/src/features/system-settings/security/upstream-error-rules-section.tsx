@@ -84,7 +84,28 @@ const EMPTY_RULE: ErrorRuleForm = {
   priority: 100,
 }
 
+const DEFAULT_PRIORITY = 100
+
 const IMPORT_CONCURRENCY = 4
+
+// priority 支持 0（0 是升序排序下的最高优先级），所以不能用 `Number(x) || 100`
+// 这种写法——它会把 0 当成 falsy 静默换成 100。
+function toPriority(value: unknown): number {
+  if (value === '' || value === null || value === undefined) {
+    return DEFAULT_PRIORITY
+  }
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : DEFAULT_PRIORITY
+}
+
+function toStatusCode(value: unknown): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback
+}
 
 async function listRules() {
   const res = await api.get<{ success: boolean; data: ErrorRule[] }>(
@@ -121,9 +142,9 @@ function normalizeForm(values: ErrorRuleForm): ErrorRuleForm {
     passthrough_body: false,
     skip_monitoring: false,
     custom_message: values.custom_message.trim(),
-    upstream_status: Number(values.upstream_status) || 0,
-    response_code: Number(values.response_code) || 0,
-    priority: Number(values.priority) || 100,
+    upstream_status: toStatusCode(values.upstream_status),
+    response_code: toStatusCode(values.response_code),
+    priority: toPriority(values.priority),
   }
 }
 
@@ -161,15 +182,15 @@ function parseImportRules(text: string): ErrorRuleForm[] {
       description:
         typeof value.description === 'string' ? value.description : '',
       platforms: typeof value.platforms === 'string' ? value.platforms : '',
-      upstream_status: Number(value.upstream_status) || 0,
+      upstream_status: toStatusCode(value.upstream_status),
       keywords: typeof value.keywords === 'string' ? value.keywords : '',
       passthrough_code: Boolean(value.passthrough_code),
-      response_code: Number(value.response_code) || 0,
+      response_code: toStatusCode(value.response_code),
       passthrough_body: Boolean(value.passthrough_body),
       custom_message:
         typeof value.custom_message === 'string' ? value.custom_message : '',
       skip_monitoring: Boolean(value.skip_monitoring),
-      priority: Number(value.priority) || 100,
+      priority: toPriority(value.priority),
     })
   })
 }
@@ -207,6 +228,9 @@ export function UpstreamErrorRulesSection() {
       setFormOpen(false)
       queryClient.invalidateQueries({ queryKey: ['upstream-error-rules'] })
     },
+    onError: (error: unknown) => {
+      toast.error(errorMessage(error, t('Failed to save error rule')))
+    },
   })
 
   const deleteMutation = useMutation({
@@ -216,6 +240,9 @@ export function UpstreamErrorRulesSection() {
       setDeleteTarget(null)
       queryClient.invalidateQueries({ queryKey: ['upstream-error-rules'] })
     },
+    onError: (error: unknown) => {
+      toast.error(errorMessage(error, t('Failed to delete error rule')))
+    },
   })
 
   const reloadMutation = useMutation({
@@ -223,6 +250,9 @@ export function UpstreamErrorRulesSection() {
     onSuccess: () => {
       toast.success(t('Rules reloaded'))
       queryClient.invalidateQueries({ queryKey: ['upstream-error-rules'] })
+    },
+    onError: (error: unknown) => {
+      toast.error(errorMessage(error, t('Failed to reload rules')))
     },
   })
 
@@ -270,10 +300,11 @@ export function UpstreamErrorRulesSection() {
       queryClient.invalidateQueries({ queryKey: ['upstream-error-rules'] })
     },
     onError: (error: unknown) => {
-      toast.error(
-        error instanceof Error ? error.message : t('Failed to import rules')
-      )
+      toast.error(errorMessage(error, t('Failed to import rules')))
       setImportProgress(null)
+      // 导入不是原子的：失败之前已经创建成功的规则依然存在，必须刷新列表，
+      // 否则管理员看到的是一个不包含这些新规则的陈旧快照。
+      queryClient.invalidateQueries({ queryKey: ['upstream-error-rules'] })
     },
   })
 
@@ -598,10 +629,13 @@ export function UpstreamErrorRulesSection() {
                   onChange={(event) =>
                     setFormValues((prev) => ({
                       ...prev,
-                      priority: Number(event.target.value) || 100,
+                      priority: toPriority(event.target.value),
                     }))
                   }
                 />
+                <p className='text-muted-foreground text-xs'>
+                  {t('Lower values are matched first. 0 is the highest.')}
+                </p>
               </label>
               <label className='space-y-2'>
                 <span className='text-sm font-medium'>
@@ -613,7 +647,7 @@ export function UpstreamErrorRulesSection() {
                   onChange={(event) =>
                     setFormValues((prev) => ({
                       ...prev,
-                      upstream_status: Number(event.target.value) || 0,
+                      upstream_status: toStatusCode(event.target.value),
                     }))
                   }
                 />
@@ -628,7 +662,7 @@ export function UpstreamErrorRulesSection() {
                   onChange={(event) =>
                     setFormValues((prev) => ({
                       ...prev,
-                      response_code: Number(event.target.value) || 0,
+                      response_code: toStatusCode(event.target.value),
                     }))
                   }
                 />

@@ -23,7 +23,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { useParams } from '@tanstack/react-router'
+import { useParams, useSearch } from '@tanstack/react-router'
 import { SectionPageLayout } from '@/components/layout'
 import { useSystemOptions, getOptionValue } from '../hooks/use-system-options'
 import { useSystemSettingsTranslation } from '../lib/i18n'
@@ -35,6 +35,11 @@ type SettingsPageProps<
   TSectionId extends string,
   TExtraArgs extends unknown[] = [],
 > = {
+  /**
+   * Kept for callers and for documentation purposes. The active section is
+   * resolved from the current match rather than from this path, so that both
+   * URL styles supported by the section registry keep working.
+   */
   routePath: string
   defaultSettings: TSettings
   defaultSection: TSectionId
@@ -113,7 +118,6 @@ export function SettingsPage<
   TSectionId extends string,
   TExtraArgs extends unknown[] = [],
 >({
-  routePath,
   defaultSettings,
   defaultSection,
   getSectionContent,
@@ -124,9 +128,15 @@ export function SettingsPage<
 }: SettingsPageProps<TSettings, TSectionId, TExtraArgs>) {
   const { t, ts } = useSystemSettingsTranslation()
   const { data, isLoading } = useSystemOptions()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const params = useParams({ from: routePath as any })
-  const activeSection = (params?.section ?? defaultSection) as TSectionId
+  // The section registry supports two URL styles: `urlStyle: 'path'` puts the
+  // section in a route param, the default `'query'` style puts it in the
+  // search params. Read both, otherwise one of the two styles silently keeps
+  // rendering the default section no matter what the sidebar links to.
+  const params = useParams({ strict: false }) as { section?: string }
+  const search = useSearch({ strict: false }) as { section?: string }
+  const activeSection = (params?.section ??
+    search?.section ??
+    defaultSection) as TSectionId
   const sectionMeta = getSectionMeta(activeSection)
 
   const settings = useMemo(() => {

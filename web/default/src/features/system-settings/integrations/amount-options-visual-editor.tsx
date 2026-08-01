@@ -37,6 +37,7 @@ export function AmountOptionsVisualEditor({
 }: AmountOptionsVisualEditorProps) {
   const { t } = useTranslation()
   const [newAmount, setNewAmount] = useState('')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const amounts = useMemo(() => {
     const parsed = safeJsonParseWithValidation<unknown[]>(value, {
@@ -46,39 +47,45 @@ export function AmountOptionsVisualEditor({
       context: 'amount options',
     })
 
+    // Number(null), Number(''), Number([]) all evaluate to 0 and Number(true)
+    // to 1, so a bare !isNaN(Number(item)) check used to turn junk entries into
+    // real recharge presets. The backend stores amount_options as []int, so
+    // only finite positive integers are valid here.
     return parsed
-      .filter((item) => typeof item === 'number' || !isNaN(Number(item)))
+      .filter(
+        (item) =>
+          typeof item === 'number' ||
+          (typeof item === 'string' && item.trim() !== '')
+      )
       .map(Number)
+      .filter(
+        (amount) =>
+          Number.isFinite(amount) && Number.isInteger(amount) && amount > 0
+      )
       .sort((a, b) => a - b)
   }, [value, t])
 
   const handleAdd = () => {
-    const amount = parseFloat(newAmount)
-    if (isNaN(amount) || amount <= 0) {
+    const amount = Number(newAmount.trim())
+    if (!Number.isFinite(amount) || !Number.isInteger(amount) || amount <= 0) {
+      setErrorMessage(t('Enter a positive integer amount'))
+      return
+    }
+    if (amounts.includes(amount)) {
+      setErrorMessage(t('This amount is already in the list'))
       return
     }
 
-    try {
-      const updatedAmounts = [...amounts, amount]
-        .filter((v, i, a) => a.indexOf(v) === i) // Remove duplicates
-        .sort((a, b) => a - b)
-
-      onChange(JSON.stringify(updatedAmounts, null, 2))
-      setNewAmount('')
-    } catch (_error) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to add amount:', _error)
-    }
+    const updatedAmounts = [...amounts, amount].sort((a, b) => a - b)
+    onChange(JSON.stringify(updatedAmounts, null, 2))
+    setNewAmount('')
+    setErrorMessage(null)
   }
 
   const handleRemove = (amount: number) => {
-    try {
-      const updatedAmounts = amounts.filter((a) => a !== amount)
-      onChange(JSON.stringify(updatedAmounts, null, 2))
-    } catch (_error) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to remove amount:', _error)
-    }
+    const updatedAmounts = amounts.filter((a) => a !== amount)
+    onChange(JSON.stringify(updatedAmounts, null, 2))
+    setErrorMessage(null)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -139,13 +146,20 @@ export function AmountOptionsVisualEditor({
           <Input
             id='new-amount'
             type='number'
-            step='0.01'
-            min='0'
+            step='1'
+            min='1'
             placeholder={t('e.g., 100')}
             value={newAmount}
-            onChange={(e) => setNewAmount(e.target.value)}
+            onChange={(e) => {
+              setNewAmount(e.target.value)
+              if (errorMessage) setErrorMessage(null)
+            }}
             onKeyDown={handleKeyDown}
+            aria-invalid={errorMessage ? true : undefined}
           />
+          {errorMessage && (
+            <p className='text-destructive mt-1 text-sm'>{errorMessage}</p>
+          )}
         </div>
         <Button
           type='button'
@@ -154,7 +168,7 @@ export function AmountOptionsVisualEditor({
             e.stopPropagation()
             handleAdd()
           }}
-          disabled={!newAmount || parseFloat(newAmount) <= 0}
+          disabled={!newAmount.trim()}
           className='w-full sm:w-auto'
         >
           <Plus className='h-4 w-4 sm:mr-2' />

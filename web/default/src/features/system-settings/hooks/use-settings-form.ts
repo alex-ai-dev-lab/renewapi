@@ -165,7 +165,8 @@ function expandDotPaths<T extends FieldValues>(
  *
  * Key features:
  * - Initializes form with defaultValues only on mount
- * - No automatic resets that could overwrite user input
+ * - Applies later server snapshots only when the server value itself changed
+ *   and the user has no unsaved edits
  * - Tracks changed fields to minimize API calls
  * - Provides manual reset functionality
  *
@@ -204,6 +205,16 @@ export function useSettingsForm<T extends FieldValues>({
   const serializedDefaultsRef = useRef<string>(
     JSON.stringify(baselineRef.current)
   )
+  // Tracks the last server snapshot this hook applied. Kept separate from
+  // serializedDefaultsRef, which follows the locally saved values: after a
+  // successful submit the local baseline moves ahead of the query cache, and
+  // comparing against it would make the next effect run treat the stale cached
+  // snapshot as a new server value and reset the form back to pre-save values.
+  const serializedServerRef = useRef<string>(serializedDefaultsRef.current)
+  // A server snapshot observed while the form was dirty is not safe to apply
+  // merely because the form later becomes clean: it may be the stale cache
+  // value that preceded a successful save. Wait for a newer snapshot instead.
+  const deferredServerRef = useRef<string | null>(null)
   /* eslint-enable react-hooks/refs */
 
   useEffect(() => {
@@ -212,14 +223,24 @@ export function useSettingsForm<T extends FieldValues>({
     const flattened = flattenValues(expandedDefaults as T)
     const serialized = JSON.stringify(flattened)
 
-    if (serialized === serializedDefaultsRef.current) {
+    // The server snapshot is unchanged since the last time it was applied.
+    if (serialized === serializedServerRef.current) {
       return
     }
 
+    // Never clobber unsaved edits. Keep the snapshot for comparison, but do
+    // not apply it merely because the form becomes clean after a local save or
+    // reset.
     if (form.formState.isDirty) {
+      deferredServerRef.current = serialized
       return
     }
 
+    if (deferredServerRef.current === serialized) {
+      return
+    }
+
+    serializedServerRef.current = serialized
     baselineRef.current = flattened
     defaultValuesRef.current = expandedDefaults as T
     serializedDefaultsRef.current = serialized
@@ -229,13 +250,13 @@ export function useSettingsForm<T extends FieldValues>({
   const defaultCompare = (a: unknown, b: unknown): boolean => {
     if (a === b) return true
 
+    // Handle arrays
     if (Array.isArray(a) && Array.isArray(b)) {
       return JSON.stringify(a) === JSON.stringify(b)
     }
 
     if (typeof a !== typeof b) return false
 
-    // Handle arrays
     // Handle objects (but not null)
     if (a && b && typeof a === 'object' && typeof b === 'object') {
       return JSON.stringify(a) === JSON.stringify(b)
@@ -271,6 +292,15 @@ export function useSettingsForm<T extends FieldValues>({
     baselineRef.current = flattenedValues
     defaultValuesRef.current = data
     serializedDefaultsRef.current = JSON.stringify(flattenedValues)
+    // Mark the cache snapshot currently being displayed as handled. It may
+    // still be older than `data`; allowing it through on the next effect would
+    // overwrite the values that were just saved.
+    if (expandedDefaults) {
+      serializedServerRef.current = JSON.stringify(
+        flattenValues(expandedDefaults as T)
+      )
+    }
+    deferredServerRef.current = null
     form.reset(data)
   }
 

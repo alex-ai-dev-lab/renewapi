@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useBlocker } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -32,6 +32,10 @@ type FormNavigationGuardProps = {
  *
  * Prevents navigation when form has unsaved changes.
  * Uses project's native ConfirmDialog instead of browser's window.confirm()
+ *
+ * The dialog visibility is derived from the blocker status rather than mirrored
+ * into local state, so the dialog can never outlive the blocked navigation it
+ * belongs to.
  *
  * @param when - Whether to block navigation (typically form.formState.isDirty)
  * @param title - Dialog title
@@ -52,23 +56,13 @@ export function FormNavigationGuard({
   const resolvedMessage =
     message ?? t('You have unsaved changes. Are you sure you want to leave?')
   const blocker = useBlocker({ condition: when })
-  const [showDialog, setShowDialog] = useState(false)
-
-  // Listen to blocker status changes
-  useEffect(() => {
-    if (blocker.status === 'blocked') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setShowDialog(true)
-    }
-  }, [blocker.status])
+  const isBlocked = blocker.status === 'blocked'
 
   const handleConfirm = () => {
-    setShowDialog(false)
     blocker.proceed?.()
   }
 
   const handleCancel = () => {
-    setShowDialog(false)
     blocker.reset?.()
   }
 
@@ -88,7 +82,7 @@ export function FormNavigationGuard({
 
   return (
     <ConfirmDialog
-      open={showDialog}
+      open={isBlocked}
       onOpenChange={(open) => {
         if (!open) handleCancel()
       }}

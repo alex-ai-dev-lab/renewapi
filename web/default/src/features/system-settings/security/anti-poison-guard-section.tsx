@@ -51,23 +51,63 @@ import { useSettingsForm } from '../hooks/use-settings-form'
 import { useUpdateOptionsBulk } from '../hooks/use-update-option'
 import { useSystemSettingsTranslation } from '../lib/i18n'
 
-const antiPoisonSchema = z.object({
-  anti_poison_setting: z.object({
-    enabled: z.boolean(),
-    channel_test_nonce_enabled: z.boolean(),
-    response_proof_enabled: z.boolean(),
-    tool_call_guard_enabled: z.boolean(),
-    tool_call_guard_strict: z.boolean(),
-    failure_mode: z.enum(['block', 'warn']),
-    strip_guard_output: z.boolean(),
-    signed_header_audit_enabled: z.boolean(),
-    signed_header_audit_secret: z.string().optional(),
-    max_guard_scan_bytes: z.number().min(4096).max(1048576),
-    downstream_proof_header: z.boolean(),
-    profiles: z.string().refine(isJsonObject, 'Invalid JSON object'),
-    channels: z.string().refine(isJsonObject, 'Invalid JSON object'),
-  }),
-})
+// 后端认可的画像名。渠道映射里出现其它值时，上方的预览卡片会把它过滤掉，
+// 界面看起来"没配"，值却仍然会被保存，所以这里必须做白名单校验。
+const ANTI_POISON_PROFILE_NAMES = [
+  'trusted',
+  'unknown',
+  'probation',
+  'quarantine',
+] as const
+
+type AntiPoisonProfileName = (typeof ANTI_POISON_PROFILE_NAMES)[number]
+
+const antiPoisonSchema = z
+  .object({
+    anti_poison_setting: z.object({
+      enabled: z.boolean(),
+      channel_test_nonce_enabled: z.boolean(),
+      response_proof_enabled: z.boolean(),
+      tool_call_guard_enabled: z.boolean(),
+      tool_call_guard_strict: z.boolean(),
+      failure_mode: z.enum(['block', 'warn']),
+      strip_guard_output: z.boolean(),
+      signed_header_audit_enabled: z.boolean(),
+      signed_header_audit_secret: z.string().optional(),
+      signed_header_audit_secret_configured: z.boolean(),
+      max_guard_scan_bytes: z.number().min(4096).max(1048576),
+      downstream_proof_header: z.boolean(),
+      profiles: z.string().refine(isJsonObject, 'Invalid JSON object'),
+      channels: z.string().refine(isJsonObject, 'Invalid JSON object'),
+    }),
+  })
+  .superRefine((values, ctx) => {
+    const setting = values.anti_poison_setting
+
+    // 空密钥的 HMAC 没有任何证明能力，但开关会显示为"已启用"。
+    if (
+      setting.signed_header_audit_enabled &&
+      !(setting.signed_header_audit_secret ?? '').trim() &&
+      !setting.signed_header_audit_secret_configured
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['anti_poison_setting', 'signed_header_audit_secret'],
+        message: 'Audit secret is required when signed header audit is enabled',
+      })
+    }
+
+    const invalidChannelProfiles = collectInvalidChannelProfiles(
+      setting.channels
+    )
+    if (invalidChannelProfiles.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['anti_poison_setting', 'channels'],
+        message: `Unknown anti-poison profile for channel ${invalidChannelProfiles.join(', ')}`,
+      })
+    }
+  })
 
 type AntiPoisonFormValues = z.output<typeof antiPoisonSchema>
 
@@ -78,6 +118,31 @@ function isJsonObject(value: string): boolean {
   } catch {
     return false
   }
+}
+
+// 返回 "渠道号: 画像名" 形式的问题条目。JSON 本身非法时交给 isJsonObject 报错。
+function collectInvalidChannelProfiles(value: string): string[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value || '{}')
+  } catch {
+    return []
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return []
+  }
+
+  const invalid: string[] = []
+  for (const [id, raw] of Object.entries(parsed as Record<string, unknown>)) {
+    const profile =
+      raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? String((raw as Record<string, unknown>).profile ?? '').trim()
+        : ''
+    if (!ANTI_POISON_PROFILE_NAMES.includes(profile as AntiPoisonProfileName)) {
+      invalid.push(`${id}: ${profile || '(empty)'}`)
+    }
+  }
+  return invalid
 }
 
 type AntiPoisonGuardSectionProps = {
@@ -91,6 +156,7 @@ type AntiPoisonGuardSectionProps = {
     'anti_poison_setting.strip_guard_output': boolean
     'anti_poison_setting.signed_header_audit_enabled': boolean
     'anti_poison_setting.signed_header_audit_secret'?: string
+    'anti_poison_setting.signed_header_audit_secret_configured': boolean
     'anti_poison_setting.max_guard_scan_bytes': number
     'anti_poison_setting.downstream_proof_header': boolean
     'anti_poison_setting.profiles': string
@@ -168,6 +234,8 @@ function buildAntiPoisonDefaults(
         defaults['anti_poison_setting.signed_header_audit_enabled'],
       signed_header_audit_secret:
         defaults['anti_poison_setting.signed_header_audit_secret'] || '',
+      signed_header_audit_secret_configured:
+        defaults['anti_poison_setting.signed_header_audit_secret_configured'],
       max_guard_scan_bytes:
         defaults['anti_poison_setting.max_guard_scan_bytes'],
       downstream_proof_header:

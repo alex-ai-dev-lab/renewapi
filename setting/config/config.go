@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"reflect"
@@ -60,10 +59,10 @@ func (cm *ConfigManager) LoadFromDB(options map[string]string) error {
 		if raw, ok := options[name]; ok && strings.TrimSpace(raw) != "" {
 			trimmed := strings.TrimSpace(raw)
 			if strings.HasPrefix(trimmed, "{") {
-				if err := json.Unmarshal([]byte(trimmed), config); err != nil {
+				if err := common.UnmarshalJsonStr(trimmed, config); err != nil {
 					common.SysError("failed to load json config " + name + ": " + err.Error())
 				} else {
-					var fields map[string]json.RawMessage
+					var fields map[string]any
 					if err := common.Unmarshal([]byte(trimmed), &fields); err == nil {
 						for key := range fields {
 							explicitFields[key] = ""
@@ -164,7 +163,7 @@ func configToMap(config interface{}) (map[string]string, error) {
 		case reflect.Ptr:
 			// 处理指针类型：如果非 nil，序列化指向的值
 			if !field.IsNil() {
-				bytes, err := json.Marshal(field.Interface())
+				bytes, err := common.Marshal(field.Interface())
 				if err != nil {
 					return nil, err
 				}
@@ -175,7 +174,7 @@ func configToMap(config interface{}) (map[string]string, error) {
 			}
 		case reflect.Map, reflect.Slice, reflect.Struct:
 			// 复杂类型使用JSON序列化
-			bytes, err := json.Marshal(field.Interface())
+			bytes, err := common.Marshal(field.Interface())
 			if err != nil {
 				return nil, err
 			}
@@ -302,7 +301,7 @@ func updateConfigFromMap(config interface{}, configMap map[string]string) error 
 				pending[i] = reflect.Zero(field.Type())
 			} else {
 				value := reflect.New(field.Type().Elem())
-				err := json.Unmarshal([]byte(strValue), value.Interface())
+				err := common.UnmarshalJsonStr(strValue, value.Interface())
 				if err != nil {
 					return fmt.Errorf("invalid %s: %w", key, err)
 				}
@@ -313,13 +312,13 @@ func updateConfigFromMap(config interface{}, configMap map[string]string) error 
 			// absent from the new JSON). Allocate a fresh map so removed keys
 			// are properly cleared.
 			fresh := reflect.New(field.Type())
-			if err := json.Unmarshal([]byte(strValue), fresh.Interface()); err != nil {
+			if err := common.UnmarshalJsonStr(strValue, fresh.Interface()); err != nil {
 				return fmt.Errorf("invalid %s: %w", key, err)
 			}
 			pending[i] = fresh.Elem()
 		case reflect.Slice, reflect.Struct:
 			value := reflect.New(field.Type())
-			err := json.Unmarshal([]byte(strValue), value.Interface())
+			err := common.UnmarshalJsonStr(strValue, value.Interface())
 			if err != nil {
 				return fmt.Errorf("invalid %s: %w", key, err)
 			}

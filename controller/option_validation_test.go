@@ -1,9 +1,9 @@
 package controller
 
 import (
-	"encoding/json"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
 
@@ -114,7 +114,7 @@ func TestValidateOptionValuesRejectsInvalidChannelAffinityRule(t *testing.T) {
 
 func mustMarshalChannelAffinityRules(t *testing.T, rules []operation_setting.ChannelAffinityRule) string {
 	t.Helper()
-	raw, err := json.Marshal(rules)
+	raw, err := common.Marshal(rules)
 	if err != nil {
 		t.Fatalf("marshal Channel Affinity rules: %v", err)
 	}

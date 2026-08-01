@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -92,7 +91,7 @@ func normalizeServerAddress(value string) (string, error) {
 
 func validateJSONFloatMap(value string) error {
 	var parsed map[string]float64
-	return json.Unmarshal([]byte(value), &parsed)
+	return common.UnmarshalJsonStr(value, &parsed)
 }
 
 func invalidOptionValue(message string) error {

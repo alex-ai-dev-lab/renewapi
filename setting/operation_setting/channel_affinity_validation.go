@@ -1,17 +1,18 @@
 package operation_setting
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/QuantumNous/new-api/common"
 )
 
 // ValidateChannelAffinityRulesJSON is the server-side validation boundary for
 // rules loaded from the settings API, imports, or any other JSON-backed path.
 func ValidateChannelAffinityRulesJSON(raw string) error {
 	var rules []ChannelAffinityRule
-	if err := json.Unmarshal([]byte(raw), &rules); err != nil {
+	if err := common.UnmarshalJsonStr(raw, &rules); err != nil {
 		return fmt.Errorf("channel affinity rules must be a JSON array: %w", err)
 	}
 	return ValidateChannelAffinityRules(rules)
@@ -322,7 +323,7 @@ func validateChannelAffinityHeaderValue(ruleName string, index int, value interf
 		}
 		if strings.HasPrefix(trimmed, "[") || strings.HasPrefix(trimmed, "{") {
 			var parsed interface{}
-			if err := json.Unmarshal([]byte(trimmed), &parsed); err == nil {
+			if err := common.UnmarshalJsonStr(trimmed, &parsed); err == nil {
 				return validateChannelAffinityHeaderValue(ruleName, index, parsed)
 			}
 		}

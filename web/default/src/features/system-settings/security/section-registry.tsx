@@ -16,11 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { ClientIdentitySettingsCard } from '../models/client-identity-settings-card'
+import { UserAgentSettingsSection } from '../models/user-agent-settings-section'
 import { RateLimitSection } from '../request-limits/rate-limit-section'
 import { SensitiveWordsSection } from '../request-limits/sensitive-words-section'
 import { SSRFSection } from '../request-limits/ssrf-section'
-import { ClientIdentitySettingsCard } from '../models/client-identity-settings-card'
-import { UserAgentSettingsSection } from '../models/user-agent-settings-section'
 import type { SecuritySettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { AntiPoisonGuardSection } from './anti-poison-guard-section'
@@ -102,16 +102,19 @@ const SECURITY_SECTIONS = [
             settings['anti_poison_setting.tool_call_guard_enabled'],
           'anti_poison_setting.tool_call_guard_strict':
             settings['anti_poison_setting.tool_call_guard_strict'],
-          'anti_poison_setting.failure_mode':
-            normalizeAntiPoisonFailureMode(
-              settings['anti_poison_setting.failure_mode']
-            ),
+          'anti_poison_setting.failure_mode': normalizeAntiPoisonFailureMode(
+            settings['anti_poison_setting.failure_mode']
+          ),
           'anti_poison_setting.strip_guard_output':
             settings['anti_poison_setting.strip_guard_output'],
           'anti_poison_setting.signed_header_audit_enabled':
             settings['anti_poison_setting.signed_header_audit_enabled'],
           'anti_poison_setting.signed_header_audit_secret':
             settings['anti_poison_setting.signed_header_audit_secret'] || '',
+          'anti_poison_setting.signed_header_audit_secret_configured':
+            settings[
+              'anti_poison_setting.signed_header_audit_secret_configured'
+            ],
           'anti_poison_setting.max_guard_scan_bytes':
             settings['anti_poison_setting.max_guard_scan_bytes'] || 65536,
           'anti_poison_setting.downstream_proof_header':

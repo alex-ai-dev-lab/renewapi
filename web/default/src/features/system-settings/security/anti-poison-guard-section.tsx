@@ -74,6 +74,7 @@ const antiPoisonSchema = z
       strip_guard_output: z.boolean(),
       signed_header_audit_enabled: z.boolean(),
       signed_header_audit_secret: z.string().optional(),
+      signed_header_audit_secret_configured: z.boolean(),
       max_guard_scan_bytes: z.number().min(4096).max(1048576),
       downstream_proof_header: z.boolean(),
       profiles: z.string().refine(isJsonObject, 'Invalid JSON object'),
@@ -86,7 +87,8 @@ const antiPoisonSchema = z
     // 空密钥的 HMAC 没有任何证明能力，但开关会显示为"已启用"。
     if (
       setting.signed_header_audit_enabled &&
-      !(setting.signed_header_audit_secret ?? '').trim()
+      !(setting.signed_header_audit_secret ?? '').trim() &&
+      !setting.signed_header_audit_secret_configured
     ) {
       ctx.addIssue({
         code: 'custom',
@@ -136,9 +138,7 @@ function collectInvalidChannelProfiles(value: string): string[] {
       raw && typeof raw === 'object' && !Array.isArray(raw)
         ? String((raw as Record<string, unknown>).profile ?? '').trim()
         : ''
-    if (
-      !ANTI_POISON_PROFILE_NAMES.includes(profile as AntiPoisonProfileName)
-    ) {
+    if (!ANTI_POISON_PROFILE_NAMES.includes(profile as AntiPoisonProfileName)) {
       invalid.push(`${id}: ${profile || '(empty)'}`)
     }
   }
@@ -156,6 +156,7 @@ type AntiPoisonGuardSectionProps = {
     'anti_poison_setting.strip_guard_output': boolean
     'anti_poison_setting.signed_header_audit_enabled': boolean
     'anti_poison_setting.signed_header_audit_secret'?: string
+    'anti_poison_setting.signed_header_audit_secret_configured': boolean
     'anti_poison_setting.max_guard_scan_bytes': number
     'anti_poison_setting.downstream_proof_header': boolean
     'anti_poison_setting.profiles': string
@@ -233,6 +234,8 @@ function buildAntiPoisonDefaults(
         defaults['anti_poison_setting.signed_header_audit_enabled'],
       signed_header_audit_secret:
         defaults['anti_poison_setting.signed_header_audit_secret'] || '',
+      signed_header_audit_secret_configured:
+        defaults['anti_poison_setting.signed_header_audit_secret_configured'],
       max_guard_scan_bytes:
         defaults['anti_poison_setting.max_guard_scan_bytes'],
       downstream_proof_header:

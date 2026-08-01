@@ -34,6 +34,29 @@ func isPaymentComplianceOptionKey(key string) bool {
 	return strings.HasPrefix(key, "payment_setting.compliance_")
 }
 
+const (
+	antiPoisonAuditEnabledKey = "anti_poison_setting.signed_header_audit_enabled"
+	antiPoisonAuditSecretKey  = "anti_poison_setting.signed_header_audit_secret"
+)
+
+// Validate the effective pair instead of validating each field in isolation.
+// Bulk updates may enable the audit and supply its secret in one request.
+func validateAntiPoisonAuditOptions(values map[string]string) error {
+	setting := operation_setting.GetAntiPoisonSetting()
+	enabled := setting.SignedHeaderAuditEnabled
+	secret := strings.TrimSpace(setting.SignedHeaderAuditSecret)
+	if value, ok := values[antiPoisonAuditEnabledKey]; ok {
+		enabled = strings.EqualFold(strings.TrimSpace(value), "true")
+	}
+	if value, ok := values[antiPoisonAuditSecretKey]; ok {
+		secret = strings.TrimSpace(value)
+	}
+	if enabled && secret == "" {
+		return fmt.Errorf("反投毒签名审计开启时必须配置密钥")
+	}
+	return nil
+}
+
 func isPositiveOptionValue(value string) bool {
 	intValue, err := strconv.Atoi(strings.TrimSpace(value))
 	if err == nil {
@@ -209,6 +232,12 @@ func GetOptions(c *gin.Context) {
 			strings.HasSuffix(k, "secret") ||
 			strings.HasSuffix(k, "api_key")
 		if isSensitiveKey {
+			if k == antiPoisonAuditSecretKey {
+				options = append(options, &model.Option{
+					Key:   "anti_poison_setting.signed_header_audit_secret_configured",
+					Value: strconv.FormatBool(strings.TrimSpace(value) != ""),
+				})
+			}
 			continue
 		}
 		options = append(options, &model.Option{
@@ -640,6 +669,12 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 	}
+	if err = validateAntiPoisonAuditOptions(map[string]string{
+		option.Key: option.Value.(string),
+	}); err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
+	}
 	err = model.UpdateOption(option.Key, option.Value.(string))
 	if err != nil {
 		common.ApiError(c, err)
@@ -677,6 +712,10 @@ func UpdateOptionsBulk(c *gin.Context) {
 			return
 		}
 		values[key] = value
+	}
+	if err := validateAntiPoisonAuditOptions(values); err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
 	}
 	if err := model.UpdateOptionsBulk(values); err != nil {
 		common.ApiError(c, err)

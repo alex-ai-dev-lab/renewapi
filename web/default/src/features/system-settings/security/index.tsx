@@ -50,6 +50,7 @@ const defaultSecuritySettings: SecuritySettings = {
   'anti_poison_setting.strip_guard_output': true,
   'anti_poison_setting.signed_header_audit_enabled': false,
   'anti_poison_setting.signed_header_audit_secret': '',
+  'anti_poison_setting.signed_header_audit_secret_configured': false,
   'anti_poison_setting.max_guard_scan_bytes': 65536,
   'anti_poison_setting.downstream_proof_header': false,
   'anti_poison_setting.profiles': '{}',

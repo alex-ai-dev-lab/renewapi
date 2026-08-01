@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-
 export type DashboardTimeRange = '1d' | '7d' | '30d' | '1y' | 'all'
 export type DashboardRefreshIntervalMs = 5000 | 15000 | 30000 | 60000
 export type DashboardHealthFilter = 'all' | 'active' | 'risk' | 'slow'

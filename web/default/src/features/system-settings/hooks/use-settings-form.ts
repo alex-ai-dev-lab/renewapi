@@ -165,7 +165,8 @@ function expandDotPaths<T extends FieldValues>(
  *
  * Key features:
  * - Initializes form with defaultValues only on mount
- * - No automatic resets that could overwrite user input
+ * - Applies later server snapshots only when the server value itself changed
+ *   and the user has no unsaved edits
  * - Tracks changed fields to minimize API calls
  * - Provides manual reset functionality
  *
@@ -204,6 +205,12 @@ export function useSettingsForm<T extends FieldValues>({
   const serializedDefaultsRef = useRef<string>(
     JSON.stringify(baselineRef.current)
   )
+  // Tracks the last server snapshot this hook applied. Kept separate from
+  // serializedDefaultsRef, which follows the locally saved values: after a
+  // successful submit the local baseline moves ahead of the query cache, and
+  // comparing against it would make the next effect run treat the stale cached
+  // snapshot as a new server value and reset the form back to pre-save values.
+  const serializedServerRef = useRef<string>(serializedDefaultsRef.current)
   /* eslint-enable react-hooks/refs */
 
   useEffect(() => {
@@ -212,14 +219,18 @@ export function useSettingsForm<T extends FieldValues>({
     const flattened = flattenValues(expandedDefaults as T)
     const serialized = JSON.stringify(flattened)
 
-    if (serialized === serializedDefaultsRef.current) {
+    // The server snapshot is unchanged since the last time it was applied.
+    if (serialized === serializedServerRef.current) {
       return
     }
 
+    // Never clobber unsaved edits. The snapshot stays unapplied so it can be
+    // picked up once the form is clean again.
     if (form.formState.isDirty) {
       return
     }
 
+    serializedServerRef.current = serialized
     baselineRef.current = flattened
     defaultValuesRef.current = expandedDefaults as T
     serializedDefaultsRef.current = serialized
@@ -229,13 +240,13 @@ export function useSettingsForm<T extends FieldValues>({
   const defaultCompare = (a: unknown, b: unknown): boolean => {
     if (a === b) return true
 
+    // Handle arrays
     if (Array.isArray(a) && Array.isArray(b)) {
       return JSON.stringify(a) === JSON.stringify(b)
     }
 
     if (typeof a !== typeof b) return false
 
-    // Handle arrays
     // Handle objects (but not null)
     if (a && b && typeof a === 'object' && typeof b === 'object') {
       return JSON.stringify(a) === JSON.stringify(b)

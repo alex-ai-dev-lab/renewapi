@@ -2,6 +2,8 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 	"strings"
@@ -192,24 +194,25 @@ func configToMap(config interface{}) (map[string]string, error) {
 // 辅助函数：从map更新配置对象
 func updateConfigFromMap(config interface{}, configMap map[string]string) error {
 	val := reflect.ValueOf(config)
-	if val.Kind() != reflect.Ptr {
-		return nil
+	if !val.IsValid() || val.Kind() != reflect.Ptr || val.IsNil() {
+		return fmt.Errorf("config must be a non-nil pointer to a struct")
 	}
 	val = val.Elem()
 
 	if val.Kind() != reflect.Struct {
-		return nil
+		return fmt.Errorf("config must point to a struct")
 	}
 
 	typ := val.Type()
+	pending := make(map[int]reflect.Value)
 	for i := 0; i < val.NumField(); i++ {
-		field := val.Field(i)
 		fieldType := typ.Field(i)
 
 		// 跳过未导出字段
 		if !fieldType.IsExported() {
 			continue
 		}
+		field := val.Field(i)
 
 		// 获取json标签作为键名
 		key := fieldType.Tag.Get("json")
@@ -225,60 +228,85 @@ func updateConfigFromMap(config interface{}, configMap map[string]string) error 
 
 		// 根据字段类型设置值
 		if !field.CanSet() {
-			continue
+			return fmt.Errorf("config field %s cannot be set", key)
 		}
 
 		switch field.Kind() {
 		case reflect.String:
-			field.SetString(strValue)
+			value := reflect.New(field.Type()).Elem()
+			value.SetString(strValue)
+			pending[i] = value
 		case reflect.Bool:
 			boolValue, err := strconv.ParseBool(strValue)
 			if err != nil {
-				continue
+				return fmt.Errorf("invalid %s: %w", key, err)
 			}
-			field.SetBool(boolValue)
+			value := reflect.New(field.Type()).Elem()
+			value.SetBool(boolValue)
+			pending[i] = value
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			intValue, err := strconv.ParseInt(strValue, 10, 64)
 			if err != nil {
 				// 兼容 float 格式的字符串（如 "2.000000"）
 				floatValue, fErr := strconv.ParseFloat(strValue, 64)
-				if fErr != nil {
-					continue
+				if fErr != nil || math.IsNaN(floatValue) || math.IsInf(floatValue, 0) || math.Trunc(floatValue) != floatValue || floatValue < float64(math.MinInt64) || floatValue >= float64(math.MaxInt64) {
+					if fErr != nil {
+						return fmt.Errorf("invalid %s: %w", key, fErr)
+					}
+					return fmt.Errorf("invalid %s: value must be a finite integer in range", key)
 				}
 				intValue = int64(floatValue)
 			}
-			field.SetInt(intValue)
+			value := reflect.New(field.Type()).Elem()
+			if value.OverflowInt(intValue) {
+				return fmt.Errorf("invalid %s: value overflows field type", key)
+			}
+			value.SetInt(intValue)
+			pending[i] = value
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			uintValue, err := strconv.ParseUint(strValue, 10, 64)
 			if err != nil {
 				// 兼容 float 格式的字符串
 				floatValue, fErr := strconv.ParseFloat(strValue, 64)
-				if fErr != nil || floatValue < 0 {
-					continue
+				if fErr != nil || math.IsNaN(floatValue) || math.IsInf(floatValue, 0) || math.Trunc(floatValue) != floatValue || floatValue < 0 || floatValue >= float64(math.MaxUint64) {
+					if fErr != nil {
+						return fmt.Errorf("invalid %s: %w", key, fErr)
+					}
+					return fmt.Errorf("invalid %s: value must be a finite unsigned integer in range", key)
 				}
 				uintValue = uint64(floatValue)
 			}
-			field.SetUint(uintValue)
+			value := reflect.New(field.Type()).Elem()
+			if value.OverflowUint(uintValue) {
+				return fmt.Errorf("invalid %s: value overflows field type", key)
+			}
+			value.SetUint(uintValue)
+			pending[i] = value
 		case reflect.Float32, reflect.Float64:
 			floatValue, err := strconv.ParseFloat(strValue, 64)
 			if err != nil {
-				continue
+				return fmt.Errorf("invalid %s: %w", key, err)
 			}
-			field.SetFloat(floatValue)
+			if math.IsNaN(floatValue) || math.IsInf(floatValue, 0) {
+				return fmt.Errorf("invalid %s: value must be finite", key)
+			}
+			value := reflect.New(field.Type()).Elem()
+			if value.OverflowFloat(floatValue) {
+				return fmt.Errorf("invalid %s: value overflows field type", key)
+			}
+			value.SetFloat(floatValue)
+			pending[i] = value
 		case reflect.Ptr:
 			// 处理指针类型
 			if strValue == "null" {
-				field.Set(reflect.Zero(field.Type()))
+				pending[i] = reflect.Zero(field.Type())
 			} else {
-				// 如果指针是 nil，需要先初始化
-				if field.IsNil() {
-					field.Set(reflect.New(field.Type().Elem()))
-				}
-				// 反序列化到指针指向的值
-				err := json.Unmarshal([]byte(strValue), field.Interface())
+				value := reflect.New(field.Type().Elem())
+				err := json.Unmarshal([]byte(strValue), value.Interface())
 				if err != nil {
-					continue
+					return fmt.Errorf("invalid %s: %w", key, err)
 				}
+				pending[i] = value
 			}
 		case reflect.Map:
 			// json.Unmarshal merges into existing maps (keeps old keys that are
@@ -286,15 +314,21 @@ func updateConfigFromMap(config interface{}, configMap map[string]string) error 
 			// are properly cleared.
 			fresh := reflect.New(field.Type())
 			if err := json.Unmarshal([]byte(strValue), fresh.Interface()); err != nil {
-				continue
+				return fmt.Errorf("invalid %s: %w", key, err)
 			}
-			field.Set(fresh.Elem())
+			pending[i] = fresh.Elem()
 		case reflect.Slice, reflect.Struct:
-			err := json.Unmarshal([]byte(strValue), field.Addr().Interface())
+			value := reflect.New(field.Type())
+			err := json.Unmarshal([]byte(strValue), value.Interface())
 			if err != nil {
-				continue
+				return fmt.Errorf("invalid %s: %w", key, err)
 			}
+			pending[i] = value.Elem()
 		}
+	}
+
+	for index, value := range pending {
+		val.Field(index).Set(value)
 	}
 
 	return nil

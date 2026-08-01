@@ -137,6 +137,34 @@ type CreateCustomOAuthProviderRequest struct {
 	AccessDeniedMessage   string `json:"access_denied_message"`
 }
 
+// ImportCustomOAuthProviderRequest intentionally makes client_secret optional:
+// an exported provider may omit it or contain the redacted marker, in which
+// case the atomic import preserves the secret already saved for that slug.
+type ImportCustomOAuthProviderRequest struct {
+	Name                  string `json:"name"`
+	Slug                  string `json:"slug"`
+	Icon                  string `json:"icon"`
+	Enabled               bool   `json:"enabled"`
+	ClientId              string `json:"client_id"`
+	ClientSecret          string `json:"client_secret"`
+	AuthorizationEndpoint string `json:"authorization_endpoint"`
+	TokenEndpoint         string `json:"token_endpoint"`
+	UserInfoEndpoint      string `json:"user_info_endpoint"`
+	Scopes                string `json:"scopes"`
+	UserIdField           string `json:"user_id_field"`
+	UsernameField         string `json:"username_field"`
+	DisplayNameField      string `json:"display_name_field"`
+	EmailField            string `json:"email_field"`
+	WellKnown             string `json:"well_known"`
+	AuthStyle             int    `json:"auth_style"`
+	AccessPolicy          string `json:"access_policy"`
+	AccessDeniedMessage   string `json:"access_denied_message"`
+}
+
+type ImportCustomOAuthProvidersRequest struct {
+	Providers []ImportCustomOAuthProviderRequest `json:"providers"`
+}
+
 type FetchCustomOAuthDiscoveryRequest struct {
 	WellKnownURL string `json:"well_known_url"`
 	IssuerURL    string `json:"issuer_url"`
@@ -196,7 +224,11 @@ func FetchCustomOAuthDiscovery(c *gin.Context) {
 	}
 	httpReq.Header.Set("Accept", "application/json")
 
-	client, err := service.NewHttpClientWithOptions(service.HTTPClientOptions{})
+	// Use the protected fetch client for the actual dial as well as the
+	// preflight check above. The ordinary client only validates redirects; it
+	// cannot prevent a DNS rebinding from resolving the initial hostname to a
+	// private address after validation.
+	client, err := service.GetSSRFProtectedHTTPClientWithOptions(service.HTTPClientOptions{})
 	if err != nil {
 		common.ApiErrorMsg(c, "创建 Discovery 客户端失败: "+err.Error())
 		return
@@ -242,6 +274,90 @@ func FetchCustomOAuthDiscovery(c *gin.Context) {
 		"data": gin.H{
 			"well_known_url": targetURL,
 			"discovery":      discovery,
+		},
+	})
+}
+
+// ImportCustomOAuthProviders imports all providers in one database
+// transaction. The registry is refreshed only after that transaction commits,
+// so a validation or persistence error cannot leave a partial import active.
+func ImportCustomOAuthProviders(c *gin.Context) {
+	var req ImportCustomOAuthProvidersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorMsg(c, "无效的请求参数: "+err.Error())
+		return
+	}
+	if len(req.Providers) == 0 {
+		common.ApiErrorMsg(c, "providers 不能为空")
+		return
+	}
+	if len(req.Providers) > 100 {
+		common.ApiErrorMsg(c, "一次最多导入 100 个 OAuth 提供商")
+		return
+	}
+
+	providers := make([]*model.CustomOAuthProvider, 0, len(req.Providers))
+	seenSlugs := make(map[string]struct{}, len(req.Providers))
+	for index, item := range req.Providers {
+		slug := strings.ToLower(strings.TrimSpace(item.Slug))
+		if slug == "" {
+			common.ApiErrorMsg(c, "第 "+strconv.Itoa(index+1)+" 个提供商缺少 Slug")
+			return
+		}
+		if _, exists := seenSlugs[slug]; exists {
+			common.ApiErrorMsg(c, "导入数据包含重复的 Slug: "+slug)
+			return
+		}
+		seenSlugs[slug] = struct{}{}
+		if oauth.IsProviderRegistered(slug) && !oauth.IsCustomProvider(slug) {
+			common.ApiErrorMsg(c, "该 Slug 与内置 OAuth 提供商冲突: "+slug)
+			return
+		}
+
+		providers = append(providers, &model.CustomOAuthProvider{
+			Name:                  item.Name,
+			Slug:                  item.Slug,
+			Icon:                  item.Icon,
+			Enabled:               item.Enabled,
+			ClientId:              item.ClientId,
+			ClientSecret:          item.ClientSecret,
+			AuthorizationEndpoint: item.AuthorizationEndpoint,
+			TokenEndpoint:         item.TokenEndpoint,
+			UserInfoEndpoint:      item.UserInfoEndpoint,
+			Scopes:                item.Scopes,
+			UserIdField:           item.UserIdField,
+			UsernameField:         item.UsernameField,
+			DisplayNameField:      item.DisplayNameField,
+			EmailField:            item.EmailField,
+			WellKnown:             item.WellKnown,
+			AuthStyle:             item.AuthStyle,
+			AccessPolicy:          item.AccessPolicy,
+			AccessDeniedMessage:   item.AccessDeniedMessage,
+		})
+	}
+
+	results, err := model.ImportCustomOAuthProviders(providers)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	created, updated := 0, 0
+	for _, result := range results {
+		oauth.RegisterOrUpdateCustomProvider(result.Provider)
+		if result.Created {
+			created++
+		} else {
+			updated++
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "导入成功",
+		"data": gin.H{
+			"created": created,
+			"updated": updated,
 		},
 	})
 }

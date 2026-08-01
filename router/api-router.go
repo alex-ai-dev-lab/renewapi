@@ -218,6 +218,7 @@ func SetApiRouter(router *gin.Engine) {
 		customOAuthRoute.Use(middleware.RootAuth())
 		{
 			customOAuthRoute.POST("/discovery", controller.FetchCustomOAuthDiscovery)
+			customOAuthRoute.POST("/import", controller.ImportCustomOAuthProviders)
 			customOAuthRoute.GET("/", controller.GetCustomOAuthProviders)
 			customOAuthRoute.GET("/:id", controller.GetCustomOAuthProvider)
 			customOAuthRoute.POST("/", controller.CreateCustomOAuthProvider)

@@ -318,12 +318,30 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
   }
 
   const displayType = form.watch('general_setting.quota_display_type') ?? 'USD'
-  const displayInCurrencyEnabled = form.watch('DisplayInCurrencyEnabled')
-  const showTokensOnlyOption = displayType === 'TOKENS'
+  // Visibility of the two legacy options is derived from the saved values, not
+  // from the live form values. Deriving it from the live value makes both of
+  // them one-way: changing the control unmounts the only control that could
+  // change it back. `showQuotaPerUnit` below already reads `defaultValues` for
+  // the same reason.
+  const savedDisplayType = defaultValues.general_setting.quota_display_type
+  const showTokensOnlyOption =
+    savedDisplayType === 'TOKENS' || displayType === 'TOKENS'
   const showQuotaPerUnit =
     displayType === 'TOKENS' ||
     defaultValues.QuotaPerUnit !== DEFAULT_CURRENCY_CONFIG.quotaPerUnit
-  const showDisplayInCurrencyOption = displayInCurrencyEnabled === false
+  const showDisplayInCurrencyOption =
+    defaultValues.DisplayInCurrencyEnabled === false
+
+  // Single source of truth for the dropdown: the `items` prop and the rendered
+  // children must not disagree about whether Tokens Only is offered.
+  const displayModeItems = [
+    { value: 'USD', label: t('USD') },
+    { value: 'CNY', label: t('CNY') },
+    { value: 'CUSTOM', label: t('Custom Currency') },
+    ...(showTokensOnlyOption
+      ? [{ value: 'TOKENS', label: t('Tokens Only') }]
+      : []),
+  ]
 
   return (
     <>
@@ -393,12 +411,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                 <FormItem>
                   <FormLabel>{t('Display Mode')}</FormLabel>
                   <Select
-                    items={[
-                      { value: 'USD', label: t('USD') },
-                      { value: 'CNY', label: t('CNY') },
-                      { value: 'CUSTOM', label: t('Custom Currency') },
-                      { value: 'TOKENS', label: t('Tokens Only') },
-                    ]}
+                    items={displayModeItems}
                     value={field.value}
                     onValueChange={field.onChange}
                   >
@@ -409,16 +422,11 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                     </FormControl>
                     <SelectContent alignItemWithTrigger={false}>
                       <SelectGroup>
-                        <SelectItem value='USD'>{t('USD')}</SelectItem>
-                        <SelectItem value='CNY'>{t('CNY')}</SelectItem>
-                        <SelectItem value='CUSTOM'>
-                          {t('Custom Currency')}
-                        </SelectItem>
-                        {showTokensOnlyOption && (
-                          <SelectItem value='TOKENS'>
-                            {t('Tokens Only')}
+                        {displayModeItems.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
                           </SelectItem>
-                        )}
+                        ))}
                       </SelectGroup>
                     </SelectContent>
                   </Select>

@@ -90,6 +90,22 @@ function normalizeStringList(text: string): string[] {
     .filter((s) => s.length > 0)
 }
 
+// The backend compiles these patterns with Go's regexp package. A pattern that
+// the browser cannot compile is invalid there too, so rejecting it here avoids
+// storing a rule that only fails later, at request time, on every request it
+// was supposed to match. Note that the reverse does not hold: Go's RE2 rejects
+// lookarounds and backreferences that the browser accepts.
+function findInvalidPattern(patterns: string[]): string | null {
+  for (const pattern of patterns) {
+    try {
+      void new RegExp(pattern)
+    } catch {
+      return pattern
+    }
+  }
+  return null
+}
+
 function normalizeKeySource(src: Partial<KeySource>): KeySource {
   const type = (src?.type || 'gjson') as KeySource['type']
   if (type === 'gjson') return { type, key: '', path: src?.path || '' }
@@ -176,9 +192,29 @@ export function RuleEditorDialog(props: Props) {
   }, [props.open, props.rule, props.templateKey])
 
   const handleSave = (values: RuleFormValues) => {
+    // Validated here rather than through the register() required flag: this
+    // dialog has no inline error surface, so a blocked submit was a button
+    // that did nothing.
+    const name = values.name.trim()
+    if (name.length === 0) {
+      toast.error(t('Rule name is required'))
+      return
+    }
+
     const modelRegex = normalizeStringList(values.model_regex_text)
     if (modelRegex.length === 0) {
       toast.error(t('At least one model regex pattern is required'))
+      return
+    }
+
+    const pathRegex = normalizeStringList(values.path_regex_text)
+    const valueRegex = values.value_regex.trim()
+    const invalidPattern =
+      findInvalidPattern(modelRegex) ??
+      findInvalidPattern(pathRegex) ??
+      findInvalidPattern(valueRegex ? [valueRegex] : [])
+    if (invalidPattern !== null) {
+      toast.error(`${t('Invalid regular expression')}: ${invalidPattern}`)
       return
     }
 
@@ -211,12 +247,12 @@ export function RuleEditorDialog(props: Props) {
 
     const rule: AffinityRule = {
       id: props.rule?.id,
-      name: values.name.trim(),
+      name,
       model_regex: modelRegex,
-      path_regex: normalizeStringList(values.path_regex_text),
+      path_regex: pathRegex,
       user_agent_include: normalizeStringList(values.user_agent_include_text),
       key_sources: validKeySources,
-      value_regex: values.value_regex.trim(),
+      value_regex: valueRegex,
       ttl_seconds: Number(values.ttl_seconds || 0),
       skip_retry_on_failure: values.skip_retry_on_failure,
       include_using_group: values.include_using_group,
@@ -241,7 +277,7 @@ export function RuleEditorDialog(props: Props) {
             <Label>{t('Name')} *</Label>
             <Input
               placeholder='prefer-by-conversation-id'
-              {...form.register('name', { required: true })}
+              {...form.register('name')}
             />
           </div>
 
@@ -251,7 +287,7 @@ export function RuleEditorDialog(props: Props) {
               <Textarea
                 rows={4}
                 placeholder={'^gpt-4o.*$\n^claude-3.*$'}
-                {...form.register('model_regex_text', { required: true })}
+                {...form.register('model_regex_text')}
               />
             </div>
             <div className='grid gap-1.5'>
@@ -298,9 +334,10 @@ export function RuleEditorDialog(props: Props) {
               {keySources.map((src, idx) => (
                 <div key={idx} className='flex items-center gap-2'>
                   <Select
-                    items={[
-                      ...KEY_SOURCE_TYPES.map((t) => ({ value: t, label: t })),
-                    ]}
+                    items={KEY_SOURCE_TYPES.map((sourceType) => ({
+                      value: sourceType,
+                      label: sourceType,
+                    }))}
                     value={src.type}
                     onValueChange={(v) => {
                       if (v === null) return
@@ -317,9 +354,9 @@ export function RuleEditorDialog(props: Props) {
                     </SelectTrigger>
                     <SelectContent alignItemWithTrigger={false}>
                       <SelectGroup>
-                        {KEY_SOURCE_TYPES.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {t}
+                        {KEY_SOURCE_TYPES.map((sourceType) => (
+                          <SelectItem key={sourceType} value={sourceType}>
+                            {sourceType}
                           </SelectItem>
                         ))}
                       </SelectGroup>

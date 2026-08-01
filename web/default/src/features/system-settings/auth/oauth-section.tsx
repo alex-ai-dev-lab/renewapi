@@ -18,7 +18,6 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as z from 'zod'
-import axios from 'axios'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Download, Upload } from 'lucide-react'
@@ -58,7 +57,8 @@ import {
   SettingsPageFormActions,
 } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
-import { useUpdateOption } from '../hooks/use-update-option'
+import { useUpdateOptionsBulk } from '../hooks/use-update-option'
+import { discoverOIDCEndpoints } from './custom-oauth/api'
 
 const REDACTED_SECRET = '__SECRET_REDACTED__'
 
@@ -227,9 +227,19 @@ const mergeOAuthImport = (
   return next
 }
 
+/**
+ * The three OIDC endpoint inputs are labelled as overrides for the
+ * auto-discovered values, so an explicit entry always wins. A discovery
+ * document that omits a key must not clear whatever is already saved.
+ */
+const resolveEndpoint = (override: string, discovered: string): string => {
+  if (override.trim() !== '') return override
+  return discovered || override
+}
+
 export function OAuthSection(props: OAuthSectionProps) {
   const { t } = useTranslation()
-  const updateOption = useUpdateOption()
+  const updateOptionsBulk = useUpdateOptionsBulk()
   const [activeTab, setActiveTab] = useState('github')
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
@@ -260,8 +270,12 @@ export function OAuthSection(props: OAuthSectionProps) {
   const onSubmit = async (values: OAuthFormValues) => {
     let finalValues = values
 
-    if (values.oidc.well_known && values.oidc.well_known.trim() !== '') {
-      const wellKnown = values.oidc.well_known.trim()
+    const wellKnown = values.oidc.well_known.trim()
+    const savedWellKnown = (baselineRef.current['oidc.well_known'] ?? '').trim()
+
+    // Only re-run discovery when the Well-Known URL itself changed. Doing it on
+    // every save made an unreachable provider block edits to unrelated tabs.
+    if (wellKnown !== '' && wellKnown !== savedWellKnown) {
       if (
         !wellKnown.startsWith('http://') &&
         !wellKnown.startsWith('https://')
@@ -271,10 +285,25 @@ export function OAuthSection(props: OAuthSectionProps) {
       }
 
       try {
-        const res = await axios.create().get(wellKnown)
-        const authEndpoint = res.data['authorization_endpoint'] || ''
-        const tokenEndpoint = res.data['token_endpoint'] || ''
-        const userInfoEndpoint = res.data['userinfo_endpoint'] || ''
+        const res = await discoverOIDCEndpoints(wellKnown)
+        if (!res.success) {
+          throw new Error(
+            res.message || t('Failed to fetch OIDC configuration')
+          )
+        }
+        const discovery = res.data?.discovery ?? {}
+        const authEndpoint = resolveEndpoint(
+          values.oidc.authorization_endpoint,
+          discovery.authorization_endpoint || ''
+        )
+        const tokenEndpoint = resolveEndpoint(
+          values.oidc.token_endpoint,
+          discovery.token_endpoint || ''
+        )
+        const userInfoEndpoint = resolveEndpoint(
+          values.oidc.user_info_endpoint,
+          discovery.userinfo_endpoint || ''
+        )
 
         finalValues = {
           ...values,
@@ -313,12 +342,11 @@ export function OAuthSection(props: OAuthSectionProps) {
       return
     }
 
-    for (const key of changedKeys) {
-      await updateOption.mutateAsync({
-        key,
-        value: normalized[key],
-      })
-    }
+    await updateOptionsBulk.mutateAsync({
+      options: Object.fromEntries(
+        changedKeys.map((key) => [key, normalized[key]])
+      ),
+    })
 
     baselineRef.current = normalized
     baselineSerializedRef.current = JSON.stringify(normalized)
@@ -445,7 +473,7 @@ export function OAuthSection(props: OAuthSectionProps) {
             <SettingsPageFormActions
               onSave={form.handleSubmit(onSubmit)}
               onReset={handleReset}
-              isSaving={updateOption.isPending}
+              isSaving={updateOptionsBulk.isPending}
               isResetDisabled={!form.formState.isDirty}
             />
             <FormDirtyIndicator isDirty={form.formState.isDirty} />
@@ -697,7 +725,9 @@ export function OAuthSection(props: OAuthSectionProps) {
                         />
                       </FormControl>
                       <FormDescription>
-                        {t('Auto-discovers endpoints from the provider')}
+                        {t(
+                          'Auto-discovers endpoints from the provider. Discovery runs when this URL changes, and only fills endpoints left blank below.'
+                        )}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>

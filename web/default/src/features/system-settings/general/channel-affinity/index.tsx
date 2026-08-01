@@ -61,20 +61,27 @@ import { StatusBadge, StatusBadgeList } from '@/components/status-badge'
 import { SettingsSwitchField } from '../../components/settings-form-layout'
 import { SettingsPageActionsPortal } from '../../components/settings-page-context'
 import { SettingsSection } from '../../components/settings-section'
-import { useUpdateOption } from '../../hooks/use-update-option'
+import { useUpdateOptionsBulk } from '../../hooks/use-update-option'
 import { getCacheStats, clearAllCache, clearRuleCache } from './api'
 import { RULE_TEMPLATES, cloneTemplate, makeUniqueName } from './constants'
 import { RuleEditorDialog } from './rule-editor-dialog'
 import type { AffinityRule, CacheStats, ChannelAffinitySettings } from './types'
 
+// The positional index has to win over any id carried by the payload. Every
+// edit and delete path in this file addresses rules by index, so a rule whose
+// id disagrees with its position is a rule the table cannot edit correctly.
+function withPositionalIds(items: unknown[]): AffinityRule[] {
+  return items.map(
+    (item, index) =>
+      ({ ...(item as Record<string, unknown>), id: index }) as AffinityRule
+  )
+}
+
 function parseRules(jsonStr: string): AffinityRule[] {
   try {
     const arr = JSON.parse(jsonStr || '[]')
     if (!Array.isArray(arr)) return []
-    return arr.map(
-      (r: Record<string, unknown>, i: number) =>
-        ({ id: i, ...r }) as AffinityRule
-    )
+    return withPositionalIds(arr)
   } catch {
     return []
   }
@@ -119,7 +126,7 @@ type ChannelAffinityPayload = Partial<ChannelAffinitySettings> & {
 
 export function ChannelAffinitySection(props: Props) {
   const { t } = useTranslation()
-  const updateOption = useUpdateOption()
+  const updateOptionsBulk = useUpdateOptionsBulk()
 
   const [enabled, setEnabled] = useState(
     props.defaultValues['channel_affinity_setting.enabled']
@@ -187,6 +194,7 @@ export function ChannelAffinitySection(props: Props) {
     try {
       const res = await getCacheStats()
       if (res.success) setCacheStats(res.data || null)
+      else toast.error(res.message || t('Failed to refresh cache stats'))
     } catch {
       toast.error(t('Failed to refresh cache stats'))
     } finally {
@@ -297,10 +305,11 @@ export function ChannelAffinitySection(props: Props) {
         return
       }
 
-      for (const u of updates) {
-        await updateOption.mutateAsync(u)
-      }
-      toast.success(t('Saved successfully'))
+      await updateOptionsBulk.mutateAsync({
+        options: Object.fromEntries(
+          updates.map(({ key, value }) => [key, value])
+        ),
+      })
     } catch {
       toast.error(t('Failed to save'))
     } finally {
@@ -349,10 +358,10 @@ export function ChannelAffinitySection(props: Props) {
     if (typeof value === 'string') {
       const parsed = JSON.parse(value || '[]')
       if (!Array.isArray(parsed)) throw new Error('Rules must be an array')
-      return parsed.map((rule, index) => ({ id: index, ...rule }))
+      return withPositionalIds(parsed)
     }
     if (Array.isArray(value)) {
-      return value.map((rule, index) => ({ id: index, ...rule }))
+      return withPositionalIds(value)
     }
     throw new Error('Rules must be an array')
   }
@@ -408,9 +417,13 @@ export function ChannelAffinitySection(props: Props) {
 
   const handleRuleSave = (rule: AffinityRule) => {
     setRules((prev) => {
-      const existIdx = prev.findIndex(
-        (r) => r.id === rule.id || (rule.name && r.name === editingRule?.name)
-      )
+      // Match on id alone. The previous name based clause was OR'd into the
+      // same findIndex, so with two rules sharing a name it could return the
+      // earlier one and the save landed on a rule the user never opened.
+      const existIdx =
+        typeof rule.id === 'number'
+          ? prev.findIndex((r) => r.id === rule.id)
+          : -1
       if (existIdx >= 0) {
         const next = [...prev]
         next[existIdx] = { ...rule, id: existIdx }
@@ -429,22 +442,36 @@ export function ChannelAffinitySection(props: Props) {
   }
 
   const handleClearAll = async () => {
-    const res = await clearAllCache()
-    if (res.success) {
-      toast.success(t('Cleared'))
-      refreshCache()
+    try {
+      const res = await clearAllCache()
+      if (res.success) {
+        toast.success(t('Cleared'))
+        refreshCache()
+      } else {
+        toast.error(res.message || t('Failed to clear cache'))
+      }
+    } catch {
+      toast.error(t('Failed to clear cache'))
+    } finally {
+      setClearAllDialogOpen(false)
     }
-    setClearAllDialogOpen(false)
   }
 
   const handleClearRule = async () => {
     if (!clearRuleName) return
-    const res = await clearRuleCache(clearRuleName)
-    if (res.success) {
-      toast.success(t('Cleared'))
-      refreshCache()
+    try {
+      const res = await clearRuleCache(clearRuleName)
+      if (res.success) {
+        toast.success(t('Cleared'))
+        refreshCache()
+      } else {
+        toast.error(res.message || t('Failed to clear cache'))
+      }
+    } catch {
+      toast.error(t('Failed to clear cache'))
+    } finally {
+      setClearRuleName(null)
     }
-    setClearRuleName(null)
   }
 
   const switchToJsonMode = () => {
@@ -465,12 +492,7 @@ export function ChannelAffinitySection(props: Props) {
         toast.error(t('Rules JSON must be an array'))
         return
       }
-      setRules(
-        parsed.map(
-          (r: Record<string, unknown>, i: number) =>
-            ({ id: i, ...r }) as AffinityRule
-        )
-      )
+      setRules(withPositionalIds(parsed))
       setEditMode('visual')
     } catch {
       toast.error(t('Invalid rules JSON format'))

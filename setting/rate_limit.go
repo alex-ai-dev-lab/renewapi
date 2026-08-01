@@ -16,6 +16,22 @@ var ModelRequestRateLimitSuccessCount = 1000
 var ModelRequestRateLimitGroup = map[string][2]int{}
 var ModelRequestRateLimitMutex sync.RWMutex
 
+// ValidateModelRequestRateLimitSettings validates the scalar limits before
+// they reach either the Redis or in-process limiter. Zero means unlimited for
+// count fields, while the window must always be positive.
+func ValidateModelRequestRateLimitSettings(durationMinutes, totalCount, successCount int) error {
+	if durationMinutes < 1 {
+		return fmt.Errorf("rate-limit duration must be at least 1 minute")
+	}
+	if totalCount < 0 {
+		return fmt.Errorf("total request limit cannot be negative")
+	}
+	if successCount < 0 {
+		return fmt.Errorf("successful request limit cannot be negative")
+	}
+	return nil
+}
+
 func ModelRequestRateLimitGroup2JSONString() string {
 	ModelRequestRateLimitMutex.RLock()
 	defer ModelRequestRateLimitMutex.RUnlock()
@@ -28,11 +44,18 @@ func ModelRequestRateLimitGroup2JSONString() string {
 }
 
 func UpdateModelRequestRateLimitGroupByJSONString(jsonStr string) error {
-	ModelRequestRateLimitMutex.RLock()
-	defer ModelRequestRateLimitMutex.RUnlock()
+	parsed := make(map[string][2]int)
+	if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
+		return err
+	}
+	if err := validateModelRequestRateLimitGroup(parsed); err != nil {
+		return err
+	}
 
-	ModelRequestRateLimitGroup = make(map[string][2]int)
-	return json.Unmarshal([]byte(jsonStr), &ModelRequestRateLimitGroup)
+	ModelRequestRateLimitMutex.Lock()
+	ModelRequestRateLimitGroup = parsed
+	ModelRequestRateLimitMutex.Unlock()
+	return nil
 }
 
 func GetGroupRateLimit(group string) (totalCount, successCount int, found bool) {
@@ -56,7 +79,11 @@ func CheckModelRequestRateLimitGroup(jsonStr string) error {
 	if err != nil {
 		return err
 	}
-	for group, limits := range checkModelRequestRateLimitGroup {
+	return validateModelRequestRateLimitGroup(checkModelRequestRateLimitGroup)
+}
+
+func validateModelRequestRateLimitGroup(groups map[string][2]int) error {
+	for group, limits := range groups {
 		if limits[0] < 0 || limits[1] < 1 {
 			return fmt.Errorf("group %s has negative rate limit values: [%d, %d]", group, limits[0], limits[1])
 		}

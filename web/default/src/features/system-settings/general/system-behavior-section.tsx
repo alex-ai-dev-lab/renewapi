@@ -44,6 +44,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { FormNavigationGuard } from '../components/form-navigation-guard'
 import {
   SettingsForm,
   SettingsSwitchContent,
@@ -89,6 +90,8 @@ export function SystemBehaviorSection({
     defaultValues,
   })
 
+  const { isDirty } = form.formState
+
   useResetForm(form, defaultValues)
 
   const onSubmit = async (data: BehaviorFormValues) => {
@@ -99,6 +102,12 @@ export function SystemBehaviorSection({
     for (const [key, value] of updates) {
       await updateOption.mutateAsync({ key, value })
     }
+
+    // Without this the form stays dirty after a successful save, and
+    // useResetForm deliberately skips resetting a dirty form - so the section
+    // would keep showing the submitted values forever and silently ignore
+    // every later server snapshot.
+    form.reset(data)
   }
 
   const exportConfig = async () => {
@@ -163,6 +172,7 @@ export function SystemBehaviorSection({
 
   return (
     <SettingsSection title={t('System Behavior')}>
+      <FormNavigationGuard when={isDirty} />
       <Form {...form}>
         <SettingsForm onSubmit={form.handleSubmit(onSubmit)}>
           <SettingsPageActionsPortal>

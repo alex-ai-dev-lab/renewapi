@@ -8,13 +8,9 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/setting"
-	"github.com/QuantumNous/new-api/setting/console_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
-	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -289,394 +285,26 @@ func optionValueToString(value any) string {
 
 func UpdateOption(c *gin.Context) {
 	var option OptionUpdateRequest
-	err := common.DecodeJson(c.Request.Body, &option)
-	if err != nil {
+	if err := common.DecodeJson(c.Request.Body, &option); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"message": "无效的参数",
 		})
 		return
 	}
-	option.Value = optionValueToString(option.Value)
-	switch option.Key {
-	case "QuotaForInviter", "QuotaForInvitee":
-		if isPositiveOptionValue(option.Value.(string)) && !operation_setting.IsPaymentComplianceConfirmed() {
-			common.ApiErrorI18n(c, i18n.MsgPaymentComplianceRequired)
-			return
-		}
-	default:
-		if isPaymentComplianceOptionKey(option.Key) {
-			common.ApiErrorMsg(c, "合规确认字段不允许通过通用设置接口修改")
-			return
-		}
-	}
-	switch option.Key {
-	case "GitHubOAuthEnabled":
-		if option.Value == "true" && common.GitHubClientId == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 GitHub OAuth，请先填入 GitHub Client Id 以及 GitHub Client Secret！",
-			})
-			return
-		}
-	case "discord.enabled":
-		if option.Value == "true" && system_setting.GetDiscordSettings().ClientId == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 Discord OAuth，请先填入 Discord Client Id 以及 Discord Client Secret！",
-			})
-			return
-		}
-	case "oidc.enabled":
-		if option.Value == "true" && system_setting.GetOIDCSettings().ClientId == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 OIDC 登录，请先填入 OIDC Client Id 以及 OIDC Client Secret！",
-			})
-			return
-		}
-	case "LinuxDOOAuthEnabled":
-		if option.Value == "true" && common.LinuxDOClientId == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 LinuxDO OAuth，请先填入 LinuxDO Client Id 以及 LinuxDO Client Secret！",
-			})
-			return
-		}
-	case "EmailDomainRestrictionEnabled":
-		if option.Value == "true" && len(common.EmailDomainWhitelist) == 0 {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用邮箱域名限制，请先填入限制的邮箱域名！",
-			})
-			return
-		}
-	case "WeChatAuthEnabled":
-		if option.Value == "true" && common.WeChatServerAddress == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用微信登录，请先填入微信登录相关配置信息！",
-			})
-			return
-		}
-	case "TurnstileCheckEnabled":
-		if option.Value == "true" && common.TurnstileSiteKey == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 Turnstile 校验，请先填入 Turnstile 校验相关配置信息！",
-			})
 
-			return
-		}
-	case "TelegramOAuthEnabled":
-		if option.Value == "true" && common.TelegramBotToken == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无法启用 Telegram OAuth，请先填入 Telegram Bot Token！",
-			})
-			return
-		}
-	case "theme.frontend":
-		if option.Value != "default" && option.Value != "classic" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的主题值，可选值：default（新版前端）、classic（经典前端）",
-			})
-			return
-		}
-	case "theme.customization_preset":
-		if !isOneOfOptionValue(option.Value.(string), "default", "anthropic", "simple-large", "underground", "rose-garden", "lake-view", "sunset-glow", "forest-whisper", "ocean-breeze", "lavender-dream") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的主题预设值",
-			})
-			return
-		}
-	case "theme.customization_font":
-		if !isOneOfOptionValue(option.Value.(string), "default", "sans", "serif") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的字体值",
-			})
-			return
-		}
-	case "theme.customization_radius":
-		if !isOneOfOptionValue(option.Value.(string), "default", "none", "sm", "md", "lg", "xl") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的圆角值",
-			})
-			return
-		}
-	case "theme.customization_scale":
-		if !isOneOfOptionValue(option.Value.(string), "default", "sm", "lg", "xl") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的密度值",
-			})
-			return
-		}
-	case "theme.content_layout":
-		if !isOneOfOptionValue(option.Value.(string), "full", "centered") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的内容布局值",
-			})
-			return
-		}
-	case "theme.custom_accent_enabled":
-		if !isOneOfOptionValue(option.Value.(string), "true", "false") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的自定义强调色开关",
-			})
-			return
-		}
-	case "theme.custom_accent_color":
-		if !isHexColorOptionValue(option.Value.(string)) {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的自定义强调色，请使用 #RRGGBB 格式",
-			})
-			return
-		}
-	case "theme.custom_palette_enabled":
-		if !isOneOfOptionValue(option.Value.(string), "true", "false") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的自定义界面调色板开关",
-			})
-			return
-		}
-	case "theme.custom_background_color", "theme.custom_surface_color", "theme.custom_sidebar_color", "theme.custom_chart_color":
-		if !isHexColorOptionValue(option.Value.(string)) {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的自定义界面颜色，请使用 #RRGGBB 格式",
-			})
-			return
-		}
-	case "DashboardDefaultTimeRange":
-		if !isOneOfOptionValue(option.Value.(string), "1d", "7d", "30d", "1y", "all") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的统计默认时间范围",
-			})
-			return
-		}
-	case "DashboardRefreshIntervalSeconds":
-		if !isOneOfOptionValue(option.Value.(string), "5", "15", "30", "60") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的统计刷新间隔",
-			})
-			return
-		}
-	case "DashboardDefaultPageSize":
-		if !isOneOfOptionValue(option.Value.(string), "10", "25", "50", "100") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的统计表格页大小",
-			})
-			return
-		}
-	case "DashboardDefaultHealthFilter":
-		if !isOneOfOptionValue(option.Value.(string), "all", "active", "risk", "slow") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的统计默认健康筛选",
-			})
-			return
-		}
-	case "DashboardDefaultTrendMode":
-		if !isOneOfOptionValue(option.Value.(string), "overview", "traffic", "reliability", "latency", "spend") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的统计默认趋势模式",
-			})
-			return
-		}
-	case "DashboardDefaultChartTimeRangeDays":
-		if !isOneOfOptionValue(option.Value.(string), "1", "7", "14", "29") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的统计图表默认时间窗口",
-			})
-			return
-		}
-	case "DashboardDefaultConsumptionChart":
-		if !isOneOfOptionValue(option.Value.(string), "bar", "area") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的消费分布图默认类型",
-			})
-			return
-		}
-	case "DashboardDefaultModelAnalyticsChart":
-		if !isOneOfOptionValue(option.Value.(string), "trend", "proportion", "top") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的模型分析图默认类型",
-			})
-			return
-		}
-	case "DashboardVisibleSections":
-		if !isCSVSubsetOptionValue(option.Value.(string), "overview", "models", "channels", "users") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的 Dashboard 可见分区",
-			})
-			return
-		}
-	case "SidebarSectionOrder":
-		if !isCSVSubsetOptionValue(option.Value.(string), "chat", "console", "personal", "admin") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的侧边栏分组顺序",
-			})
-			return
-		}
-	case "SystemSettingsNavigation":
-		if !isSystemSettingsNavigationOptionValue(option.Value.(string)) {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的系统设置导航配置",
-			})
-			return
-		}
-	case "DashboardSlowFirstTokenThresholdMs":
-		if !isFloatInRangeOptionValue(option.Value.(string), 100, 120000) {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的慢首字阈值",
-			})
-			return
-		}
-	case "DashboardErrorRateWarningThreshold", "DashboardErrorRateCriticalThreshold", "DashboardSuccessRateGoodThreshold", "DashboardSuccessRateDegradedThreshold":
-		if !isFloatInRangeOptionValue(option.Value.(string), 0, 100) {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的统计健康阈值",
-			})
-			return
-		}
-	case "GroupRatio":
-		err = ratio_setting.CheckGroupRatio(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "ImageRatio":
-		err = ratio_setting.UpdateImageRatioByJSONString(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "图片倍率设置失败: " + err.Error(),
-			})
-			return
-		}
-	case "AudioRatio":
-		err = ratio_setting.UpdateAudioRatioByJSONString(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "音频倍率设置失败: " + err.Error(),
-			})
-			return
-		}
-	case "AudioCompletionRatio":
-		err = ratio_setting.UpdateAudioCompletionRatioByJSONString(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "音频补全倍率设置失败: " + err.Error(),
-			})
-			return
-		}
-	case "CreateCacheRatio":
-		err = ratio_setting.UpdateCreateCacheRatioByJSONString(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "缓存创建倍率设置失败: " + err.Error(),
-			})
-			return
-		}
-	case "ModelRequestRateLimitGroup":
-		err = setting.CheckModelRequestRateLimitGroup(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "AutomaticDisableStatusCodes":
-		_, err = operation_setting.ParseHTTPStatusCodeRanges(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "AutomaticRetryStatusCodes":
-		_, err = operation_setting.ParseHTTPStatusCodeRanges(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "console_setting.api_info":
-		err = console_setting.ValidateConsoleSettings(option.Value.(string), "ApiInfo")
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "console_setting.announcements":
-		err = console_setting.ValidateConsoleSettings(option.Value.(string), "Announcements")
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "console_setting.faq":
-		err = console_setting.ValidateConsoleSettings(option.Value.(string), "FAQ")
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "console_setting.uptime_kuma_groups":
-		err = console_setting.ValidateConsoleSettings(option.Value.(string), "UptimeKumaGroups")
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	}
-	if err = validateAntiPoisonAuditOptions(map[string]string{
-		option.Key: option.Value.(string),
-	}); err != nil {
-		common.ApiErrorMsg(c, err.Error())
+	key := strings.TrimSpace(option.Key)
+	value := optionValueToString(option.Value)
+	values, err := normalizeOptionValues(map[string]string{key: value})
+	if err != nil {
+		writeOptionValidationError(c, err)
 		return
 	}
-	err = model.UpdateOption(option.Key, option.Value.(string))
-	if err != nil {
+	if err := validateOptionValues(values); err != nil {
+		writeOptionValidationError(c, err)
+		return
+	}
+	if err := model.UpdateOption(key, values[key]); err != nil {
 		common.ApiError(c, err)
 		return
 	}
@@ -695,26 +323,19 @@ func UpdateOptionsBulk(c *gin.Context) {
 		})
 		return
 	}
+
 	values := make(map[string]string, len(request.Options))
 	for key, rawValue := range request.Options {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			common.ApiErrorMsg(c, "设置项不能为空")
-			return
-		}
-		value := optionValueToString(rawValue)
-		if isPaymentComplianceOptionKey(key) {
-			common.ApiErrorMsg(c, "合规确认字段不允许通过通用设置接口修改")
-			return
-		}
-		if (key == "QuotaForInviter" || key == "QuotaForInvitee") && isPositiveOptionValue(value) && !operation_setting.IsPaymentComplianceConfirmed() {
-			common.ApiErrorI18n(c, i18n.MsgPaymentComplianceRequired)
-			return
-		}
-		values[key] = value
+		values[key] = optionValueToString(rawValue)
 	}
-	if err := validateAntiPoisonAuditOptions(values); err != nil {
-		common.ApiErrorMsg(c, err.Error())
+	normalizedValues, err := normalizeOptionValues(values)
+	if err != nil {
+		writeOptionValidationError(c, err)
+		return
+	}
+	values = normalizedValues
+	if err := validateOptionValues(values); err != nil {
+		writeOptionValidationError(c, err)
 		return
 	}
 	if err := model.UpdateOptionsBulk(values); err != nil {

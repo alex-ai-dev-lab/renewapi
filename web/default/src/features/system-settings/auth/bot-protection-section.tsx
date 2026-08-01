@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -54,17 +54,46 @@ import {
   SettingsPageFormActions,
 } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
-import { useUpdateOption } from '../hooks/use-update-option'
+import { useResetForm } from '../hooks/use-reset-form'
+import { useUpdateOptionsBulk } from '../hooks/use-update-option'
 
 const REDACTED_SECRET = '__SECRET_REDACTED__'
 
-const botProtectionSchema = z.object({
+// Shape only. Used for export/import parsing so those paths never throw just
+// because Turnstile is half-configured.
+const botProtectionValuesSchema = z.object({
   TurnstileCheckEnabled: z.boolean(),
   TurnstileSiteKey: z.string().optional(),
   TurnstileSecretKey: z.string().optional(),
 })
 
-type BotProtectionFormValues = z.infer<typeof botProtectionSchema>
+// Shape + cross-field rules. Used as the form resolver so that enabling
+// Turnstile without credentials is rejected instead of silently saved.
+const botProtectionSchema = botProtectionValuesSchema.superRefine(
+  (value, ctx) => {
+    if (!value.TurnstileCheckEnabled) {
+      return
+    }
+
+    if (!(value.TurnstileSiteKey ?? '').trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['TurnstileSiteKey'],
+        message: 'Site key is required when Turnstile is enabled',
+      })
+    }
+
+    if (!(value.TurnstileSecretKey ?? '').trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['TurnstileSecretKey'],
+        message: 'Secret key is required when Turnstile is enabled',
+      })
+    }
+  }
+)
+
+type BotProtectionFormValues = z.infer<typeof botProtectionValuesSchema>
 
 type BotProtectionSectionProps = {
   defaultValues: BotProtectionFormValues
@@ -78,7 +107,7 @@ export function BotProtectionSection({
   defaultValues,
 }: BotProtectionSectionProps) {
   const { t } = useTranslation()
-  const updateOption = useUpdateOption()
+  const updateOptionsBulk = useUpdateOptionsBulk()
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
 
@@ -87,9 +116,7 @@ export function BotProtectionSection({
     defaultValues,
   })
 
-  useEffect(() => {
-    form.reset(defaultValues)
-  }, [defaultValues, form])
+  useResetForm(form, defaultValues)
 
   const onSubmit = async (data: BotProtectionFormValues) => {
     const updates = Object.entries(data).filter(
@@ -97,12 +124,14 @@ export function BotProtectionSection({
         value !== defaultValues[key as keyof BotProtectionFormValues]
     )
 
-    for (const [key, value] of updates) {
-      await updateOption.mutateAsync({ key, value: value ?? '' })
-    }
+    await updateOptionsBulk.mutateAsync({
+      options: Object.fromEntries(
+        updates.map(([key, value]) => [key, value ?? ''])
+      ),
+    })
   }
 
-  const currentValues = () => botProtectionSchema.parse(form.getValues())
+  const currentValues = () => botProtectionValuesSchema.parse(form.getValues())
 
   const exportConfig = async () => {
     const values = currentValues()
@@ -155,7 +184,7 @@ export function BotProtectionSection({
       const raw = JSON.parse(importText) as BotProtectionImportExportPayload
       const source = raw.BotProtection ?? raw
       const current = currentValues()
-      const parsed = botProtectionSchema.parse({
+      const parsed = botProtectionValuesSchema.parse({
         ...current,
         ...source,
         TurnstileSecretKey:
@@ -208,7 +237,7 @@ export function BotProtectionSection({
           </SettingsPageActionsPortal>
           <SettingsPageFormActions
             onSave={form.handleSubmit(onSubmit)}
-            isSaving={updateOption.isPending}
+            isSaving={updateOptionsBulk.isPending}
           />
           <FormField
             control={form.control}

@@ -2,8 +2,11 @@ package model
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -20,6 +23,8 @@ type Option struct {
 	Key   string `json:"key" gorm:"primaryKey"`
 	Value string `json:"value"`
 }
+
+var optionUpdateMutex sync.Mutex
 
 func AllOption() ([]*Option, error) {
 	var options []*Option
@@ -236,19 +241,7 @@ func SyncOptions(frequency int) {
 }
 
 func UpdateOption(key string, value string) error {
-	// Save to database first
-	option := Option{
-		Key: key,
-	}
-	// https://gorm.io/docs/update.html#Save-All-Fields
-	DB.FirstOrCreate(&option, Option{Key: key})
-	option.Value = value
-	// Save is a combination function.
-	// If save value does not contain primary key, it will execute Create,
-	// otherwise it will execute Update (with all fields).
-	DB.Save(&option)
-	// Update OptionMap
-	return updateOptionMap(key, value)
+	return persistOptionValues(map[string]string{key: value})
 }
 
 // UpdateOptionsBulk persists multiple key/value pairs in a single database
@@ -260,25 +253,92 @@ func UpdateOptionsBulk(values map[string]string) error {
 	if len(values) == 0 {
 		return nil
 	}
-	err := DB.Transaction(func(tx *gorm.DB) error {
-		for k, v := range values {
-			option := Option{Key: k}
-			if err := tx.FirstOrCreate(&option, Option{Key: k}).Error; err != nil {
+	return persistOptionValues(values)
+}
+
+func persistOptionValues(values map[string]string) error {
+	optionUpdateMutex.Lock()
+	defer optionUpdateMutex.Unlock()
+
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	previous := make(map[string]string, len(keys))
+	var existing []*Option
+	if err := DB.Where("key IN ?", keys).Find(&existing).Error; err != nil {
+		return err
+	}
+	for _, option := range existing {
+		previous[option.Key] = option.Value
+	}
+	previousOptionMap := make(map[string]string, len(keys))
+	common.OptionMapRWMutex.RLock()
+	for _, key := range keys {
+		if value, ok := common.OptionMap[key]; ok {
+			previousOptionMap[key] = value
+		}
+	}
+	common.OptionMapRWMutex.RUnlock()
+
+	if err := DB.Transaction(func(tx *gorm.DB) error {
+		for _, key := range keys {
+			option := Option{Key: key}
+			if err := tx.FirstOrCreate(&option, Option{Key: key}).Error; err != nil {
 				return err
 			}
-			option.Value = v
+			option.Value = values[key]
 			if err := tx.Save(&option).Error; err != nil {
 				return err
 			}
 		}
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
-	for k, v := range values {
-		if err := updateOptionMap(k, v); err != nil {
+
+	for _, key := range keys {
+		if err := updateOptionMap(key, values[key]); err != nil {
+			rollbackErr := rollbackOptionValues(keys, previous, previousOptionMap)
+			if rollbackErr != nil {
+				return fmt.Errorf("apply option %q failed: %w; rollback failed: %v", key, err, rollbackErr)
+			}
 			return err
+		}
+	}
+
+	return nil
+}
+
+func rollbackOptionValues(keys []string, previous, previousOptionMap map[string]string) error {
+	if err := DB.Transaction(func(tx *gorm.DB) error {
+		for _, key := range keys {
+			value, existed := previous[key]
+			if existed {
+				if err := tx.Model(&Option{}).Where("key = ?", key).Update("value", value).Error; err != nil {
+					return err
+				}
+				continue
+			}
+			if err := tx.Where("key = ?", key).Delete(&Option{}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	loadOptionsFromDatabase()
+	common.OptionMapRWMutex.Lock()
+	defer common.OptionMapRWMutex.Unlock()
+	for _, key := range keys {
+		if value, existed := previousOptionMap[key]; existed {
+			common.OptionMap[key] = value
+		} else {
+			delete(common.OptionMap, key)
 		}
 	}
 	return nil
@@ -287,11 +347,22 @@ func UpdateOptionsBulk(values map[string]string) error {
 func updateOptionMap(key string, value string) (err error) {
 	common.OptionMapRWMutex.Lock()
 	defer common.OptionMapRWMutex.Unlock()
+	previousValue, hadPreviousValue := common.OptionMap[key]
 	common.OptionMap[key] = value
 
 	// 检查是否是模型配置 - 使用更规范的方式处理
-	if handleConfigUpdate(key, value) {
+	if handled, configErr := handleConfigUpdate(key, value); handled {
+		if configErr != nil {
+			if hadPreviousValue {
+				common.OptionMap[key] = previousValue
+			} else {
+				delete(common.OptionMap, key)
+			}
+			return configErr
+		}
 		return nil // 已由配置系统处理
+	} else if configErr != nil {
+		return configErr
 	}
 
 	// 处理传统配置项...
@@ -645,10 +716,10 @@ func updateOptionMap(key string, value string) (err error) {
 }
 
 // handleConfigUpdate 处理分层配置更新，返回是否已处理
-func handleConfigUpdate(key, value string) bool {
+func handleConfigUpdate(key, value string) (bool, error) {
 	parts := strings.SplitN(key, ".", 2)
 	if len(parts) != 2 {
-		return false // 不是分层配置
+		return false, nil // 不是分层配置
 	}
 
 	configName := parts[0]
@@ -657,14 +728,16 @@ func handleConfigUpdate(key, value string) bool {
 	// 获取配置对象
 	cfg := config.GlobalConfig.Get(configName)
 	if cfg == nil {
-		return false // 未注册的配置
+		return false, nil // 未注册的配置
 	}
 
 	// 更新配置
 	configMap := map[string]string{
 		configKey: value,
 	}
-	config.UpdateConfigFromMap(cfg, configMap)
+	if err := config.UpdateConfigFromMap(cfg, configMap); err != nil {
+		return true, err
+	}
 
 	// 特定配置的后处理
 	if configName == "performance_setting" {
@@ -678,5 +751,5 @@ func handleConfigUpdate(key, value string) bool {
 		system_setting.UpdateAndSyncTheme()
 	}
 
-	return true // 已处理
+	return true, nil // 已处理
 }

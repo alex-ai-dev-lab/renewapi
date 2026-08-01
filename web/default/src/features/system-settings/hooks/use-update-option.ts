@@ -19,6 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import i18next from 'i18next'
 import { toast } from 'sonner'
+import { getApiErrorMessage } from '@/lib/api-errors'
+import { isRequestCanceled } from '@/lib/request-errors'
 import { updateSystemOption, updateSystemOptionsBulk } from '../api'
 import type { UpdateOptionRequest, UpdateOptionsBulkRequest } from '../types'
 
@@ -62,33 +64,34 @@ const STATUS_RELATED_KEYS = [
   'DashboardSuccessRateDegradedThreshold',
 ]
 
+function showMutationError(error: unknown, fallback: string) {
+  if (isRequestCanceled(error)) return
+  toast.error(getApiErrorMessage(error, fallback))
+}
+
 export function useUpdateOption() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (request: UpdateOptionRequest) => updateSystemOption(request),
-    onSuccess: (data, variables) => {
-      if (data.success) {
-        // Always refresh system-options
-        queryClient.invalidateQueries({ queryKey: ['system-options'] })
+    onSuccess: (_data, variables) => {
+      // Always refresh system-options
+      queryClient.invalidateQueries({ queryKey: ['system-options'] })
 
-        // If updating frontend-display-related config, also refresh status
-        if (STATUS_RELATED_KEYS.includes(variables.key)) {
-          queryClient.invalidateQueries({ queryKey: ['status'] })
-          try {
-            window.localStorage.removeItem('status')
-          } catch {
-            /* empty */
-          }
+      // If updating frontend-display-related config, also refresh status
+      if (STATUS_RELATED_KEYS.includes(variables.key)) {
+        queryClient.invalidateQueries({ queryKey: ['status'] })
+        try {
+          window.localStorage.removeItem('status')
+        } catch {
+          /* empty */
         }
-
-        toast.success(i18next.t('Setting updated successfully'))
-      } else {
-        toast.error(data.message || i18next.t('Failed to update setting'))
       }
+
+      toast.success(i18next.t('Setting updated successfully'))
     },
-    onError: (error: Error) => {
-      toast.error(error.message || i18next.t('Failed to update setting'))
+    onError: (error: unknown) => {
+      showMutationError(error, i18next.t('Failed to update setting'))
     },
   })
 }
@@ -99,27 +102,23 @@ export function useUpdateOptionsBulk() {
   return useMutation({
     mutationFn: (request: UpdateOptionsBulkRequest) =>
       updateSystemOptionsBulk(request),
-    onSuccess: (data, variables) => {
-      if (data.success) {
-        queryClient.invalidateQueries({ queryKey: ['system-options'] })
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['system-options'] })
 
-        const keys = Object.keys(variables.options)
-        if (keys.some((key) => STATUS_RELATED_KEYS.includes(key))) {
-          queryClient.invalidateQueries({ queryKey: ['status'] })
-          try {
-            window.localStorage.removeItem('status')
-          } catch {
-            /* empty */
-          }
+      const keys = Object.keys(variables.options)
+      if (keys.some((key) => STATUS_RELATED_KEYS.includes(key))) {
+        queryClient.invalidateQueries({ queryKey: ['status'] })
+        try {
+          window.localStorage.removeItem('status')
+        } catch {
+          /* empty */
         }
-
-        toast.success(i18next.t('Settings updated successfully'))
-      } else {
-        toast.error(data.message || i18next.t('Failed to update settings'))
       }
+
+      toast.success(i18next.t('Settings updated successfully'))
     },
-    onError: (error: Error) => {
-      toast.error(error.message || i18next.t('Failed to update settings'))
+    onError: (error: unknown) => {
+      showMutationError(error, i18next.t('Failed to update settings'))
     },
   })
 }

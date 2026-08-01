@@ -32,16 +32,16 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsPageActionsPortal } from '../../components/settings-page-context'
 import { SettingsSection } from '../../components/settings-section'
+import { importCustomOAuthProviders } from './api'
 import { ProviderFormDialog } from './components/provider-form-dialog'
 import { ProviderTable } from './components/provider-table'
-import {
-  useCreateProvider,
-  useUpdateProvider,
-} from './hooks/use-custom-oauth-mutations'
 import { useCustomOAuthProviders } from './hooks/use-custom-oauth-providers'
 import { customOAuthFormSchema, type CustomOAuthProvider } from './types'
 
 const REDACTED_SECRET = '__SECRET_REDACTED__'
+
+const REDACTED_SECRET_IMPORT_ERROR =
+  'Client secret was redacted on export and this instance has no saved secret for this provider'
 
 type CustomOAuthImportPayload =
   | CustomOAuthProvider[]
@@ -69,7 +69,12 @@ const toProviderPayload = (
   ) {
     source.client_secret = existing.client_secret
   } else if (source.client_secret === REDACTED_SECRET) {
-    source.client_secret = ''
+    // There is no saved secret to restore. Writing the placeholder through
+    // would store a bogus secret, and blanking it would create a provider that
+    // looks enabled but can never complete a token exchange. importConfig
+    // reports this case up front; this throw keeps the helper safe for any
+    // other caller.
+    throw new Error(REDACTED_SECRET_IMPORT_ERROR)
   }
 
   const parsed = customOAuthFormSchema.parse(source)
@@ -98,11 +103,10 @@ const toProviderPayload = (
 export function CustomOAuthSection() {
   const { t } = useTranslation()
   const { data: providers = [], isLoading } = useCustomOAuthProviders()
-  const createProvider = useCreateProvider()
-  const updateProvider = useUpdateProvider()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
+  const [isImporting, setIsImporting] = useState(false)
   const [editingProvider, setEditingProvider] =
     useState<CustomOAuthProvider | null>(null)
 
@@ -175,29 +179,75 @@ export function CustomOAuthSection() {
       }
 
       const existingBySlug = new Map(
-        providers.map((provider) => [provider.slug, provider])
+        providers.map((provider) => [
+          provider.slug.trim().toLowerCase(),
+          provider,
+        ])
       )
-      let created = 0
-      let updated = 0
+
+      // Validate the whole payload before making the single atomic import
+      // request. This keeps client-side diagnostics useful without creating a
+      // second persistence path in the browser.
+      const pending: Omit<CustomOAuthProvider, 'id'>[] = []
+      const missingSecrets: string[] = []
+      const invalidProviders: string[] = []
+      const seenSlugs = new Set<string>()
 
       for (const provider of importProviders) {
-        const existing =
-          typeof provider.slug === 'string'
-            ? existingBySlug.get(provider.slug)
-            : undefined
-        const payload = toProviderPayload(provider, existing)
+        const label =
+          (typeof provider?.slug === 'string' && provider.slug) ||
+          (typeof provider?.name === 'string' && provider.name) ||
+          t('Unnamed provider')
+        const normalizedSlug =
+          typeof provider?.slug === 'string'
+            ? provider.slug.trim().toLowerCase()
+            : ''
+        if (normalizedSlug && seenSlugs.has(normalizedSlug)) {
+          invalidProviders.push(label)
+          continue
+        }
+        if (normalizedSlug) {
+          seenSlugs.add(normalizedSlug)
+        }
+        const existing = normalizedSlug
+          ? existingBySlug.get(normalizedSlug)
+          : undefined
 
-        if (existing) {
-          await updateProvider.mutateAsync({
-            id: existing.id,
-            data: payload,
+        if (!existing && provider?.client_secret === REDACTED_SECRET) {
+          missingSecrets.push(label)
+          continue
+        }
+
+        try {
+          pending.push({
+            ...toProviderPayload(provider, existing),
           })
-          updated += 1
-        } else {
-          await createProvider.mutateAsync(payload)
-          created += 1
+        } catch {
+          invalidProviders.push(label)
         }
       }
+
+      if (missingSecrets.length > 0) {
+        throw new Error(
+          t(
+            'These providers do not exist on this instance and their client secrets were redacted on export. Fill in the client secrets before importing: {{list}}',
+            { list: missingSecrets.join(', ') }
+          )
+        )
+      }
+
+      if (invalidProviders.length > 0) {
+        throw new Error(
+          t('These providers are missing required fields: {{list}}', {
+            list: invalidProviders.join(', '),
+          })
+        )
+      }
+
+      setIsImporting(true)
+      const response = await importCustomOAuthProviders(pending)
+      const created = response.data?.created ?? 0
+      const updated = response.data?.updated ?? 0
 
       setImportOpen(false)
       toast.success(
@@ -210,6 +260,8 @@ export function CustomOAuthSection() {
       toast.error(
         error instanceof Error ? error.message : t('Invalid Custom OAuth JSON')
       )
+    } finally {
+      setIsImporting(false)
     }
   }
 
@@ -277,10 +329,7 @@ export function CustomOAuthSection() {
             <Button variant='outline' onClick={() => setImportOpen(false)}>
               {t('Cancel')}
             </Button>
-            <Button
-              onClick={importConfig}
-              disabled={createProvider.isPending || updateProvider.isPending}
-            >
+            <Button onClick={importConfig} disabled={isImporting}>
               {t('Import JSON')}
             </Button>
           </DialogFooter>

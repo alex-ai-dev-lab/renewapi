@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { unwrapApiResponse } from '@/lib/api-errors'
 import type { CustomOAuthProvider, DiscoveryResponse } from './types'
 
 // ============================================================================
@@ -29,6 +30,17 @@ interface ApiResponse<T = unknown> {
   data?: T
 }
 
+const CUSTOM_OAUTH_REQUEST_CONFIG = {
+  skipBusinessError: true,
+  skipErrorHandler: true,
+  timeoutClass: 'interactive',
+} as const
+
+export interface CustomOAuthImportSummary {
+  created: number
+  updated: number
+}
+
 // ============================================================================
 // Custom OAuth Provider APIs
 // ============================================================================
@@ -36,37 +48,65 @@ interface ApiResponse<T = unknown> {
 export async function getCustomOAuthProviders(): Promise<
   ApiResponse<CustomOAuthProvider[]>
 > {
-  const res = await api.get('/api/custom-oauth-provider/')
-  return res.data
+  const res = await api.get(
+    '/api/custom-oauth-provider/',
+    CUSTOM_OAUTH_REQUEST_CONFIG
+  )
+  return unwrapApiResponse(res.data)
 }
 
 export async function getCustomOAuthProvider(
   id: number
 ): Promise<ApiResponse<CustomOAuthProvider>> {
-  const res = await api.get(`/api/custom-oauth-provider/${id}`)
-  return res.data
+  const res = await api.get(
+    `/api/custom-oauth-provider/${id}`,
+    CUSTOM_OAUTH_REQUEST_CONFIG
+  )
+  return unwrapApiResponse(res.data)
 }
 
 export async function createCustomOAuthProvider(
   data: Omit<CustomOAuthProvider, 'id'>
 ): Promise<ApiResponse<CustomOAuthProvider>> {
-  const res = await api.post('/api/custom-oauth-provider/', data)
-  return res.data
+  const res = await api.post(
+    '/api/custom-oauth-provider/',
+    data,
+    CUSTOM_OAUTH_REQUEST_CONFIG
+  )
+  return unwrapApiResponse(res.data)
 }
 
 export async function updateCustomOAuthProvider(
   id: number,
   data: Partial<CustomOAuthProvider>
 ): Promise<ApiResponse<CustomOAuthProvider>> {
-  const res = await api.put(`/api/custom-oauth-provider/${id}`, data)
-  return res.data
+  const res = await api.put(
+    `/api/custom-oauth-provider/${id}`,
+    data,
+    CUSTOM_OAUTH_REQUEST_CONFIG
+  )
+  return unwrapApiResponse(res.data)
 }
 
 export async function deleteCustomOAuthProvider(
   id: number
 ): Promise<ApiResponse> {
-  const res = await api.delete(`/api/custom-oauth-provider/${id}`)
-  return res.data
+  const res = await api.delete(
+    `/api/custom-oauth-provider/${id}`,
+    CUSTOM_OAUTH_REQUEST_CONFIG
+  )
+  return unwrapApiResponse(res.data)
+}
+
+export async function importCustomOAuthProviders(
+  providers: Omit<CustomOAuthProvider, 'id'>[]
+): Promise<ApiResponse<CustomOAuthImportSummary>> {
+  const res = await api.post(
+    '/api/custom-oauth-provider/import',
+    { providers },
+    CUSTOM_OAUTH_REQUEST_CONFIG
+  )
+  return unwrapApiResponse(res.data)
 }
 
 export async function discoverOIDCEndpoints(
@@ -74,6 +114,6 @@ export async function discoverOIDCEndpoints(
 ): Promise<DiscoveryResponse> {
   const res = await api.post('/api/custom-oauth-provider/discovery', {
     well_known_url: wellKnownUrl,
-  })
-  return res.data
+  }, CUSTOM_OAUTH_REQUEST_CONFIG)
+  return unwrapApiResponse(res.data)
 }

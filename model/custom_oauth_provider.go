@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"gorm.io/gorm"
 )
 
 type accessPolicyPayload struct {
@@ -66,6 +67,8 @@ type CustomOAuthProvider struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+const customOAuthRedactedSecret = "__SECRET_REDACTED__"
+
 func (CustomOAuthProvider) TableName() string {
 	return "custom_oauth_providers"
 }
@@ -118,6 +121,87 @@ func UpdateCustomOAuthProvider(provider *CustomOAuthProvider) error {
 		return err
 	}
 	return DB.Save(provider).Error
+}
+
+// CustomOAuthProviderImportResult describes one provider changed by an atomic
+// import. The caller uses the committed provider to refresh the in-memory
+// OAuth registry after the transaction succeeds.
+type CustomOAuthProviderImportResult struct {
+	Provider *CustomOAuthProvider
+	Created  bool
+}
+
+// ImportCustomOAuthProviders creates or updates providers in one transaction.
+// An empty client secret preserves the existing secret for a slug that already
+// exists; a new provider must supply a real secret. This keeps redacted exports
+// safe without allowing a placeholder or blank secret to be persisted.
+func ImportCustomOAuthProviders(providers []*CustomOAuthProvider) ([]CustomOAuthProviderImportResult, error) {
+	results := make([]CustomOAuthProviderImportResult, 0, len(providers))
+	if len(providers) == 0 {
+		return results, nil
+	}
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var existingProviders []*CustomOAuthProvider
+		if err := tx.Order("id asc").Find(&existingProviders).Error; err != nil {
+			return err
+		}
+
+		existingBySlug := make(map[string]*CustomOAuthProvider, len(existingProviders))
+		for _, provider := range existingProviders {
+			existingBySlug[strings.ToLower(provider.Slug)] = provider
+		}
+		seenSlugs := make(map[string]struct{}, len(providers))
+		prepared := make([]CustomOAuthProviderImportResult, 0, len(providers))
+
+		for _, input := range providers {
+			if input == nil {
+				return errors.New("provider must not be nil")
+			}
+
+			candidate := *input
+			lookupSlug := strings.ToLower(strings.TrimSpace(candidate.Slug))
+			if _, exists := seenSlugs[lookupSlug]; exists {
+				return fmt.Errorf("duplicate provider slug: %s", candidate.Slug)
+			}
+			seenSlugs[lookupSlug] = struct{}{}
+
+			current, exists := existingBySlug[lookupSlug]
+			if exists {
+				candidate.Id = current.Id
+				candidate.CreatedAt = current.CreatedAt
+				if strings.TrimSpace(candidate.ClientSecret) == "" || candidate.ClientSecret == customOAuthRedactedSecret {
+					candidate.ClientSecret = current.ClientSecret
+				}
+			} else if strings.TrimSpace(candidate.ClientSecret) == "" || candidate.ClientSecret == customOAuthRedactedSecret {
+				return fmt.Errorf("client secret is required for new provider: %s", candidate.Slug)
+			}
+
+			if err := validateCustomOAuthProvider(&candidate); err != nil {
+				return fmt.Errorf("provider %s: %w", candidate.Slug, err)
+			}
+
+			result := CustomOAuthProviderImportResult{
+				Provider: &candidate,
+				Created:  !exists,
+			}
+			if exists {
+				if err := tx.Save(&candidate).Error; err != nil {
+					return err
+				}
+			} else if err := tx.Create(&candidate).Error; err != nil {
+				return err
+			}
+			prepared = append(prepared, result)
+		}
+
+		results = prepared
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 // DeleteCustomOAuthProvider deletes a custom OAuth provider by ID

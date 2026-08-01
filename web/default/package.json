@@ -16,7 +16,8 @@
     "copyright": "node scripts/add-copyright.mjs",
     "i18n:sync": "node scripts/sync-i18n.mjs",
     "knip": "knip",
-    "test:security": "bun test src/lib/security-boundaries.test.ts"
+    "test:security": "bun test src/lib/security-boundaries.test.ts",
+    "test:request-errors": "bun test src/lib/request-errors.test.ts src/lib/api-request-errors.test.ts src/lib/api-errors.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

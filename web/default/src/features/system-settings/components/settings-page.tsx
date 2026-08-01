@@ -24,6 +24,8 @@ import {
   type ReactNode,
 } from 'react'
 import { useParams, useSearch } from '@tanstack/react-router'
+import { getApiErrorMessage } from '@/lib/api-errors'
+import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout'
 import { useSystemOptions, getOptionValue } from '../hooks/use-system-options'
 import { useSystemSettingsTranslation } from '../lib/i18n'
@@ -127,7 +129,7 @@ export function SettingsPage<
   resolveSettings,
 }: SettingsPageProps<TSettings, TSectionId, TExtraArgs>) {
   const { t, ts } = useSystemSettingsTranslation()
-  const { data, isLoading } = useSystemOptions()
+  const { data, error, isError, isLoading, refetch } = useSystemOptions()
   // The section registry supports two URL styles: `urlStyle: 'path'` puts the
   // section in a route param, the default `'query'` style puts it in the
   // search params. Read both, otherwise one of the two styles silently keeps
@@ -157,6 +159,25 @@ export function SettingsPage<
             defaultValue: loadingMessage,
           })}
         </div>
+      </SettingsPageFrame>
+    )
+  }
+
+  if (isError) {
+    return (
+      <SettingsPageFrame title={t(sectionMeta.titleKey)}>
+        <ErrorState
+          title={ts('settings.common.loadErrorTitle', {
+            defaultValue: 'Unable to load settings',
+          })}
+          description={getApiErrorMessage(
+            error,
+            ts('settings.common.loadError', {
+              defaultValue: 'The settings could not be loaded. Please retry.',
+            })
+          )}
+          onRetry={() => void refetch()}
+        />
       </SettingsPageFrame>
     )
   }

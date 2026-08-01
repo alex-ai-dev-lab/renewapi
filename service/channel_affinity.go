@@ -33,14 +33,14 @@ const (
 	ginKeyCompactionResponseHashes  = "responses_compaction_response_hashes"
 	ginKeySessionRecoveryLogInfo    = "session_recovery_log_info"
 
-	channelAffinityCacheNamespace           = "new-api:channel_affinity:v1"
-	channelAffinityRecordNamespace          = "new-api:channel_affinity:v2"
-	channelAffinityMultiKeyIndexNamespace   = "new-api:channel_affinity_multi_key_index:v1"
-	channelAffinityNegativeNamespace        = "new-api:channel_affinity_negative:v1"
-	channelAffinityNegativeV2Namespace      = "new-api:channel_affinity_negative:v2"
-	channelAffinityKeyNegativeNamespace     = "new-api:channel_affinity_key_negative:v1"
-	channelAffinityRecoveryChainNamespace   = "new-api:channel_affinity_recovery_chain:v1"
-	channelAffinityUsageCacheStatsNamespace = "new-api:channel_affinity_usage_cache_stats:v1"
+	channelAffinityCacheNamespace           = "new-api:channel_affinity:v3"
+	channelAffinityRecordNamespace          = "new-api:channel_affinity:v3_record"
+	channelAffinityMultiKeyIndexNamespace   = "new-api:channel_affinity_multi_key_index:v3"
+	channelAffinityNegativeNamespace        = "new-api:channel_affinity_negative:v3"
+	channelAffinityNegativeV2Namespace      = "new-api:channel_affinity_negative:v3_record"
+	channelAffinityKeyNegativeNamespace     = "new-api:channel_affinity_key_negative:v3"
+	channelAffinityRecoveryChainNamespace   = "new-api:channel_affinity_recovery_chain:v3"
+	channelAffinityUsageCacheStatsNamespace = "new-api:channel_affinity_usage_cache_stats:v3"
 )
 
 type ChannelAffinityRecord struct {
@@ -683,7 +683,7 @@ func buildChannelAffinityCacheKeySuffix(rule operation_setting.ChannelAffinityRu
 	if rule.IncludeUsingGroup && usingGroup != "" {
 		parts = append(parts, usingGroup)
 	}
-	parts = append(parts, affinityValue)
+	parts = append(parts, affinityFingerprint(affinityValue))
 	return strings.Join(parts, ":")
 }
 
@@ -752,11 +752,7 @@ func affinityFingerprint(s string) string {
 	if s == "" {
 		return ""
 	}
-	hex := common.Sha1([]byte(s))
-	if len(hex) >= 8 {
-		return hex[:8]
-	}
-	return hex
+	return common.HmacSha256(s, common.CryptoSecret)
 }
 
 func buildChannelAffinityKeyHint(s string) string {
@@ -764,12 +760,11 @@ func buildChannelAffinityKeyHint(s string) string {
 	if s == "" {
 		return ""
 	}
-	s = strings.ReplaceAll(s, "\n", " ")
-	s = strings.ReplaceAll(s, "\r", " ")
-	if len(s) <= 12 {
-		return s
+	fingerprint := affinityFingerprint(s)
+	if len(fingerprint) > 12 {
+		fingerprint = fingerprint[:12]
 	}
-	return s[:4] + "..." + s[len(s)-4:]
+	return "hmac:" + fingerprint
 }
 
 func cloneStringAnyMap(src map[string]interface{}) map[string]interface{} {

@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { unwrapApiResponse } from '@/lib/api-errors'
 import type {
   ConfirmPaymentComplianceResponse,
   DeleteLogsResponse,
@@ -31,29 +32,47 @@ import type {
   UpstreamRatiosResponse,
 } from './types'
 
+const SYSTEM_SETTINGS_REQUEST_CONFIG = {
+  skipBusinessError: true,
+  skipErrorHandler: true,
+  timeoutClass: 'interactive',
+} as const
+
 export async function getSystemOptions() {
-  const res = await api.get<SystemOptionsResponse>('/api/option/')
-  return res.data
+  const res = await api.get<SystemOptionsResponse>(
+    '/api/option/',
+    SYSTEM_SETTINGS_REQUEST_CONFIG
+  )
+  return unwrapApiResponse(res.data)
 }
 
 export async function updateSystemOption(request: UpdateOptionRequest) {
-  const res = await api.put<UpdateOptionResponse>('/api/option/', request)
-  return res.data
+  const res = await api.put<UpdateOptionResponse>(
+    '/api/option/',
+    request,
+    SYSTEM_SETTINGS_REQUEST_CONFIG
+  )
+  return unwrapApiResponse(res.data)
 }
 
 export async function updateSystemOptionsBulk(
   request: UpdateOptionsBulkRequest
 ) {
-  const res = await api.put<UpdateOptionResponse>('/api/option/bulk', request)
-  return res.data
+  const res = await api.put<UpdateOptionResponse>(
+    '/api/option/bulk',
+    request,
+    SYSTEM_SETTINGS_REQUEST_CONFIG
+  )
+  return unwrapApiResponse(res.data)
 }
 
 export async function confirmPaymentCompliance() {
   const res = await api.post<ConfirmPaymentComplianceResponse>(
     '/api/option/payment_compliance',
-    { confirmed: true }
+    { confirmed: true },
+    SYSTEM_SETTINGS_REQUEST_CONFIG
   )
-  return res.data
+  return unwrapApiResponse(res.data)
 }
 
 export async function deleteLogsBefore(targetTimestamp: number) {

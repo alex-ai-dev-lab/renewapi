@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
+import { useState, type BaseSyntheticEvent } from 'react'
 import * as z from 'zod'
 import type { Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -62,23 +62,61 @@ import { SettingsSection } from '../components/settings-section'
 import { useSettingsForm } from '../hooks/use-settings-form'
 import { useUpdateOption } from '../hooks/use-update-option'
 
-const _systemInfoSchema = z.object({
-  theme: z.object({
-    frontend: z.enum(['default', 'classic']),
-  }),
-  SystemName: z.string().min(1),
-  ServerAddress: z.string().optional(),
-  Logo: z.string().url().optional().or(z.literal('')),
-  Footer: z.string().optional(),
-  About: z.string().optional(),
-  HomePageContent: z.string().optional(),
-  legal: z.object({
-    user_agreement: z.string().optional(),
-    privacy_policy: z.string().optional(),
-  }),
-})
+// The server address is the base for OAuth callbacks and webhook URLs, so a
+// value without a scheme is unusable. Reject anything that is not an absolute
+// http(s) URL instead of letting it reach the backend.
+function isAbsoluteHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 
-type SystemInfoFormValues = z.infer<typeof _systemInfoSchema>
+// Applied to the form value before submitting, not only to the payload, so the
+// value shown after saving is the value that was actually stored.
+function normalizeServerAddress(value: string): string {
+  let next = value.trim()
+  while (next.endsWith('/')) {
+    next = next.slice(0, -1)
+  }
+  return next
+}
+
+// Single source of truth for the schema. The previous code kept one copy at
+// module scope purely to derive the type and a second copy inside the
+// component for validation, which let the two drift apart.
+function createSystemInfoSchema(t: (key: string) => string) {
+  return z.object({
+    theme: z.object({
+      frontend: z.enum(['default', 'classic']),
+    }),
+    SystemName: z.string().min(1, {
+      error: () => t('System name is required'),
+    }),
+    ServerAddress: z
+      .string()
+      .optional()
+      .refine(
+        (value) => !value || isAbsoluteHttpUrl(normalizeServerAddress(value)),
+        {
+          error: () =>
+            t('Server address must be a full URL starting with http:// or https://'),
+        }
+      ),
+    Logo: z.string().url().optional().or(z.literal('')),
+    Footer: z.string().optional(),
+    About: z.string().optional(),
+    HomePageContent: z.string().optional(),
+    legal: z.object({
+      user_agreement: z.string().optional(),
+      privacy_policy: z.string().optional(),
+    }),
+  })
+}
+
+type SystemInfoFormValues = z.infer<ReturnType<typeof createSystemInfoSchema>>
 
 type SystemInfoSectionProps = {
   defaultValues: SystemInfoFormValues
@@ -199,27 +237,11 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
     },
   }
 
-  const systemInfoSchemaWithI18n = z.object({
-    theme: z.object({
-      frontend: z.enum(['default', 'classic']),
-    }),
-    SystemName: z.string().min(1, {
-      error: () => t('System name is required'),
-    }),
-    ServerAddress: z.string().optional(),
-    Logo: z.string().url().optional().or(z.literal('')),
-    Footer: z.string().optional(),
-    About: z.string().optional(),
-    HomePageContent: z.string().optional(),
-    legal: z.object({
-      user_agreement: z.string().optional(),
-      privacy_policy: z.string().optional(),
-    }),
-  })
+  const systemInfoSchema = createSystemInfoSchema(t)
 
   const { form, handleSubmit, handleReset, isDirty, isSubmitting } =
     useSettingsForm<SystemInfoFormValues>({
-      resolver: zodResolver(systemInfoSchemaWithI18n) as Resolver<
+      resolver: zodResolver(systemInfoSchema) as Resolver<
         SystemInfoFormValues,
         unknown,
         SystemInfoFormValues
@@ -229,7 +251,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
         for (const [key, value] of Object.entries(changedFields)) {
           let v = normalizeValue(value)
           if (key === 'ServerAddress') {
-            v = v.replace(/\/+$/, '')
+            v = normalizeServerAddress(v)
           }
           await updateOption.mutateAsync({
             key,
@@ -238,6 +260,21 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
         }
       },
     })
+
+  // Normalize in the form itself before submitting. Doing it only inside
+  // onSubmit meant the hook re-baselined on the un-normalized values, so the
+  // form reported "saved" while displaying something the server never stored.
+  const submitForm = (event?: BaseSyntheticEvent) => {
+    const current = normalizeValue(form.getValues('ServerAddress'))
+    const normalized = normalizeServerAddress(current)
+    if (normalized !== current) {
+      form.setValue('ServerAddress', normalized, {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+    }
+    return handleSubmit(event)
+  }
 
   const buildExportPayload = () => {
     const values = form.getValues()
@@ -291,7 +328,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
         }
       })
 
-      const parsedValues = systemInfoSchemaWithI18n.parse(nextValues)
+      const parsedValues = systemInfoSchema.parse(nextValues)
 
       systemInfoFieldNames.forEach((name) => {
         form.setValue(name, getSystemInfoFieldValue(parsedValues, name), {
@@ -312,9 +349,9 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
 
       <SettingsSection title={t('System Information')}>
         <Form {...form}>
-          <SettingsForm onSubmit={handleSubmit}>
+          <SettingsForm onSubmit={submitForm}>
             <SettingsPageFormActions
-              onSave={handleSubmit}
+              onSave={submitForm}
               onReset={handleReset}
               isSaving={isSubmitting || updateOption.isPending}
               isResetDisabled={!isDirty}

@@ -181,3 +181,16 @@ func TestPanelRateLimitKeyDoesNotIncludeEndpointOrIP(t *testing.T) {
 		t.Fatal("same authenticated user must share a budget across IPs and endpoints")
 	}
 }
+
+func TestPanelRateLimitClampsWeightToSmallConfiguredBudget(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	withPanelRateLimitConfig(t, 1, 1)
+	key := fmt.Sprintf("rateLimit:panel:read:user:%d", nextPanelTestUserID())
+
+	if !localPanelRateLimit(key, 1, 5) {
+		t.Fatal("a weighted request should be allowed once when the budget is smaller than its nominal weight")
+	}
+	if localPanelRateLimit(key, 1, 5) {
+		t.Fatal("the clamped weighted request should consume the complete budget")
+	}
+}

@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import { Toast, Pagination } from '@douyinfe/semi-ui';
+import axios from 'axios';
 import {
   toastConstants,
   BILLING_PRICING_VARS,
@@ -127,6 +128,15 @@ if (isMobileScreen) {
 }
 
 export function showError(error) {
+  if (
+    axios.isCancel(error) ||
+    error?.code === 'ERR_CANCELED' ||
+    error?.name === 'AbortError' ||
+    error?.name === 'CanceledError'
+  ) {
+    return;
+  }
+
   console.error(error);
   if (error.message) {
     if (error.name === 'AxiosError') {

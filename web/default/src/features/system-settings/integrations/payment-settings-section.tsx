@@ -430,14 +430,10 @@ export function PaymentSettingsSection({
 
   const confirmComplianceMutation = useMutation({
     mutationFn: confirmPaymentCompliance,
-    onSuccess: (data) => {
-      if (data.success) {
-        toast.success(t('Compliance confirmed successfully'))
-        setShowComplianceDialog(false)
-        queryClient.invalidateQueries({ queryKey: ['system-options'] })
-      } else {
-        toast.error(data.message || t('Failed to confirm compliance'))
-      }
+    onSuccess: () => {
+      toast.success(t('Compliance confirmed successfully'))
+      setShowComplianceDialog(false)
+      queryClient.invalidateQueries({ queryKey: ['system-options'] })
     },
     onError: (error: Error) => {
       toast.error(error.message || t('Failed to confirm compliance'))

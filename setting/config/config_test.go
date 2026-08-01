@@ -152,3 +152,25 @@ func TestUpdateConfigFromMap_ScalarFieldsUnchanged(t *testing.T) {
 		t.Errorf("Modes should be unchanged, got %v", cfg.Modes)
 	}
 }
+
+func TestUpdateConfigFromMap_InvalidFieldDoesNotPartiallyApply(t *testing.T) {
+	cfg := &testConfigWithBooleans{
+		Enabled: true,
+		Name:    "old",
+	}
+
+	err := UpdateConfigFromMap(cfg, map[string]string{
+		"enabled": "not-a-bool",
+		"name":    "new",
+	})
+	if err == nil {
+		t.Fatal("UpdateConfigFromMap should reject an invalid boolean")
+	}
+
+	if !cfg.Enabled {
+		t.Fatal("Enabled changed even though the update was rejected")
+	}
+	if cfg.Name != "old" {
+		t.Fatalf("Name = %q, want old after rejected update", cfg.Name)
+	}
+}

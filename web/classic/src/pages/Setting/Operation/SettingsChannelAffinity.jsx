@@ -821,7 +821,7 @@ export default function SettingsChannelAffinity(props) {
       return showError(t('规则 JSON 格式不正确'));
     }
 
-    const requestQueue = updateArray.map((item) => {
+    const options = updateArray.reduce((result, item) => {
       let value = '';
       if (item.key === KEY_RULES) {
         value = compactRules;
@@ -830,17 +830,15 @@ export default function SettingsChannelAffinity(props) {
       } else {
         value = String(inputs[item.key] ?? '');
       }
-      return API.put('/api/option/', { key: item.key, value });
-    });
+      result[item.key] = value;
+      return result;
+    }, {});
 
     setLoading(true);
-    Promise.all(requestQueue)
+    API.put('/api/option/bulk', { options })
       .then((res) => {
-        if (requestQueue.length === 1) {
-          if (res.includes(undefined)) return;
-        } else if (requestQueue.length > 1) {
-          if (res.includes(undefined))
-            return showError(t('部分保存失败，请重试'));
+        if (!res?.data?.success) {
+          return showError(res?.data?.message || t('保存失败，请重试'));
         }
         showSuccess(t('保存成功'));
         props.refresh();

@@ -19,12 +19,21 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 import type { CacheStats } from './types'
 
+const CHANNEL_AFFINITY_REQUEST_CONFIG = {
+  skipBusinessError: true,
+  skipErrorHandler: true,
+  timeoutClass: 'background',
+} as const
+
 export async function getCacheStats(): Promise<{
   success: boolean
   message?: string
   data?: CacheStats
 }> {
-  const res = await api.get('/api/option/channel_affinity_cache')
+  const res = await api.get(
+    '/api/option/channel_affinity_cache',
+    CHANNEL_AFFINITY_REQUEST_CONFIG
+  )
   return res.data
 }
 
@@ -33,6 +42,7 @@ export async function clearAllCache(): Promise<{
   message?: string
 }> {
   const res = await api.delete('/api/option/channel_affinity_cache', {
+    ...CHANNEL_AFFINITY_REQUEST_CONFIG,
     params: { all: true },
   })
   return res.data
@@ -42,6 +52,7 @@ export async function clearRuleCache(
   ruleName: string
 ): Promise<{ success: boolean; message?: string }> {
   const res = await api.delete('/api/option/channel_affinity_cache', {
+    ...CHANNEL_AFFINITY_REQUEST_CONFIG,
     params: { rule_name: ruleName },
   })
   return res.data
@@ -54,6 +65,7 @@ export async function getAffinityUsageCache(params: {
   key_fp: string
 }): Promise<{ success: boolean; message?: string; data?: unknown }> {
   const res = await api.get('/api/log/channel_affinity_usage_cache', {
+    ...CHANNEL_AFFINITY_REQUEST_CONFIG,
     params,
   })
   return res.data

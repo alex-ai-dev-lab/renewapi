@@ -33,18 +33,36 @@ func init() {
 }
 
 func GetPasskeySettings() *PasskeySettings {
-	if defaultPasskeySettings.RPID == "" && ServerAddress != "" {
+	applyPasskeyDefaults(&defaultPasskeySettings)
+	return &defaultPasskeySettings
+}
+
+// GetPasskeySettingsSnapshot returns the effective settings without mutating
+// the registered config. Validation paths use this form so merely checking a
+// proposed option cannot silently persist derived RP ID/origin values.
+func GetPasskeySettingsSnapshot() PasskeySettings {
+	settings := defaultPasskeySettings
+	applyPasskeyDefaults(&settings)
+	return settings
+}
+
+func applyPasskeyDefaults(settings *PasskeySettings) {
+	if settings.RPID == "" && ServerAddress != "" {
 		// 从ServerAddress提取域名作为RPID
 		// ServerAddress可能是 "https://newapi.pro" 这种格式
 		serverAddr := strings.TrimSpace(ServerAddress)
 		if parsed, err := url.Parse(serverAddr); err == nil && parsed.Host != "" {
-			defaultPasskeySettings.RPID = parsed.Host
+			settings.RPID = strings.ToLower(parsed.Hostname())
 		} else {
-			defaultPasskeySettings.RPID = serverAddr
+			settings.RPID = serverAddr
 		}
 	}
-	if defaultPasskeySettings.Origins == "" || defaultPasskeySettings.Origins == "[]" {
-		defaultPasskeySettings.Origins = ServerAddress
+	if settings.Origins == "" || settings.Origins == "[]" {
+		serverAddr := strings.TrimSpace(ServerAddress)
+		if parsed, err := url.Parse(serverAddr); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+			settings.Origins = parsed.Scheme + "://" + parsed.Host
+		} else {
+			settings.Origins = strings.TrimRight(serverAddr, "/")
+		}
 	}
-	return &defaultPasskeySettings
 }

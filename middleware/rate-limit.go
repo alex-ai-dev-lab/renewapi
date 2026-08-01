@@ -153,13 +153,7 @@ func redisWeightedSlidingWindowAllow(ctx context.Context, rdb *redis.Client, key
 	if maxRequestNum <= 0 {
 		return true, nil
 	}
-	if weight <= 0 {
-		weight = 1
-	}
-	if weight > maxRequestNum {
-		// 阈值比单次权重还小时该接口会被永久 429，属于配置问题，保留原语义
-		return false, nil
-	}
+	weight = normalizeRateLimitWeight(maxRequestNum, weight)
 	if duration <= 0 {
 		duration = 1
 	}
@@ -390,7 +384,20 @@ func enforcePanelRateLimit(c *gin.Context) bool {
 
 func localPanelRateLimit(key string, limit int, weight int) bool {
 	inMemoryRateLimiter.Init(common.RateLimitKeyExpirationDuration)
-	return inMemoryRateLimiter.RequestN(key, limit, common.PanelRateLimitDuration, weight)
+	return inMemoryRateLimiter.RequestN(key, limit, common.PanelRateLimitDuration, normalizeRateLimitWeight(limit, weight))
+}
+
+// normalizeRateLimitWeight prevents a weighted endpoint from becoming
+// permanently unavailable when an operator configures a budget below its
+// nominal cost. A request consumes the whole available budget in that case.
+func normalizeRateLimitWeight(limit, weight int) int {
+	if weight <= 0 {
+		return 1
+	}
+	if limit > 0 && weight > limit {
+		return limit
+	}
+	return weight
 }
 
 func panelRequestWeight(c *gin.Context) int {

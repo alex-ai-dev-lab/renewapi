@@ -62,7 +62,7 @@ import {
   SettingsPageFormActions,
 } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
-import { useUpdateOption } from '../hooks/use-update-option'
+import { useUpdateOptionsBulk } from '../hooks/use-update-option'
 
 type AttachmentPreference = '' | 'platform' | 'cross-platform'
 type AttachmentSelectValue = 'none' | 'platform' | 'cross-platform'
@@ -82,6 +82,152 @@ const passkeySchema = z.object({
     user_verification: z.enum(['required', 'preferred', 'discouraged']),
     attachment_preference: z.enum(['none', 'platform', 'cross-platform']),
   }),
+})
+
+const DOMAIN_PATTERN =
+  /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i
+
+/**
+ * The Relying Party ID is a bare domain, not a URL. A scheme, port or path
+ * here makes every WebAuthn ceremony fail in the browser.
+ */
+const isIpAddress = (value: string): boolean => {
+  const ipv4 = value.split('.')
+  if (
+    ipv4.length === 4 &&
+    ipv4.every((part) => /^(0|[1-9]\d{0,2})$/.test(part))
+  ) {
+    return ipv4.every((part) => Number(part) <= 255)
+  }
+
+  if (!value.includes(':') || !/^[0-9a-f:]+$/i.test(value)) return false
+  try {
+    const parsed = new URL(`https://[${value}]`)
+    return parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase() === value
+  } catch {
+    return false
+  }
+}
+
+const isValidRelyingPartyId = (value: string): boolean =>
+  value === 'localhost' || DOMAIN_PATTERN.test(value) || isIpAddress(value)
+
+/**
+ * WebAuthn compares origins by exact string, so a trailing slash, a path or a
+ * missing scheme silently breaks authentication.
+ */
+const isExactOrigin = (value: string): boolean => {
+  let parsed: URL
+  try {
+    parsed = new URL(value)
+  } catch {
+    return false
+  }
+
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return false
+  }
+
+  return parsed.origin === value
+}
+
+const originHostname = (value: string): string | null => {
+  try {
+    return new URL(value).hostname
+  } catch {
+    return null
+  }
+}
+
+const splitOrigins = (value: string): string[] =>
+  value
+    .split(/[\n,]/)
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+
+/**
+ * Shape plus cross-field rules. Used only as the form resolver: the plain
+ * `passkeySchema` stays in charge of export/import parsing so those buttons
+ * never throw just because Passkey is half-configured.
+ */
+const passkeyFormSchema = passkeySchema.superRefine((value, ctx) => {
+  const passkey = value.passkey
+
+  if (!passkey.enabled) {
+    return
+  }
+
+  const relyingPartyId = passkey.rp_id.trim()
+
+  if (!relyingPartyId) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['passkey', 'rp_id'],
+      message: 'Relying Party ID is required when Passkey is enabled',
+    })
+  } else if (!isValidRelyingPartyId(relyingPartyId)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['passkey', 'rp_id'],
+      message:
+        'Relying Party ID must be a bare domain such as example.com, without scheme, port or path',
+    })
+  }
+
+  const origins = splitOrigins(passkey.origins)
+
+  if (origins.length === 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['passkey', 'origins'],
+      message:
+        'At least one allowed origin is required when Passkey is enabled',
+    })
+    return
+  }
+
+  const malformed = origins.filter((origin) => !isExactOrigin(origin))
+
+  if (malformed.length > 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['passkey', 'origins'],
+      message: `Each origin must be exact, such as https://example.com, with no trailing slash or path: ${malformed.join(', ')}`,
+    })
+    return
+  }
+
+  if (!passkey.allow_insecure_origin) {
+    const insecure = origins.filter((origin) => origin.startsWith('http://'))
+
+    if (insecure.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['passkey', 'origins'],
+        message: `Insecure origins require "Allow Insecure Origins": ${insecure.join(', ')}`,
+      })
+    }
+  }
+
+  if (relyingPartyId && isValidRelyingPartyId(relyingPartyId)) {
+    const offDomain = origins.filter((origin) => {
+      const hostname = originHostname(origin)
+      if (hostname === null) {
+        return false
+      }
+      return (
+        hostname !== relyingPartyId && !hostname.endsWith(`.${relyingPartyId}`)
+      )
+    })
+
+    if (offDomain.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['passkey', 'origins'],
+        message: `Origins must be on the Relying Party ID domain (${relyingPartyId}): ${offDomain.join(', ')}`,
+      })
+    }
+  }
 })
 
 type PasskeyFormInput = z.input<typeof passkeySchema>
@@ -153,7 +299,7 @@ type PasskeyImportExportPayload = {
 
 export function PasskeySection(props: PasskeySectionProps) {
   const { t } = useTranslation()
-  const updateOption = useUpdateOption()
+  const updateOptionsBulk = useUpdateOptionsBulk()
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
 
@@ -163,7 +309,7 @@ export function PasskeySection(props: PasskeySectionProps) {
   )
 
   const form = useForm<PasskeyFormInput, unknown, PasskeyFormValues>({
-    resolver: zodResolver(passkeySchema),
+    resolver: zodResolver(passkeyFormSchema),
     defaultValues: formDefaults,
   })
 
@@ -191,12 +337,11 @@ export function PasskeySection(props: PasskeySectionProps) {
       return
     }
 
-    for (const key of changedKeys) {
-      await updateOption.mutateAsync({
-        key,
-        value: normalized[key],
-      })
-    }
+    await updateOptionsBulk.mutateAsync({
+      options: Object.fromEntries(
+        changedKeys.map((key) => [key, normalized[key]])
+      ),
+    })
 
     baselineRef.current = normalized
     baselineSerializedRef.current = JSON.stringify(normalized)
@@ -291,7 +436,7 @@ export function PasskeySection(props: PasskeySectionProps) {
           </SettingsPageActionsPortal>
           <SettingsPageFormActions
             onSave={form.handleSubmit(onSubmit)}
-            isSaving={updateOption.isPending}
+            isSaving={updateOptionsBulk.isPending}
           />
           <FormField
             control={form.control}

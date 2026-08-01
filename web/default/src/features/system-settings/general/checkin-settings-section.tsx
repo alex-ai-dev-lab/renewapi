@@ -44,6 +44,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { FormNavigationGuard } from '../components/form-navigation-guard'
 import {
   SettingsForm,
   SettingsSwitchContent,
@@ -54,15 +55,35 @@ import {
   SettingsPageFormActions,
 } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
-import { useUpdateOption } from '../hooks/use-update-option'
+import { useUpdateOptionsBulk } from '../hooks/use-update-option'
 
-const schema = z.object({
+const valuesSchema = z.object({
   enabled: z.boolean(),
   minQuota: z.coerce.number().int().min(0),
   maxQuota: z.coerce.number().int().min(0),
 })
 
-type Values = z.infer<typeof schema>
+/**
+ * The two bounds are only meaningful relative to each other: the daily reward
+ * is drawn from [minQuota, maxQuota]. Validating them independently lets a
+ * maximum below the minimum save cleanly, which leaves the range inverted for
+ * every subsequent check-in. The refinement is attached to the resolver only,
+ * so importing a payload can still surface field-level errors without the
+ * cross-field rule throwing during Export/Import.
+ */
+const schema = valuesSchema.superRefine((values, ctx) => {
+  if (!values.enabled) return
+  if (values.maxQuota < values.minQuota) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['maxQuota'],
+      message:
+        'Maximum check-in quota must be greater than or equal to the minimum',
+    })
+  }
+})
+
+type Values = z.infer<typeof valuesSchema>
 
 type CheckinImportExportPayload = Partial<Values> & {
   BillingBasics?: {
@@ -90,7 +111,7 @@ export function CheckinSettingsSection({
   }
 }) {
   const { t } = useTranslation()
-  const updateOption = useUpdateOption()
+  const updateOptionsBulk = useUpdateOptionsBulk()
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
 
@@ -135,9 +156,11 @@ export function CheckinSettingsSection({
       return
     }
 
-    for (const update of updates) {
-      await updateOption.mutateAsync(update)
-    }
+    await updateOptionsBulk.mutateAsync({
+      options: Object.fromEntries(
+        updates.map(({ key, value }) => [key, value])
+      ),
+    })
 
     form.reset(values)
   }
@@ -206,7 +229,7 @@ export function CheckinSettingsSection({
       )
       if (maxQuota !== undefined) next.maxQuota = maxQuota
 
-      const parsed = schema.parse(next)
+      const parsed = valuesSchema.parse(next)
       form.setValue('enabled', parsed.enabled, {
         shouldDirty: true,
         shouldValidate: true,
@@ -233,6 +256,7 @@ export function CheckinSettingsSection({
 
   return (
     <SettingsSection title={t('Check-in Settings')}>
+      <FormNavigationGuard when={isDirty} />
       <Form {...form}>
         <SettingsForm onSubmit={form.handleSubmit(onSubmit)} autoComplete='off'>
           <SettingsPageActionsPortal>
@@ -257,7 +281,7 @@ export function CheckinSettingsSection({
           </SettingsPageActionsPortal>
           <SettingsPageFormActions
             onSave={form.handleSubmit(onSubmit)}
-            isSaving={updateOption.isPending || isSubmitting}
+            isSaving={updateOptionsBulk.isPending || isSubmitting}
             isSaveDisabled={!isDirty}
             saveLabel='Save check-in settings'
           />
@@ -278,7 +302,7 @@ export function CheckinSettingsSection({
                   <Switch
                     checked={field.value}
                     onCheckedChange={field.onChange}
-                    disabled={updateOption.isPending || isSubmitting}
+                    disabled={updateOptionsBulk.isPending || isSubmitting}
                   />
                 </FormControl>
               </SettingsSwitchItem>

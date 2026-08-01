@@ -36,15 +36,21 @@ func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Reque
 		if err != nil {
 			return fmt.Errorf("unmarshal_model_mapping_failed")
 		}
-		candidates, err := basecommon.ResolveModelMappingCandidates(modelMap, mappingModelName)
+		mappingStartModel := mappingModelName
+		if isResponsesCompact {
+			if mappedModel, exists := modelMap[originModelName]; exists && len(mappedModel) > 0 {
+				mappingStartModel = originModelName
+			}
+		}
+		candidates, err := basecommon.ResolveModelMappingCandidates(modelMap, mappingStartModel)
 		if err != nil {
 			return fmt.Errorf("model_mapping_contains_cycle: %w", err)
 		}
 		channelId := info.ChannelId
-		if info.ModelMappingRoute.ChannelId != channelId || info.ModelMappingRoute.Source != mappingModelName {
+		if info.ModelMappingRoute.ChannelId != channelId || info.ModelMappingRoute.Source != mappingStartModel {
 			info.ModelMappingRoute = common.ModelMappingRouteCursor{
 				ChannelId:  channelId,
-				Source:     mappingModelName,
+				Source:     mappingStartModel,
 				Candidates: append([]string(nil), candidates...),
 			}
 		}

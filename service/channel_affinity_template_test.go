@@ -209,6 +209,7 @@ func TestGetPreferredChannelByAffinity_RequestHeaderKeySource(t *testing.T) {
 
 	affinityValue := fmt.Sprintf("header-hit-%d", time.Now().UnixNano())
 	cacheKeySuffix := buildChannelAffinityCacheKeySuffix(rule, "gpt-5", "default", affinityValue)
+	require.NotContains(t, cacheKeySuffix, affinityValue)
 
 	cache := getChannelAffinityCache()
 	require.NoError(t, cache.SetWithTTL(cacheKeySuffix, 9528, time.Minute))
@@ -237,6 +238,7 @@ func TestGetPreferredChannelByAffinity_RequestHeaderKeySource(t *testing.T) {
 	require.Equal(t, "request_header", meta.KeySourceType)
 	require.Equal(t, "X-Affinity-Key", meta.KeySourceKey)
 	require.Equal(t, buildChannelAffinityKeyHint(affinityValue), meta.KeyHint)
+	require.NotContains(t, meta.KeyHint, affinityValue)
 }
 
 func TestEvictCurrentChannelAffinityUsesCompareAndDelete(t *testing.T) {

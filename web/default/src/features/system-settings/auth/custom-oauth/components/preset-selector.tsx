@@ -30,21 +30,127 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SettingsControlGroup } from '../../../components/settings-form-layout'
-import { OAUTH_PRESETS, type CustomOAuthFormValues } from '../types'
+import {
+  OAUTH_PRESETS,
+  type CustomOAuthFormValues,
+  type OAuthPreset,
+} from '../types'
 
 type PresetSelectorProps = {
   form: UseFormReturn<CustomOAuthFormValues>
+}
+
+/**
+ * Some presets ship templated paths rather than literal ones. Keycloak, for
+ * example, uses `/realms/{realm}/protocol/openid-connect/auth`. Pasting those
+ * onto the base URL as-is produces an endpoint the form happily accepts (the
+ * schema only checks for a non-empty string) but that 404s on every login, so
+ * the placeholders have to be collected and filled in before the endpoint
+ * fields are written.
+ */
+const PLACEHOLDER_PATTERN = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g
+
+const PLACEHOLDER_LABELS: Record<string, string> = {
+  realm: 'Realm',
+}
+
+const PLACEHOLDER_EXAMPLES: Record<string, string> = {
+  realm: 'master',
+}
+
+const presetPaths = (preset: OAuthPreset): string[] => [
+  preset.authorization_endpoint,
+  preset.token_endpoint,
+  preset.user_info_endpoint,
+]
+
+const collectPlaceholders = (preset: OAuthPreset): string[] => {
+  const names = new Set<string>()
+  for (const path of presetPaths(preset)) {
+    for (const match of path.matchAll(PLACEHOLDER_PATTERN)) {
+      names.add(match[1])
+    }
+  }
+  return Array.from(names)
+}
+
+const substitutePlaceholders = (
+  path: string,
+  values: Record<string, string>
+): string =>
+  path.replace(PLACEHOLDER_PATTERN, (whole, name: string) => {
+    const value = (values[name] ?? '').trim()
+    return value === '' ? whole : encodeURIComponent(value)
+  })
+
+const isAbsoluteHttpUrl = (value: string): boolean => {
+  try {
+    const parsed = new URL(value.trim())
+    return (
+      (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      parsed.hostname !== '' &&
+      parsed.username === '' &&
+      parsed.password === '' &&
+      parsed.search === '' &&
+      parsed.hash === ''
+    )
+  } catch {
+    return false
+  }
 }
 
 export function PresetSelector(props: PresetSelectorProps) {
   const { t } = useTranslation()
   const [selectedPreset, setSelectedPreset] = useState<string>('')
   const [baseUrl, setBaseUrl] = useState<string>('')
+  const [placeholderValues, setPlaceholderValues] = useState<
+    Record<string, string>
+  >({})
+
+  const activePreset = OAUTH_PRESETS.find((p) => p.key === selectedPreset)
+  const placeholders = activePreset ? collectPlaceholders(activePreset) : []
+
+  const applyEndpoints = (
+    preset: OAuthPreset,
+    url: string,
+    values: Record<string, string>
+  ) => {
+    const setEndpoints = (auth: string, token: string, userInfo: string) => {
+      props.form.setValue('authorization_endpoint', auth, {
+        shouldDirty: true,
+      })
+      props.form.setValue('token_endpoint', token, { shouldDirty: true })
+      props.form.setValue('user_info_endpoint', userInfo, {
+        shouldDirty: true,
+      })
+    }
+
+    const missing = collectPlaceholders(preset).filter(
+      (name) => (values[name] ?? '').trim() === ''
+    )
+
+    // Leave the endpoints blank until everything needed to build a real URL is
+    // present. A half-resolved value would save without complaint and only
+    // surface as a broken provider at login time.
+    if (!isAbsoluteHttpUrl(url) || missing.length > 0) {
+      setEndpoints('', '', '')
+      return
+    }
+
+    const cleanUrl = url.trim().replace(/\/+$/, '')
+    const [auth, token, userInfo] = presetPaths(preset).map(
+      (path) => cleanUrl + substitutePlaceholders(path, values)
+    )
+    setEndpoints(auth, token, userInfo)
+  }
 
   const handlePresetChange = (presetKey: string) => {
     setSelectedPreset(presetKey)
     const preset = OAUTH_PRESETS.find((p) => p.key === presetKey)
     if (!preset) return
+
+    // Placeholder values belong to the preset that declared them.
+    setPlaceholderValues({})
 
     // Auto-fill name, slug, icon, and field mappings immediately
     props.form.setValue('name', preset.name, { shouldDirty: true })
@@ -66,40 +172,22 @@ export function PresetSelector(props: PresetSelectorProps) {
       shouldDirty: true,
     })
 
-    // Apply base URL if already entered
-    if (baseUrl) {
-      applyEndpoints(preset, baseUrl)
-    }
+    applyEndpoints(preset, baseUrl, {})
   }
 
   const handleBaseUrlChange = (url: string) => {
     setBaseUrl(url)
-    if (!selectedPreset) return
+    if (!activePreset) return
 
-    const preset = OAUTH_PRESETS.find((p) => p.key === selectedPreset)
-    if (!preset) return
-
-    applyEndpoints(preset, url)
+    applyEndpoints(activePreset, url, placeholderValues)
   }
 
-  const applyEndpoints = (
-    preset: (typeof OAUTH_PRESETS)[number],
-    url: string
-  ) => {
-    const cleanUrl = url.replace(/\/+$/, '')
-    props.form.setValue(
-      'authorization_endpoint',
-      cleanUrl + preset.authorization_endpoint,
-      { shouldDirty: true }
-    )
-    props.form.setValue('token_endpoint', cleanUrl + preset.token_endpoint, {
-      shouldDirty: true,
-    })
-    props.form.setValue(
-      'user_info_endpoint',
-      cleanUrl + preset.user_info_endpoint,
-      { shouldDirty: true }
-    )
+  const handlePlaceholderChange = (name: string, value: string) => {
+    const next = { ...placeholderValues, [name]: value }
+    setPlaceholderValues(next)
+    if (!activePreset) return
+
+    applyEndpoints(activePreset, baseUrl, next)
   }
 
   return (
@@ -141,6 +229,24 @@ export function PresetSelector(props: PresetSelectorProps) {
           />
         </div>
       </div>
+
+      {placeholders.length > 0 && (
+        <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+          {placeholders.map((name) => (
+            <div key={name} className='space-y-1.5'>
+              <Label>{t(PLACEHOLDER_LABELS[name] ?? name)}</Label>
+              <Input
+                placeholder={PLACEHOLDER_EXAMPLES[name] ?? `{${name}}`}
+                value={placeholderValues[name] ?? ''}
+                onChange={(e) => handlePlaceholderChange(name, e.target.value)}
+              />
+              <p className='text-muted-foreground text-xs'>
+                {t('Required by this preset to build the endpoint URLs.')}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
     </SettingsControlGroup>
   )
 }

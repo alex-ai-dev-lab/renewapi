@@ -54,7 +54,7 @@ import {
 } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
 import { useResetForm } from '../hooks/use-reset-form'
-import { useUpdateOption } from '../hooks/use-update-option'
+import { useUpdateOptionsBulk } from '../hooks/use-update-option'
 
 const basicAuthSchema = z.object({
   PasswordLoginEnabled: z.boolean(),
@@ -78,7 +78,7 @@ type BasicAuthImportExportPayload = {
 
 export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
   const { t } = useTranslation()
-  const updateOption = useUpdateOption()
+  const updateOptionsBulk = useUpdateOptionsBulk()
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
 
@@ -119,9 +119,11 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
       }
     })
 
-    for (const update of updates) {
-      await updateOption.mutateAsync(update)
-    }
+    await updateOptionsBulk.mutateAsync({
+      options: Object.fromEntries(
+        updates.map(({ key, value }) => [key, value])
+      ),
+    })
   }
 
   const currentValues = () => basicAuthSchema.parse(form.getValues())
@@ -212,7 +214,7 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
           </SettingsPageActionsPortal>
           <SettingsPageFormActions
             onSave={form.handleSubmit(onSubmit)}
-            isSaving={updateOption.isPending}
+            isSaving={updateOptionsBulk.isPending}
           />
           <FormField
             control={form.control}

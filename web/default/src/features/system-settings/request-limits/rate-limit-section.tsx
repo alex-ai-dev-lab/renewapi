@@ -54,7 +54,7 @@ import {
   SettingsPageFormActions,
 } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
-import { useUpdateOption } from '../hooks/use-update-option'
+import { useUpdateOptionsBulk } from '../hooks/use-update-option'
 import { RateLimitVisualEditor } from './rate-limit-visual-editor'
 
 const isValidJSON = (value: string | undefined) => {
@@ -67,7 +67,15 @@ const isValidJSON = (value: string | undefined) => {
     for (const [, val] of Object.entries(parsed)) {
       if (!Array.isArray(val) || val.length !== 2) return false
       if (typeof val[0] !== 'number' || typeof val[1] !== 'number') return false
-      if (val[0] < 0 || val[1] < 1) return false
+      if (
+        !Number.isFinite(val[0]) ||
+        !Number.isFinite(val[1]) ||
+        !Number.isInteger(val[0]) ||
+        !Number.isInteger(val[1]) ||
+        val[0] < 0 ||
+        val[1] < 1
+      )
+        return false
       if (val[0] > 2147483647 || val[1] > 2147483647) return false
     }
     return true
@@ -79,9 +87,9 @@ const isValidJSON = (value: string | undefined) => {
 const createRateLimitSchema = (t: (key: string) => string) =>
   z.object({
     ModelRequestRateLimitEnabled: z.boolean(),
-    ModelRequestRateLimitDurationMinutes: z.number().min(0),
-    ModelRequestRateLimitCount: z.number().min(0).max(100000000),
-    ModelRequestRateLimitSuccessCount: z.number().min(1).max(100000000),
+    ModelRequestRateLimitDurationMinutes: z.number().int().min(1),
+    ModelRequestRateLimitCount: z.number().int().min(0).max(100000000),
+    ModelRequestRateLimitSuccessCount: z.number().int().min(0).max(100000000),
     ModelRequestRateLimitGroup: z
       .string()
       .optional()
@@ -120,7 +128,7 @@ const toRateLimitGroup = (value: unknown) => {
 
 export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
   const { t } = useTranslation()
-  const updateOption = useUpdateOption()
+  const updateOptions = useUpdateOptionsBulk()
   const [useVisualEditor, setUseVisualEditor] = useState(true)
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
@@ -138,14 +146,17 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
   }, [defaultValues, form])
 
   const onSubmit = async (values: RateLimitFormValues) => {
-    const updates = Object.entries(values).filter(
-      ([key, value]) =>
+    const options: Record<string, string | number | boolean> = {}
+    for (const [key, value] of Object.entries(values)) {
+      if (
+        value !== undefined &&
         value !== defaultValues[key as keyof RateLimitFormValues]
-    )
-
-    for (const [key, value] of updates) {
-      await updateOption.mutateAsync({ key, value: value ?? '' })
+      ) {
+        options[key] = value
+      }
     }
+    if (Object.keys(options).length === 0) return
+    await updateOptions.mutateAsync({ options })
   }
 
   const exportConfig = async () => {
@@ -264,7 +275,7 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
           </SettingsPageActionsPortal>
           <SettingsPageFormActions
             onSave={form.handleSubmit(onSubmit)}
-            isSaving={updateOption.isPending}
+            isSaving={updateOptions.isPending}
             saveLabel='Save rate limits'
           />
           <FormField
@@ -301,11 +312,11 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
                     <div className='flex items-center gap-2'>
                       <Input
                         type='number'
-                        min={0}
+                        min={1}
                         step={1}
                         {...field}
                         onChange={(e) =>
-                          field.onChange(parseInt(e.target.value) || 0)
+                          field.onChange(parseInt(e.target.value) || 1)
                         }
                       />
                       <span className='text-muted-foreground text-sm'>
@@ -362,12 +373,12 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
                     <div className='flex items-center gap-2'>
                       <Input
                         type='number'
-                        min={1}
+                        min={0}
                         max={100000000}
                         step={1}
                         {...field}
                         onChange={(e) =>
-                          field.onChange(parseInt(e.target.value) || 1)
+                          field.onChange(parseInt(e.target.value) || 0)
                         }
                       />
                       <span className='text-muted-foreground text-sm'>

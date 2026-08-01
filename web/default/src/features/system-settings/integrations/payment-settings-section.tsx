@@ -1483,22 +1483,22 @@ export function PaymentSettingsSection({
               </p>
             </div>
 
-            <div className='rounded-lg border border-border bg-muted p-4 text-sm text-muted-foreground'>
+            <div className='border-border bg-muted text-muted-foreground rounded-lg border p-4 text-sm'>
               <p className='mb-2 font-medium'>{t('Webhook Configuration:')}</p>
               <ul className='list-inside list-disc space-y-1'>
                 <li>
                   {t('Webhook URL:')}{' '}
-                <code className='rounded bg-card px-1 py-0.5 text-xs text-foreground'>
+                  <code className='bg-card text-foreground rounded px-1 py-0.5 text-xs'>
                     {'<ServerAddress>/api/stripe/webhook'}
                   </code>
                 </li>
                 <li>
                   {t('Required events:')}{' '}
-                <code className='rounded bg-card px-1 py-0.5 text-xs text-foreground'>
+                  <code className='bg-card text-foreground rounded px-1 py-0.5 text-xs'>
                     {t('checkout.session.completed')}
                   </code>{' '}
                   {t('and')}{' '}
-                <code className='rounded bg-card px-1 py-0.5 text-xs text-foreground'>
+                  <code className='bg-card text-foreground rounded px-1 py-0.5 text-xs'>
                     {t('checkout.session.expired')}
                   </code>
                 </li>
@@ -1667,12 +1667,12 @@ export function PaymentSettingsSection({
               </p>
             </div>
 
-            <div className='rounded-lg border border-border bg-muted p-4 text-sm text-muted-foreground'>
+            <div className='border-border bg-muted text-muted-foreground rounded-lg border p-4 text-sm'>
               <p className='mb-2 font-medium'>{t('Webhook Configuration:')}</p>
               <ul className='list-inside list-disc space-y-1'>
                 <li>
                   {t('Webhook URL:')}{' '}
-                <code className='rounded bg-card px-1 py-0.5 text-xs text-foreground'>
+                  <code className='bg-card text-foreground rounded px-1 py-0.5 text-xs'>
                     {'<ServerAddress>/api/creem/webhook'}
                   </code>
                 </li>

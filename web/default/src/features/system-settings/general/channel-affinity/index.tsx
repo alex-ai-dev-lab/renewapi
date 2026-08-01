@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Download,
   Edit,
@@ -124,7 +124,7 @@ type ChannelAffinityPayload = Partial<ChannelAffinitySettings> & {
   }>
 }
 
-export function ChannelAffinitySection(props: Props) {
+function ChannelAffinityEditor(props: Props) {
   const { t } = useTranslation()
   const updateOptionsBulk = useUpdateOptionsBulk()
 
@@ -167,29 +167,8 @@ export function ChannelAffinitySection(props: Props) {
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
 
-  useEffect(() => {
-    setEnabled(props.defaultValues['channel_affinity_setting.enabled'])
-    setSwitchOnSuccess(
-      props.defaultValues['channel_affinity_setting.switch_on_success']
-    )
-    setMaxEntries(props.defaultValues['channel_affinity_setting.max_entries'])
-    setDefaultTtl(
-      props.defaultValues['channel_affinity_setting.default_ttl_seconds']
-    )
-    const parsed = parseRules(
-      props.defaultValues['channel_affinity_setting.rules']
-    )
-    setRules(parsed)
-    setJsonText(
-      JSON.stringify(
-        parsed.map(({ id: _, ...r }) => r),
-        null,
-        2
-      )
-    )
-  }, [props.defaultValues])
-
   const refreshCache = useCallback(async () => {
+    await Promise.resolve()
     setCacheLoading(true)
     try {
       const res = await getCacheStats()
@@ -203,7 +182,11 @@ export function ChannelAffinitySection(props: Props) {
   }, [t])
 
   useEffect(() => {
-    refreshCache()
+    const timer = window.setTimeout(() => {
+      void refreshCache()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [refreshCache])
 
   const appendCliTemplates = () => {
@@ -847,4 +830,13 @@ export function ChannelAffinitySection(props: Props) {
       </Dialog>
     </>
   )
+}
+
+export function ChannelAffinitySection(props: Props) {
+  const defaultValuesKey = useMemo(
+    () => JSON.stringify(props.defaultValues),
+    [props.defaultValues]
+  )
+
+  return <ChannelAffinityEditor key={defaultValuesKey} {...props} />
 }

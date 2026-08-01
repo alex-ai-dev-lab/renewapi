@@ -16,7 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type BaseSyntheticEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -410,10 +416,18 @@ export function PasskeySection(props: PasskeySectionProps) {
     }
   }
 
+  const handleFormSubmit = (event: BaseSyntheticEvent) => {
+    void form.handleSubmit(onSubmit)(event)
+  }
+
+  const handleSave = () => {
+    void form.handleSubmit(onSubmit)()
+  }
+
   return (
     <SettingsSection title={t('Passkey Authentication')}>
       <Form {...form}>
-        <SettingsForm onSubmit={form.handleSubmit(onSubmit)}>
+        <SettingsForm onSubmit={handleFormSubmit}>
           <SettingsPageActionsPortal>
             <Button
               type='button'
@@ -435,7 +449,7 @@ export function PasskeySection(props: PasskeySectionProps) {
             </Button>
           </SettingsPageActionsPortal>
           <SettingsPageFormActions
-            onSave={form.handleSubmit(onSubmit)}
+            onSave={handleSave}
             isSaving={updateOptionsBulk.isPending}
           />
           <FormField

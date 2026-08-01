@@ -16,7 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type BaseSyntheticEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -353,6 +359,14 @@ export function OAuthSection(props: OAuthSectionProps) {
     form.reset(buildFormDefaults(normalized))
   }
 
+  const handleFormSubmit = (event: BaseSyntheticEvent) => {
+    void form.handleSubmit(onSubmit)(event)
+  }
+
+  const handleSave = () => {
+    void form.handleSubmit(onSubmit)()
+  }
+
   const handleReset = () => {
     form.reset(buildFormDefaults(baselineRef.current))
     toast.success(t('Form reset to saved values'))
@@ -449,7 +463,7 @@ export function OAuthSection(props: OAuthSectionProps) {
 
       <SettingsSection title={t('OAuth Integrations')}>
         <Form {...form}>
-          <SettingsForm onSubmit={form.handleSubmit(onSubmit)}>
+          <SettingsForm onSubmit={handleFormSubmit}>
             <SettingsPageActionsPortal>
               <Button
                 type='button'
@@ -471,7 +485,7 @@ export function OAuthSection(props: OAuthSectionProps) {
               </Button>
             </SettingsPageActionsPortal>
             <SettingsPageFormActions
-              onSave={form.handleSubmit(onSubmit)}
+              onSave={handleSave}
               onReset={handleReset}
               isSaving={updateOptionsBulk.isPending}
               isResetDisabled={!form.formState.isDirty}

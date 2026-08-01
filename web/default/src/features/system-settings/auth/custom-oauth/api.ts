@@ -112,8 +112,12 @@ export async function importCustomOAuthProviders(
 export async function discoverOIDCEndpoints(
   wellKnownUrl: string
 ): Promise<DiscoveryResponse> {
-  const res = await api.post('/api/custom-oauth-provider/discovery', {
-    well_known_url: wellKnownUrl,
-  }, CUSTOM_OAUTH_REQUEST_CONFIG)
+  const res = await api.post(
+    '/api/custom-oauth-provider/discovery',
+    {
+      well_known_url: wellKnownUrl,
+    },
+    CUSTOM_OAUTH_REQUEST_CONFIG
+  )
   return unwrapApiResponse(res.data)
 }

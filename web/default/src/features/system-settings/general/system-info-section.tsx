@@ -102,7 +102,9 @@ function createSystemInfoSchema(t: (key: string) => string) {
         (value) => !value || isAbsoluteHttpUrl(normalizeServerAddress(value)),
         {
           error: () =>
-            t('Server address must be a full URL starting with http:// or https://'),
+            t(
+              'Server address must be a full URL starting with http:// or https://'
+            ),
         }
       ),
     Logo: z.string().url().optional().or(z.literal('')),

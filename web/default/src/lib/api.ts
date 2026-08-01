@@ -20,6 +20,7 @@ import axios, { type AxiosRequestConfig } from 'axios'
 import { t } from 'i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { isRequestCanceled } from '@/lib/request-errors'
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
@@ -72,6 +73,12 @@ api.interceptors.response.use(
     return response
   },
   (error) => {
+    // Aborted requests are expected during navigation and query replacement.
+    // They must not surface as user-facing failures.
+    if (isRequestCanceled(error)) {
+      return Promise.reject(error)
+    }
+
     const skip = error?.config?.skipErrorHandler
     const status = error?.response?.status
 

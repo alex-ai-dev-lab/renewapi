@@ -75,7 +75,7 @@ func TestNormalizeOptionValuesCanonicalizesServerAddressAndRejectsDuplicates(t *
 	}
 
 	if _, err := normalizeOptionValues(map[string]string{
-		"ServerAddress":  "https://example.com",
+		"ServerAddress":   "https://example.com",
 		" ServerAddress ": "https://other.example.com",
 	}); err == nil {
 		t.Fatal("expected duplicate normalized keys to be rejected")

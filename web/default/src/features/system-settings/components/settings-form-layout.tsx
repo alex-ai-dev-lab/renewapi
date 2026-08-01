@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { ComponentProps, ReactNode } from 'react'
+import { useId, type ComponentProps, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { FormItem } from '@/components/ui/form'
 import { Label } from '@/components/ui/label'
@@ -41,6 +41,8 @@ type SettingsSwitchFieldProps = SettingsSwitchRowProps & {
   label: ReactNode
   description?: ReactNode
   disabled?: boolean
+  /** Overrides the generated id used to tie the label to the switch. */
+  switchId?: string
 }
 
 const settingsSwitchRowClassName =
@@ -108,17 +110,31 @@ export function SettingsSwitchField({
   description,
   disabled,
   className,
+  switchId,
   ...props
 }: SettingsSwitchFieldProps) {
+  // Without an explicit association the label is inert: the switch itself is a
+  // small hit target on a full-width row, and assistive technology announces
+  // the control with no name.
+  const generatedId = useId()
+  const controlId = switchId ?? generatedId
+  const descriptionId = `${controlId}-description`
+
   return (
     <SettingsSwitchRow className={className} {...props}>
       <SettingsSwitchContent>
-        <Label className='text-sm font-medium'>{label}</Label>
+        <Label htmlFor={controlId} className='text-sm font-medium'>
+          {label}
+        </Label>
         {description ? (
-          <p className='text-muted-foreground text-xs'>{description}</p>
+          <p id={descriptionId} className='text-muted-foreground text-xs'>
+            {description}
+          </p>
         ) : null}
       </SettingsSwitchContent>
       <Switch
+        id={controlId}
+        aria-describedby={description ? descriptionId : undefined}
         checked={checked}
         onCheckedChange={onCheckedChange}
         disabled={disabled}

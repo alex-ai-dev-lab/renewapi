@@ -269,13 +269,7 @@ export async function handleTestChannel(
       if (!options?.silent) {
         toast.success(i18next.t(SUCCESS_MESSAGES.TESTED))
       }
-      onTestComplete?.(
-        true,
-        responseTime,
-        undefined,
-        undefined,
-        response
-      )
+      onTestComplete?.(true, responseTime, undefined, undefined, response)
     } else {
       if (!options?.silent) {
         toast.error(response.message || i18next.t(ERROR_MESSAGES.TEST_FAILED))
@@ -392,6 +386,32 @@ export async function handleBatchDelete(
   }
 }
 
+const CHANNEL_STATUS_UPDATE_CONCURRENCY = 4
+
+async function updateChannelsStatus(
+  ids: number[],
+  status: number
+): Promise<PromiseSettledResult<Awaited<ReturnType<typeof updateChannel>>>[]> {
+  const results: PromiseSettledResult<
+    Awaited<ReturnType<typeof updateChannel>>
+  >[] = []
+
+  for (
+    let start = 0;
+    start < ids.length;
+    start += CHANNEL_STATUS_UPDATE_CONCURRENCY
+  ) {
+    const batch = ids.slice(start, start + CHANNEL_STATUS_UPDATE_CONCURRENCY)
+    results.push(
+      ...(await Promise.allSettled(
+        batch.map((id) => updateChannel(id, { status }))
+      ))
+    )
+  }
+
+  return results
+}
+
 /**
  * Batch enable channels
  */
@@ -406,11 +426,7 @@ export async function handleBatchEnable(
   }
 
   try {
-    // Update each channel individually
-    const promises = ids.map((id) =>
-      updateChannel(id, { status: CHANNEL_STATUS.ENABLED })
-    )
-    const results = await Promise.allSettled(promises)
+    const results = await updateChannelsStatus(ids, CHANNEL_STATUS.ENABLED)
 
     const successCount = results.filter(
       (r) => r.status === 'fulfilled' && r.value.success
@@ -449,11 +465,10 @@ export async function handleBatchDisable(
   }
 
   try {
-    // Update each channel individually
-    const promises = ids.map((id) =>
-      updateChannel(id, { status: CHANNEL_STATUS.MANUAL_DISABLED })
+    const results = await updateChannelsStatus(
+      ids,
+      CHANNEL_STATUS.MANUAL_DISABLED
     )
-    const results = await Promise.allSettled(promises)
 
     const successCount = results.filter(
       (r) => r.status === 'fulfilled' && r.value.success

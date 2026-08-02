@@ -294,16 +294,26 @@ func (t *channelTestTracker) recordFailure(channelID int) int {
 	return t.channelFailCount[channelID]
 }
 
-// lastTestSince returns how long ago the channel was last tested; if never, a
-// very large duration is returned so the first test always runs.
-func (t *channelTestTracker) lastTestSince(channelID int) time.Duration {
+// lastTestSince returns how long ago the channel was last tested. The persisted
+// timestamp keeps a process restart from scheduling every channel at once.
+func (t *channelTestTracker) lastTestSince(channelID int, persistedTestTime int64) time.Duration {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	last, ok := t.channelLastTest[channelID]
+	if persistedTestTime > 0 {
+		persisted := time.Unix(persistedTestTime, 0)
+		if !ok || persisted.After(last) {
+			last = persisted
+			ok = true
+		}
+	}
 	if !ok {
 		return 365 * 24 * time.Hour
 	}
-	return time.Since(last)
+	if elapsed := time.Since(last); elapsed >= 0 {
+		return elapsed
+	}
+	return 0
 }
 
 func (t *channelTestTracker) failCount(channelID int) int {
@@ -553,7 +563,7 @@ scheduleLoop:
 
 		// Check per-channel schedule
 		interval, retryCount, retryThreshold, twStart, twEnd, timezone := getEffectiveTestConfig(channel)
-		since := testTracking.lastTestSince(channel.Id)
+		since := testTracking.lastTestSince(channel.Id, channel.TestTime)
 		if since < interval {
 			continue // Not due yet
 		}

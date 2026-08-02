@@ -54,7 +54,7 @@ export function CommonLogsStats() {
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['usage-logs-stats', isAdmin, searchParams],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = buildApiParams({
         page: 1,
         pageSize: 1,
@@ -64,8 +64,8 @@ export function CommonLogsStats() {
       })
 
       const result = isAdmin
-        ? await getLogStats(params)
-        : await getUserLogStats(params)
+        ? await getLogStats(params, { signal })
+        : await getUserLogStats(params, { signal })
 
       return result.success
         ? result.data || DEFAULT_LOG_STATS

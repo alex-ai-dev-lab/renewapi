@@ -259,8 +259,15 @@ export function buildApiParams(config: {
 export async function fetchLogsByCategory(
   config: FetchLogsConfig
 ): Promise<GetLogsResponse> {
-  const { logCategory, isAdmin, page, pageSize, searchParams, columnFilters } =
-    config
+  const {
+    logCategory,
+    isAdmin,
+    page,
+    pageSize,
+    searchParams,
+    columnFilters,
+    signal,
+  } = config
 
   if (logCategory === 'common') {
     const params = buildApiParams({
@@ -270,7 +277,9 @@ export async function fetchLogsByCategory(
       columnFilters,
       isAdmin,
     })
-    return isAdmin ? await getAllLogs(params) : await getUserLogs(params)
+    return isAdmin
+      ? await getAllLogs(params, { signal })
+      : await getUserLogs(params, { signal })
   }
 
   // For drawing and task logs
@@ -293,12 +302,20 @@ export async function fetchLogsByCategory(
 
   if (logCategory === 'drawing') {
     return isAdmin
-      ? await getAllMidjourneyLogs(paramsWithFilter as GetMidjourneyLogsParams)
-      : await getUserMidjourneyLogs(paramsWithFilter as GetMidjourneyLogsParams)
+      ? await getAllMidjourneyLogs(
+          paramsWithFilter as GetMidjourneyLogsParams,
+          { signal }
+        )
+      : await getUserMidjourneyLogs(
+          paramsWithFilter as GetMidjourneyLogsParams,
+          { signal }
+        )
   }
 
   // task logs
   return isAdmin
-    ? await getAllTaskLogs(paramsWithFilter as GetTaskLogsParams)
-    : await getUserTaskLogs(paramsWithFilter as GetTaskLogsParams)
+    ? await getAllTaskLogs(paramsWithFilter as GetTaskLogsParams, { signal })
+    : await getUserTaskLogs(paramsWithFilter as GetTaskLogsParams, {
+        signal,
+      })
 }

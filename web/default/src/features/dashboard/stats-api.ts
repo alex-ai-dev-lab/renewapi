@@ -26,7 +26,7 @@ import type {
 export type TimeRange = DashboardTimeRange
 export type RefreshIntervalMs = DashboardRefreshIntervalMs
 
-export const DEFAULT_REFRESH_INTERVAL_MS: RefreshIntervalMs = 5000
+export const DEFAULT_REFRESH_INTERVAL_MS: RefreshIntervalMs = 30000
 
 export interface OverviewStats {
   total_requests: number

@@ -91,7 +91,7 @@ export const DASHBOARD_VISIBLE_SECTION_VALUES: readonly DashboardVisibleSection[
 export const DEFAULT_DASHBOARD_DEFAULTS: DashboardDefaults = {
   timeRange: '7d',
   autoRefresh: true,
-  refreshInterval: 5000,
+  refreshInterval: 30000,
   pageSize: 25,
   healthFilter: 'all',
   trendMode: 'overview',

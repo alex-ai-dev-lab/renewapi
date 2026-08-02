@@ -15,6 +15,9 @@ services:
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
       SQL_DSN: ${SQL_DSN:-}
+      SQLITE_SEPARATE_LOG_DB: ${SQLITE_SEPARATE_LOG_DB:-true}
+      SQLITE_LOG_MAX_OPEN_CONNS: ${SQLITE_LOG_MAX_OPEN_CONNS:-4}
+      SQLITE_LOG_MAX_IDLE_CONNS: ${SQLITE_LOG_MAX_IDLE_CONNS:-4}
       PORT: ${PORT:-3000}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set to a strong random value, e.g. `openssl rand -hex 32`}
       ERROR_LOG_ENABLED: ${ERROR_LOG_ENABLED:-true}

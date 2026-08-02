@@ -17,7 +17,7 @@ func GetOverviewStats(c *gin.Context) {
 	timeRange := c.DefaultQuery("time_range", "7d")
 	startTime := calculateStartTime(timeRange)
 
-	stats, err := model.GetOverviewStats(startTime)
+	stats, err := model.GetOverviewStatsWithContext(c.Request.Context(), startTime)
 	if err != nil {
 		respondStatsError(c, "overview", err)
 		return
@@ -34,7 +34,7 @@ func GetChannelStats(c *gin.Context) {
 	timeRange := c.DefaultQuery("time_range", "7d")
 	startTime := calculateStartTime(timeRange)
 
-	stats, err := model.GetChannelStats(startTime)
+	stats, err := model.GetChannelStatsWithContext(c.Request.Context(), startTime)
 	if err != nil {
 		respondStatsError(c, "channel", err)
 		return
@@ -51,7 +51,7 @@ func GetModelStats(c *gin.Context) {
 	timeRange := c.DefaultQuery("time_range", "7d")
 	startTime := calculateStartTime(timeRange)
 
-	stats, err := model.GetModelStats(startTime)
+	stats, err := model.GetModelStatsWithContext(c.Request.Context(), startTime)
 	if err != nil {
 		respondStatsError(c, "model", err)
 		return
@@ -68,7 +68,7 @@ func GetUserStats(c *gin.Context) {
 	timeRange := c.DefaultQuery("time_range", "7d")
 	startTime := calculateStartTime(timeRange)
 
-	stats, err := model.GetUserStats(startTime)
+	stats, err := model.GetUserStatsWithContext(c.Request.Context(), startTime)
 	if err != nil {
 		respondStatsError(c, "user", err)
 		return
@@ -93,7 +93,7 @@ func GetChannelUserStats(c *gin.Context) {
 		return
 	}
 
-	stats, err := model.GetChannelUserStats(startTime, channelID)
+	stats, err := model.GetChannelUserStatsWithContext(c.Request.Context(), startTime, channelID)
 	if err != nil {
 		respondStatsError(c, "channel-user", err)
 		return
@@ -118,7 +118,7 @@ func GetChannelTrendStats(c *gin.Context) {
 		return
 	}
 
-	stats, err := model.GetChannelTrendStats(startTime, channelID)
+	stats, err := model.GetChannelTrendStatsWithContext(c.Request.Context(), startTime, channelID)
 	if err != nil {
 		respondStatsError(c, "channel-trend", err)
 		return
@@ -143,7 +143,7 @@ func GetModelTrendStats(c *gin.Context) {
 		return
 	}
 
-	stats, err := model.GetModelTrendStats(startTime, modelName)
+	stats, err := model.GetModelTrendStatsWithContext(c.Request.Context(), startTime, modelName)
 	if err != nil {
 		respondStatsError(c, "model-trend", err)
 		return
@@ -168,7 +168,7 @@ func GetUserTrendStats(c *gin.Context) {
 		return
 	}
 
-	stats, err := model.GetUserTrendStats(startTime, userID)
+	stats, err := model.GetUserTrendStatsWithContext(c.Request.Context(), startTime, userID)
 	if err != nil {
 		respondStatsError(c, "user-trend", err)
 		return

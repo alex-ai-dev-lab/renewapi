@@ -142,7 +142,7 @@ func chooseDB(envName string, isLog bool) (*gorm.DB, error) {
 			} else {
 				common.LogSqlType = common.DatabaseTypeSQLite
 			}
-			return gorm.Open(sqlite.Open(common.SQLitePath), newGormConfig(true))
+			return gorm.Open(sqlite.Open(compatsqlite.WithConnectionPragmas(common.SQLitePath)), newGormConfig(true))
 		}
 		// Use MySQL
 		common.SysLog("using MySQL as database")
@@ -164,7 +164,7 @@ func chooseDB(envName string, isLog bool) (*gorm.DB, error) {
 	// Use SQLite
 	common.SysLog("SQL_DSN not set, using SQLite as database")
 	common.UsingSQLite = true
-	return gorm.Open(sqlite.Open(common.SQLitePath), newGormConfig(true))
+	return gorm.Open(sqlite.Open(compatsqlite.WithConnectionPragmas(common.SQLitePath)), newGormConfig(true))
 }
 
 func InitDB() error {
@@ -222,6 +222,25 @@ func InitLogDBForMigration() error {
 
 func initLogDB(migrationMode bool) (err error) {
 	if os.Getenv("LOG_SQL_DSN") == "" {
+		if common.UsingSQLite && common.GetEnvOrDefaultBool("SQLITE_SEPARATE_LOG_DB", true) {
+			LOG_DB, err = gorm.Open(
+				sqlite.Open(compatsqlite.WithConnectionPragmas(common.SQLitePath)),
+				newGormConfig(true),
+			)
+			if err != nil {
+				return err
+			}
+			if common.DebugEnabled {
+				LOG_DB = LOG_DB.Debug()
+			}
+			if err := compatsqlite.TuneLogPragmas(LOG_DB); err != nil {
+				return err
+			}
+			if migrationMode {
+				return nil
+			}
+			return CheckLogSchema()
+		}
 		LOG_DB = DB
 		if migrationMode {
 			return nil
@@ -245,7 +264,7 @@ func initLogDB(migrationMode bool) (err error) {
 			return err
 		}
 		if common.LogSqlType == common.DatabaseTypeSQLite {
-			if err := compatsqlite.TunePragmas(LOG_DB); err != nil {
+			if err := compatsqlite.TuneLogPragmas(LOG_DB); err != nil {
 				return err
 			}
 		} else {

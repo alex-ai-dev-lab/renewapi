@@ -134,7 +134,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       searchParams,
       t,
     ],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const result = await fetchLogsByCategory({
         logCategory,
         isAdmin,
@@ -142,6 +142,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         pageSize: pagination.pageSize,
         searchParams,
         columnFilters,
+        signal,
       })
 
       if (!result?.success) {

@@ -137,9 +137,14 @@ export type CodexCredentialPreflightResponse = {
  * Get paginated list of channels
  */
 export async function getChannels(
-  params: GetChannelsParams = {}
+  params: GetChannelsParams = {},
+  config: ApiRequestConfig = {}
 ): Promise<GetChannelsResponse> {
-  const res = await api.get('/api/channel', { params })
+  const res = await api.get('/api/channel', {
+    ...config,
+    params,
+    timeoutClass: config.timeoutClass ?? 'interactive',
+  })
   return res.data
 }
 
@@ -147,9 +152,14 @@ export async function getChannels(
  * Search channels with filters
  */
 export async function searchChannels(
-  params: SearchChannelsParams
+  params: SearchChannelsParams,
+  config: ApiRequestConfig = {}
 ): Promise<SearchChannelsResponse> {
-  const res = await api.get('/api/channel/search', { params })
+  const res = await api.get('/api/channel/search', {
+    ...config,
+    params,
+    timeoutClass: config.timeoutClass ?? 'interactive',
+  })
   return res.data
 }
 

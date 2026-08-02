@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api } from '@/lib/api'
+import { api, type ApiRequestConfig } from '@/lib/api'
 import { buildQueryParams } from './lib/utils'
 import type {
   GetLogsParams,
@@ -39,7 +39,8 @@ function buildApiPath(endpoint: string, isAdmin: boolean): string {
 async function fetchLogs<T>(
   endpoint: string,
   params: T,
-  isAdmin: boolean
+  isAdmin: boolean,
+  config: ApiRequestConfig = {}
 ): Promise<GetLogsResponse> {
   const paramRecord = params as unknown as Record<string, unknown>
   const queryParams = buildQueryParams({
@@ -48,20 +49,27 @@ async function fetchLogs<T>(
     ...params,
   })
   const path = buildApiPath(endpoint, isAdmin)
-  const res = await api.get(`${path}?${queryParams}`)
+  const res = await api.get(`${path}?${queryParams}`, {
+    ...config,
+    timeoutClass: config.timeoutClass ?? 'interactive',
+  })
   return res.data
 }
 
 async function fetchLogStats<T>(
   endpoint: string,
   params: T,
-  isAdmin: boolean
+  isAdmin: boolean,
+  config: ApiRequestConfig = {}
 ): Promise<GetLogStatsResponse> {
   const queryParams = buildQueryParams(
     params as unknown as Record<string, unknown>
   )
   const path = buildApiPath(endpoint, isAdmin)
-  const res = await api.get(`${path}/stat?${queryParams}`)
+  const res = await api.get(`${path}/stat?${queryParams}`, {
+    ...config,
+    timeoutClass: config.timeoutClass ?? 'interactive',
+  })
   return res.data
 }
 
@@ -69,19 +77,25 @@ async function fetchLogStats<T>(
 // Common Log APIs
 // ============================================================================
 
-export const getAllLogs = (params: GetLogsParams = {}) =>
-  fetchLogs('/api/log', params, true)
+export const getAllLogs = (
+  params: GetLogsParams = {},
+  config: ApiRequestConfig = {}
+) => fetchLogs('/api/log', params, true, config)
 
 export const getUserLogs = (
-  params: Omit<GetLogsParams, 'username' | 'channel'> = {}
-) => fetchLogs('/api/log', params, false)
+  params: Omit<GetLogsParams, 'username' | 'channel'> = {},
+  config: ApiRequestConfig = {}
+) => fetchLogs('/api/log', params, false, config)
 
-export const getLogStats = (params: GetLogStatsParams = {}) =>
-  fetchLogStats('/api/log', params, true)
+export const getLogStats = (
+  params: GetLogStatsParams = {},
+  config: ApiRequestConfig = {}
+) => fetchLogStats('/api/log', params, true, config)
 
 export const getUserLogStats = (
-  params: Omit<GetLogStatsParams, 'username' | 'channel'> = {}
-) => fetchLogStats('/api/log', params, false)
+  params: Omit<GetLogStatsParams, 'username' | 'channel'> = {},
+  config: ApiRequestConfig = {}
+) => fetchLogStats('/api/log', params, false, config)
 
 export async function getUserInfo(
   userId: number
@@ -94,18 +108,26 @@ export async function getUserInfo(
 // Midjourney (Drawing) Logs API
 // ============================================================================
 
-export const getAllMidjourneyLogs = (params: GetMidjourneyLogsParams) =>
-  fetchLogs('/api/mj', params, true)
+export const getAllMidjourneyLogs = (
+  params: GetMidjourneyLogsParams,
+  config: ApiRequestConfig = {}
+) => fetchLogs('/api/mj', params, true, config)
 
-export const getUserMidjourneyLogs = (params: GetMidjourneyLogsParams) =>
-  fetchLogs('/api/mj', params, false)
+export const getUserMidjourneyLogs = (
+  params: GetMidjourneyLogsParams,
+  config: ApiRequestConfig = {}
+) => fetchLogs('/api/mj', params, false, config)
 
 // ============================================================================
 // Task Logs API
 // ============================================================================
 
-export const getAllTaskLogs = (params: GetTaskLogsParams) =>
-  fetchLogs('/api/task', params, true)
+export const getAllTaskLogs = (
+  params: GetTaskLogsParams,
+  config: ApiRequestConfig = {}
+) => fetchLogs('/api/task', params, true, config)
 
-export const getUserTaskLogs = (params: GetTaskLogsParams) =>
-  fetchLogs('/api/task', params, false)
+export const getUserTaskLogs = (
+  params: GetTaskLogsParams,
+  config: ApiRequestConfig = {}
+) => fetchLogs('/api/task', params, false, config)

@@ -45,6 +45,25 @@ func TestIsClockInTestWindowSupportsSameDayWindow(t *testing.T) {
 	require.False(t, isClockInTestWindow("18:01", "09:00", "18:00"))
 }
 
+func TestChannelTestTrackerUsesPersistedTestTimeAfterRestart(t *testing.T) {
+	tracker := &channelTestTracker{channelLastTest: make(map[int]time.Time)}
+	persisted := time.Now().Add(-5 * time.Minute).Unix()
+
+	since := tracker.lastTestSince(42, persisted)
+
+	require.GreaterOrEqual(t, since, 4*time.Minute)
+	require.Less(t, since, 6*time.Minute)
+}
+
+func TestChannelTestTrackerPrefersInMemoryTestTime(t *testing.T) {
+	tracker := &channelTestTracker{channelLastTest: make(map[int]time.Time)}
+	tracker.recordTest(42)
+
+	since := tracker.lastTestSince(42, time.Now().Add(-time.Hour).Unix())
+
+	require.Less(t, since, time.Second)
+}
+
 func TestResponsesCompactionProbeModelsStayExplicitlyScoped(t *testing.T) {
 	t.Setenv("RESPONSES_COMPACTION_MODEL", "gpt-5.7")
 	t.Setenv("RESPONSES_COMPACTION_PROBE_MAX_MODELS", "10")

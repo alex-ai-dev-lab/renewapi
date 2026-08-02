@@ -39,8 +39,14 @@ const (
 // Bulk updates may enable the audit and supply its secret in one request.
 func validateAntiPoisonAuditOptions(values map[string]string) error {
 	setting := operation_setting.GetAntiPoisonSetting()
-	enabled := effectiveOptionBool(values, antiPoisonAuditEnabledKey, setting.SignedHeaderAuditEnabled)
-	secret := strings.TrimSpace(effectiveOptionValue(values, antiPoisonAuditSecretKey, setting.SignedHeaderAuditSecret))
+	enabled := setting.SignedHeaderAuditEnabled
+	secret := strings.TrimSpace(setting.SignedHeaderAuditSecret)
+	if value, ok := values[antiPoisonAuditEnabledKey]; ok {
+		enabled = strings.EqualFold(strings.TrimSpace(value), "true")
+	}
+	if value, ok := values[antiPoisonAuditSecretKey]; ok {
+		secret = strings.TrimSpace(value)
+	}
 	if enabled && secret == "" {
 		return fmt.Errorf("反投毒签名审计开启时必须配置密钥")
 	}
@@ -298,10 +304,6 @@ func UpdateOption(c *gin.Context) {
 		writeOptionValidationError(c, err)
 		return
 	}
-	if err := validateAntiPoisonAuditOptions(values); err != nil {
-		common.ApiErrorMsg(c, err.Error())
-		return
-	}
 	if err := model.UpdateOption(key, values[key]); err != nil {
 		common.ApiError(c, err)
 		return
@@ -334,10 +336,6 @@ func UpdateOptionsBulk(c *gin.Context) {
 	values = normalizedValues
 	if err := validateOptionValues(values); err != nil {
 		writeOptionValidationError(c, err)
-		return
-	}
-	if err := validateAntiPoisonAuditOptions(values); err != nil {
-		common.ApiErrorMsg(c, err.Error())
 		return
 	}
 	if err := model.UpdateOptionsBulk(values); err != nil {

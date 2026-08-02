@@ -27,7 +27,6 @@ import RehypeKatex from 'rehype-katex';
 import RemarkGfm from 'remark-gfm';
 import RehypeHighlight from 'rehype-highlight';
 import { useRef, useState, useEffect, useMemo } from 'react';
-import mermaid from 'mermaid';
 import React from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import clsx from 'clsx';
@@ -36,19 +35,50 @@ import { copy, rehypeSplitWordsIntoSpans } from '../../../helpers';
 import { IconCopy } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 
-mermaid.initialize({
-  startOnLoad: false,
-  theme: 'default',
-  securityLevel: 'loose',
-});
+let mermaidLoader;
+
+function loadMermaid() {
+  if (!mermaidLoader) {
+    mermaidLoader = import('mermaid').then(({ default: mermaid }) => {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'default',
+        securityLevel: 'loose',
+      });
+      return mermaid;
+    });
+  }
+  return mermaidLoader;
+}
 
 export function Mermaid(props) {
   const ref = useRef(null);
   const [hasError, setHasError] = useState(false);
+  const [mermaidInstance, setMermaidInstance] = useState(null);
 
   useEffect(() => {
-    if (props.code && ref.current) {
-      mermaid
+    let active = true;
+    loadMermaid()
+      .then((instance) => {
+        if (active) {
+          setMermaidInstance(instance);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setHasError(true);
+          console.error('[Mermaid] failed to load', error);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (props.code && ref.current && mermaidInstance) {
+      mermaidInstance
         .run({
           nodes: [ref.current],
           suppressErrors: true,
@@ -58,7 +88,7 @@ export function Mermaid(props) {
           console.error('[Mermaid] ', e.message);
         });
     }
-  }, [props.code]);
+  }, [mermaidInstance, props.code]);
 
   function viewSvgInNewWindow() {
     const svg = ref.current?.querySelector('svg');

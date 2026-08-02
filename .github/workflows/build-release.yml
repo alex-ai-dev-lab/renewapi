@@ -85,6 +85,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # Changed-file checks below compare against the base commit.
           fetch-depth: 0
 
       - uses: actions/setup-go@v5
@@ -197,7 +198,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          # The release build only needs the checked-out source tree.
+          fetch-depth: 1
 
       - uses: docker/setup-qemu-action@v3
 
@@ -227,6 +229,13 @@ jobs:
             echo "release_tag=$release_tag"
             echo "image=$image"
             echo "tarball=$tarball"
+            ref="${GITHUB_REF_NAME:-detached}"
+            cache_ref="$(printf '%s' "$ref" | tr -c 'A-Za-z0-9_.-' '-')"
+            cache_ref="${cache_ref%-}"
+            if [ -z "$cache_ref" ]; then
+              cache_ref="detached"
+            fi
+            echo "cache_scope=renewapi-${GITHUB_EVENT_NAME}-${cache_ref}"
             echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } >> "$GITHUB_OUTPUT"
 
@@ -251,8 +260,11 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.image }}:sha-${{ steps.meta.outputs.short }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ steps.meta.outputs.cache_scope }}
+          # Frontend builders are intermediate stages; mode=max is required to
+          # restore Bun/Vite/Rsbuild layers on the next run. Move to mode=min
+          # only after the prebuilt-dist artifact flow removes those stages.
+          cache-to: type=gha,scope=${{ steps.meta.outputs.cache_scope }},mode=max
           provenance: true
           sbom: true
 
@@ -262,20 +274,14 @@ jobs:
           IMAGE: ${{ steps.meta.outputs.image }}
           TAG: ${{ steps.meta.outputs.tag }}
           TARBALL: ${{ steps.meta.outputs.tarball }}
-          CREATED: ${{ steps.meta.outputs.created }}
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          docker buildx build \
-            --platform linux/amd64 \
-            --load \
-            --build-arg "VERSION=$TAG" \
-            --build-arg "COMMIT_SHA=$GITHUB_SHA" \
-            --build-arg "BUILD_DATE=$CREATED" \
-            --build-arg "UPSTREAM_REF=$UPSTREAM_REF" \
-            -t "$IMAGE:$TAG-amd64-package" \
-            .
-          docker save "$IMAGE:$TAG-amd64-package" | gzip -9 > "release-assets/$TARBALL"
+          # Reuse the exact amd64 image just pushed by the multi-arch build;
+          # do not parse or execute the Dockerfile a second time.
+          docker pull --platform linux/amd64 "$IMAGE:$TAG"
+          test "$(docker image inspect "$IMAGE:$TAG" --format '{{.Architecture}}')" = amd64
+          docker save "$IMAGE:$TAG" | gzip -9 > "release-assets/$TARBALL"
           cp compose.yaml docker-compose.yml release-assets/
           cp .env.example release-assets/default.env.example
           (

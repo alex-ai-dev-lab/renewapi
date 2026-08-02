@@ -4,32 +4,39 @@ ARG BUN_IMAGE=oven/bun:1-alpine
 ARG GO_IMAGE=golang:1.25.1-alpine
 ARG RUNTIME_IMAGE=alpine:3.20
 
-FROM ${BUN_IMAGE} AS frontend-builder
+FROM --platform=$BUILDPLATFORM ${BUN_IMAGE} AS frontend-default-builder
 WORKDIR /src
 
-COPY VERSION ./
 COPY web/default/package.json web/default/bun.lock ./web/default/
-COPY web/classic/package.json web/classic/bun.lock ./web/classic/
 
 WORKDIR /src/web/default
-RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
+RUN --mount=type=cache,id=renewapi-bun-default,target=/root/.bun/install/cache,sharing=locked \
+    bun install --frozen-lockfile
 
-WORKDIR /src/web/classic
-RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
-
-WORKDIR /src
 COPY web/default ./web/default
-COPY web/classic ./web/classic
+COPY VERSION /src/VERSION
 
 WORKDIR /src/web/default
 RUN DISABLE_ESLINT_PLUGIN=true VITE_REACT_APP_VERSION="$(cat /src/VERSION)" bun run build
 
+FROM --platform=$BUILDPLATFORM ${BUN_IMAGE} AS frontend-classic-builder
+WORKDIR /src
+
+COPY web/classic/package.json web/classic/bun.lock ./web/classic/
+
+WORKDIR /src/web/classic
+RUN --mount=type=cache,id=renewapi-bun-classic,target=/root/.bun/install/cache,sharing=locked \
+    bun install --frozen-lockfile
+
+COPY web/classic ./web/classic
+COPY VERSION /src/VERSION
+
 WORKDIR /src/web/classic
 RUN VITE_REACT_APP_VERSION="$(cat /src/VERSION)" bun run build
 
-FROM ${GO_IMAGE} AS backend-builder
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS backend-builder
+ARG TARGETOS
+ARG TARGETARCH
 ARG VERSION=dev
 ARG COMMIT_SHA=unknown
 ARG BUILD_DATE=unknown
@@ -48,11 +55,13 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
 COPY . .
-COPY --from=frontend-builder /src/web/default/dist ./web/default/dist
-COPY --from=frontend-builder /src/web/classic/dist ./web/classic/dist
+COPY --from=frontend-default-builder /src/web/default/dist ./web/default/dist
+COPY --from=frontend-classic-builder /src/web/classic/dist ./web/classic/dist
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
+    test "$(go env GOOS)" = "${TARGETOS}" && \
+    test "$(go env GOARCH)" = "${TARGETARCH}" && \
     go build -trimpath -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=${VERSION}'" -o /out/new-api
 
 FROM ${RUNTIME_IMAGE} AS runtime

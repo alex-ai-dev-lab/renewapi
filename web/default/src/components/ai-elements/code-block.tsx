@@ -29,11 +29,7 @@ import {
 } from 'react'
 import type { Element } from 'hast'
 import { CheckIcon, CopyIcon } from 'lucide-react'
-import {
-  type BundledLanguage,
-  codeToHtml,
-  type ShikiTransformer,
-} from 'shiki/bundle/web'
+import { type BundledLanguage, type ShikiTransformer } from 'shiki/bundle/web'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -50,6 +46,13 @@ type CodeBlockContextType = {
 const CodeBlockContext = createContext<CodeBlockContextType>({
   code: '',
 })
+
+let shikiLoader: Promise<typeof import('shiki/bundle/web')> | undefined
+
+function loadShiki() {
+  shikiLoader ??= import('shiki/bundle/web')
+  return shikiLoader
+}
 
 const lineNumberTransformer: ShikiTransformer = {
   name: 'line-numbers',
@@ -77,6 +80,7 @@ export async function highlightCode(
   language: BundledLanguage,
   showLineNumbers = false
 ) {
+  const { codeToHtml } = await loadShiki()
   const transformers: ShikiTransformer[] = showLineNumbers
     ? [lineNumberTransformer]
     : []

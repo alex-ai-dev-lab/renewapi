@@ -112,6 +112,28 @@ func TestValidateOptionValuesRejectsInvalidChannelAffinityRule(t *testing.T) {
 	}
 }
 
+func TestValidateAntiPoisonAuditOptionsUsesEffectiveValues(t *testing.T) {
+	if err := validateAntiPoisonAuditOptions(map[string]string{
+		antiPoisonAuditEnabledKey: "true",
+		antiPoisonAuditSecretKey:  "audit-secret",
+	}); err != nil {
+		t.Fatalf("expected a complete effective pair to pass: %v", err)
+	}
+
+	if err := validateAntiPoisonAuditOptions(map[string]string{
+		antiPoisonAuditEnabledKey: "true",
+		antiPoisonAuditSecretKey:  "",
+	}); err == nil {
+		t.Fatal("expected enabled audit without a secret to be rejected")
+	}
+
+	if err := validateAntiPoisonAuditOptions(map[string]string{
+		antiPoisonAuditEnabledKey: "false",
+	}); err != nil {
+		t.Fatalf("expected disabled audit to allow an empty secret: %v", err)
+	}
+}
+
 func mustMarshalChannelAffinityRules(t *testing.T, rules []operation_setting.ChannelAffinityRule) string {
 	t.Helper()
 	raw, err := common.Marshal(rules)

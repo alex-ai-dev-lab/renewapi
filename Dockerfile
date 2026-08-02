@@ -13,8 +13,9 @@ WORKDIR /src/web/default
 RUN --mount=type=cache,id=renewapi-bun-default,target=/root/.bun/install/cache,sharing=locked \
     bun install --frozen-lockfile
 
+WORKDIR /src
 COPY web/default ./web/default
-COPY VERSION /src/VERSION
+COPY VERSION ./VERSION
 
 WORKDIR /src/web/default
 RUN DISABLE_ESLINT_PLUGIN=true VITE_REACT_APP_VERSION="$(cat /src/VERSION)" bun run build
@@ -28,8 +29,9 @@ WORKDIR /src/web/classic
 RUN --mount=type=cache,id=renewapi-bun-classic,target=/root/.bun/install/cache,sharing=locked \
     bun install --frozen-lockfile
 
+WORKDIR /src
 COPY web/classic ./web/classic
-COPY VERSION /src/VERSION
+COPY VERSION ./VERSION
 
 WORKDIR /src/web/classic
 RUN VITE_REACT_APP_VERSION="$(cat /src/VERSION)" bun run build

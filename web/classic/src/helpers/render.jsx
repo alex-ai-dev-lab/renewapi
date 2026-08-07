@@ -126,8 +126,8 @@ function loadExtensionIcons() {
 
 function getIconEntry(icons, key) {
   return Object.prototype.hasOwnProperty.call(icons, key)
-      ? icons[key]
-      : undefined;
+    ? icons[key]
+    : undefined;
 }
 
 // 获取侧边栏Lucide图标组件
@@ -456,7 +456,7 @@ function renderLobeHubIcon(iconName, size, icons) {
   const BaseIcon = getIconEntry(icons, baseKey);
   const variantKey = segments[1];
   const VariantIcon =
-      BaseIcon && variantKey ? getIconEntry(BaseIcon, variantKey) : undefined;
+    BaseIcon && variantKey ? getIconEntry(BaseIcon, variantKey) : undefined;
 
   let IconComponent = undefined;
   let propStartIndex = 1;
@@ -471,8 +471,8 @@ function renderLobeHubIcon(iconName, size, icons) {
 
   // 失败兜底
   if (
-      !IconComponent ||
-      (typeof IconComponent !== 'function' && typeof IconComponent !== 'object')
+    !IconComponent ||
+    (typeof IconComponent !== 'function' && typeof IconComponent !== 'object')
   ) {
     const firstLetter = String(iconName).charAt(0).toUpperCase();
     return <Avatar size='extra-extra-small'>{firstLetter}</Avatar>;
@@ -490,8 +490,8 @@ function renderLobeHubIcon(iconName, size, icons) {
     }
     // 去除引号
     if (
-        (v.startsWith('"') && v.endsWith('"')) ||
-        (v.startsWith("'") && v.endsWith("'"))
+      (v.startsWith('"') && v.endsWith('"')) ||
+      (v.startsWith("'") && v.endsWith("'"))
     ) {
       return v.slice(1, -1);
     }
@@ -527,19 +527,19 @@ function LobeHubIconRenderer({ iconName, size }) {
   const baseKey = iconName.split('.')[0];
   const commonIcon = getIconEntry(COMMON_LOBE_ICONS, baseKey);
   const [loadedExtensionIcons, setLoadedExtensionIcons] =
-      useState(extensionIcons);
+    useState(extensionIcons);
 
   useEffect(() => {
     if (commonIcon || loadedExtensionIcons) return;
 
     let active = true;
     loadExtensionIcons()
-        .then((icons) => {
-          if (active) setLoadedExtensionIcons(icons);
-        })
-        .catch(() => {
-          if (active) setLoadedExtensionIcons({});
-        });
+      .then((icons) => {
+        if (active) setLoadedExtensionIcons(icons);
+      })
+      .catch(() => {
+        if (active) setLoadedExtensionIcons({});
+      });
 
     return () => {
       active = false;

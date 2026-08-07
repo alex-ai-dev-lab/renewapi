@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import i18next from 'i18next';
+import { useEffect, useState } from 'react';
 import { Modal, Tag, Typography, Avatar } from '@douyinfe/semi-ui';
 import { copy, showSuccess } from './utils';
 import { MOBILE_BREAKPOINT } from '../hooks/common/useIsMobile';
@@ -27,41 +28,7 @@ import {
   BILLING_VAR_REGEX,
 } from '../constants';
 import { visit } from 'unist-util-visit';
-import * as LobeIcons from '@lobehub/icons';
-import {
-  OpenAI,
-  Claude,
-  Gemini,
-  Moonshot,
-  Zhipu,
-  Qwen,
-  DeepSeek,
-  Minimax,
-  Wenxin,
-  Spark,
-  Midjourney,
-  Hunyuan,
-  Cohere,
-  Cloudflare,
-  Ai360,
-  Yi,
-  Jina,
-  Mistral,
-  XAI,
-  Ollama,
-  Doubao,
-  Suno,
-  Xinference,
-  OpenRouter,
-  Dify,
-  Coze,
-  SiliconCloud,
-  FastGPT,
-  Kling,
-  Jimeng,
-  Perplexity,
-  Replicate,
-} from '@lobehub/icons';
+import { COMMON_LOBE_ICONS } from './lobe-icon-common';
 
 import {
   LayoutDashboard,
@@ -108,6 +75,60 @@ import {
   SiWechat,
   SiX,
 } from 'react-icons/si';
+
+const {
+  Ai360,
+  Claude,
+  Cloudflare,
+  Cohere,
+  Coze,
+  DeepSeek,
+  Dify,
+  Doubao,
+  FastGPT,
+  Gemini,
+  Hunyuan,
+  Jimeng,
+  Jina,
+  Kling,
+  Midjourney,
+  Minimax,
+  Mistral,
+  Moonshot,
+  Ollama,
+  OpenAI,
+  OpenRouter,
+  Perplexity,
+  Qwen,
+  Replicate,
+  SiliconCloud,
+  Spark,
+  Suno,
+  Wenxin,
+  XAI,
+  Xinference,
+  Yi,
+  Zhipu,
+} = COMMON_LOBE_ICONS;
+
+let extensionIcons = null;
+let extensionIconsPromise = null;
+
+function loadExtensionIcons() {
+  if (!extensionIconsPromise) {
+    extensionIconsPromise = import('@lobehub/icons').then((icons) => {
+      extensionIcons = icons;
+      return icons;
+    });
+  }
+  return extensionIconsPromise;
+}
+
+function getIconEntry(icons, key) {
+  return Object.prototype.hasOwnProperty.call(icons, key)
+      ? icons[key]
+      : undefined;
+}
 
 // 获取侧边栏Lucide图标组件
 export function getLucideIcon(key, selected = false) {
@@ -428,26 +449,23 @@ export function getChannelIcon(channelType) {
  * @param {number} size - 图标大小，默认为 14
  * @returns {JSX.Element} - 对应的图标组件或 Avatar
  */
-export function getLobeHubIcon(iconName, size = 14) {
-  if (typeof iconName === 'string') iconName = iconName.trim();
-  // 如果没有图标名称，返回 Avatar
-  if (!iconName) {
-    return <Avatar size='extra-extra-small'>?</Avatar>;
-  }
-
+function renderLobeHubIcon(iconName, size, icons) {
   // 解析组件路径与点号链式属性
   const segments = String(iconName).split('.');
   const baseKey = segments[0];
-  const BaseIcon = LobeIcons[baseKey];
+  const BaseIcon = getIconEntry(icons, baseKey);
+  const variantKey = segments[1];
+  const VariantIcon =
+      BaseIcon && variantKey ? getIconEntry(BaseIcon, variantKey) : undefined;
 
   let IconComponent = undefined;
   let propStartIndex = 1;
 
-  if (BaseIcon && segments.length > 1 && BaseIcon[segments[1]]) {
-    IconComponent = BaseIcon[segments[1]];
+  if (VariantIcon) {
+    IconComponent = VariantIcon;
     propStartIndex = 2;
   } else {
-    IconComponent = LobeIcons[baseKey];
+    IconComponent = BaseIcon;
     propStartIndex = 1;
   }
 
@@ -503,6 +521,51 @@ export function getLobeHubIcon(iconName, size = 14) {
   if (props.size == null && size != null) props.size = size;
 
   return <IconComponent {...props} />;
+}
+
+function LobeHubIconRenderer({ iconName, size }) {
+  const baseKey = iconName.split('.')[0];
+  const commonIcon = getIconEntry(COMMON_LOBE_ICONS, baseKey);
+  const [loadedExtensionIcons, setLoadedExtensionIcons] =
+      useState(extensionIcons);
+
+  useEffect(() => {
+    if (commonIcon || loadedExtensionIcons) return;
+
+    let active = true;
+    loadExtensionIcons()
+        .then((icons) => {
+          if (active) setLoadedExtensionIcons(icons);
+        })
+        .catch(() => {
+          if (active) setLoadedExtensionIcons({});
+        });
+
+    return () => {
+      active = false;
+    };
+  }, [commonIcon, loadedExtensionIcons]);
+
+  const icons = commonIcon ? COMMON_LOBE_ICONS : loadedExtensionIcons;
+  if (!icons) {
+    return (
+      <Avatar size='extra-extra-small'>
+        {String(iconName).charAt(0).toUpperCase()}
+      </Avatar>
+    );
+  }
+
+  return renderLobeHubIcon(iconName, size, icons);
+}
+
+export function getLobeHubIcon(iconName, size = 14) {
+  if (typeof iconName === 'string') iconName = iconName.trim();
+  // 如果没有图标名称，返回 Avatar
+  if (!iconName) {
+    return <Avatar size='extra-extra-small'>?</Avatar>;
+  }
+
+  return <LobeHubIconRenderer iconName={String(iconName)} size={size} />;
 }
 
 const oauthProviderIconMap = {

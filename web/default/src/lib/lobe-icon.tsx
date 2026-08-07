@@ -25,7 +25,30 @@ For commercial licensing, please contact support@quantumnous.com
  * - Chained properties: "OpenAI.Avatar.type={'platform'}"
  * - Size parameter: getLobeIcon("OpenAI", 20)
  */
-import * as LobeIcons from '@lobehub/icons'
+import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
+import { COMMON_LOBE_ICONS } from './lobe-icon-common'
+
+type IconComponent = ComponentType<Record<string, unknown>>
+type IconRegistry = Record<string, unknown>
+
+let extensionIcons: IconRegistry | null = null
+let extensionIconsPromise: Promise<IconRegistry> | null = null
+
+function loadExtensionIcons(): Promise<IconRegistry> {
+  if (!extensionIconsPromise) {
+    extensionIconsPromise = import('@lobehub/icons').then((icons) => {
+      extensionIcons = icons as IconRegistry
+      return extensionIcons
+    })
+  }
+  return extensionIconsPromise
+}
+
+function getIconEntry(icons: IconRegistry, key: string): unknown {
+  return Object.prototype.hasOwnProperty.call(icons, key)
+    ? icons[key]
+    : undefined
+}
 
 /**
  * Parse a property value from string to appropriate type
@@ -72,52 +95,40 @@ function parseValue(raw: string | undefined | null): string | number | boolean {
  * getLobeIcon("OpenAI.Color", 20)
  * getLobeIcon("Claude.Avatar.type={'platform'}", 32)
  */
-export function getLobeIcon(
-  iconName: string | undefined | null,
-  size: number = 20
-): React.ReactNode {
-  if (!iconName || typeof iconName !== 'string') {
-    return (
-      <div
-        className='bg-muted text-muted-foreground flex items-center justify-center rounded-full text-xs font-medium'
-        style={{ width: size, height: size }}
-      >
-        ?
-      </div>
-    )
-  }
+function renderFallback(label: string, size: number): ReactNode {
+  return (
+    <div
+      className='bg-muted text-muted-foreground flex items-center justify-center rounded-full text-xs font-medium'
+      style={{ width: size, height: size }}
+    >
+      {label}
+    </div>
+  )
+}
 
-  const trimmedName = iconName.trim()
-  if (!trimmedName) {
-    return (
-      <div
-        className='bg-muted text-muted-foreground flex items-center justify-center rounded-full text-xs font-medium'
-        style={{ width: size, height: size }}
-      >
-        ?
-      </div>
-    )
-  }
-
+function renderIcon(
+  trimmedName: string,
+  size: number,
+  icons: IconRegistry
+): ReactNode {
   // Parse component path and chained properties
   const segments = trimmedName.split('.')
   const baseKey = segments[0]
-  const BaseIcon = (LobeIcons as Record<string, unknown>)[baseKey] as
-    | Record<string, unknown>
-    | undefined
+  const BaseIcon = getIconEntry(icons, baseKey)
+  const variantKey = segments[1]
+  const VariantIcon =
+    BaseIcon && variantKey
+      ? getIconEntry(BaseIcon as IconRegistry, variantKey)
+      : undefined
 
-  let IconComponent: React.ComponentType<Record<string, unknown>> | undefined
+  let IconComponent: IconComponent | undefined
   let propStartIndex: number
 
-  if (BaseIcon && segments.length > 1 && BaseIcon[segments[1]]) {
-    IconComponent = BaseIcon[segments[1]] as React.ComponentType<
-      Record<string, unknown>
-    >
+  if (VariantIcon) {
+    IconComponent = VariantIcon as IconComponent
     propStartIndex = 2
   } else {
-    IconComponent = (LobeIcons as Record<string, unknown>)[baseKey] as
-      | React.ComponentType<Record<string, unknown>>
-      | undefined
+    IconComponent = BaseIcon as IconComponent | undefined
     propStartIndex = segments.length > 1 && /^[A-Z]/.test(segments[1]) ? 2 : 1
   }
 
@@ -127,14 +138,7 @@ export function getLobeIcon(
     (typeof IconComponent !== 'function' && typeof IconComponent !== 'object')
   ) {
     const firstLetter = trimmedName.charAt(0).toUpperCase()
-    return (
-      <div
-        className='bg-muted text-muted-foreground flex items-center justify-center rounded-full text-xs font-medium'
-        style={{ width: size, height: size }}
-      >
-        {firstLetter}
-      </div>
-    )
+    return renderFallback(firstLetter, size)
   }
 
   // Parse chained properties (e.g., "type={'platform'}", "shape='square'")
@@ -161,4 +165,52 @@ export function getLobeIcon(
   }
 
   return <IconComponent {...props} />
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+function LobeIconRenderer(props: { iconName: string; size: number }) {
+  const baseKey = props.iconName.split('.')[0]
+  const commonIcon = getIconEntry(COMMON_LOBE_ICONS, baseKey)
+  const [loadedExtensionIcons, setLoadedExtensionIcons] =
+    useState<IconRegistry | null>(() => extensionIcons)
+
+  useEffect(() => {
+    if (commonIcon || loadedExtensionIcons) return
+
+    let active = true
+    void loadExtensionIcons()
+      .then((icons) => {
+        if (active) setLoadedExtensionIcons(icons)
+      })
+      .catch(() => {
+        if (active) setLoadedExtensionIcons({})
+      })
+
+    return () => {
+      active = false
+    }
+  }, [commonIcon, loadedExtensionIcons])
+
+  const icons = commonIcon ? COMMON_LOBE_ICONS : loadedExtensionIcons
+  if (!icons) {
+    return renderFallback(props.iconName.charAt(0).toUpperCase(), props.size)
+  }
+
+  return renderIcon(props.iconName, props.size, icons)
+}
+
+export function getLobeIcon(
+  iconName: string | undefined | null,
+  size: number = 20
+): ReactNode {
+  if (!iconName || typeof iconName !== 'string') {
+    return renderFallback('?', size)
+  }
+
+  const trimmedName = iconName.trim()
+  if (!trimmedName) {
+    return renderFallback('?', size)
+  }
+
+  return <LobeIconRenderer iconName={trimmedName} size={size} />
 }

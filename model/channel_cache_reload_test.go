@@ -15,11 +15,13 @@ func TestReloadChannelCachePreservesLastKnownGoodOnDatabaseError(t *testing.T) {
 	oldMemoryCache := common.MemoryCacheEnabled
 	oldChannels := channelsIDM
 	oldGroups := group2model2channels
+	oldRuntime := channelRuntimeCache.Load()
 	t.Cleanup(func() {
 		DB = oldDB
 		common.MemoryCacheEnabled = oldMemoryCache
 		channelsIDM = oldChannels
 		group2model2channels = oldGroups
+		channelRuntimeCache.Store(oldRuntime)
 	})
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -32,6 +34,7 @@ func TestReloadChannelCachePreservesLastKnownGoodOnDatabaseError(t *testing.T) {
 	sentinel := &Channel{Id: 42, Name: "last-known-good"}
 	channelsIDM = map[int]*Channel{42: sentinel}
 	group2model2channels = map[string]map[string][]int{"default": {"gpt-test": {42}}}
+	channelRuntimeCache.Store(nil)
 
 	require.Error(t, ReloadChannelCache())
 	require.Same(t, sentinel, channelsIDM[42])

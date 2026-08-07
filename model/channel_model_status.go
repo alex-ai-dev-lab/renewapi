@@ -182,12 +182,7 @@ func IsChannelModelDisabledForGroup(channelID int, group, modelName string) bool
 	}
 	now := common.GetTimestamp()
 	if common.MemoryCacheEnabled {
-		value, ok := channelModelStatusCacheMap().Load(channelModelStatusCacheKey(channelID, group, modelName))
-		if !ok {
-			return false
-		}
-		record, ok := value.(ChannelModelStatus)
-		return ok && isChannelModelStatusDisabled(record, now)
+		return isChannelModelStatusDisabledByCacheKey(channelModelStatusCacheKey(channelID, group, modelName), now)
 	}
 	if DB == nil {
 		return false
@@ -199,6 +194,15 @@ func IsChannelModelDisabledForGroup(channelID int, group, modelName string) bool
 		return false
 	}
 	return isChannelModelStatusDisabled(status, now)
+}
+
+func isChannelModelStatusDisabledByCacheKey(cacheKey string, now int64) bool {
+	value, ok := channelModelStatusCacheMap().Load(cacheKey)
+	if !ok {
+		return false
+	}
+	record, ok := value.(ChannelModelStatus)
+	return ok && isChannelModelStatusDisabled(record, now)
 }
 
 func FilterChannelIDsByModelStatus(channelIDs []int, group, modelName string) []int {

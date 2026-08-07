@@ -233,10 +233,11 @@ func channelMatchesRetryRequirements(param *RetryParam, channel *model.Channel) 
 	if !ChannelMatchesResponsesRequirement(channel, param.ModelName, param.ResponsesRequirement, param.Request) {
 		return false
 	}
-	if !antipoison.ProductionRoutingAllowed(channel.Id, channel.GetSetting()) {
+	channelSetting := channelSettingForRouting(channel)
+	if !antipoison.ProductionRoutingAllowed(channel.Id, channelSetting) {
 		return false
 	}
-	if !ChannelAntiPoisonCircuitAllowsProduction(channel.Id, channel.GetSetting()) {
+	if !ChannelAntiPoisonCircuitAllowsProduction(channel.Id, channelSetting) {
 		return false
 	}
 	return true
@@ -254,8 +255,19 @@ func ChannelAllowedForProduction(channel *model.Channel) bool {
 	if channel == nil {
 		return false
 	}
-	return antipoison.ProductionRoutingAllowed(channel.Id, channel.GetSetting()) &&
-		ChannelAntiPoisonCircuitAllowsProduction(channel.Id, channel.GetSetting())
+	channelSetting := channelSettingForRouting(channel)
+	return antipoison.ProductionRoutingAllowed(channel.Id, channelSetting) &&
+		ChannelAntiPoisonCircuitAllowsProduction(channel.Id, channelSetting)
+}
+
+func channelSettingForRouting(channel *model.Channel) dto.ChannelSettings {
+	if channel == nil {
+		return dto.ChannelSettings{}
+	}
+	if setting, ok := model.CacheGetChannelSettingReadOnly(channel.Id); ok {
+		return setting
+	}
+	return channel.GetSetting()
 }
 
 // requirementFilterMaxAttempts 限制“拉一个渠道→不满要求→排除后重拉”的次数，

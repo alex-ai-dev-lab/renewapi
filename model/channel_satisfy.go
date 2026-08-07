@@ -13,19 +13,16 @@ func IsChannelEnabledForGroupModel(group string, modelName string, channelID int
 		return isChannelEnabledForGroupModelDB(group, modelName, channelID)
 	}
 
-	channelSyncLock.RLock()
-	defer channelSyncLock.RUnlock()
-
-	if group2model2channels == nil {
+	snapshot := loadChannelRuntimeSnapshot()
+	if snapshot == nil || snapshot.groupModels == nil {
 		return false
 	}
-
-	if isChannelIDInList(group2model2channels[group][modelName], channelID) {
+	if isChannelIDInBuckets(snapshot.groupModels[group][modelName], channelID) {
 		return true
 	}
 	normalized := ratio_setting.FormatMatchingModelName(modelName)
 	if normalized != "" && normalized != modelName {
-		return isChannelIDInList(group2model2channels[group][normalized], channelID)
+		return isChannelIDInBuckets(snapshot.groupModels[group][normalized], channelID)
 	}
 	return false
 }
@@ -61,10 +58,12 @@ func isChannelEnabledForGroupModelDB(group string, modelName string, channelID i
 	return err == nil && count > 0
 }
 
-func isChannelIDInList(list []int, channelID int) bool {
-	for _, id := range list {
-		if id == channelID {
-			return true
+func isChannelIDInBuckets(buckets []channelPriorityBucket, channelID int) bool {
+	for _, bucket := range buckets {
+		for _, entry := range bucket.entries {
+			if entry.channel != nil && entry.channel.Id == channelID {
+				return true
+			}
 		}
 	}
 	return false

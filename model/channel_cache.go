@@ -2,16 +2,17 @@ package model
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
@@ -19,6 +20,114 @@ import (
 var group2model2channels map[string]map[string][]int // enabled channel
 var channelsIDM map[int]*Channel                     // all channels include disabled
 var channelSyncLock sync.RWMutex
+var channelRuntimeCache atomic.Pointer[channelRuntimeSnapshot]
+
+type channelRuntimeSnapshot struct {
+	groupModels map[string]map[string][]channelPriorityBucket
+	channels    map[int]*Channel
+	settings    map[int]cachedChannelSetting
+}
+
+type channelPriorityBucket struct {
+	priority int64
+	entries  []channelSelectionEntry
+}
+
+type channelSelectionEntry struct {
+	channel             *Channel
+	modelStatusCacheKey string
+}
+
+type cachedChannelSetting struct {
+	raw     string
+	setting dto.ChannelSettings
+	valid   bool
+}
+
+func buildChannelRuntimeSnapshot(previous *channelRuntimeSnapshot) *channelRuntimeSnapshot {
+	snapshot := &channelRuntimeSnapshot{
+		groupModels: make(map[string]map[string][]channelPriorityBucket, len(group2model2channels)),
+		channels:    make(map[int]*Channel, len(channelsIDM)),
+		settings:    make(map[int]cachedChannelSetting, len(channelsIDM)),
+	}
+	for id, channel := range channelsIDM {
+		if channel == nil {
+			continue
+		}
+		snapshot.channels[id] = channel
+		raw := ""
+		if channel.Setting != nil {
+			raw = *channel.Setting
+		}
+		if previous != nil {
+			if cached, ok := previous.settings[id]; ok && cached.raw == raw {
+				snapshot.settings[id] = cached
+				continue
+			}
+		}
+		cached := cachedChannelSetting{raw: raw, valid: true}
+		if raw != "" {
+			cached.valid = common.Unmarshal([]byte(raw), &cached.setting) == nil
+		}
+		snapshot.settings[id] = cached
+	}
+
+	for group, modelChannels := range group2model2channels {
+		modelBuckets := make(map[string][]channelPriorityBucket, len(modelChannels))
+		for modelName, channelIDs := range modelChannels {
+			entries := make([]channelSelectionEntry, 0, len(channelIDs))
+			for _, channelID := range channelIDs {
+				channel := snapshot.channels[channelID]
+				if channel == nil {
+					continue
+				}
+				entries = append(entries, channelSelectionEntry{
+					channel:             channel,
+					modelStatusCacheKey: channelModelStatusCacheKey(channelID, group, modelName),
+				})
+			}
+			sort.SliceStable(entries, func(i, j int) bool {
+				return entries[i].channel.GetPriority() > entries[j].channel.GetPriority()
+			})
+			buckets := make([]channelPriorityBucket, 0, 4)
+			for _, entry := range entries {
+				priority := entry.channel.GetPriority()
+				last := len(buckets) - 1
+				if last < 0 || buckets[last].priority != priority {
+					buckets = append(buckets, channelPriorityBucket{priority: priority})
+					last++
+				}
+				buckets[last].entries = append(buckets[last].entries, entry)
+			}
+			modelBuckets[modelName] = buckets
+		}
+		snapshot.groupModels[group] = modelBuckets
+	}
+	return snapshot
+}
+
+func publishChannelRuntimeSnapshotLocked() {
+	channelRuntimeCache.Store(buildChannelRuntimeSnapshot(channelRuntimeCache.Load()))
+}
+
+func loadChannelRuntimeSnapshot() *channelRuntimeSnapshot {
+	if snapshot := channelRuntimeCache.Load(); snapshot != nil {
+		return snapshot
+	}
+	channelSyncLock.RLock()
+	snapshot := channelRuntimeCache.Load()
+	if snapshot == nil {
+		snapshot = buildChannelRuntimeSnapshot(nil)
+	}
+	channelSyncLock.RUnlock()
+	if current := channelRuntimeCache.Load(); current != nil {
+		return current
+	}
+	if channelRuntimeCache.CompareAndSwap(nil, snapshot) {
+		return snapshot
+	}
+	return channelRuntimeCache.Load()
+}
 
 func InitChannelCache() {
 	if err := ReloadChannelCache(); err != nil {
@@ -99,6 +208,7 @@ func ReloadChannelCache() error {
 		}
 	}
 	channelsIDM = newChannelId2channel
+	publishChannelRuntimeSnapshotLocked()
 	channelSyncLock.Unlock()
 	common.SysLog("channels synced from database")
 	return nil
@@ -138,173 +248,178 @@ func GetRandomSatisfiedChannelExcludingWithPolicy(group string, model string, re
 	if !common.MemoryCacheEnabled {
 		return GetChannelExcludingWithPolicy(group, model, retry, excluded, policy)
 	}
-
-	channelSyncLock.RLock()
-	defer channelSyncLock.RUnlock()
-
-	// First, try to find channels with the exact model name.
-	channels := group2model2channels[group][model]
-	channels = filterExcludedChannelIDs(channels, excluded)
-	channels = FilterChannelIDsByModelStatus(channels, group, model)
-	channels = filterRandomSelectableChannelIDs(channels)
-	channels = filterProviderRoutingChannelIDs(channels, policy)
-
-	// If no channels found, try to find channels with the normalized model name.
-	if len(channels) == 0 {
-		normalizedModel := ratio_setting.FormatMatchingModelName(model)
-		channels = group2model2channels[group][normalizedModel]
-		channels = filterExcludedChannelIDs(channels, excluded)
-		channels = FilterChannelIDsByModelStatus(channels, group, normalizedModel)
-		channels = filterRandomSelectableChannelIDs(channels)
-		channels = filterProviderRoutingChannelIDs(channels, policy)
-	}
-
-	if len(channels) == 0 {
-		return nil, nil
-	}
-
 	if len(excluded) > 0 {
 		retry = 0
 	}
-
-	if len(channels) == 1 {
-		if channel, ok := channelsIDM[channels[0]]; ok {
-			return channel, nil
-		}
-		return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channels[0])
+	if retry < 0 {
+		retry = 0
 	}
 
-	uniquePriorities := make(map[int]bool)
-	for _, channelId := range channels {
-		if channel, ok := channelsIDM[channelId]; ok {
-			uniquePriorities[int(channel.GetPriority())] = true
-		} else {
-			return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channelId)
-		}
+	snapshot := loadChannelRuntimeSnapshot()
+	now := common.GetTimestamp()
+	channel, found, err := selectRandomChannelFromSnapshot(snapshot, group, model, retry, excluded, policy, now)
+	if found || err != nil {
+		return channel, err
 	}
-	var sortedUniquePriorities []int
-	for priority := range uniquePriorities {
-		sortedUniquePriorities = append(sortedUniquePriorities, priority)
-	}
-	sort.Sort(sort.Reverse(sort.IntSlice(sortedUniquePriorities)))
 
-	if retry >= len(uniquePriorities) {
-		retry = len(uniquePriorities) - 1
+	normalizedModel := ratio_setting.FormatMatchingModelName(model)
+	if normalizedModel == "" || normalizedModel == model {
+		return nil, nil
 	}
-	targetPriority := int64(sortedUniquePriorities[retry])
+	channel, _, err = selectRandomChannelFromSnapshot(snapshot, group, normalizedModel, retry, excluded, policy, now)
+	return channel, err
+}
 
-	// get the priority for the given retry number
-	var sumWeight = 0
-	var targetChannels []*Channel
-	for _, channelId := range channels {
-		if channel, ok := channelsIDM[channelId]; ok {
-			if channel.GetPriority() == targetPriority {
-				sumWeight += channel.GetWeight()
-				targetChannels = append(targetChannels, channel)
+func selectRandomChannelFromSnapshot(
+	snapshot *channelRuntimeSnapshot,
+	group string,
+	modelName string,
+	retry int,
+	excluded map[int]bool,
+	policy ChannelRoutingPolicy,
+	now int64,
+) (*Channel, bool, error) {
+	if snapshot == nil {
+		return nil, false, nil
+	}
+	modelBuckets := snapshot.groupModels[group]
+	if modelBuckets == nil {
+		return nil, false, nil
+	}
+	buckets := modelBuckets[modelName]
+	if len(buckets) == 0 {
+		return nil, false, nil
+	}
+
+	policyEmpty := policy == nil || policy.Empty()
+	selectedBucket := -1
+	lastAvailableBucket := -1
+	availableBuckets := 0
+	totalCandidates := 0
+	for bucketIndex := range buckets {
+		available := false
+		for _, entry := range buckets[bucketIndex].entries {
+			if !channelSelectionEntrySelectable(entry, excluded, policy, policyEmpty, now) {
+				continue
 			}
-		} else {
-			return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channelId)
+			available = true
+			totalCandidates++
+		}
+		if !available {
+			continue
+		}
+		if availableBuckets == retry {
+			selectedBucket = bucketIndex
+		}
+		lastAvailableBucket = bucketIndex
+		availableBuckets++
+	}
+	if totalCandidates == 0 {
+		return nil, false, nil
+	}
+	if selectedBucket < 0 {
+		selectedBucket = lastAvailableBucket
+	}
+	bucket := buckets[selectedBucket]
+	if totalCandidates == 1 {
+		for _, entry := range bucket.entries {
+			if channelSelectionEntrySelectable(entry, excluded, policy, policyEmpty, now) {
+				return entry.channel, true, nil
+			}
 		}
 	}
-	sortChannelsByProviderRoutingOrder(targetChannels, policy)
-	targetChannels = keepBestProviderRoutingOrderRank(targetChannels, policy)
 
-	if len(targetChannels) == 0 {
-		return nil, errors.New(fmt.Sprintf("no channel found, group: %s, model: %s, priority: %d", group, model, targetPriority))
+	bestRank := 0
+	bestRankSet := false
+	selectedCount := 0
+	sumWeight := 0
+	for _, entry := range bucket.entries {
+		if !channelSelectionEntrySelectable(entry, excluded, policy, policyEmpty, now) {
+			continue
+		}
+		rank := 0
+		if !policyEmpty {
+			rank = policy.OrderRank(entry.channel)
+		}
+		if !bestRankSet || rank < bestRank {
+			bestRank = rank
+			bestRankSet = true
+			selectedCount = 0
+			sumWeight = 0
+		}
+		if rank == bestRank {
+			selectedCount++
+			sumWeight += entry.channel.GetWeight()
+		}
+	}
+	if selectedCount == 0 {
+		return nil, true, fmt.Errorf("no channel found, group: %s, model: %s, priority: %d", group, modelName, bucket.priority)
 	}
 
-	sumWeight = 0
-	for _, channel := range targetChannels {
-		sumWeight += channel.GetWeight()
-	}
-
-	// smoothing factor and adjustment
 	smoothingFactor := 1
 	smoothingAdjustment := 0
-
 	if sumWeight == 0 {
-		// when all channels have weight 0, set sumWeight to the number of channels and set smoothing adjustment to 100
-		// each channel's effective weight = 100
-		sumWeight = len(targetChannels) * 100
+		sumWeight = selectedCount * 100
 		smoothingAdjustment = 100
-	} else if sumWeight/len(targetChannels) < 10 {
-		// when the average weight is less than 10, set smoothing factor to 100
+	} else if sumWeight/selectedCount < 10 {
 		smoothingFactor = 100
 	}
-
-	// Calculate the total weight of all channels up to endIdx
-	totalWeight := sumWeight * smoothingFactor
-
-	// Generate a random value in the range [0, totalWeight)
-	randomWeight := rand.Intn(totalWeight)
-
-	// Find a channel based on its weight
-	for _, channel := range targetChannels {
-		randomWeight -= channel.GetWeight()*smoothingFactor + smoothingAdjustment
+	randomWeight := rand.Intn(sumWeight * smoothingFactor)
+	for _, entry := range bucket.entries {
+		if !channelSelectionEntrySelectable(entry, excluded, policy, policyEmpty, now) {
+			continue
+		}
+		if !policyEmpty && policy.OrderRank(entry.channel) != bestRank {
+			continue
+		}
+		randomWeight -= entry.channel.GetWeight()*smoothingFactor + smoothingAdjustment
 		if randomWeight < 0 {
-			return channel, nil
+			return entry.channel, true, nil
 		}
 	}
-	// return null if no channel is not found
-	return nil, errors.New("channel not found")
+	return nil, true, fmt.Errorf("channel not found, group: %s, model: %s, priority: %d", group, modelName, bucket.priority)
 }
 
-func filterExcludedChannelIDs(channels []int, excluded map[int]bool) []int {
-	if len(channels) == 0 || len(excluded) == 0 {
-		return channels
+func channelSelectionEntrySelectable(
+	entry channelSelectionEntry,
+	excluded map[int]bool,
+	policy ChannelRoutingPolicy,
+	policyEmpty bool,
+	now int64,
+) bool {
+	channel := entry.channel
+	if channel == nil || excluded[channel.Id] || channel.Type == constant.ChannelTypeMock {
+		return false
 	}
-	filtered := make([]int, 0, len(channels))
-	for _, channelID := range channels {
-		if excluded[channelID] {
-			continue
-		}
-		filtered = append(filtered, channelID)
+	if isChannelModelStatusDisabledByCacheKey(entry.modelStatusCacheKey, now) {
+		return false
 	}
-	return filtered
-}
-
-func filterRandomSelectableChannelIDs(channels []int) []int {
-	if len(channels) == 0 {
-		return channels
-	}
-	filtered := make([]int, 0, len(channels))
-	for _, channelID := range channels {
-		channel, ok := channelsIDM[channelID]
-		if !ok || channel.Type == constant.ChannelTypeMock {
-			continue
-		}
-		filtered = append(filtered, channelID)
-	}
-	return filtered
-}
-
-func filterProviderRoutingChannelIDs(channels []int, policy ChannelRoutingPolicy) []int {
-	if len(channels) == 0 || policy == nil || policy.Empty() {
-		return channels
-	}
-	filtered := make([]int, 0, len(channels))
-	for _, channelID := range channels {
-		channel, ok := channelsIDM[channelID]
-		if !ok || !policy.Matches(channel) {
-			continue
-		}
-		filtered = append(filtered, channelID)
-	}
-	return filtered
+	return policyEmpty || policy.Matches(channel)
 }
 
 func CacheGetChannel(id int) (*Channel, error) {
 	if !common.MemoryCacheEnabled {
 		return GetChannelById(id, true)
 	}
-	channelSyncLock.RLock()
-	defer channelSyncLock.RUnlock()
-
-	c, ok := channelsIDM[id]
+	c, ok := loadChannelRuntimeSnapshot().channels[id]
 	if !ok {
 		return nil, fmt.Errorf("渠道# %d，已不存在", id)
 	}
 	return c, nil
+}
+
+// CacheGetChannelSettingReadOnly returns the parsed setting stored in the
+// current runtime snapshot. Callers must treat nested slices, maps and pointers
+// as immutable. A false result preserves the existing parse-and-repair fallback.
+func CacheGetChannelSettingReadOnly(id int) (dto.ChannelSettings, bool) {
+	if !common.MemoryCacheEnabled {
+		return dto.ChannelSettings{}, false
+	}
+	cached, ok := loadChannelRuntimeSnapshot().settings[id]
+	if !ok || !cached.valid {
+		return dto.ChannelSettings{}, false
+	}
+	return cached.setting, true
 }
 
 func CacheGetChannelInfo(id int) (*ChannelInfo, error) {
@@ -315,10 +430,7 @@ func CacheGetChannelInfo(id int) (*ChannelInfo, error) {
 		}
 		return &channel.ChannelInfo, nil
 	}
-	channelSyncLock.RLock()
-	defer channelSyncLock.RUnlock()
-
-	c, ok := channelsIDM[id]
+	c, ok := loadChannelRuntimeSnapshot().channels[id]
 	if !ok {
 		return nil, fmt.Errorf("渠道# %d，已不存在", id)
 	}
@@ -334,10 +446,9 @@ func CacheGetAllChannels() []*Channel {
 	if !common.MemoryCacheEnabled {
 		return nil
 	}
-	channelSyncLock.RLock()
-	defer channelSyncLock.RUnlock()
-	channels := make([]*Channel, 0, len(channelsIDM))
-	for _, channel := range channelsIDM {
+	snapshot := loadChannelRuntimeSnapshot()
+	channels := make([]*Channel, 0, len(snapshot.channels))
+	for _, channel := range snapshot.channels {
 		if channel != nil {
 			channels = append(channels, channel)
 		}
@@ -350,10 +461,16 @@ func CacheUpdateChannelStatus(id int, status int) {
 		return
 	}
 	channelSyncLock.Lock()
-	defer channelSyncLock.Unlock()
+	defer func() {
+		publishChannelRuntimeSnapshotLocked()
+		channelSyncLock.Unlock()
+	}()
 	channel, ok := channelsIDM[id]
-	if ok {
-		channel.Status = status
+	if ok && channel != nil {
+		updated := *channel
+		updated.Status = status
+		channel = &updated
+		channelsIDM[id] = channel
 	}
 	if status != common.ChannelStatusEnabled {
 		// Remove the channel from its own group/model buckets instead of rebuilding
@@ -444,11 +561,14 @@ func CacheUpdateChannel(channel *Channel) {
 	if !common.MemoryCacheEnabled {
 		return
 	}
-	channelSyncLock.Lock()
-	defer channelSyncLock.Unlock()
 	if channel == nil {
 		return
 	}
+	channelSyncLock.Lock()
+	defer func() {
+		publishChannelRuntimeSnapshotLocked()
+		channelSyncLock.Unlock()
+	}()
 
 	if channelsIDM == nil {
 		channelsIDM = make(map[int]*Channel)

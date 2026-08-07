@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -115,11 +116,18 @@ func GetAndValidateEmbeddingRequest(c *gin.Context, relayMode int) (*dto.Embeddi
 }
 
 func GetAndValidateResponsesRequest(c *gin.Context) (*dto.OpenAIResponsesRequest, error) {
+	if request, ok := common.GetContextKeyType[*dto.OpenAIResponsesRequest](c, constant.ContextKeyResponsesRoutingRequest); ok && request != nil {
+		return validateResponsesRequest(request)
+	}
 	request := &dto.OpenAIResponsesRequest{}
 	err := common.UnmarshalBodyReusable(c, request)
 	if err != nil {
 		return nil, err
 	}
+	return validateResponsesRequest(request)
+}
+
+func validateResponsesRequest(request *dto.OpenAIResponsesRequest) (*dto.OpenAIResponsesRequest, error) {
 	if request.Model == "" {
 		return nil, errors.New("model is required")
 	}
@@ -144,10 +152,17 @@ func exceedsMaxTokensLimit(values ...*uint) bool {
 }
 
 func GetAndValidateResponsesCompactionRequest(c *gin.Context) (*dto.OpenAIResponsesCompactionRequest, error) {
+	if request, ok := common.GetContextKeyType[*dto.OpenAIResponsesCompactionRequest](c, constant.ContextKeyResponsesRoutingRequest); ok && request != nil {
+		return validateResponsesCompactionRequest(request)
+	}
 	request := &dto.OpenAIResponsesCompactionRequest{}
 	if err := common.UnmarshalBodyReusable(c, request); err != nil {
 		return nil, err
 	}
+	return validateResponsesCompactionRequest(request)
+}
+
+func validateResponsesCompactionRequest(request *dto.OpenAIResponsesCompactionRequest) (*dto.OpenAIResponsesCompactionRequest, error) {
 	if request.Model == "" {
 		return nil, errors.New("model is required")
 	}

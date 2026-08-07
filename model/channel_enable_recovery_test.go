@@ -15,11 +15,13 @@ func setupChannelEnableRecoveryTestDB(t *testing.T) {
 	oldMemoryCacheEnabled := common.MemoryCacheEnabled
 	oldGroup2Model2Channels := group2model2channels
 	oldChannelsIDM := channelsIDM
+	oldRuntime := channelRuntimeCache.Load()
 	t.Cleanup(func() {
 		DB = oldDB
 		common.MemoryCacheEnabled = oldMemoryCacheEnabled
 		group2model2channels = oldGroup2Model2Channels
 		channelsIDM = oldChannelsIDM
+		channelRuntimeCache.Store(oldRuntime)
 		ReloadChannelModelStatusCache()
 	})
 
@@ -30,6 +32,7 @@ func setupChannelEnableRecoveryTestDB(t *testing.T) {
 	common.MemoryCacheEnabled = true
 	group2model2channels = make(map[string]map[string][]int)
 	channelsIDM = make(map[int]*Channel)
+	channelRuntimeCache.Store(nil)
 	ReloadChannelModelStatusCache()
 }
 

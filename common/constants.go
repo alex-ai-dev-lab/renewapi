@@ -192,6 +192,8 @@ var RequestInterval time.Duration
 
 var SyncFrequency int // unit is second
 
+var RedisOperationTimeout = 2 * time.Second
+
 var BatchUpdateEnabled = false
 var BatchUpdateInterval int
 

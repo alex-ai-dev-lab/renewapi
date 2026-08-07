@@ -100,6 +100,11 @@ func InitEnv() {
 
 	// Initialize variables with GetEnvOrDefault
 	SyncFrequency = GetEnvOrDefault("SYNC_FREQUENCY", 60)
+	redisOperationTimeoutMs := GetEnvOrDefault("REDIS_OPERATION_TIMEOUT_MS", 2000)
+	if redisOperationTimeoutMs <= 0 {
+		redisOperationTimeoutMs = 2000
+	}
+	RedisOperationTimeout = time.Duration(redisOperationTimeoutMs) * time.Millisecond
 	BatchUpdateInterval = GetEnvOrDefault("BATCH_UPDATE_INTERVAL", 5)
 	RelayTimeout = GetEnvOrDefault("RELAY_TIMEOUT", 0)
 	RelayFirstByteTimeout = GetEnvOrDefault("RELAY_FIRST_BYTE_TIMEOUT", 15)

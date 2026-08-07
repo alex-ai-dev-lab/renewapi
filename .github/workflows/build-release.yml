@@ -133,6 +133,25 @@ jobs:
           go mod verify
           go mod tidy -diff
 
+      - name: Capture tracked Go package directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_file="$RUNNER_TEMP/renewapi-go-package-dirs"
+          while IFS= read -r -d '' file; do
+            dirname "$file"
+          done < <(git ls-files -z -- '*.go') \
+            | sort -u \
+            | awk '$0 == "." { print "."; next } { print "./" $0 }' \
+            > "$package_file"
+          test -s "$package_file"
+          if grep -q '/node_modules/' "$package_file"; then
+            printf '%s\n' 'Tracked Go package list unexpectedly includes node_modules:'
+            grep '/node_modules/' "$package_file"
+            exit 1
+          fi
+          printf 'Captured %s tracked Go package directories.\n' "$(wc -l < "$package_file")"
+
       - name: Install default frontend dependencies
         working-directory: web/default
         run: bun install --frozen-lockfile
@@ -175,12 +194,18 @@ jobs:
         run: bun run build
 
       - name: Verify backend
+        shell: bash
         run: |
-          go test -count=1 ./...
+          set -euo pipefail
+          package_file="$RUNNER_TEMP/renewapi-go-package-dirs"
+          test -s "$package_file"
+          mapfile -t go_packages < "$package_file"
+          printf 'Verifying %s tracked Go package directories.\n' "${#go_packages[@]}"
+          go test -count=1 "${go_packages[@]}"
           go test -race -count=1 -run 'TestObservedCapability|TestManualUnknownFallsBack|TestChannelMatchesResponsesRequirement|TestPlanResponsesExecution|TestResponsesCompactionProbeModels' ./service ./controller
           go test -race -count=1 ./relay/channel ./relay/channel/baidu ./relay/channel/openai ./relay/channel/claude ./relay/channel/gemini ./relay/channel/codex
-          go vet ./...
-          go build ./...
+          go vet "${go_packages[@]}"
+          go build "${go_packages[@]}"
 
       - name: Verify commit diff
         shell: bash

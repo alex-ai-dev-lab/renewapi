@@ -15,8 +15,73 @@ import (
 var RDB *redis.Client
 var RedisEnabled = true
 
+var (
+	redisIncrWithTTLScript = redis.NewScript(`
+local n = redis.call('INCRBY', KEYS[1], ARGV[1])
+if redis.call('TTL', KEYS[1]) < 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+return n
+`)
+	redisHIncrByScript = redis.NewScript(`
+local n = redis.call('HINCRBY', KEYS[1], ARGV[1], ARGV[2])
+if redis.call('TTL', KEYS[1]) < 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[3])
+end
+return n
+`)
+	redisHIncrByExistingScript = redis.NewScript(`
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  return 0
+end
+for i = 4, #ARGV do
+  if redis.call('HEXISTS', KEYS[1], ARGV[i]) == 0 then
+    return 0
+  end
+end
+redis.call('HINCRBY', KEYS[1], ARGV[1], ARGV[2])
+if redis.call('TTL', KEYS[1]) < 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[3])
+end
+return 1
+`)
+	redisHSetFieldScript = redis.NewScript(`
+local n = redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
+if redis.call('TTL', KEYS[1]) < 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[3])
+end
+return n
+`)
+	redisHSetFieldExistingScript = redis.NewScript(`
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  return 0
+end
+for i = 4, #ARGV do
+  if redis.call('HEXISTS', KEYS[1], ARGV[i]) == 0 then
+    return 0
+  end
+end
+redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
+if redis.call('TTL', KEYS[1]) < 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[3])
+end
+return 1
+`)
+)
+
 func RedisKeyCacheSeconds() int {
 	return SyncFrequency
+}
+
+func RedisOperationContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	timeout := RedisOperationTimeout
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	return context.WithTimeout(parent, timeout)
 }
 
 // InitRedisClient This function is called after init()
@@ -71,18 +136,28 @@ func ParseRedisOption() *redis.Options {
 }
 
 func RedisSet(key string, value string, expiration time.Duration) error {
+	return RedisSetContext(context.Background(), key, value, expiration)
+}
+
+func RedisSetContext(parent context.Context, key string, value string, expiration time.Duration) error {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis SET: key=%s, value=%s, expiration=%v", key, value, expiration))
 	}
-	ctx := context.Background()
+	ctx, cancel := RedisOperationContext(parent)
+	defer cancel()
 	return RDB.Set(ctx, key, value, expiration).Err()
 }
 
 func RedisGet(key string) (string, error) {
+	return RedisGetContext(context.Background(), key)
+}
+
+func RedisGetContext(parent context.Context, key string) (string, error) {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis GET: key=%s", key))
 	}
-	ctx := context.Background()
+	ctx, cancel := RedisOperationContext(parent)
+	defer cancel()
 	val, err := RDB.Get(ctx, key).Result()
 	return val, err
 }
@@ -98,10 +173,15 @@ func RedisGet(key string) (string, error) {
 //}
 
 func RedisDel(key string) error {
+	return RedisDelContext(context.Background(), key)
+}
+
+func RedisDelContext(parent context.Context, key string) error {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis DEL: key=%s", key))
 	}
-	ctx := context.Background()
+	ctx, cancel := RedisOperationContext(parent)
+	defer cancel()
 	return RDB.Del(ctx, key).Err()
 }
 
@@ -109,15 +189,21 @@ func RedisDelKey(key string) error {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis DEL Key: key=%s", key))
 	}
-	ctx := context.Background()
+	ctx, cancel := RedisOperationContext(context.Background())
+	defer cancel()
 	return RDB.Del(ctx, key).Err()
 }
 
 func RedisHSetObj(key string, obj interface{}, expiration time.Duration) error {
+	return RedisHSetObjContext(context.Background(), key, obj, expiration)
+}
+
+func RedisHSetObjContext(parent context.Context, key string, obj interface{}, expiration time.Duration) error {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis HSET: key=%s, obj=%+v, expiration=%v", key, obj, expiration))
 	}
-	ctx := context.Background()
+	ctx, cancel := RedisOperationContext(parent)
+	defer cancel()
 
 	data := make(map[string]interface{})
 
@@ -168,10 +254,15 @@ func RedisHSetObj(key string, obj interface{}, expiration time.Duration) error {
 }
 
 func RedisHGetObj(key string, obj interface{}) error {
+	return RedisHGetObjContext(context.Background(), key, obj)
+}
+
+func RedisHGetObjContext(parent context.Context, key string, obj interface{}) error {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis HGETALL: key=%s", key))
 	}
-	ctx := context.Background()
+	ctx, cancel := RedisOperationContext(parent)
+	defer cancel()
 
 	result, err := RDB.HGetAll(ctx, key).Result()
 	if err != nil {
@@ -254,47 +345,40 @@ func RedisIncr(key string, delta int64) error {
 }
 
 func RedisIncrWithTTL(key string, delta int64, ttlSeconds int) (int64, error) {
+	return RedisIncrWithTTLContext(context.Background(), key, delta, ttlSeconds)
+}
+
+func RedisIncrWithTTLContext(parent context.Context, key string, delta int64, ttlSeconds int) (int64, error) {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis INCR: key=%s, delta=%d", key, delta))
 	}
-	ctx := context.Background()
+	ctx, cancel := RedisOperationContext(parent)
+	defer cancel()
 	if ttlSeconds <= 0 {
 		ttlSeconds = 60
 	}
-	script := redis.NewScript(`
-local n = redis.call('INCRBY', KEYS[1], ARGV[1])
-if redis.call('TTL', KEYS[1]) < 0 then
-  redis.call('EXPIRE', KEYS[1], ARGV[2])
-end
-return n
-`)
-	return script.Run(ctx, RDB, []string{key}, delta, ttlSeconds).Int64()
+	return redisIncrWithTTLScript.Run(ctx, RDB, []string{key}, delta, ttlSeconds).Int64()
 }
 
 func RedisHIncrBy(key, field string, delta int64) error {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis HINCRBY: key=%s, field=%s, delta=%d", key, field, delta))
 	}
-	ctx := context.Background()
+	ctx, cancel := RedisOperationContext(context.Background())
+	defer cancel()
 	ttlSeconds := RedisKeyCacheSeconds()
 	if ttlSeconds <= 0 {
 		ttlSeconds = 60
 	}
-	script := redis.NewScript(`
-local n = redis.call('HINCRBY', KEYS[1], ARGV[1], ARGV[2])
-if redis.call('TTL', KEYS[1]) < 0 then
-  redis.call('EXPIRE', KEYS[1], ARGV[3])
-end
-return n
-`)
-	return script.Run(ctx, RDB, []string{key}, field, delta, ttlSeconds).Err()
+	return redisHIncrByScript.Run(ctx, RDB, []string{key}, field, delta, ttlSeconds).Err()
 }
 
 func RedisHIncrByExisting(key, field string, delta int64, requiredFields ...string) error {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis HINCRBY existing: key=%s, field=%s, delta=%d", key, field, delta))
 	}
-	ctx := context.Background()
+	ctx, cancel := RedisOperationContext(context.Background())
+	defer cancel()
 	ttlSeconds := RedisKeyCacheSeconds()
 	if ttlSeconds <= 0 {
 		ttlSeconds = 60
@@ -303,48 +387,28 @@ func RedisHIncrByExisting(key, field string, delta int64, requiredFields ...stri
 	for _, requiredField := range requiredFields {
 		args = append(args, requiredField)
 	}
-	script := redis.NewScript(`
-if redis.call('EXISTS', KEYS[1]) == 0 then
-  return 0
-end
-for i = 4, #ARGV do
-  if redis.call('HEXISTS', KEYS[1], ARGV[i]) == 0 then
-    return 0
-  end
-end
-redis.call('HINCRBY', KEYS[1], ARGV[1], ARGV[2])
-if redis.call('TTL', KEYS[1]) < 0 then
-  redis.call('EXPIRE', KEYS[1], ARGV[3])
-end
-return 1
-`)
-	return script.Run(ctx, RDB, []string{key}, args...).Err()
+	return redisHIncrByExistingScript.Run(ctx, RDB, []string{key}, args...).Err()
 }
 
 func RedisHSetField(key, field string, value interface{}) error {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis HSET field: key=%s, field=%s, value=%v", key, field, value))
 	}
-	ctx := context.Background()
+	ctx, cancel := RedisOperationContext(context.Background())
+	defer cancel()
 	ttlSeconds := RedisKeyCacheSeconds()
 	if ttlSeconds <= 0 {
 		ttlSeconds = 60
 	}
-	script := redis.NewScript(`
-local n = redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
-if redis.call('TTL', KEYS[1]) < 0 then
-  redis.call('EXPIRE', KEYS[1], ARGV[3])
-end
-return n
-`)
-	return script.Run(ctx, RDB, []string{key}, field, value, ttlSeconds).Err()
+	return redisHSetFieldScript.Run(ctx, RDB, []string{key}, field, value, ttlSeconds).Err()
 }
 
 func RedisHSetFieldExisting(key, field string, value interface{}, requiredFields ...string) error {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis HSET existing field: key=%s, field=%s, value=%v", key, field, value))
 	}
-	ctx := context.Background()
+	ctx, cancel := RedisOperationContext(context.Background())
+	defer cancel()
 	ttlSeconds := RedisKeyCacheSeconds()
 	if ttlSeconds <= 0 {
 		ttlSeconds = 60
@@ -353,20 +417,5 @@ func RedisHSetFieldExisting(key, field string, value interface{}, requiredFields
 	for _, requiredField := range requiredFields {
 		args = append(args, requiredField)
 	}
-	script := redis.NewScript(`
-if redis.call('EXISTS', KEYS[1]) == 0 then
-  return 0
-end
-for i = 4, #ARGV do
-  if redis.call('HEXISTS', KEYS[1], ARGV[i]) == 0 then
-    return 0
-  end
-end
-redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
-if redis.call('TTL', KEYS[1]) < 0 then
-  redis.call('EXPIRE', KEYS[1], ARGV[3])
-end
-return 1
-`)
-	return script.Run(ctx, RDB, []string{key}, args...).Err()
+	return redisHSetFieldExistingScript.Run(ctx, RDB, []string{key}, args...).Err()
 }

@@ -126,7 +126,8 @@ func checkAndRecordTokenLimitMemory(key string, limit int, amount int) bool {
 }
 
 func checkAndRecordTokenLimitRedis(key string, limit int, amount int) (bool, error) {
-	ctx := context.Background()
+	ctx, cancel := common.RedisOperationContext(context.Background())
+	defer cancel()
 	windowKey := fmt.Sprintf("token_limit:%s:%d", key, time.Now().Unix()/60)
 	value, err := common.RDB.IncrBy(ctx, windowKey, int64(amount)).Result()
 	if err != nil {
@@ -145,7 +146,8 @@ func checkAndRecordTokenLimitRedis(key string, limit int, amount int) (bool, err
 }
 
 func tryAcquireTokenConcurrencyRedis(tokenID int, limit int) (bool, error) {
-	ctx := context.Background()
+	ctx, cancel := common.RedisOperationContext(context.Background())
+	defer cancel()
 	key := tokenConcurrencyKey(tokenID)
 	value, err := common.RDB.Incr(ctx, key).Result()
 	if err != nil {
@@ -165,7 +167,8 @@ func tryAcquireTokenConcurrencyRedis(tokenID int, limit int) (bool, error) {
 }
 
 func releaseTokenConcurrencyRedis(tokenID int) error {
-	ctx := context.Background()
+	ctx, cancel := common.RedisOperationContext(context.Background())
+	defer cancel()
 	key := tokenConcurrencyKey(tokenID)
 	value, err := common.RDB.Decr(ctx, key).Result()
 	if err != nil {

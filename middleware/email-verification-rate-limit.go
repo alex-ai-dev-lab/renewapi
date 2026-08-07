@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -34,7 +33,8 @@ func emailVerificationRateLimitKeys(c *gin.Context) []string {
 }
 
 func redisEmailVerificationRateLimiter(c *gin.Context) {
-	ctx := context.Background()
+	ctx, cancel := common.RedisOperationContext(c.Request.Context())
+	defer cancel()
 	rdb := common.RDB
 	keys := emailVerificationRateLimitKeys(c)
 

@@ -115,7 +115,7 @@ func logRateLimitRedisError(err error) {
 
 func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
 	key := "rateLimit:" + mark + c.ClientIP()
-	allowed, err := redisSlidingWindowAllow(context.Background(), common.RDB, key, maxRequestNum, duration, common.RateLimitKeyExpirationDuration)
+	allowed, err := redisSlidingWindowAllow(c.Request.Context(), common.RDB, key, maxRequestNum, duration, common.RateLimitKeyExpirationDuration)
 	if err != nil {
 		logRateLimitRedisError(err)
 		// 保持失效关闭，但依赖不可用应为 503 而非 500
@@ -309,7 +309,7 @@ func userRateLimitFactory(maxRequestNum int, duration int64, mark string) func(c
 // userRedisRateLimiter is like redisRateLimiter but accepts a pre-built key
 // (to support user-ID-based keys).
 func userRedisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, key string) {
-	allowed, err := redisSlidingWindowAllow(context.Background(), common.RDB, key, maxRequestNum, duration, common.RateLimitKeyExpirationDuration)
+	allowed, err := redisSlidingWindowAllow(c.Request.Context(), common.RDB, key, maxRequestNum, duration, common.RateLimitKeyExpirationDuration)
 	if err != nil {
 		logRateLimitRedisError(err)
 		c.Status(http.StatusServiceUnavailable)

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -197,10 +198,9 @@ func initDB(migrationMode bool) (err error) {
 				return err
 			}
 		} else {
-			sqlDB.SetMaxIdleConns(common.GetEnvOrDefault("SQL_MAX_IDLE_CONNS", 100))
-			sqlDB.SetMaxOpenConns(common.GetEnvOrDefault("SQL_MAX_OPEN_CONNS", 1000))
+			configureSQLPoolSize(sqlDB, false)
 		}
-		sqlDB.SetConnMaxLifetime(time.Second * time.Duration(common.GetEnvOrDefault("SQL_MAX_LIFETIME", 60)))
+		configureSQLPoolLifetime(sqlDB, false)
 
 		if migrationMode {
 			return nil
@@ -268,10 +268,9 @@ func initLogDB(migrationMode bool) (err error) {
 				return err
 			}
 		} else {
-			sqlDB.SetMaxIdleConns(common.GetEnvOrDefault("SQL_MAX_IDLE_CONNS", 100))
-			sqlDB.SetMaxOpenConns(common.GetEnvOrDefault("SQL_MAX_OPEN_CONNS", 1000))
+			configureSQLPoolSize(sqlDB, true)
 		}
-		sqlDB.SetConnMaxLifetime(time.Second * time.Duration(common.GetEnvOrDefault("SQL_MAX_LIFETIME", 60)))
+		configureSQLPoolLifetime(sqlDB, true)
 
 		if migrationMode {
 			return nil
@@ -281,6 +280,45 @@ func initLogDB(migrationMode bool) (err error) {
 		common.FatalLog(err)
 	}
 	return err
+}
+
+func configureSQLPoolSize(sqlDB *sql.DB, isLog bool) {
+	if sqlDB == nil {
+		return
+	}
+	maxIdleKey := "SQL_MAX_IDLE_CONNS"
+	maxOpenKey := "SQL_MAX_OPEN_CONNS"
+	if isLog {
+		maxIdleKey = "LOG_SQL_MAX_IDLE_CONNS"
+		maxOpenKey = "LOG_SQL_MAX_OPEN_CONNS"
+	}
+	maxIdle := getDatabaseEnvInt(maxIdleKey, "SQL_MAX_IDLE_CONNS", 100)
+	maxOpen := getDatabaseEnvInt(maxOpenKey, "SQL_MAX_OPEN_CONNS", 1000)
+	sqlDB.SetMaxIdleConns(maxIdle)
+	sqlDB.SetMaxOpenConns(maxOpen)
+}
+
+func configureSQLPoolLifetime(sqlDB *sql.DB, isLog bool) {
+	if sqlDB == nil {
+		return
+	}
+	lifetimeKey := "SQL_MAX_LIFETIME"
+	idleTimeKey := "SQL_MAX_IDLE_TIME"
+	if isLog {
+		lifetimeKey = "LOG_SQL_MAX_LIFETIME"
+		idleTimeKey = "LOG_SQL_MAX_IDLE_TIME"
+	}
+	lifetimeSeconds := getDatabaseEnvInt(lifetimeKey, "SQL_MAX_LIFETIME", 60)
+	idleTimeSeconds := getDatabaseEnvInt(idleTimeKey, "SQL_MAX_IDLE_TIME", 0)
+	sqlDB.SetConnMaxLifetime(time.Second * time.Duration(lifetimeSeconds))
+	sqlDB.SetConnMaxIdleTime(time.Second * time.Duration(idleTimeSeconds))
+}
+
+func getDatabaseEnvInt(primaryKey, fallbackKey string, defaultValue int) int {
+	if primaryKey != fallbackKey && strings.TrimSpace(os.Getenv(primaryKey)) == "" {
+		return common.GetEnvOrDefault(fallbackKey, defaultValue)
+	}
+	return common.GetEnvOrDefault(primaryKey, defaultValue)
 }
 
 func mainSchemaMigrationDefinitions() []schemaMigrationDefinition {

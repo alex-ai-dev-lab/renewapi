@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -19,6 +18,36 @@ var (
 	tokenConcurrencyMu    sync.Mutex
 	tokenConcurrencyCount = map[int]int{}
 	tokenConcurrencyRedis = map[int]int{}
+	tokenRateLimitScript  = redis.NewScript(`
+local value = redis.call('INCRBY', KEYS[1], ARGV[1])
+if redis.call('TTL', KEYS[1]) < 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[3])
+end
+if value > tonumber(ARGV[2]) then
+  redis.call('DECRBY', KEYS[1], ARGV[1])
+  return 0
+end
+return 1
+`)
+	tokenConcurrencyAcquireScript = redis.NewScript(`
+local value = redis.call('INCR', KEYS[1])
+if redis.call('TTL', KEYS[1]) < 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+if value > tonumber(ARGV[1]) then
+  redis.call('DECR', KEYS[1])
+  return 0
+end
+return 1
+`)
+	tokenConcurrencyReleaseScript = redis.NewScript(`
+local current = tonumber(redis.call('GET', KEYS[1]) or '0')
+if current <= 1 then
+  redis.call('UNLINK', KEYS[1])
+  return 0
+end
+return redis.call('DECR', KEYS[1])
+`)
 )
 
 type tokenLimitCounter struct {
@@ -129,58 +158,36 @@ func checkAndRecordTokenLimitRedis(key string, limit int, amount int) (bool, err
 	ctx, cancel := common.RedisOperationContext(context.Background())
 	defer cancel()
 	windowKey := fmt.Sprintf("token_limit:%s:%d", key, time.Now().Unix()/60)
-	value, err := common.RDB.IncrBy(ctx, windowKey, int64(amount)).Result()
-	if err != nil {
-		return false, err
-	}
-	if value == int64(amount) {
-		if err := common.RDB.Expire(ctx, windowKey, tokenLimitWindow+5*time.Second).Err(); err != nil {
-			return false, err
-		}
-	}
-	if value > int64(limit) {
-		_ = common.RDB.DecrBy(ctx, windowKey, int64(amount)).Err()
-		return false, nil
-	}
-	return true, nil
+	allowed, err := tokenRateLimitScript.Run(
+		ctx,
+		common.RDB,
+		[]string{windowKey},
+		amount,
+		limit,
+		int((tokenLimitWindow+5*time.Second)/time.Second),
+	).Int()
+	return allowed == 1, err
 }
 
 func tryAcquireTokenConcurrencyRedis(tokenID int, limit int) (bool, error) {
 	ctx, cancel := common.RedisOperationContext(context.Background())
 	defer cancel()
 	key := tokenConcurrencyKey(tokenID)
-	value, err := common.RDB.Incr(ctx, key).Result()
-	if err != nil {
-		return false, err
-	}
-	if value == 1 {
-		if err := common.RDB.Expire(ctx, key, 2*time.Minute).Err(); err != nil {
-			_ = common.RDB.Decr(ctx, key).Err()
-			return false, err
-		}
-	}
-	if value > int64(limit) {
-		_ = common.RDB.Decr(ctx, key).Err()
-		return false, nil
-	}
-	return true, nil
+	acquired, err := tokenConcurrencyAcquireScript.Run(
+		ctx,
+		common.RDB,
+		[]string{key},
+		limit,
+		int((2*time.Minute)/time.Second),
+	).Int()
+	return acquired == 1, err
 }
 
 func releaseTokenConcurrencyRedis(tokenID int) error {
 	ctx, cancel := common.RedisOperationContext(context.Background())
 	defer cancel()
 	key := tokenConcurrencyKey(tokenID)
-	value, err := common.RDB.Decr(ctx, key).Result()
-	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			return nil
-		}
-		return err
-	}
-	if value <= 0 {
-		return common.RDB.Del(ctx, key).Err()
-	}
-	return nil
+	return tokenConcurrencyReleaseScript.Run(ctx, common.RDB, []string{key}).Err()
 }
 
 func releaseTokenConcurrencyRedisMarker(tokenID int) bool {

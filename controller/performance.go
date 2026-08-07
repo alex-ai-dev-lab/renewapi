@@ -13,6 +13,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 )
 
@@ -28,6 +29,8 @@ type PerformanceStats struct {
 	DiskSpaceInfo common.DiskSpaceInfo `json:"disk_space_info"`
 	// 配置信息
 	Config PerformanceConfig `json:"config"`
+	// 数据库连接池统计
+	DatabaseStats model.DatabaseStats `json:"database_stats"`
 }
 
 // MemoryStats 内存统计
@@ -131,6 +134,7 @@ func GetPerformanceStats(c *gin.Context) {
 		DiskCacheInfo: diskCacheInfo,
 		DiskSpaceInfo: diskSpaceInfo,
 		Config:        config,
+		DatabaseStats: model.GetDatabaseStats(),
 	}
 
 	c.JSON(http.StatusOK, gin.H{

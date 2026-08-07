@@ -1,6 +1,7 @@
 package cachex
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -10,6 +11,36 @@ import (
 	"github.com/samber/hot"
 	"github.com/stretchr/testify/require"
 )
+
+type hybridCacheCommandCounter struct {
+	mu       sync.Mutex
+	pipeline int
+}
+
+func (h *hybridCacheCommandCounter) BeforeProcess(ctx context.Context, _ redis.Cmder) (context.Context, error) {
+	return ctx, nil
+}
+
+func (h *hybridCacheCommandCounter) AfterProcess(context.Context, redis.Cmder) error {
+	return nil
+}
+
+func (h *hybridCacheCommandCounter) BeforeProcessPipeline(ctx context.Context, _ []redis.Cmder) (context.Context, error) {
+	h.mu.Lock()
+	h.pipeline++
+	h.mu.Unlock()
+	return ctx, nil
+}
+
+func (h *hybridCacheCommandCounter) AfterProcessPipeline(context.Context, []redis.Cmder) error {
+	return nil
+}
+
+func (h *hybridCacheCommandCounter) pipelines() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.pipeline
+}
 
 func TestHybridCacheCompareAndDeleteMemory(t *testing.T) {
 	cache := NewHybridCache[int](HybridCacheConfig[int]{
@@ -96,6 +127,78 @@ func TestHybridCacheCompareAndSwapRedis(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, 3, value)
+}
+
+func TestHybridCacheRedisReadThroughUsesBoundedL1(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	counter := &hybridCacheCommandCounter{}
+	client.AddHook(counter)
+	cache := NewHybridCache[int](HybridCacheConfig[int]{
+		Namespace:            "read-through",
+		Redis:                client,
+		RedisCodec:           IntCodec{},
+		MemoryReadThrough:    true,
+		MemoryReadThroughTTL: 50 * time.Millisecond,
+		Memory: func() *hot.HotCache[string, int] {
+			return hot.NewHotCache[string, int](hot.LRU, 8).Build()
+		},
+	})
+	require.NoError(t, client.Set(context.Background(), cache.FullKey("session"), "41", time.Minute).Err())
+
+	value, found, err := cache.Get("session")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, 41, value)
+	require.Equal(t, 1, counter.pipelines())
+
+	value, found, err = cache.Get("session")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, 41, value)
+	require.Equal(t, 1, counter.pipelines())
+	require.Equal(t, HybridCacheStats{L1Hits: 1, L1Misses: 1, RedisHits: 1}, cache.Stats())
+
+	time.Sleep(75 * time.Millisecond)
+	_, found, err = cache.Get("session")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, 2, counter.pipelines())
+	require.Equal(t, "redis+l1:lru", func() string { algorithm, _ := cache.Algorithm(); return algorithm }())
+}
+
+func TestHybridCacheRedisReadThroughUpdatesAndInvalidatesL1(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	cache := NewHybridCache[int](HybridCacheConfig[int]{
+		Namespace:            "read-through-cas",
+		Redis:                client,
+		RedisCodec:           IntCodec{},
+		MemoryReadThrough:    true,
+		MemoryReadThroughTTL: time.Second,
+		Memory: func() *hot.HotCache[string, int] {
+			return hot.NewHotCache[string, int](hot.LRU, 8).Build()
+		},
+	})
+
+	require.NoError(t, cache.SetWithTTL("session", 1, time.Minute))
+	expected := 1
+	swapped, err := cache.CompareAndSwap("session", &expected, 2, time.Minute, func(a, b int) bool { return a == b })
+	require.NoError(t, err)
+	require.True(t, swapped)
+	value, found, err := cache.Get("session")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, 2, value)
+
+	deleted, err := cache.CompareAndDelete("session", 2, func(a, b int) bool { return a == b })
+	require.NoError(t, err)
+	require.True(t, deleted)
+	_, found, err = cache.Get("session")
+	require.NoError(t, err)
+	require.False(t, found)
 }
 
 func TestHybridCacheDeleteManySerializesWithCompareAndDelete(t *testing.T) {

@@ -41,6 +41,7 @@ const (
 	channelAffinityKeyNegativeNamespace     = "new-api:channel_affinity_key_negative:v3"
 	channelAffinityRecoveryChainNamespace   = "new-api:channel_affinity_recovery_chain:v3"
 	channelAffinityUsageCacheStatsNamespace = "new-api:channel_affinity_usage_cache_stats:v3"
+	channelAffinityL1TTL                    = time.Second
 )
 
 type ChannelAffinityRecord struct {
@@ -252,8 +253,10 @@ func getChannelAffinityRecordCache() *cachex.HybridCache[ChannelAffinityRecord] 
 		capacity, ttl := affinityCacheCapacityAndTTL()
 		channelAffinityRecordCache = cachex.NewHybridCache[ChannelAffinityRecord](cachex.HybridCacheConfig[ChannelAffinityRecord]{
 			Namespace: cachex.Namespace(channelAffinityRecordNamespace), Redis: common.RDB,
-			RedisEnabled: func() bool { return common.RedisEnabled && common.RDB != nil },
-			RedisCodec:   cachex.JSONCodec[ChannelAffinityRecord]{},
+			RedisEnabled:         func() bool { return common.RedisEnabled && common.RDB != nil },
+			RedisCodec:           cachex.JSONCodec[ChannelAffinityRecord]{},
+			MemoryReadThrough:    true,
+			MemoryReadThroughTTL: channelAffinityL1TTL,
 			Memory: func() *hot.HotCache[string, ChannelAffinityRecord] {
 				return hot.NewHotCache[string, ChannelAffinityRecord](hot.LRU, capacity).WithTTL(time.Duration(ttl) * time.Second).WithJanitor().Build()
 			},
@@ -298,6 +301,10 @@ type ChannelAffinityCacheStats struct {
 	ByRuleName    map[string]int `json:"by_rule_name"`
 	CacheCapacity int            `json:"cache_capacity"`
 	CacheAlgo     string         `json:"cache_algo"`
+	L1Hits        uint64         `json:"l1_hits"`
+	L1Misses      uint64         `json:"l1_misses"`
+	RedisHits     uint64         `json:"redis_hits"`
+	RedisMisses   uint64         `json:"redis_misses"`
 }
 
 func getChannelAffinityCache() *cachex.HybridCache[int] {
@@ -318,7 +325,9 @@ func getChannelAffinityCache() *cachex.HybridCache[int] {
 			RedisEnabled: func() bool {
 				return common.RedisEnabled && common.RDB != nil
 			},
-			RedisCodec: cachex.IntCodec{},
+			RedisCodec:           cachex.IntCodec{},
+			MemoryReadThrough:    true,
+			MemoryReadThroughTTL: channelAffinityL1TTL,
 			Memory: func() *hot.HotCache[string, int] {
 				return hot.NewHotCache[string, int](hot.LRU, capacity).
 					WithTTL(time.Duration(defaultTTLSeconds) * time.Second).
@@ -444,6 +453,8 @@ func GetChannelAffinityCacheStats() ChannelAffinityCacheStats {
 	cache := getChannelAffinityCache()
 	mainCap, _ := cache.Capacity()
 	mainAlgo, _ := cache.Algorithm()
+	legacyStats := cache.Stats()
+	recordStats := getChannelAffinityRecordCache().Stats()
 
 	rules := setting.Rules
 	ruleByName := make(map[string]operation_setting.ChannelAffinityRule, len(rules))
@@ -514,6 +525,10 @@ func GetChannelAffinityCacheStats() ChannelAffinityCacheStats {
 		ByRuleName:    byRuleName,
 		CacheCapacity: mainCap,
 		CacheAlgo:     mainAlgo,
+		L1Hits:        legacyStats.L1Hits + recordStats.L1Hits,
+		L1Misses:      legacyStats.L1Misses + recordStats.L1Misses,
+		RedisHits:     legacyStats.RedisHits + recordStats.RedisHits,
+		RedisMisses:   legacyStats.RedisMisses + recordStats.RedisMisses,
 	}
 }
 

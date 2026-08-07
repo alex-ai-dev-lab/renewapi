@@ -23,6 +23,14 @@ func flushLoop() {
 	}
 }
 
+func redisFlushLoop() {
+	ticker := time.NewTicker(redisMetricFlushInterval)
+	defer ticker.Stop()
+	for range ticker.C {
+		flushRedisPendingBuckets()
+	}
+}
+
 func flushCompletedBuckets() {
 	currentBucket := bucketStart(time.Now().Unix())
 	hotBuckets.Range(func(key, value any) bool {

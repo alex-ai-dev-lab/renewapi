@@ -12,18 +12,23 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/perf_metrics_setting"
-	"github.com/bytedance/gopkg/util/gopool"
 )
 
 var hotBuckets sync.Map
-var pendingSamples sync.WaitGroup
+var redisPendingBuckets sync.Map
+var initOnce sync.Once
+
+const redisMetricFlushInterval = 250 * time.Millisecond
 
 // seriesSchema is a stable client cache/schema marker. Do not change it when
 // hiding fields or making response-only privacy hardening changes.
 const seriesSchema = "dbcd0a3c01b55203"
 
 func Init() {
-	go flushLoop()
+	initOnce.Do(func() {
+		go flushLoop()
+		go redisFlushLoop()
+	})
 }
 
 func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens int64) {
@@ -57,15 +62,11 @@ func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens i
 }
 
 func RecordRelaySampleAsync(info *relaycommon.RelayInfo, success bool, outputTokens int64) {
-	pendingSamples.Add(1)
-	gopool.Go(func() {
-		defer pendingSamples.Done()
-		RecordRelaySample(info, success, outputTokens)
-	})
+	RecordRelaySample(info, success, outputTokens)
 }
 
 func WaitForPendingSamples() {
-	pendingSamples.Wait()
+	flushRedisPendingBuckets()
 }
 
 func Record(sample Sample) {
@@ -87,7 +88,7 @@ func Record(sample Sample) {
 	}
 	actual, _ := hotBuckets.LoadOrStore(key, &atomicBucket{})
 	actual.(*atomicBucket).add(sample)
-	recordRedis(key, sample)
+	queueRedisSample(key, sample)
 }
 
 func Query(params QueryParams) (QueryResult, error) {
@@ -338,32 +339,65 @@ func avgTps(value counters) float64 {
 	return float64(value.outputTokens) / (float64(value.generationMs) / 1000)
 }
 
-func recordRedis(key bucketKey, sample Sample) {
+func queueRedisSample(key bucketKey, sample Sample) {
 	if !common.RedisEnabled || common.RDB == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
+	actual, _ := redisPendingBuckets.LoadOrStore(key, &atomicBucket{})
+	actual.(*atomicBucket).add(sample)
+}
 
-	redisKey := redisBucketKey(key)
+type redisMetricFlush struct {
+	key     bucketKey
+	bucket  *atomicBucket
+	pending counters
+}
+
+func flushRedisPendingBuckets() {
+	if !common.RedisEnabled || common.RDB == nil {
+		return
+	}
+	flushes := make([]redisMetricFlush, 0, 16)
+	redisPendingBuckets.Range(func(key, value any) bool {
+		bucket := value.(*atomicBucket)
+		pending := bucket.drain()
+		if pending.requestCount > 0 {
+			flushes = append(flushes, redisMetricFlush{key: key.(bucketKey), bucket: bucket, pending: pending})
+		}
+		return true
+	})
+	if len(flushes) == 0 {
+		return
+	}
+
+	ctx, cancel := common.RedisOperationContext(context.Background())
+	defer cancel()
 	pipe := common.RDB.TxPipeline()
-	pipe.HIncrBy(ctx, redisKey, "req", 1)
-	if sample.Success {
-		pipe.HIncrBy(ctx, redisKey, "ok", 1)
+	for _, flush := range flushes {
+		redisKey := redisBucketKey(flush.key)
+		pipe.HIncrBy(ctx, redisKey, "req", flush.pending.requestCount)
+		if flush.pending.successCount != 0 {
+			pipe.HIncrBy(ctx, redisKey, "ok", flush.pending.successCount)
+		}
+		if flush.pending.totalLatencyMs != 0 {
+			pipe.HIncrBy(ctx, redisKey, "lat", flush.pending.totalLatencyMs)
+		}
+		if flush.pending.ttftCount != 0 {
+			pipe.HIncrBy(ctx, redisKey, "ttft", flush.pending.ttftSumMs)
+			pipe.HIncrBy(ctx, redisKey, "ttft_n", flush.pending.ttftCount)
+		}
+		if flush.pending.outputTokens != 0 && flush.pending.generationMs != 0 {
+			pipe.HIncrBy(ctx, redisKey, "out", flush.pending.outputTokens)
+			pipe.HIncrBy(ctx, redisKey, "gen_ms", flush.pending.generationMs)
+		}
+		pipe.Expire(ctx, redisKey, time.Hour)
 	}
-	if sample.LatencyMs > 0 {
-		pipe.HIncrBy(ctx, redisKey, "lat", sample.LatencyMs)
+	if _, err := pipe.Exec(ctx); err != nil {
+		for _, flush := range flushes {
+			flush.bucket.addCounters(flush.pending)
+		}
+		common.SysError(fmt.Sprintf("failed to flush %d Redis performance metric buckets: %v", len(flushes), err))
 	}
-	if sample.HasTtft && sample.TtftMs >= 0 {
-		pipe.HIncrBy(ctx, redisKey, "ttft", sample.TtftMs)
-		pipe.HIncrBy(ctx, redisKey, "ttft_n", 1)
-	}
-	if sample.OutputTokens > 0 && sample.GenerationMs > 0 {
-		pipe.HIncrBy(ctx, redisKey, "out", sample.OutputTokens)
-		pipe.HIncrBy(ctx, redisKey, "gen_ms", sample.GenerationMs)
-	}
-	pipe.Expire(ctx, redisKey, time.Hour)
-	_, _ = pipe.Exec(ctx)
 }
 
 func mergeRedisActiveBuckets(merged map[bucketKey]counters, params QueryParams, startTs int64, endTs int64) {

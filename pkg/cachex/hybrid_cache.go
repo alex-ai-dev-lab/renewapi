@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -27,8 +28,13 @@ type HybridCacheConfig[V any] struct {
 	RedisCodec   ValueCodec[V]
 	RedisEnabled func() bool
 
-	// Memory builds a hot cache used when Redis is disabled. Keys stored in memory are fully namespaced.
-	Memory func() *hot.HotCache[string, V]
+	// Memory builds a hot cache used when Redis is disabled. With
+	// MemoryReadThrough enabled it also acts as a bounded Redis L1.
+	Memory            func() *hot.HotCache[string, V]
+	MemoryReadThrough bool
+	// MemoryReadThroughTTL bounds cross-instance staleness. Redis' remaining
+	// TTL is used when it is lower than this value.
+	MemoryReadThroughTTL time.Duration
 }
 
 // HybridCache is a small helper that uses Redis when enabled, otherwise falls back to in-memory hot cache.
@@ -43,15 +49,31 @@ type HybridCache[V any] struct {
 	memInit  func() *hot.HotCache[string, V]
 	mem      *hot.HotCache[string, V]
 	memLocks [64]sync.Mutex
+
+	memoryReadThrough    bool
+	memoryReadThroughTTL time.Duration
+	l1Hits               atomic.Uint64
+	l1Misses             atomic.Uint64
+	redisHits            atomic.Uint64
+	redisMisses          atomic.Uint64
+}
+
+type HybridCacheStats struct {
+	L1Hits      uint64
+	L1Misses    uint64
+	RedisHits   uint64
+	RedisMisses uint64
 }
 
 func NewHybridCache[V any](cfg HybridCacheConfig[V]) *HybridCache[V] {
 	return &HybridCache[V]{
-		ns:           cfg.Namespace,
-		redis:        cfg.Redis,
-		redisCodec:   cfg.RedisCodec,
-		redisEnabled: cfg.RedisEnabled,
-		memInit:      cfg.Memory,
+		ns:                   cfg.Namespace,
+		redis:                cfg.Redis,
+		redisCodec:           cfg.RedisCodec,
+		redisEnabled:         cfg.RedisEnabled,
+		memInit:              cfg.Memory,
+		memoryReadThrough:    cfg.MemoryReadThrough,
+		memoryReadThroughTTL: cfg.MemoryReadThroughTTL,
 	}
 }
 
@@ -88,30 +110,83 @@ func (c *HybridCache[V]) Get(key string) (value V, found bool, err error) {
 	}
 
 	if c.redisOn() {
-		ctx, cancel := context.WithTimeout(context.Background(), defaultRedisOpTimeout)
-		defer cancel()
-
-		raw, e := c.redis.Get(ctx, full).Result()
-		if e == nil {
-			v, decErr := c.redisCodec.Decode(raw)
-			if decErr != nil {
-				var zero V
-				return zero, false, decErr
+		if c.memoryReadThrough {
+			lock := c.memoryLock(full)
+			lock.Lock()
+			defer lock.Unlock()
+			value, found, err = c.memCache().Get(full)
+			if err != nil {
+				return value, false, err
 			}
-			return v, true, nil
+			if found {
+				c.l1Hits.Add(1)
+				return value, true, nil
+			}
+			c.l1Misses.Add(1)
+			return c.getRedisWithTTL(full)
 		}
-		if errors.Is(e, redis.Nil) {
-			var zero V
-			return zero, false, nil
-		}
-		var zero V
-		return zero, false, e
+		return c.getRedis(full)
 	}
 
 	lock := c.memoryLock(full)
 	lock.Lock()
 	defer lock.Unlock()
 	return c.memCache().Get(full)
+}
+
+func (c *HybridCache[V]) getRedis(full string) (value V, found bool, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultRedisOpTimeout)
+	defer cancel()
+
+	raw, e := c.redis.Get(ctx, full).Result()
+	if e == nil {
+		v, decErr := c.redisCodec.Decode(raw)
+		if decErr != nil {
+			var zero V
+			return zero, false, decErr
+		}
+		c.redisHits.Add(1)
+		return v, true, nil
+	}
+	if errors.Is(e, redis.Nil) {
+		c.redisMisses.Add(1)
+		var zero V
+		return zero, false, nil
+	}
+	var zero V
+	return zero, false, e
+}
+
+func (c *HybridCache[V]) getRedisWithTTL(full string) (value V, found bool, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultRedisOpTimeout)
+	defer cancel()
+	pipe := c.redis.Pipeline()
+	getCmd := pipe.Get(ctx, full)
+	ttlCmd := pipe.PTTL(ctx, full)
+	_, execErr := pipe.Exec(ctx)
+	if getErr := getCmd.Err(); getErr != nil {
+		if errors.Is(getErr, redis.Nil) {
+			c.redisMisses.Add(1)
+			var zero V
+			return zero, false, nil
+		}
+		var zero V
+		return zero, false, getErr
+	}
+	if execErr != nil && !errors.Is(execErr, redis.Nil) {
+		var zero V
+		return zero, false, execErr
+	}
+	value, err = c.redisCodec.Decode(getCmd.Val())
+	if err != nil {
+		var zero V
+		return zero, false, err
+	}
+	c.redisHits.Add(1)
+	if ttl := c.l1TTL(ttlCmd.Val()); ttl > 0 {
+		c.memCache().SetWithTTL(full, value, ttl)
+	}
+	return value, true, nil
 }
 
 func (c *HybridCache[V]) SetWithTTL(key string, v V, ttl time.Duration) error {
@@ -127,7 +202,11 @@ func (c *HybridCache[V]) SetWithTTL(key string, v V, ttl time.Duration) error {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), defaultRedisOpTimeout)
 		defer cancel()
-		return c.redis.Set(ctx, full, raw, ttl).Err()
+		if err := c.redis.Set(ctx, full, raw, ttl).Err(); err != nil {
+			return err
+		}
+		c.storeL1(full, v, ttl)
+		return nil
 	}
 
 	lock := c.memoryLock(full)
@@ -135,6 +214,62 @@ func (c *HybridCache[V]) SetWithTTL(key string, v V, ttl time.Duration) error {
 	c.memCache().SetWithTTL(full, v, ttl)
 	lock.Unlock()
 	return nil
+}
+
+func (c *HybridCache[V]) l1TTL(redisTTL time.Duration) time.Duration {
+	limit := c.memoryReadThroughTTL
+	if redisTTL <= 0 {
+		return limit
+	}
+	if limit > 0 && redisTTL > limit {
+		return limit
+	}
+	return redisTTL
+}
+
+func (c *HybridCache[V]) storeL1(full string, value V, redisTTL time.Duration) {
+	if !c.memoryReadThrough || !c.redisOn() {
+		return
+	}
+	ttl := c.l1TTL(redisTTL)
+	if ttl <= 0 {
+		return
+	}
+	lock := c.memoryLock(full)
+	lock.Lock()
+	c.memCache().SetWithTTL(full, value, ttl)
+	lock.Unlock()
+}
+
+func (c *HybridCache[V]) deleteL1(fullKeys []string) {
+	if !c.memoryReadThrough || len(fullKeys) == 0 {
+		return
+	}
+	unlock := c.lockMemoryKeys(fullKeys)
+	c.memCache().DeleteMany(fullKeys)
+	unlock()
+}
+
+func (c *HybridCache[V]) purgeL1() {
+	if !c.memoryReadThrough {
+		return
+	}
+	for i := range c.memLocks {
+		c.memLocks[i].Lock()
+	}
+	c.memCache().Purge()
+	for i := len(c.memLocks) - 1; i >= 0; i-- {
+		c.memLocks[i].Unlock()
+	}
+}
+
+func (c *HybridCache[V]) Stats() HybridCacheStats {
+	return HybridCacheStats{
+		L1Hits:      c.l1Hits.Load(),
+		L1Misses:    c.l1Misses.Load(),
+		RedisHits:   c.redisHits.Load(),
+		RedisMisses: c.redisMisses.Load(),
+	}
 }
 
 // CompareAndDelete removes key only when its current value still matches
@@ -162,6 +297,7 @@ if redis.call("GET", KEYS[1]) == ARGV[1] then
 end
 return 0`
 		deleted, err := c.redis.Eval(ctx, script, []string{full}, raw).Int()
+		c.deleteL1([]string{full})
 		return deleted > 0, err
 	}
 
@@ -218,6 +354,11 @@ return 1`
 			ttlMillis = 1
 		}
 		swapped, evalErr := c.redis.Eval(ctx, script, []string{full}, expectedPresent, expectedRaw, replacementRaw, ttlMillis).Int()
+		if evalErr == nil && swapped == 1 {
+			c.storeL1(full, replacement, ttl)
+		} else {
+			c.deleteL1([]string{full})
+		}
 		return swapped == 1, evalErr
 	}
 
@@ -308,6 +449,7 @@ func (c *HybridCache[V]) scanKeys(match string) ([]string, error) {
 
 func (c *HybridCache[V]) Purge() error {
 	if c.redisOn() {
+		defer c.purgeL1()
 		keys, err := c.scanKeys(c.ns.MatchPattern())
 		if err != nil {
 			return err
@@ -413,6 +555,7 @@ func (c *HybridCache[V]) DeleteMany(keys []string) (map[string]bool, error) {
 			cmds = append(cmds, pipe.Unlink(ctx, k))
 		}
 		_, err := pipe.Exec(ctx)
+		c.deleteL1(fullKeys)
 		if err != nil && !errors.Is(err, redis.Nil) {
 			return res, err
 		}
@@ -429,15 +572,19 @@ func (c *HybridCache[V]) DeleteMany(keys []string) (map[string]bool, error) {
 }
 
 func (c *HybridCache[V]) Capacity() (mainCacheCapacity int, missingCacheCapacity int) {
-	if c.redisOn() {
+	if c.redisOn() && !c.memoryReadThrough {
 		return 0, 0
 	}
 	return c.memCache().Capacity()
 }
 
 func (c *HybridCache[V]) Algorithm() (mainCacheAlgorithm string, missingCacheAlgorithm string) {
-	if c.redisOn() {
+	if c.redisOn() && !c.memoryReadThrough {
 		return "redis", ""
 	}
-	return c.memCache().Algorithm()
+	main, missing := c.memCache().Algorithm()
+	if c.redisOn() {
+		main = "redis+l1:" + main
+	}
+	return main, missing
 }

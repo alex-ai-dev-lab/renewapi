@@ -21,29 +21,44 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 
-import enTranslation from './locales/en.json';
-import frTranslation from './locales/fr.json';
 import zhCNTranslation from './locales/zh-CN.json';
-import zhTWTranslation from './locales/zh-TW.json';
-import ruTranslation from './locales/ru.json';
-import jaTranslation from './locales/ja.json';
-import viTranslation from './locales/vi.json';
 import { supportedLanguages } from './language';
 
-i18n
+const localeLoaders = {
+  en: () => import('./locales/en.json'),
+  'zh-TW': () => import('./locales/zh-TW.json'),
+  fr: () => import('./locales/fr.json'),
+  ru: () => import('./locales/ru.json'),
+  ja: () => import('./locales/ja.json'),
+  vi: () => import('./locales/vi.json'),
+};
+
+const localeBackend = {
+  type: 'backend',
+  init() {},
+  read(language, namespace, callback) {
+    const loadLocale = localeLoaders[language];
+    if (!loadLocale) {
+      callback(new Error(`Unsupported locale: ${language}`), false);
+      return;
+    }
+
+    loadLocale()
+      .then((locale) => callback(null, locale.default[namespace] ?? {}))
+      .catch((error) => callback(error, false));
+  },
+};
+
+export const i18nReady = i18n
+  .use(localeBackend)
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     load: 'currentOnly',
     supportedLngs: supportedLanguages,
+    partialBundledLanguages: true,
     resources: {
-      en: enTranslation,
       'zh-CN': zhCNTranslation,
-      'zh-TW': zhTWTranslation,
-      fr: frTranslation,
-      ru: ruTranslation,
-      ja: jaTranslation,
-      vi: viTranslation,
     },
     fallbackLng: 'zh-CN',
     nsSeparator: false,

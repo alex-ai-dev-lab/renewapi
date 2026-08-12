@@ -79,6 +79,26 @@ export function buildSearchParams(
   }
 }
 
+function normalizeSearchParam(value: unknown): unknown {
+  if (value === undefined || value === null || value === '') return undefined
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item))
+  }
+  return value
+}
+
+export function areSearchParamsEqual(
+  current: Record<string, unknown>,
+  next: Record<string, unknown>
+): boolean {
+  const keys = new Set([...Object.keys(current), ...Object.keys(next)])
+  return Array.from(keys).every(
+    (key) =>
+      JSON.stringify(normalizeSearchParam(current[key])) ===
+      JSON.stringify(normalizeSearchParam(next[key]))
+  )
+}
+
 /**
  * Get log category display name
  */

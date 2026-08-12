@@ -217,9 +217,16 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       }
       toolbar={
         isCommon ? (
-          <CommonLogsFilterBar table={table} />
+          <CommonLogsFilterBar
+            key={JSON.stringify(searchParams)}
+            table={table}
+          />
         ) : (
-          <TaskLogsFilterBar table={table} logCategory={logCategory} />
+          <TaskLogsFilterBar
+            key={`${logCategory}-${JSON.stringify(searchParams)}`}
+            table={table}
+            logCategory={logCategory}
+          />
         )
       }
       renderRow={(row) => {

@@ -16,13 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import { type Table } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
 import { useIsAdmin } from '@/hooks/use-admin'
-import { buildSearchParams } from '../lib/filter'
+import { areSearchParamsEqual, buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
 import type { DrawingLogFilters, LogCategory, TaskLogFilters } from '../types'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
@@ -73,11 +73,6 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
 
   const [filters, setFilters] = useState<TaskLogsFilters>(() => {
     const { start, end } = getDefaultTimeRange()
-    return { startTime: start, endTime: end }
-  })
-
-  useEffect(() => {
-    const { start, end } = getDefaultTimeRange()
     const baseFilters = {
       startTime: searchParams.startTime
         ? new Date(searchParams.startTime)
@@ -87,25 +82,16 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
         ? { channel: String(searchParams.channel) }
         : {}),
     }
-    const next: TaskLogsFilters =
-      props.logCategory === 'drawing'
-        ? {
-            ...baseFilters,
-            ...(searchParams.filter ? { mjId: searchParams.filter } : {}),
-          }
-        : {
-            ...baseFilters,
-            ...(searchParams.filter ? { taskId: searchParams.filter } : {}),
-          }
-
-    setFilters(next)
-  }, [
-    props.logCategory,
-    searchParams.startTime,
-    searchParams.endTime,
-    searchParams.channel,
-    searchParams.filter,
-  ])
+    return props.logCategory === 'drawing'
+      ? {
+          ...baseFilters,
+          ...(searchParams.filter ? { mjId: searchParams.filter } : {}),
+        }
+      : {
+          ...baseFilters,
+          ...(searchParams.filter ? { taskId: searchParams.filter } : {}),
+        }
+  })
 
   const handleChange = useCallback(
     (field: keyof TaskLogsFilters, value: Date | string | undefined) => {
@@ -116,33 +102,41 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
 
   const handleApply = useCallback(() => {
     const filterParams = buildSearchParams(filters, props.logCategory)
+    const nextSearch = {
+      ...filterParams,
+      page: 1,
+    }
+    if (areSearchParamsEqual(searchParams, nextSearch)) {
+      queryClient.invalidateQueries({ queryKey: ['logs'] })
+      return
+    }
     navigate({
       to: '/usage-logs/$section',
       params: { section: props.logCategory },
-      search: {
-        ...filterParams,
-        page: 1,
-      },
+      search: nextSearch,
     })
-    queryClient.invalidateQueries({ queryKey: ['logs'] })
-  }, [filters, navigate, props.logCategory, queryClient])
+  }, [filters, navigate, props.logCategory, queryClient, searchParams])
 
   const handleReset = useCallback(() => {
     const { start, end } = getDefaultTimeRange()
     const resetFilters: TaskLogsFilters = { startTime: start, endTime: end }
     setFilters(resetFilters)
 
+    const nextSearch = {
+      page: 1,
+      startTime: start.getTime(),
+      endTime: end.getTime(),
+    }
+    if (areSearchParamsEqual(searchParams, nextSearch)) {
+      queryClient.invalidateQueries({ queryKey: ['logs'] })
+      return
+    }
     navigate({
       to: '/usage-logs/$section',
       params: { section: props.logCategory },
-      search: {
-        page: 1,
-        startTime: start.getTime(),
-        endTime: end.getTime(),
-      },
+      search: nextSearch,
     })
-    queryClient.invalidateQueries({ queryKey: ['logs'] })
-  }, [navigate, props.logCategory, queryClient])
+  }, [navigate, props.logCategory, queryClient, searchParams])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

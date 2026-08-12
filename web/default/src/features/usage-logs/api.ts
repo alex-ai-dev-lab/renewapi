@@ -80,7 +80,7 @@ async function fetchLogStats<T>(
 export const getAllLogs = (
   params: GetLogsParams = {},
   config: ApiRequestConfig = {}
-) => fetchLogs('/api/log', params, true, config)
+) => fetchLogs('/api/log/', params, true, config)
 
 export const getUserLogs = (
   params: Omit<GetLogsParams, 'username' | 'channel'> = {},

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import { type Table } from '@tanstack/react-table'
@@ -38,7 +38,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { LOG_TYPE_ALL_VALUE, LOG_TYPE_FILTERS } from '../constants'
-import { buildSearchParams } from '../lib/filter'
+import { areSearchParamsEqual, buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
 import type { CommonLogFilters } from '../types'
 import { CommonLogsStats } from './common-logs-stats'
@@ -76,13 +76,7 @@ export function CommonLogsFilterBar<TData>(
 
   const [filters, setFilters] = useState<CommonLogFilters>(() => {
     const { start, end } = getDefaultTimeRange()
-    return { startTime: start, endTime: end }
-  })
-  const [logType, setLogType] = useState<LogTypeValue>(LOG_TYPE_ALL_VALUE)
-
-  useEffect(() => {
-    const { start, end } = getDefaultTimeRange()
-    setFilters({
+    return {
       startTime: searchParams.startTime
         ? new Date(searchParams.startTime)
         : start,
@@ -94,28 +88,16 @@ export function CommonLogsFilterBar<TData>(
       username: searchParams.username || undefined,
       requestId: searchParams.requestId || undefined,
       upstreamRequestId: searchParams.upstreamRequestId || undefined,
-    })
-
+    }
+  })
+  const [logType, setLogType] = useState<LogTypeValue>(() => {
     const typeArr = searchParams.type
-    const nextLogType =
-      Array.isArray(typeArr) &&
+    return Array.isArray(typeArr) &&
       typeArr.length === 1 &&
       isLogTypeValue(typeArr[0])
-        ? typeArr[0]
-        : LOG_TYPE_ALL_VALUE
-    setLogType(nextLogType)
-  }, [
-    searchParams.startTime,
-    searchParams.endTime,
-    searchParams.channel,
-    searchParams.model,
-    searchParams.token,
-    searchParams.group,
-    searchParams.username,
-    searchParams.requestId,
-    searchParams.upstreamRequestId,
-    searchParams.type,
-  ])
+      ? typeArr[0]
+      : LOG_TYPE_ALL_VALUE
+  })
 
   const handleChange = useCallback(
     (field: keyof CommonLogFilters, value: Date | string | undefined) => {
@@ -126,18 +108,22 @@ export function CommonLogsFilterBar<TData>(
 
   const handleApply = useCallback(() => {
     const filterParams = buildSearchParams(filters, 'common')
+    const nextSearch = {
+      ...filterParams,
+      type: [logType],
+      page: 1,
+    }
+    if (areSearchParamsEqual(searchParams, nextSearch)) {
+      queryClient.invalidateQueries({ queryKey: ['logs'] })
+      queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
+      return
+    }
     navigate({
       to: '/usage-logs/$section',
       params: { section: 'common' },
-      search: {
-        ...filterParams,
-        type: [logType],
-        page: 1,
-      },
+      search: nextSearch,
     })
-    queryClient.invalidateQueries({ queryKey: ['logs'] })
-    queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
-  }, [filters, logType, navigate, queryClient])
+  }, [filters, logType, navigate, queryClient, searchParams])
 
   const handleReset = useCallback(() => {
     const { start, end } = getDefaultTimeRange()
@@ -145,19 +131,23 @@ export function CommonLogsFilterBar<TData>(
     setFilters(resetFilters)
     setLogType(LOG_TYPE_ALL_VALUE)
 
+    const nextSearch = {
+      page: 1,
+      type: [LOG_TYPE_ALL_VALUE],
+      startTime: start.getTime(),
+      endTime: end.getTime(),
+    }
+    if (areSearchParamsEqual(searchParams, nextSearch)) {
+      queryClient.invalidateQueries({ queryKey: ['logs'] })
+      queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
+      return
+    }
     navigate({
       to: '/usage-logs/$section',
       params: { section: 'common' },
-      search: {
-        page: 1,
-        type: [LOG_TYPE_ALL_VALUE],
-        startTime: start.getTime(),
-        endTime: end.getTime(),
-      },
+      search: nextSearch,
     })
-    queryClient.invalidateQueries({ queryKey: ['logs'] })
-    queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
-  }, [navigate, queryClient])
+  }, [navigate, queryClient, searchParams])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

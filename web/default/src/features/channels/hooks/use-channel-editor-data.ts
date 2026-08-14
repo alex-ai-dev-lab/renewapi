@@ -50,6 +50,7 @@ export function useChannelEditorData(currentRow?: Channel | null) {
     isChannelLoading: channelQuery.isLoading,
     isChannelError: channelQuery.isError,
     channelQueryError: channelQuery.error,
+    refetchChannel: channelQuery.refetch,
     groupsData: groupsQuery.data,
     isLoadingGroups: groupsQuery.isLoading,
     userAgentsData: userAgentsQuery.data,

@@ -136,6 +136,8 @@ import {
   hasModelConfigChanged,
   findMissingModelsInMapping,
   validateModelMappingJson,
+  getChannelEditConfigVersion,
+  getChannelFormInitializationTarget,
 } from '../../lib'
 import {
   collectInvalidStatusCodeEntries,
@@ -313,6 +315,7 @@ export function ChannelMutateDrawer({
     isChannelLoading,
     isChannelError,
     channelQueryError,
+    refetchChannel,
     groupsData,
     isLoadingGroups,
     userAgentsData,
@@ -325,10 +328,14 @@ export function ChannelMutateDrawer({
   const initialModelsRef = useRef<string[]>([])
   const initialModelMappingRef = useRef<string>('')
   const initialStatusCodeMappingRef = useRef<string>('')
+  const initializedFormTargetRef = useRef<number | 'create' | null>(null)
   const [statusCodeRiskOpen, setStatusCodeRiskOpen] = useState(false)
   const [statusCodeRiskDetailItems, setStatusCodeRiskDetailItems] = useState<
     string[]
   >([])
+  const [editingConfigVersion, setEditingConfigVersion] = useState<
+    number | undefined
+  >()
   const statusCodeRiskResolveRef = useRef<
     ((confirmed: boolean) => void) | null
   >(null)
@@ -371,6 +378,21 @@ export function ChannelMutateDrawer({
     resolver: zodResolver(channelFormSchema),
     defaultValues: CHANNEL_FORM_DEFAULT_VALUES,
   })
+
+  const initializeEditForm = useCallback(
+    (channel: Channel) => {
+      const defaults = transformChannelToFormDefaults(channel)
+      form.reset(defaults)
+      setAdvancedSettingsOpen(
+        readAdvancedSettingsPreference() || hasAdvancedSettingsValues(defaults)
+      )
+      initialModelsRef.current = parseModelsString(channel.models || '')
+      initialModelMappingRef.current = channel.model_mapping || ''
+      initialStatusCodeMappingRef.current = channel.status_code_mapping || ''
+      setEditingConfigVersion(channel.config_version)
+    },
+    [form]
+  )
 
   // Watch form values for conditional rendering
   const multiKeyMode = form.watch('multi_key_mode')
@@ -640,29 +662,45 @@ export function ChannelMutateDrawer({
     upstreamUpdateMeta.detectedModels.length -
     upstreamDetectedModelsPreview.length
 
-  // Load channel data into form when editing
+  // Initialize once for each open channel. Background refetches must not
+  // overwrite edits that are already in progress.
   useEffect(() => {
-    if (isEditing && channelData?.data) {
-      const defaults = transformChannelToFormDefaults(channelData.data)
-      form.reset(defaults)
-      setAdvancedSettingsOpen(
-        readAdvancedSettingsPreference() || hasAdvancedSettingsValues(defaults)
-      )
-      // Store initial values for comparison
-      initialModelsRef.current = parseModelsString(
-        channelData.data.models || ''
-      )
-      initialModelMappingRef.current = channelData.data.model_mapping || ''
-      initialStatusCodeMappingRef.current =
-        channelData.data.status_code_mapping || ''
-    } else if (!isEditing) {
+    if (!open) {
+      initializedFormTargetRef.current = null
+      setEditingConfigVersion(undefined)
+      return
+    }
+
+    const desiredTarget = isEditing ? channelId : 'create'
+    if (
+      initializedFormTargetRef.current !== null &&
+      initializedFormTargetRef.current !== desiredTarget
+    ) {
+      initializedFormTargetRef.current = null
+      setEditingConfigVersion(undefined)
+    }
+    const target = getChannelFormInitializationTarget({
+      open,
+      isEditing,
+      channelId,
+      loadedChannelId: channelData?.data?.id,
+      initializedTarget: initializedFormTargetRef.current,
+    })
+    if (target === null) return
+
+    if (isEditing) {
+      if (!channelData?.data) return
+      initializeEditForm(channelData.data)
+    } else {
       form.reset(CHANNEL_FORM_DEFAULT_VALUES)
       setAdvancedSettingsOpen(false)
       initialModelsRef.current = []
       initialModelMappingRef.current = ''
       initialStatusCodeMappingRef.current = ''
+      setEditingConfigVersion(undefined)
     }
-  }, [isEditing, channelData, form])
+    initializedFormTargetRef.current = target
+  }, [open, isEditing, channelId, channelData, form, initializeEditForm])
 
   useEffect(() => {
     if (currentType !== 57) {
@@ -907,6 +945,35 @@ export function ChannelMutateDrawer({
     setOpen(null)
   }, [channelId, queryClient, onOpenChange, setOpen])
 
+  const reloadChannelConfiguration = useCallback(async () => {
+    if (!channelId) return
+    const result = await refetchChannel()
+    const freshChannel = result.data?.data
+    if (!freshChannel || freshChannel.id !== channelId) {
+      toast.error(result.data?.message || t('Failed to load channel details'))
+      return
+    }
+    initializeEditForm(freshChannel)
+    initializedFormTargetRef.current = channelId
+    setEditingConfigVersion(freshChannel.config_version)
+    toast.success(t('Channel updated successfully'))
+  }, [channelId, refetchChannel, initializeEditForm, t])
+
+  const handleConfigConflict = useCallback(
+    (message: string) => {
+      toast.error(message, {
+        duration: Infinity,
+        action: {
+          label: t('Refresh'),
+          onClick: () => {
+            void reloadChannelConfiguration()
+          },
+        },
+      })
+    },
+    [reloadChannelConfiguration, t]
+  )
+
   // Show missing models confirmation dialog
   const confirmMissingModelMappings = useCallback(
     (missingModels: string[]): Promise<MissingModelsAction> => {
@@ -963,7 +1030,12 @@ export function ChannelMutateDrawer({
     currentRow,
     isEditing,
     isMultiKeyChannel,
+    configVersion: getChannelEditConfigVersion({
+      isEditing,
+      frozenConfigVersion: editingConfigVersion,
+    }),
     onSuccess: handleSuccess,
+    onConflict: handleConfigConflict,
   })
 
   const isSubmitting = channelMutation.isPending
@@ -1093,6 +1165,8 @@ export function ChannelMutateDrawer({
     (v: boolean) => {
       onOpenChange(v)
       if (!v) {
+        initializedFormTargetRef.current = null
+        setEditingConfigVersion(undefined)
         form.reset(CHANNEL_FORM_DEFAULT_VALUES)
         setAdvancedSettingsOpen(false)
         resetCodexCredential()
@@ -4762,7 +4836,11 @@ export function ChannelMutateDrawer({
             <Button
               form='channel-form'
               type='submit'
-              disabled={isSubmitting || isChannelDetailUnavailable}
+              disabled={
+                isSubmitting ||
+                isChannelDetailLoading ||
+                isChannelDetailUnavailable
+              }
             >
               {isSubmitting && (
                 <Loader2 className='mr-2 h-4 w-4 animate-spin' />

@@ -20,6 +20,8 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+import { getApiErrorMessage } from '@/lib/api-errors'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -32,7 +34,9 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { handleCopyChannel } from '../../lib'
+import { getChannel } from '../../api'
+import { channelsQueryKeys, handleCopyChannel } from '../../lib'
+import type { GetChannelResponse } from '../../types'
 import { useChannels } from '../channels-provider'
 
 type CopyChannelDialogProps = {
@@ -45,7 +49,7 @@ export function CopyChannelDialog({
   onOpenChange,
 }: CopyChannelDialogProps) {
   const { t } = useTranslation()
-  const { currentRow } = useChannels()
+  const { currentRow, setCurrentRow, setOpen } = useChannels()
   const queryClient = useQueryClient()
   const [suffix, setSuffix] = useState('_copy')
   const [resetBalance, setResetBalance] = useState(true)
@@ -55,22 +59,43 @@ export function CopyChannelDialog({
 
   const handleCopy = async () => {
     setIsCopying(true)
+    try {
+      const newId = await handleCopyChannel(
+        currentRow.id,
+        {
+          suffix,
+          reset_balance: resetBalance,
+        },
+        queryClient
+      )
+      if (!newId) return
 
-    await handleCopyChannel(
-      currentRow.id,
-      {
-        suffix,
-        reset_balance: resetBalance,
-      },
-      queryClient,
-      () => {
-        onOpenChange(false)
-        setSuffix('_copy')
-        setResetBalance(true)
+      let copiedChannel: GetChannelResponse
+      try {
+        copiedChannel = await queryClient.fetchQuery({
+          queryKey: channelsQueryKeys.detail(newId),
+          queryFn: () => getChannel(newId),
+        })
+      } catch (error) {
+        toast.error(
+          getApiErrorMessage(error, t('Failed to load channel details'))
+        )
+        return
       }
-    )
-
-    setIsCopying(false)
+      if (!copiedChannel.success || !copiedChannel.data) {
+        toast.error(
+          copiedChannel.message || t('Failed to load channel details')
+        )
+        return
+      }
+      onOpenChange(false)
+      setSuffix('_copy')
+      setResetBalance(true)
+      setCurrentRow(copiedChannel.data)
+      setOpen('update-channel')
+    } finally {
+      setIsCopying(false)
+    }
   }
 
   return (
@@ -122,7 +147,7 @@ export function CopyChannelDialog({
           </Button>
           <Button onClick={handleCopy} disabled={isCopying}>
             {isCopying && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
-            {isCopying ? 'Copying...' : 'Copy Channel'}
+            {t('Copy Channel')}
           </Button>
         </DialogFooter>
       </DialogContent>

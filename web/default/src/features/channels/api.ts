@@ -22,8 +22,8 @@ import type {
   AddChannelRequest,
   BatchDeleteParams,
   BatchSetTagParams,
-  Channel,
   ChannelUpdatePayload,
+  ChannelUpdateResponse,
   ChannelBalanceResponse,
   ChannelModelStatusResponse,
   ChannelTestResponse,
@@ -223,12 +223,29 @@ export async function createChannel(
 export async function updateChannel(
   id: number,
   data: ChannelUpdatePayload
-): Promise<{ success: boolean; message?: string; data?: Channel }> {
+): Promise<ChannelUpdateResponse> {
   const res = await api.put(
     '/api/channel/',
     { id, ...data },
     channelActionConfig()
   )
+  return res.data
+}
+
+/**
+ * Update channel configuration with optimistic concurrency control.
+ */
+export async function updateChannelConfig(
+  id: number,
+  data: ChannelUpdatePayload,
+  configVersion: number
+): Promise<ChannelUpdateResponse> {
+  const res = await api.put(`/api/channel/${id}/config`, data, {
+    ...channelActionConfig(),
+    headers: {
+      'If-Match': `"channel-${configVersion}"`,
+    },
+  })
   return res.data
 }
 

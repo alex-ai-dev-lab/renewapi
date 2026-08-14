@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import type { QueryClient } from '@tanstack/react-query'
 import i18next from 'i18next'
 import { toast } from 'sonner'
+import { getApiErrorMessage } from '@/lib/api-errors'
 import { formatCurrencyFromUSD } from '@/lib/currency'
 import {
   copyChannel,
@@ -301,19 +302,28 @@ export async function handleCopyChannel(
   params: CopyChannelParams,
   queryClient?: QueryClient,
   onSuccess?: (newId: number) => void
-): Promise<void> {
+): Promise<number | null> {
   try {
     const response = await copyChannel(id, params)
     if (response.success) {
+      const newId = response.data?.id
+      if (!newId) {
+        toast.error(i18next.t('Failed to copy channel'))
+        return null
+      }
       toast.success(i18next.t(SUCCESS_MESSAGES.COPIED))
-      queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-      onSuccess?.(response.data?.id ?? 0)
+      await queryClient?.invalidateQueries({
+        queryKey: channelsQueryKeys.lists(),
+      })
+      onSuccess?.(newId)
+      return newId
     } else {
       toast.error(response.message || i18next.t('Failed to copy channel'))
     }
-  } catch (_error) {
-    toast.error(i18next.t('Failed to copy channel'))
+  } catch (error) {
+    toast.error(getApiErrorMessage(error, i18next.t('Failed to copy channel')))
   }
+  return null
 }
 
 /**

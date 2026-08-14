@@ -16,12 +16,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-// Re-export all library functions
-export * from './channel-actions'
-export * from './channel-form'
-export * from './channel-form-initialization'
-export * from './channel-mutation-errors'
-export * from './channel-type-config'
-export * from './channel-utils'
-export * from './multi-key-utils'
-export * from './model-mapping-validation'
+import { describe, expect, test } from 'bun:test'
+import { getChannelEditConfigVersion } from '../../lib/channel-form-initialization'
+
+describe('ChannelMutateDrawer edit config version contract', () => {
+  test('passes the frozen edit version to the mutation hook', () => {
+    expect(
+      getChannelEditConfigVersion({
+        isEditing: true,
+        frozenConfigVersion: 109,
+      })
+    ).toBe(109)
+  })
+
+  test('does not pass a version for create mode', () => {
+    expect(
+      getChannelEditConfigVersion({
+        isEditing: false,
+        frozenConfigVersion: 109,
+      })
+    ).toBeUndefined()
+  })
+})

@@ -19,45 +19,24 @@ For commercial licensing, please contact support@quantumnous.com
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { createChannel, updateChannel } from '../api'
+import { getApiErrorMessage } from '@/lib/api-errors'
+import { createChannel, updateChannelConfig } from '../api'
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import {
   transformFormDataToCreatePayload,
   transformFormDataToUpdatePayload,
   type ChannelFormValues,
 } from '../lib'
+import { isChannelConfigConflict } from '../lib/channel-mutation-errors'
 import type { Channel } from '../types'
 
 type UseChannelMutateFormParams = {
   currentRow?: Channel | null
   isEditing: boolean
   isMultiKeyChannel: boolean
+  configVersion?: number
   onSuccess: () => void
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
-function getErrorMessage(error: unknown): string | undefined {
-  if (error instanceof Error && typeof error.message === 'string') {
-    return error.message
-  }
-
-  if (!isRecord(error)) return undefined
-
-  const response = error.response
-  if (isRecord(response)) {
-    const data = response.data
-    if (isRecord(data)) {
-      const message = data.message
-      if (typeof message === 'string') return message
-    }
-  }
-
-  const message = error.message
-  if (typeof message === 'string') return message
-  return undefined
+  onConflict: (message: string) => void
 }
 
 export function useChannelMutateForm(props: UseChannelMutateFormParams) {
@@ -66,6 +45,9 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
   return useMutation({
     mutationFn: async (data: ChannelFormValues): Promise<string> => {
       if (props.isEditing && props.currentRow) {
+        if (!props.configVersion) {
+          throw new Error(t(ERROR_MESSAGES.UPDATE_FAILED))
+        }
         const payload = transformFormDataToUpdatePayload(
           data,
           props.currentRow.id
@@ -78,9 +60,10 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
               }
             : payload
 
-        const response = await updateChannel(
+        const response = await updateChannelConfig(
           props.currentRow.id,
-          payloadWithKeyMode
+          payloadWithKeyMode,
+          props.configVersion
         )
         if (!response.success) {
           throw new Error(response.message || t(ERROR_MESSAGES.UPDATE_FAILED))
@@ -100,7 +83,22 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
       props.onSuccess()
     },
     onError: (error: unknown) => {
-      toast.error(getErrorMessage(error) || t(ERROR_MESSAGES.CREATE_FAILED))
+      if (props.isEditing && isChannelConfigConflict(error)) {
+        props.onConflict(
+          getApiErrorMessage(error, t(ERROR_MESSAGES.UPDATE_FAILED))
+        )
+        return
+      }
+      toast.error(
+        getApiErrorMessage(
+          error,
+          t(
+            props.isEditing
+              ? ERROR_MESSAGES.UPDATE_FAILED
+              : ERROR_MESSAGES.CREATE_FAILED
+          )
+        )
+      )
     },
   })
 }

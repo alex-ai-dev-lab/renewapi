@@ -16,12 +16,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-// Re-export all library functions
-export * from './channel-actions'
-export * from './channel-form'
-export * from './channel-form-initialization'
-export * from './channel-mutation-errors'
-export * from './channel-type-config'
-export * from './channel-utils'
-export * from './multi-key-utils'
-export * from './model-mapping-validation'
+type ErrorRecord = Record<string, unknown>
+
+function isRecord(value: unknown): value is ErrorRecord {
+  return typeof value === 'object' && value !== null
+}
+
+/**
+ * A config update conflict can be returned either as an HTTP 409 or as the
+ * explicit business error code used by the channel config endpoint.
+ */
+export function isChannelConfigConflict(error: unknown): boolean {
+  if (!isRecord(error)) return false
+
+  const response = isRecord(error.response) ? error.response : undefined
+  if (response?.status === 409) return true
+
+  const responseData =
+    response && isRecord(response.data) ? response.data : undefined
+  return responseData?.code === 'CHANNEL_CONFIG_CONFLICT'
+}

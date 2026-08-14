@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -156,6 +157,134 @@ func TestDistributeInstallsHighestPriorityChannelModelRouteBeforeRelay(t *testin
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, req)
 	require.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
+}
+
+func TestDistributeInitialSelectionUsesOnlyExplicitFallbackModels(t *testing.T) {
+	require.NoError(t, appI18n.Init())
+	db := setupDistributorFallbackTestDB(t)
+	fallback := distributorRouteTestChannel(121, "fallback", "gpt-fallback", 10)
+	require.NoError(t, db.Create(fallback).Error)
+	require.NoError(t, fallback.AddAbilities(nil))
+	model.InitChannelCache()
+
+	t.Setenv("REQUEST_MODELS_FALLBACK_ENABLED", "true")
+	t.Setenv("REQUEST_MODELS_FALLBACK_MAX", "4")
+	gin.SetMode(gin.TestMode)
+
+	t.Run("explicit fallback advances initial selection", func(t *testing.T) {
+		router := gin.New()
+		router.POST("/v1/chat/completions", distributorRouteAuthContext(), Distribute(), func(c *gin.Context) {
+			require.Equal(t, fallback.Id, common.GetContextKeyInt(c, constant.ContextKeyChannelId))
+			require.Equal(t, "gpt-primary", common.GetContextKeyString(c, constant.ContextKeyClientModel))
+			require.Equal(t, "gpt-fallback", common.GetContextKeyString(c, constant.ContextKeyOriginalModel))
+			require.Equal(t, []string{"gpt-fallback"}, common.GetContextKeyStringSlice(c, constant.ContextKeyFallbackModels))
+			c.Status(http.StatusNoContent)
+		})
+		body := `{"model":"gpt-primary","models":["gpt-fallback"]}`
+		request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		require.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
+	})
+
+	t.Run("missing explicit fallback never changes model", func(t *testing.T) {
+		router := gin.New()
+		router.POST("/v1/chat/completions", distributorRouteAuthContext(), Distribute(), func(c *gin.Context) {
+			t.Fatal("request without a primary channel must not reach relay")
+		})
+		body := `{"model":"gpt-primary"}`
+		request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		require.Equal(t, http.StatusServiceUnavailable, response.Code)
+		require.Contains(t, response.Body.String(), `"code":"model_not_found"`)
+		require.Contains(t, response.Body.String(), "gpt-primary")
+	})
+
+	t.Run("token whitelist still filters explicit fallback", func(t *testing.T) {
+		router := gin.New()
+		router.POST("/v1/chat/completions", func(c *gin.Context) {
+			common.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
+			common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+			common.SetContextKey(c, constant.ContextKeyTokenGroup, "default")
+			common.SetContextKey(c, constant.ContextKeyTokenModelLimitEnabled, true)
+			common.SetContextKey(c, constant.ContextKeyTokenModelLimit, map[string]bool{"gpt-primary": true})
+			c.Next()
+		}, Distribute(), func(c *gin.Context) {
+			t.Fatal("token-forbidden fallback must not reach relay")
+		})
+		body := `{"model":"gpt-primary","models":["gpt-fallback"]}`
+		request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	})
+
+	t.Run("provider policy still filters explicit fallback", func(t *testing.T) {
+		t.Setenv("PROVIDER_ROUTING_CONTROL_ENABLED", "true")
+		router := gin.New()
+		router.POST("/v1/chat/completions", distributorRouteAuthContext(), Distribute(), func(c *gin.Context) {
+			t.Fatal("provider-forbidden fallback must not reach relay")
+		})
+		body := `{"model":"gpt-primary","models":["gpt-fallback"],"provider":{"only":["anthropic"]}}`
+		request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	})
+}
+
+func TestSelectDistributorInitialChannelReturnsRealSelectionError(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	common.SetContextKey(ctx, constant.ContextKeyFallbackModels, []string{"gpt-primary", "gpt-fallback"})
+
+	selectorCalls := make([]string, 0, 2)
+	channel, _, selectErr := selectDistributorInitialChannelWithSelector(ctx, &ModelRequest{Model: "gpt-primary"}, "default", nil, "", func(param *service.RetryParam) (*model.Channel, string, error) {
+		selectorCalls = append(selectorCalls, param.ModelName)
+		return nil, "default", errors.New("database unavailable")
+	})
+	require.Nil(t, channel)
+	require.Error(t, selectErr)
+	require.Equal(t, []string{"gpt-primary"}, selectorCalls)
+	require.Contains(t, strings.ToLower(selectErr.Error()), "database unavailable")
+}
+
+func setupDistributorFallbackTestDB(t *testing.T) *gorm.DB {
+	oldDB := model.DB
+	oldMemoryCacheEnabled := common.MemoryCacheEnabled
+	t.Cleanup(func() {
+		model.DB = oldDB
+		common.MemoryCacheEnabled = oldMemoryCacheEnabled
+		if oldDB != nil && oldMemoryCacheEnabled {
+			model.InitChannelCache()
+		}
+	})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(
+		&model.Channel{},
+		&model.Ability{},
+		&model.ChannelModelStatus{},
+		&model.ChannelModelCapability{},
+		&model.ModelEndpoint{},
+	))
+	model.DB = db
+	common.MemoryCacheEnabled = true
+	return db
+}
+
+func distributorRouteAuthContext() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		common.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
+		common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+		common.SetContextKey(c, constant.ContextKeyTokenGroup, "default")
+		c.Next()
+	}
 }
 
 func distributorRouteTestChannel(id int, name, models string, priority int64) *model.Channel {

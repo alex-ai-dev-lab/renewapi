@@ -39,6 +39,7 @@ func Distribute() func(c *gin.Context) {
 		channelId, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId)
 		modelRequest, shouldSelectChannel, err := getModelRequest(c)
 		if err != nil {
+			service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 			abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
 		}
@@ -70,30 +71,36 @@ func Distribute() func(c *gin.Context) {
 			}
 			id, err := strconv.Atoi(channelId.(string))
 			if err != nil {
+				service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 				abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId))
 				return
 			}
 			channel, err = model.GetChannelById(id, true)
 			if err != nil {
+				service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 				abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId))
 				return
 			}
 			if channel.Status != common.ChannelStatusEnabled {
+				service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
 				return
 			}
 			if !service.ChannelAllowedForProduction(channel) {
+				service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 				abortWithOpenAiMessage(c, http.StatusForbidden, "channel is quarantined by anti-poison profile")
 				return
 			}
 			if !responsesRoutePlanEnabled(responsesRequirement) &&
 				!service.ChannelMatchesResponsesRequirement(channel, modelRequest.Model, responsesRequirement, modelRequest.RoutingRequest) {
+				service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 				abortWithOpenAiMessage(c, http.StatusBadRequest, "selected channel does not satisfy responses compaction capability")
 				return
 			}
 			if responsesRoutePlanEnabled(responsesRequirement) && shouldSelectChannel {
 				plannedChannel, planErr := buildDistributorResponsesRoutePlan(c, modelRequest, responsesRequirement, requiredContinuationModel, channel.Id)
 				if planErr != nil {
+					service.SetModelRouteOutcome(c, service.ModelRouteOutcomeRouteUnavailable)
 					abortWithOpenAiMessage(c, http.StatusBadRequest, planErr.Error(), types.ErrorCodeModelNotFound)
 					return
 				}
@@ -108,6 +115,7 @@ func Distribute() func(c *gin.Context) {
 
 			if shouldSelectChannel {
 				if modelRequest.Model == "" {
+					service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 					abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorModelNameRequired))
 					return
 				}
@@ -118,11 +126,13 @@ func Distribute() func(c *gin.Context) {
 					playgroundRequest := &dto.PlayGroundRequest{}
 					err = common.UnmarshalBodyReusable(c, playgroundRequest)
 					if err != nil {
+						service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 						abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidPlayground, map[string]any{"Error": err.Error()}))
 						return
 					}
 					if playgroundRequest.Group != "" {
 						if !service.GroupInUserUsableGroups(usingGroup, playgroundRequest.Group) && playgroundRequest.Group != usingGroup {
+							service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 							abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorGroupAccessDenied))
 							return
 						}
@@ -135,6 +145,7 @@ func Distribute() func(c *gin.Context) {
 					plannedChannel, planErr := buildDistributorResponsesRoutePlan(c, modelRequest, responsesRequirement, requiredContinuationModel, 0)
 					if planErr != nil {
 						showGroup := usingGroup
+						service.SetModelRouteOutcome(c, service.ModelRouteOutcomeRouteUnavailable)
 						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorGetChannelFailed, map[string]any{"Group": showGroup, "Model": modelRequest.Model, "Error": planErr.Error()}), types.ErrorCodeModelNotFound)
 						return
 					}
@@ -152,6 +163,7 @@ func Distribute() func(c *gin.Context) {
 					if err == nil && preferred != nil {
 						if preferred.Status != common.ChannelStatusEnabled {
 							if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
+								service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 								abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorAffinityChannelDisabled))
 								return
 							}
@@ -191,28 +203,20 @@ func Distribute() func(c *gin.Context) {
 				}
 
 				if channel == nil {
-					requiresResponses := strings.HasPrefix(c.Request.URL.Path, "/v1/responses")
-					clientFormat := types.RelayFormatOpenAI
-					if requiresResponses {
-						clientFormat = types.RelayFormatOpenAIResponses
-					}
-					channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
-						Ctx:                           c,
-						ModelName:                     modelRequest.Model,
-						TokenGroup:                    usingGroup,
-						Retry:                         common.GetPointer(0),
-						RequireOpenAIResponsesSupport: requiresResponses,
-						ClientRelayFormat:             clientFormat,
-						ProviderRoutingPolicy:         modelRequest.ProviderPolicy,
-						ResponsesRequirement:          responsesRequirement,
-						RequiredModelName:             requiredContinuationModel,
-					})
+					channel, selectGroup, err = selectDistributorInitialChannel(
+						c,
+						modelRequest,
+						usingGroup,
+						responsesRequirement,
+						requiredContinuationModel,
+					)
 					if err != nil {
 						showGroup := usingGroup
 						if usingGroup == "auto" {
 							showGroup = fmt.Sprintf("auto(%s)", selectGroup)
 						}
 						message := i18n.T(c, i18n.MsgDistributorGetChannelFailed, map[string]any{"Group": showGroup, "Model": modelRequest.Model, "Error": err.Error()})
+						service.SetModelRouteOutcome(c, service.ModelRouteOutcomeServerError)
 						// 如果错误，但是渠道不为空，说明是数据库一致性问题
 						//if channel != nil {
 						//	common.SysError(fmt.Sprintf("渠道不存在：%d", channel.Id))
@@ -222,6 +226,7 @@ func Distribute() func(c *gin.Context) {
 						return
 					}
 					if channel == nil {
+						service.SetModelRouteOutcome(c, service.ModelRouteOutcomeRouteUnavailable)
 						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
 						return
 					}
@@ -230,6 +235,7 @@ func Distribute() func(c *gin.Context) {
 		}
 		common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 		if newAPIError := SetupContextForSelectedChannel(c, channel, modelRequest.Model); newAPIError != nil {
+			service.SetModelRouteOutcome(c, service.ModelRouteOutcomeServerError)
 			abortWithOpenAiMessage(c, newAPIError.StatusCode, newAPIError.Error(), newAPIError.GetErrorCode())
 			return
 		}
@@ -259,6 +265,7 @@ func enforceTokenModelLimit(c *gin.Context, clientModel string) bool {
 	s, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
 	if !ok {
 		// token model limit is empty, all models are not allowed
+		service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 		abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenNoModelAccess))
 		return false
 	}
@@ -268,10 +275,104 @@ func enforceTokenModelLimit(c *gin.Context, clientModel string) bool {
 	}
 	matchName := ratio_setting.FormatMatchingModelName(clientModel) // match gpts & thinking-*
 	if _, ok := tokenModelLimit[matchName]; !ok {
+		service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 		abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenModelForbidden, map[string]any{"Model": clientModel}))
 		return false
 	}
 	return true
+}
+
+// selectDistributorInitialChannel keeps the distributor's normal selection
+// constraints while allowing an explicitly requested models fallback to take
+// over when the primary model has no candidate. A real selection error is
+// returned immediately; only a nil channel advances to the next model.
+func selectDistributorInitialChannel(
+	c *gin.Context,
+	modelRequest *ModelRequest,
+	usingGroup string,
+	responsesRequirement *service.ResponsesRoutingRequirement,
+	requiredContinuationModel string,
+) (*model.Channel, string, error) {
+	return selectDistributorInitialChannelWithSelector(
+		c,
+		modelRequest,
+		usingGroup,
+		responsesRequirement,
+		requiredContinuationModel,
+		service.CacheGetRandomSatisfiedChannel,
+	)
+}
+
+type distributorChannelSelector func(*service.RetryParam) (*model.Channel, string, error)
+
+func selectDistributorInitialChannelWithSelector(
+	c *gin.Context,
+	modelRequest *ModelRequest,
+	usingGroup string,
+	responsesRequirement *service.ResponsesRoutingRequirement,
+	requiredContinuationModel string,
+	selectChannel distributorChannelSelector,
+) (*model.Channel, string, error) {
+	if c == nil || modelRequest == nil {
+		return nil, usingGroup, errors.New("model request is nil")
+	}
+	if selectChannel == nil {
+		return nil, usingGroup, errors.New("channel selector is nil")
+	}
+	candidates := []string{modelRequest.Model}
+	if fallbackModels := common.GetContextKeyStringSlice(c, constant.ContextKeyFallbackModels); len(fallbackModels) > 1 {
+		candidates = fallbackModels
+		if !strings.EqualFold(candidates[0], modelRequest.Model) {
+			candidates = append([]string{modelRequest.Model}, candidates...)
+		}
+	}
+	requiresResponses := strings.HasPrefix(c.Request.URL.Path, "/v1/responses")
+	clientFormat := types.RelayFormatOpenAI
+	if requiresResponses {
+		clientFormat = types.RelayFormatOpenAIResponses
+	}
+	for index, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if index > 0 && !distributorTokenAllowsModel(c, candidate) {
+			continue
+		}
+		// CacheGetRandomSatisfiedChannel advances auto-group state when a
+		// candidate is unavailable. Reset it before trying the next model.
+		if strings.EqualFold(usingGroup, "auto") {
+			common.SetContextKey(c, constant.ContextKeyAutoGroupIndex, 0)
+			common.SetContextKey(c, constant.ContextKeyAutoGroupRetryIndex, 0)
+		}
+		channel, selectGroup, err := selectChannel(&service.RetryParam{
+			Ctx:                           c,
+			ModelName:                     candidate,
+			TokenGroup:                    usingGroup,
+			Retry:                         common.GetPointer(0),
+			RequireOpenAIResponsesSupport: requiresResponses,
+			ClientRelayFormat:             clientFormat,
+			ProviderRoutingPolicy:         modelRequest.ProviderPolicy,
+			ResponsesRequirement:          responsesRequirement,
+			RequiredModelName:             requiredContinuationModel,
+		})
+		if err != nil {
+			return nil, selectGroup, err
+		}
+		if channel == nil {
+			continue
+		}
+		modelRequest.Model = candidate
+		if index > 0 {
+			// The relay route plan starts with the model selected here. Remove
+			// already exhausted candidates so it cannot retry the unavailable
+			// primary model after a fallback failure.
+			remaining := append([]string(nil), candidates[index:]...)
+			common.SetContextKey(c, constant.ContextKeyFallbackModels, remaining)
+		}
+		return channel, selectGroup, nil
+	}
+	return nil, usingGroup, nil
 }
 
 // channelAffinityFallbackOnly reports whether channel affinity should only be used

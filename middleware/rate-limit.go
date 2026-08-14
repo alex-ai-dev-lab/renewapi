@@ -42,7 +42,7 @@ if current >= max_requests then
   redis.call('EXPIRE', key, ttl_seconds)
   return 0
 end
-redis.call('ZADD', key, now_ms, tostring(now_ms) .. '-' .. nonce)
+redis.call('ZADD', key, now_ms, nonce)
 redis.call('EXPIRE', key, ttl_seconds)
 return 1
 `)
@@ -131,6 +131,10 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 }
 
 func redisSlidingWindowAllow(ctx context.Context, rdb *redis.Client, key string, maxRequestNum int, duration int64, expiration time.Duration) (bool, error) {
+	return redisSlidingWindowReserve(ctx, rdb, key, maxRequestNum, duration, expiration, rateLimitMemberNonce())
+}
+
+func redisSlidingWindowReserve(ctx context.Context, rdb *redis.Client, key string, maxRequestNum int, duration int64, expiration time.Duration, reservationID string) (bool, error) {
 	if maxRequestNum <= 0 {
 		return true, nil
 	}
@@ -142,11 +146,40 @@ func redisSlidingWindowAllow(ctx context.Context, rdb *redis.Client, key string,
 		ttlSeconds = duration
 	}
 	windowMs := duration * 1000
-	res, err := redisSlidingWindowRateLimitScript.Run(ctx, rdb, []string{key}, maxRequestNum, windowMs, ttlSeconds, rateLimitMemberNonce()).Result()
+	res, err := redisSlidingWindowRateLimitScript.Run(ctx, rdb, []string{key}, maxRequestNum, windowMs, ttlSeconds, reservationID).Result()
 	if err != nil {
 		return false, err
 	}
 	return redisScriptBool(res)
+}
+
+func redisSlidingWindowCancel(ctx context.Context, rdb *redis.Client, key, reservationID string) error {
+	if key == "" || reservationID == "" {
+		return nil
+	}
+	return rdb.ZRem(ctx, key, reservationID).Err()
+}
+
+func redisSlidingWindowRetryAfter(ctx context.Context, rdb *redis.Client, key string, duration int64) (int64, error) {
+	if rdb == nil || key == "" {
+		return 1, nil
+	}
+	if duration <= 0 {
+		duration = 1
+	}
+	items, err := rdb.ZRangeWithScores(ctx, key, 0, 0).Result()
+	if err != nil {
+		return 1, err
+	}
+	if len(items) == 0 {
+		return 1, nil
+	}
+	nowMs := time.Now().UnixMilli()
+	retryMs := duration*1000 - (nowMs - int64(items[0].Score))
+	if retryMs <= 0 {
+		return 1, nil
+	}
+	return (retryMs + 999) / 1000, nil
 }
 
 func redisWeightedSlidingWindowAllow(ctx context.Context, rdb *redis.Client, key string, maxRequestNum int, duration int64, expiration time.Duration, weight int) (bool, error) {

@@ -33,3 +33,18 @@ func TestInMemoryRateLimiterRequestNRejectsOversizedWeight(t *testing.T) {
 		t.Fatal("rejected oversized request must not consume budget")
 	}
 }
+
+func TestInMemoryRateLimiterReservationCanBeCancelled(t *testing.T) {
+	var limiter InMemoryRateLimiter
+	limiter.Init(time.Minute)
+	if !limiter.Reserve("reservation", 1, 60, "request-1") {
+		t.Fatal("reservation should be allowed")
+	}
+	if limiter.Reserve("reservation", 1, 60, "request-2") {
+		t.Fatal("concurrent reservation should see the occupied slot")
+	}
+	limiter.Cancel("reservation", "request-1")
+	if !limiter.Reserve("reservation", 1, 60, "request-2") {
+		t.Fatal("cancelled reservation should release the slot")
+	}
+}

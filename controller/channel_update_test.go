@@ -132,6 +132,44 @@ func TestUpdateChannelConfigRequiresIfMatch(t *testing.T) {
 	require.Equal(t, `"channel-2"`, recorder.Header().Get("ETag"))
 }
 
+func TestCopyChannelResetsConfigVersion(t *testing.T) {
+	db := setupChannelUpdateControllerTestDB(t)
+	origin := model.Channel{
+		ConfigVersion: 42,
+		Type:          1,
+		Key:           "sk-original",
+		Status:        common.ChannelStatusEnabled,
+		Name:          "original",
+		Models:        "gpt-test",
+		Group:         "default",
+	}
+	require.NoError(t, db.Create(&origin).Error)
+	require.NoError(t, origin.AddAbilities(db))
+
+	router := gin.New()
+	router.POST("/api/channel/copy/:id", CopyChannel)
+	request := httptest.NewRequest(http.MethodPost, "/api/channel/copy/"+strconv.Itoa(origin.Id), nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			ID int `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	require.NotZero(t, response.Data.ID)
+
+	var clone model.Channel
+	require.NoError(t, db.First(&clone, response.Data.ID).Error)
+	require.Equal(t, int64(1), clone.ConfigVersion)
+	require.Equal(t, origin.Name+"_复制", clone.Name)
+	require.Equal(t, origin.Key, clone.Key)
+}
+
 func TestAddChannelRejectsNilChannelWithoutPanic(t *testing.T) {
 	setupChannelUpdateControllerTestDB(t)
 

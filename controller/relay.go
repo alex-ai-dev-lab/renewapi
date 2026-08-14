@@ -79,6 +79,20 @@ func relayModeName(mode int) string {
 	return strconv.Itoa(mode)
 }
 
+func setRelayErrorModelRouteOutcome(c *gin.Context, relayErr *types.NewAPIError) {
+	if c == nil || relayErr == nil || service.GetModelRouteOutcome(c) != service.ModelRouteOutcomeUnset {
+		return
+	}
+	switch {
+	case service.IsChannelFailureError(relayErr):
+		service.SetModelRouteOutcome(c, service.ModelRouteOutcomeUpstreamRetryable)
+	case relayErr.StatusCode >= http.StatusInternalServerError || relayErr.StatusCode == 0:
+		service.SetModelRouteOutcome(c, service.ModelRouteOutcomeServerError)
+	default:
+		service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
+	}
+}
+
 func requestedEndpointTypeFromPath(path string) string {
 	switch relayconstant.Path2RelayMode(path) {
 	case relayconstant.RelayModeImagesGenerations:
@@ -186,6 +200,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 			// Compat hook: OnClientResponseError (normalizes error for client)
 			newAPIError = compat.Hooks().OnClientResponseError(c, relayInfo, newAPIError)
+			setRelayErrorModelRouteOutcome(c, newAPIError)
 			recordUnhandledRelayErrorLog(c, newAPIError)
 			if relayInfo != nil && relayInfo.ClientResponseCommitted() {
 				return
@@ -213,6 +228,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	request, err := helper.GetAndValidateRequest(c, relayFormat)
 	if err != nil {
+		service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 		// Map "request body too large" to 413 so clients can handle it correctly
 		if common.IsRequestBodyTooLargeError(err) || errors.Is(err, common.ErrRequestBodyTooLarge) {
 			newAPIError = types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusRequestEntityTooLarge, types.ErrOptionWithSkipRetry())
@@ -224,12 +240,14 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	relayInfo, err = relaycommon.GenRelayInfo(c, relayFormat, request, ws)
 	if err != nil {
+		service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return
 	}
 
 	// Compat hook: OnInit (detects features like encrypted reasoning, claude thinking)
 	if err := compat.Hooks().OnInit(c, relayInfo); err != nil {
+		service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return
 	}
@@ -248,6 +266,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		contains, words := service.CheckSensitiveText(meta.CombineText)
 		if contains {
 			logger.LogWarn(c, fmt.Sprintf("user sensitive words detected: %s", strings.Join(words, ", ")))
+			service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 			newAPIError = types.NewError(err, types.ErrorCodeSensitiveWordsDetected)
 			return
 		}
@@ -255,6 +274,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	tokens, err := service.EstimateRequestToken(c, meta, relayInfo)
 	if err != nil {
+		service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 		newAPIError = types.NewError(err, types.ErrorCodeCountTokenFailed)
 		return
 	}
@@ -265,6 +285,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 	}
 	if !checkTokenTPMLimit(c, tokens) {
+		service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 		newAPIError = types.NewErrorWithStatusCode(
 			fmt.Errorf("token TPM limit exceeded"),
 			types.ErrorCodeRateLimitExceeded,
@@ -277,16 +298,23 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	relayInfo.SetEstimatePromptTokens(tokens)
 	if preflightErr := compat.Hooks().OnRequestPreflight(c, relayInfo, request); preflightErr != nil {
+		if preflightErr.StatusCode >= http.StatusInternalServerError || preflightErr.StatusCode == 0 {
+			service.SetModelRouteOutcome(c, service.ModelRouteOutcomeServerError)
+		} else {
+			service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
+		}
 		newAPIError = preflightErr
 		return
 	}
 	if prepareErr := prepareDistributorResponsesRoutePlan(c, relayInfo); prepareErr != nil {
+		service.SetModelRouteOutcome(c, service.ModelRouteOutcomeRouteUnavailable)
 		newAPIError = prepareErr
 		return
 	}
 
 	priceData, err := helper.ModelPriceHelper(c, relayInfo, tokens, meta)
 	if err != nil {
+		service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 		newAPIError = types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
 		return
 	}
@@ -298,6 +326,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	} else {
 		newAPIError = service.PreConsumeBilling(c, priceData.QuotaToPreConsume, relayInfo)
 		if newAPIError != nil {
+			service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 			return
 		}
 	}

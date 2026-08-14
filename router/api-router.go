@@ -213,6 +213,16 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.POST("/client_identity/claude/rotate", controller.RotateClaudeDeviceID)
 		}
 
+		requestGuardRoute := apiRouter.Group("/request-guard")
+		requestGuardRoute.Use(middleware.RootAuth())
+		{
+			requestGuardRoute.GET("/config", controller.GetRequestGuardConfig)
+			requestGuardRoute.PUT("/config", controller.UpdateRequestGuardConfig)
+			requestGuardRoute.POST("/probe", controller.ProbeRequestGuardEndpoint)
+			requestGuardRoute.GET("/status", controller.GetRequestGuardStatus)
+			requestGuardRoute.GET("/events", controller.GetRequestGuardEvents)
+		}
+
 		// Custom OAuth provider management (root only)
 		customOAuthRoute := apiRouter.Group("/custom-oauth-provider")
 		customOAuthRoute.Use(middleware.RootAuth())

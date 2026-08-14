@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"crypto/x509"
 	"errors"
 	"net/http"
 	"testing"
@@ -16,6 +18,13 @@ func resetRouterCooldownTrackerForTest() {
 	routerCooldownTracker.Lock()
 	defer routerCooldownTracker.Unlock()
 	routerCooldownTracker.items = make(map[string]RouterCooldownState)
+}
+
+func cooldownStateForTest(channelID int, info *relaycommon.RelayInfo) (RouterCooldownState, bool) {
+	routerCooldownTracker.Lock()
+	defer routerCooldownTracker.Unlock()
+	state, ok := routerCooldownTracker.items[routerCooldownKey(channelID, info)]
+	return state, ok
 }
 
 func TestRouterCooldownDisabledDoesNotExclude(t *testing.T) {
@@ -54,6 +63,74 @@ func TestRouterCooldownExcludesAfterThresholdAndClears(t *testing.T) {
 	ClearRouterCooldown(10, info)
 	ApplyRouterCooldownFilter(info, param)
 	require.False(t, param.ExcludedChannelIds[10])
+}
+
+func TestRouterCooldownUsesBoundedRetryHint(t *testing.T) {
+	t.Setenv("ROUTER_COOLDOWN_ENABLED", "true")
+	t.Setenv("ROUTER_COOLDOWN_THRESHOLD", "1")
+	t.Setenv("ROUTER_COOLDOWN_SECONDS", "45")
+	resetRouterCooldownTrackerForTest()
+
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-test", RelayMode: 1}
+	err := types.NewOpenAIError(
+		errors.New("rate limited"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusTooManyRequests,
+		types.ErrOptionWithRetryHint(2*time.Minute),
+	)
+	RecordRouterCooldownFailure(10, info, err)
+
+	state, ok := cooldownStateForTest(10, info)
+	require.True(t, ok)
+	require.Equal(t, 2*time.Minute, state.CooldownUntil.Sub(state.LastFailure))
+}
+
+func TestRouterCooldownFallsBackToConfiguredTTL(t *testing.T) {
+	t.Setenv("ROUTER_COOLDOWN_ENABLED", "true")
+	t.Setenv("ROUTER_COOLDOWN_THRESHOLD", "1")
+	t.Setenv("ROUTER_COOLDOWN_SECONDS", "45")
+	resetRouterCooldownTrackerForTest()
+
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-test", RelayMode: 1}
+	err := types.NewOpenAIError(errors.New("rate limited"), types.ErrorCodeBadResponseStatusCode, http.StatusTooManyRequests)
+	RecordRouterCooldownFailure(10, info, err)
+
+	state, ok := cooldownStateForTest(10, info)
+	require.True(t, ok)
+	require.Equal(t, 45*time.Second, state.CooldownUntil.Sub(state.LastFailure))
+}
+
+func TestRouterCooldownIgnoresNonRetryableFailures(t *testing.T) {
+	t.Setenv("ROUTER_COOLDOWN_ENABLED", "true")
+	resetRouterCooldownTrackerForTest()
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-test", RelayMode: 1}
+
+	tests := []struct {
+		name string
+		err  *types.NewAPIError
+	}{
+		{
+			name: "skip retry",
+			err:  types.NewOpenAIError(errors.New("skip"), types.ErrorCodeBadResponseStatusCode, http.StatusBadGateway, types.ErrOptionWithSkipRetry()),
+		},
+		{
+			name: "client canceled",
+			err:  types.NewError(context.Canceled, types.ErrorCodeDoRequestFailed),
+		},
+		{
+			name: "tls verification",
+			err:  types.NewError(&x509.UnknownAuthorityError{}, types.ErrorCodeDoRequestFailed),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			resetRouterCooldownTrackerForTest()
+			RecordRouterCooldownFailure(10, info, test.err)
+			_, ok := cooldownStateForTest(10, info)
+			require.False(t, ok)
+		})
+	}
 }
 
 func TestRouterRetryBackoffDelayRange(t *testing.T) {

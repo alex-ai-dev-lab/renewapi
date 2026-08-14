@@ -276,6 +276,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 
 	relayInfo.SetEstimatePromptTokens(tokens)
+	if preflightErr := compat.Hooks().OnRequestPreflight(c, relayInfo, request); preflightErr != nil {
+		newAPIError = preflightErr
+		return
+	}
 	if prepareErr := prepareDistributorResponsesRoutePlan(c, relayInfo); prepareErr != nil {
 		newAPIError = prepareErr
 		return

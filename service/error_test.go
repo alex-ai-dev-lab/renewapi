@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/types"
@@ -120,6 +121,44 @@ func TestRelayErrorHandlerKeepsOpenAIErrorMessage(t *testing.T) {
 
 	require.NotNil(t, newAPIError)
 	require.Equal(t, message, newAPIError.Error())
+}
+
+func TestParseRetryAfter(t *testing.T) {
+	now := time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name  string
+		value string
+		want  time.Duration
+		ok    bool
+	}{
+		{name: "seconds", value: "120", want: 120 * time.Second, ok: true},
+		{name: "http date", value: now.Add(90 * time.Second).Format(http.TimeFormat), want: 90 * time.Second, ok: true},
+		{name: "zero is bounded", value: "0", want: minRetryAfterHint, ok: true},
+		{name: "oversized is bounded", value: "999999999", want: maxRetryAfterHint, ok: true},
+		{name: "negative", value: "-1", ok: false},
+		{name: "past date", value: now.Add(-time.Minute).Format(http.TimeFormat), ok: false},
+		{name: "invalid", value: "later", ok: false},
+		{name: "missing", value: "", ok: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, ok := parseRetryAfter(test.value, now)
+			require.Equal(t, test.ok, ok)
+			require.Equal(t, test.want, got)
+		})
+	}
+}
+
+func TestRelayErrorHandlerPreservesRetryAfterHint(t *testing.T) {
+	resp := &http.Response{
+		StatusCode: http.StatusTooManyRequests,
+		Header:     http.Header{"Retry-After": []string{"120"}},
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"rate limited","type":"rate_limit","code":"rate_limit"}}`)),
+	}
+
+	newAPIError := RelayErrorHandler(context.Background(), resp, false)
+	require.Equal(t, 120*time.Second, newAPIError.RetryHint)
 }
 
 func TestRelayErrorHandlerKeepsInvalidJSONBodyInDebugLog(t *testing.T) {

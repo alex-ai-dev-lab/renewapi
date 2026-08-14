@@ -39,6 +39,14 @@ func ResponsesRequestToChatCompletionsRequestWithMapping(req *dto.OpenAIResponse
 		Store:         req.Store,
 		Reasoning:     reasoningToRaw(req.Reasoning),
 	}
+	out.FrequencyPenalty, err = responsesRawFloat(req.FrequencyPenalty)
+	if err != nil {
+		return nil, ResponsesBridgeToolMapping{}, fmt.Errorf("invalid frequency_penalty: %w", err)
+	}
+	out.PresencePenalty, err = responsesRawFloat(req.PresencePenalty)
+	if err != nil {
+		return nil, ResponsesBridgeToolMapping{}, fmt.Errorf("invalid presence_penalty: %w", err)
+	}
 	if req.MaxOutputTokens != nil {
 		out.MaxTokens = req.MaxOutputTokens
 	}
@@ -65,6 +73,17 @@ func ResponsesRequestToChatCompletionsRequestWithMapping(req *dto.OpenAIResponse
 		out.Messages = append(out.Messages, dto.Message{Role: "user", Content: ""})
 	}
 	return out, mapping, nil
+}
+
+func responsesRawFloat(raw json.RawMessage) (*float64, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var value float64
+	if err := common.Unmarshal(raw, &value); err != nil {
+		return nil, err
+	}
+	return &value, nil
 }
 
 func responsesInputToChatMessages(raw json.RawMessage) []dto.Message {

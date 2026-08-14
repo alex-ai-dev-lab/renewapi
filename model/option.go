@@ -717,6 +717,18 @@ func updateOptionMap(key string, value string) (err error) {
 
 // handleConfigUpdate 处理分层配置更新，返回是否已处理
 func handleConfigUpdate(key, value string) (bool, error) {
+	if key == "request_guard_setting" {
+		var next operation_setting.RequestGuardSetting
+		if err := common.UnmarshalJsonStr(value, &next); err != nil {
+			return true, err
+		}
+		if err := operation_setting.ValidateRequestGuardSetting(next); err != nil {
+			return true, err
+		}
+		operation_setting.ApplyRequestGuardSetting(next)
+		return true, nil
+	}
+
 	parts := strings.SplitN(key, ".", 2)
 	if len(parts) != 2 {
 		return false, nil // 不是分层配置
@@ -749,6 +761,12 @@ func handleConfigUpdate(key, value string) (bool, error) {
 		ratio_setting.InvalidateExposedDataCache()
 	} else if configName == "theme" {
 		system_setting.UpdateAndSyncTheme()
+	} else if configName == "request_guard_setting" {
+		next := operation_setting.GetRequestGuardSetting()
+		if err := operation_setting.ValidateRequestGuardSetting(next); err != nil {
+			return true, err
+		}
+		operation_setting.ApplyRequestGuardSetting(next)
 	}
 
 	return true, nil // 已处理

@@ -87,6 +87,7 @@ export const SYSTEM_SETTINGS_SECTION_ORDER_DEFAULT: Record<string, string[]> = {
     'sensitive-words',
     'ssrf',
     'anti-poison-guard',
+    'request-guard',
     'client-identity',
     'user-agents',
   ],

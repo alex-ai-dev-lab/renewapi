@@ -141,12 +141,13 @@ func executeAntiPoisonProbe(probeCtx *gin.Context, parent *gin.Context, info *re
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 	}
-	body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
+	body, size, getBody, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 	}
 	defer closer.Close()
 	info.UpstreamRequestBodySize = size
+	info.UpstreamRequestGetBody = getBody
 	resp, reqErr := adaptor.DoRequest(probeCtx, info, body)
 	if reqErr != nil {
 		service.RecordAntiPoisonProbeResult(info.ChannelId, info.ChannelSetting, false)

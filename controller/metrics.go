@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/requestguard"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -40,6 +41,9 @@ func initMetricsCollectors() {
 			func() float64 { return 1 },
 		))
 		for _, collector := range service.StreamRecoveryCollectors() {
+			prometheus.MustRegister(collector)
+		}
+		for _, collector := range requestguard.Collectors() {
 			prometheus.MustRegister(collector)
 		}
 	})

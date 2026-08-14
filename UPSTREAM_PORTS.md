@@ -1,12 +1,12 @@
 # Upstream Port Ledger
 
-Audited-Upstream-Ref: 4e570389dd433a717373ce9c9b822b59f5ed3d5d
+Audited-Upstream-Ref: 58d4e9bd3bb035df8ea235dd682ccc8a45d0332a
 
-Upstream tag at audit time: `v1.0.0-rc.20`
+Upstream release at audit time: `v1.0.0-rc.24` plus post-release `main`
 
-Audit date: `2026-07-10`
+Audit date: `2026-08-14`
 
-Fork review base: `origin/main` at `f79053d8ee0b`
+Fork review base: `origin/main` at `91d636fba978`
 
 The fork and `QuantumNous/new-api` have no common Git ancestor. "Audited" means every upstream commit through the ref above was reviewed; it does not mean every feature was copied. Updates are ported as behavior-focused local commits so fork security, compatibility, and branding remain intact.
 
@@ -24,6 +24,19 @@ The fork and `QuantumNous/new-api` have no common Git ancestor. "Audited" means 
 | `0977965d`, `867d8acf` | `444aba1b` | Added Ollama tool calls and Kimi K2.6 temperature normalization. |
 | `90fa6fe6`, `394b023d`, `28e0115a` | `63d0d706` | Fixed wallet quota units, decimal ratio editing, and browser translation mutation of React roots. |
 | `230a3592`, `afb470e4` | `be35adb2` | Corrected log ordering and rebuilt the composite index on existing SQLite/MySQL/PostgreSQL databases. |
+
+## 2026-08-14 Review: rc.21 -> rc.24 -> main
+
+Reviewed upstream through QuantumNous/new-api `main` at `58d4e9bd3bb035df8ea235dd682ccc8a45d0332a` (latest commit dated 2026-08-13). The release boundaries were rc.20 `6ce7305c`, rc.21 `bde9b2f4`, rc.22 `bc14c18f`, rc.23 `0ab02020`, and rc.24 `5c3abffe`.
+
+| Upstream ref | Classification | Local result |
+| --- | --- | --- |
+| `58d4e9b`, `ccd535e`, `50e5377`, `e926e5c`, `df43f80`, `cfaba1d` | `ALREADY_COVERED` | Existing BillingSession, explicit-column account updates, transport, thinking-budget, and compatibility behavior already cover these invariants; no duplicate port was added. |
+| `d6b5ce9`, `253a74d`, `2399de9`, `3d5dc36`, `d49160f`, `bd585d7` | `ADAPT` | Ported the relevant HTTP replay, Responses penalty, backend length validation, Gemini model listing, Ali `top_p`, cancellation, and bounded cooldown behavior in renewapi-native code and tests. |
+| CPA `Retry-After` edge cases | `ADAPT` | Retained the existing router reliability boundary and added only a bounded cooldown hint. |
+| DeepSeek Responses, broad UI/refactor/relaykit changes, and unrelated dependency churn | `DEFER` / `REJECT` | Not required by this audit or incompatible with the fork's current scope. |
+
+The reviewed range contains 133 commits from the previous audit ref `4e570389dd433a717373ce9c9b822b59f5ed3d5d` to the current upstream main. Because the fork and upstream have unrelated histories, this ledger records behavior-focused ports rather than a merge or cherry-pick.
 
 ## Preserved Fork Behavior
 

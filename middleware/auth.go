@@ -388,7 +388,8 @@ func TokenAuth() func(c *gin.Context) {
 		// gemini api 从query中获取key
 		// 注意: 从 query 取 key 是 Gemini 官方协议要求，不能去掉；但 URL 会被反向代理、
 		// 网关、浏览器历史记下。部署时应确保访问日志对 ?key= 做脉络脉。
-		if strings.HasPrefix(c.Request.URL.Path, "/v1beta/models") ||
+		if c.Request.URL.Path == "/v1/models" ||
+			strings.HasPrefix(c.Request.URL.Path, "/v1beta/models") ||
 			strings.HasPrefix(c.Request.URL.Path, "/v1beta/openai/models") ||
 			strings.HasPrefix(c.Request.URL.Path, "/v1/models/") {
 			skKey := c.Query("key")

@@ -327,6 +327,7 @@ func mainSchemaMigrationDefinitions() []schemaMigrationDefinition {
 		{Key: "billing-ledger:v1", Revision: "2026-07-28.1", Apply: migrateBillingLedgerV1},
 		{Key: "channel-config:v1", Revision: "2026-07-28.1", Apply: migrateChannelConfigV1},
 		{Key: "responses-capability:v1", Revision: "2026-07-28.1", Apply: migrateResponsesCapabilityV1},
+		{Key: "request-guard-events:v1", Revision: "2026-08-14.1", Apply: migrateRequestGuardEventsV1},
 		{Key: "manual:subscription_plans.price_amount_decimal:v1", Revision: "2026-07-28.1", Apply: migrateSubscriptionPlanPriceAmount},
 		{Key: "manual:tokens.model_limits_text:v1", Revision: "2026-07-28.1", Apply: migrateTokenModelLimitsToText},
 	}
@@ -427,6 +428,10 @@ func migrateChannelConfigV1() error {
 
 func migrateResponsesCapabilityV1() error {
 	return DB.AutoMigrate(&ChannelModelCapability{})
+}
+
+func migrateRequestGuardEventsV1() error {
+	return DB.AutoMigrate(&RequestGuardEvent{})
 }
 
 type sqliteColumnDef struct {

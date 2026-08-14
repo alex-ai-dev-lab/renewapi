@@ -24,6 +24,7 @@ import { SSRFSection } from '../request-limits/ssrf-section'
 import type { SecuritySettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { AntiPoisonGuardSection } from './anti-poison-guard-section'
+import { RequestGuardSection } from './request-guard-section'
 
 type AntiPoisonFailureMode = 'block' | 'warn'
 
@@ -126,6 +127,11 @@ const SECURITY_SECTIONS = [
         }}
       />
     ),
+  },
+  {
+    id: 'request-guard',
+    titleKey: 'Request Guard',
+    build: () => <RequestGuardSection />,
   },
   {
     id: 'client-identity',

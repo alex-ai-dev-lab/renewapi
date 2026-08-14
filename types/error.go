@@ -1,11 +1,13 @@
 package types
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 )
@@ -69,15 +71,18 @@ const (
 	ErrorCodeBadRequestBody ErrorCode = "bad_request_body"
 
 	// response error
-	ErrorCodeReadResponseBodyFailed ErrorCode = "read_response_body_failed"
-	ErrorCodeBadResponseStatusCode  ErrorCode = "bad_response_status_code"
-	ErrorCodeBadResponse            ErrorCode = "bad_response"
-	ErrorCodeBadResponseBody        ErrorCode = "bad_response_body"
-	ErrorCodeEmptyResponse          ErrorCode = "empty_response"
-	ErrorCodeTruncatedResponse      ErrorCode = "truncated_response"
-	ErrorCodeAwsInvokeError         ErrorCode = "aws_invoke_error"
-	ErrorCodeModelNotFound          ErrorCode = "model_not_found"
-	ErrorCodePromptBlocked          ErrorCode = "prompt_blocked"
+	ErrorCodeReadResponseBodyFailed      ErrorCode = "read_response_body_failed"
+	ErrorCodeBadResponseStatusCode       ErrorCode = "bad_response_status_code"
+	ErrorCodeBadResponse                 ErrorCode = "bad_response"
+	ErrorCodeBadResponseBody             ErrorCode = "bad_response_body"
+	ErrorCodeEmptyResponse               ErrorCode = "empty_response"
+	ErrorCodeTruncatedResponse           ErrorCode = "truncated_response"
+	ErrorCodeAwsInvokeError              ErrorCode = "aws_invoke_error"
+	ErrorCodeModelNotFound               ErrorCode = "model_not_found"
+	ErrorCodePromptBlocked               ErrorCode = "prompt_blocked"
+	ErrorCodeRequestGuardBlocked         ErrorCode = "request_guard_blocked"
+	ErrorCodeRequestGuardUnavailable     ErrorCode = "request_guard_unavailable"
+	ErrorCodeRequestGuardInvalidResponse ErrorCode = "request_guard_invalid_response"
 
 	// anti-poison error
 	ErrorCodeAntiPoisonValidationFailed ErrorCode = "anti_poison_validation_failed"
@@ -101,6 +106,7 @@ type NewAPIError struct {
 	errorCode      ErrorCode
 	StatusCode     int
 	Metadata       json.RawMessage
+	RetryHint      time.Duration
 }
 
 // Unwrap enables errors.Is / errors.As to work with NewAPIError by exposing the underlying error.
@@ -395,6 +401,16 @@ func ErrOptionWithSkipRetry() NewAPIErrorOptions {
 	return func(e *NewAPIError) {
 		e.skipRetry = true
 	}
+}
+
+func ErrOptionWithRetryHint(retryHint time.Duration) NewAPIErrorOptions {
+	return func(e *NewAPIError) {
+		e.RetryHint = retryHint
+	}
+}
+
+func IsClientCanceledError(err *NewAPIError) bool {
+	return err != nil && errors.Is(err, context.Canceled)
 }
 
 func ErrOptionWithNoRecordErrorLog() NewAPIErrorOptions {

@@ -27,6 +27,12 @@ type HTTPClientOptions struct {
 	HTTP2ConnectionShards int
 }
 
+type StrictSSRFHTTPClientOptions struct {
+	HTTPClientOptions
+	AllowPrivateIP      bool
+	UseEnvironmentProxy bool
+}
+
 const maxCachedHTTPClients = 256
 
 var (
@@ -130,6 +136,77 @@ func GetSSRFProtectedHTTPClientWithOptions(options HTTPClientOptions) (*http.Cli
 	evictHTTPClientIfFull(protectedFetchClients)
 	protectedFetchClients[options] = client
 	proxyClientLock.Unlock()
+	return client, nil
+}
+
+// NewStrictSSRFHTTPClient creates a protected client whose SSRF policy cannot
+// be disabled by global fetch settings. Environment proxies are opt-in.
+func NewStrictSSRFHTTPClient(options StrictSSRFHTTPClientOptions) (*http.Client, error) {
+	clientOptions := normalizeHTTPClientOptions(options.HTTPClientOptions)
+	if clientOptions.Proxy != "" && options.UseEnvironmentProxy {
+		return nil, fmt.Errorf("explicit and environment proxy policies are mutually exclusive")
+	}
+	protection, err := common.NewSSRFProtectionFromFetchSetting(
+		options.AllowPrivateIP,
+		false,
+		false,
+		nil,
+		nil,
+		nil,
+		true,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	netDialer := &net.Dialer{Timeout: boundedHTTPTimeout(common.RelayDialTimeout, 30), KeepAlive: 30 * time.Second}
+	dialContext := netDialer.DialContext
+	var proxyFunc func(*http.Request) (*url.URL, error)
+	protectDirectDial := true
+	if options.UseEnvironmentProxy {
+		proxyFunc = http.ProxyFromEnvironment
+	}
+	if clientOptions.Proxy != "" {
+		parsedURL, err := parseProxyURL(clientOptions.Proxy)
+		if err != nil {
+			return nil, err
+		}
+		switch parsedURL.Scheme {
+		case "http", "https":
+			proxyFunc = http.ProxyURL(parsedURL)
+		case "socks5", "socks5h":
+			socksDialer, err := newSocks5Dialer(parsedURL)
+			if err != nil {
+				return nil, err
+			}
+			proxyFunc = nil
+			protectDirectDial = false
+			dialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialSOCKS5Context(ctx, socksDialer, network, addr)
+			}
+		default:
+			return nil, unsupportedProxySchemeError(parsedURL.Scheme)
+		}
+	}
+
+	getProtection := func() (*common.SSRFProtection, bool, error) {
+		return protection, true, nil
+	}
+	client := newProtectedFetchHTTPClientWithProxy(nil, dialContext, getProtection, proxyFunc)
+	roundTripper := client.Transport.(*ssrfProtectedRoundTripper)
+	roundTripper.protectDirectDial = protectDirectDial
+	roundTripper.tlsInsecure = shouldSkipTLSVerify(clientOptions)
+	roundTripper.policy = normalizeHTTPTransportPolicy(clientOptions.HTTPProtocol, clientOptions.HTTP2ConnectionShards)
+	roundTripper.validateURL = protection.ValidateURL
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if err := protection.ValidateURL(req.URL.String()); err != nil {
+			return fmt.Errorf("redirect to %s blocked: %v", req.URL.String(), err)
+		}
+		if len(via) >= 10 {
+			return fmt.Errorf("stopped after 10 redirects")
+		}
+		return nil
+	}
 	return client, nil
 }
 

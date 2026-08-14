@@ -3,12 +3,14 @@ package aws
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -32,6 +34,29 @@ func TestNewAwsInvokeContextInheritsInboundCancellation(t *testing.T) {
 		require.ErrorIs(t, invokeContext.Err(), context.Canceled)
 	default:
 		t.Fatal("AWS invoke context was not canceled with the inbound request")
+	}
+}
+
+func TestNewAwsInvokeErrorSkipsRetryOnlyForClientCancellation(t *testing.T) {
+	canceledContext, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	tests := []struct {
+		name           string
+		requestContext context.Context
+		err            error
+		wantSkipRetry  bool
+	}{
+		{name: "client canceled", requestContext: canceledContext, err: context.Canceled, wantSkipRetry: true},
+		{name: "relay timeout", requestContext: context.Background(), err: context.DeadlineExceeded, wantSkipRetry: false},
+		{name: "upstream failure", requestContext: context.Background(), err: errors.New("upstream failed"), wantSkipRetry: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			invokeErr := newAwsInvokeError(test.requestContext, test.err, "InvokeModel")
+			require.Equal(t, test.wantSkipRetry, types.IsSkipRetryError(invokeErr))
+		})
 	}
 }
 

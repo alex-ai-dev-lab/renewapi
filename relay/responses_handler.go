@@ -166,12 +166,13 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			c.Set("responses_legacy_bridge_sse", false)
 		}
 		c.Set("responses_upstream_stream", plan.UpstreamStream)
-		body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
+		body, size, getBody, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 		defer closer.Close()
 		info.UpstreamRequestBodySize = size
+		info.UpstreamRequestGetBody = getBody
 		requestBody = body
 	} else if passThroughEnabled {
 		storage, err := common.GetBodyStorage(c)
@@ -187,12 +188,13 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			if err != nil {
 				return types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 			}
-			body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
+			body, size, getBody, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
 			if err != nil {
 				return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 			}
 			defer closer.Close()
 			info.UpstreamRequestBodySize = size
+			info.UpstreamRequestGetBody = getBody
 			requestBody = body
 		} else {
 			requestBody = common.ReaderOnly(storage)
@@ -227,13 +229,14 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		}
 
 		logger.LogDebug(c, "requestBody: %s", jsonData)
-		body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
+		body, size, getBody, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 		defer closer.Close()
 		jsonData = nil
 		info.UpstreamRequestBodySize = size
+		info.UpstreamRequestGetBody = getBody
 		requestBody = body
 	}
 

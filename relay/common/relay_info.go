@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -213,6 +214,9 @@ type RelayInfo struct {
 	// http.Request.ContentLength manually (net/http only auto-detects it for
 	// *bytes.Reader/Buffer/strings.Reader). 0 means "let net/http decide".
 	UpstreamRequestBodySize int64
+	// UpstreamRequestGetBody returns a fresh reader over the current attempt's
+	// marshaled body so net/http can replay it after a retryable HTTP/2 reset.
+	UpstreamRequestGetBody func() (io.ReadCloser, error)
 
 	PriceData types.PriceData
 	// QuotaClamp records the first saturated quota conversion for audit logging.
@@ -244,6 +248,11 @@ type RelayInfo struct {
 }
 
 func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
+	// Body metadata belongs to one channel attempt and may reference storage
+	// that the previous handler has already closed.
+	info.UpstreamRequestBodySize = 0
+	info.UpstreamRequestGetBody = nil
+
 	info.AntiPoisonConfigCache = nil
 
 	channelType := common.GetContextKeyInt(c, constant.ContextKeyChannelType)

@@ -34,6 +34,7 @@ type ssrfProtectedRoundTripper struct {
 	protectDirectDial bool
 	tlsInsecure       bool
 	policy            HTTPTransportPolicy
+	validateURL       func(string) error
 
 	mutex         sync.Mutex
 	transports    map[string]*http.Transport
@@ -130,6 +131,7 @@ func newProtectedFetchHTTPClientWithProxy(resolver ssrfResolver, dialContext fun
 			protectDirectDial: true,
 			tlsInsecure:       common.TLSInsecureSkipVerify,
 			transports:        make(map[string]*http.Transport),
+			validateURL:       ValidateSSRFProtectedFetchURL,
 		},
 		CheckRedirect: checkProtectedFetchRedirect,
 	}
@@ -143,7 +145,11 @@ func (t *ssrfProtectedRoundTripper) RoundTrip(req *http.Request) (*http.Response
 	if req == nil || req.URL == nil {
 		return nil, fmt.Errorf("invalid request")
 	}
-	if err := ValidateSSRFProtectedFetchURL(req.URL.String()); err != nil {
+	validator := t.validateURL
+	if validator == nil {
+		validator = ValidateSSRFProtectedFetchURL
+	}
+	if err := validator(req.URL.String()); err != nil {
 		return nil, err
 	}
 	var proxyURL *url.URL

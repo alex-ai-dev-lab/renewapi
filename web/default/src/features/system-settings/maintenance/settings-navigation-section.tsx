@@ -82,7 +82,9 @@ export function SettingsNavigationSection({
   const areaMeta: Record<string, { title: string; description: string }> = {
     operations: {
       title: t('Operations'),
-      description: t('Operational defaults, monitoring, logs, and maintenance.'),
+      description: t(
+        'Operational defaults, monitoring, logs, and maintenance.'
+      ),
     },
     models: {
       title: t('Models & Routing'),
@@ -151,6 +153,7 @@ export function SettingsNavigationSection({
       ssrf: t('SSRF Protection'),
       'upstream-error-rules': t('Upstream Error Rules'),
       'anti-poison-guard': t('Anti-Poison Guard'),
+      'request-guard': t('Request Guard'),
     },
     content: {
       dashboard: t('Data Dashboard'),
@@ -290,7 +293,9 @@ export function SettingsNavigationSection({
 
   const importConfig = () => {
     try {
-      const raw = JSON.parse(importText) as SettingsNavigationImportExportPayload
+      const raw = JSON.parse(
+        importText
+      ) as SettingsNavigationImportExportPayload
       const payload = raw.SystemSettingsNavigation ?? raw
       const imported =
         typeof payload === 'string'
@@ -329,7 +334,11 @@ export function SettingsNavigationSection({
                 <Download className='mr-2 h-4 w-4' />
                 {t('Export JSON')}
               </Button>
-              <Button type='button' variant='outline' onClick={openImportDialog}>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={openImportDialog}
+              >
                 <Upload className='mr-2 h-4 w-4' />
                 {t('Import JSON')}
               </Button>
@@ -442,9 +451,7 @@ export function SettingsNavigationSection({
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent className='sm:max-w-2xl'>
           <DialogHeader>
-            <DialogTitle>
-              {t('Import system settings navigation')}
-            </DialogTitle>
+            <DialogTitle>{t('Import system settings navigation')}</DialogTitle>
           </DialogHeader>
           <Textarea
             rows={12}

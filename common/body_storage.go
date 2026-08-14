@@ -80,6 +80,15 @@ func (m *memoryStorage) Bytes() ([]byte, error) {
 	return m.data, nil
 }
 
+func openMemoryStorageReader(storage *memoryStorage) (io.ReadCloser, error) {
+	storage.mu.Lock()
+	defer storage.mu.Unlock()
+	if atomic.LoadInt32(&storage.closed) == 1 {
+		return nil, ErrStorageClosed
+	}
+	return io.NopCloser(bytes.NewReader(storage.data)), nil
+}
+
 func (m *memoryStorage) Size() int64 {
 	return m.size
 }
@@ -229,6 +238,19 @@ func (d *diskStorage) Bytes() ([]byte, error) {
 	return data, nil
 }
 
+func openDiskStorageReader(storage *diskStorage) (io.ReadCloser, error) {
+	storage.mu.Lock()
+	defer storage.mu.Unlock()
+	if atomic.LoadInt32(&storage.closed) == 1 {
+		return nil, ErrStorageClosed
+	}
+	file, err := os.Open(storage.filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open body cache file for replay: %w", err)
+	}
+	return file, nil
+}
+
 func (d *diskStorage) Size() int64 {
 	return d.size
 }
@@ -306,6 +328,20 @@ func CreateBodyStorageFromReader(reader io.Reader, contentLength int64, maxBytes
 // from type-asserting io.ReadCloser and closing the underlying BodyStorage.
 func ReaderOnly(r io.Reader) io.Reader {
 	return struct{ io.Reader }{r}
+}
+
+// OpenBodyStorageReader returns an independent reader positioned at the start
+// of storage without moving the shared BodyStorage cursor or copying a
+// disk-backed payload into memory.
+func OpenBodyStorageReader(storage BodyStorage) (io.ReadCloser, error) {
+	switch typed := storage.(type) {
+	case *memoryStorage:
+		return openMemoryStorageReader(typed)
+	case *diskStorage:
+		return openDiskStorageReader(typed)
+	default:
+		return nil, fmt.Errorf("unsupported body storage type %T", storage)
+	}
 }
 
 // CleanupOldCacheFiles 清理旧的缓存文件（用于启动时清理残留）

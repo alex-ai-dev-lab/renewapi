@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
@@ -38,6 +39,12 @@ type RelayHook interface {
 
 	// OnClientResponseError fires inside defer block before error serialization.
 	OnClientResponseError(c *gin.Context, info *relaycommon.RelayInfo, err *types.NewAPIError) *types.NewAPIError
+}
+
+// RequestPreflightHook is an optional RelayHook capability invoked after
+// request token estimation and before route planning or billing.
+type RequestPreflightHook interface {
+	OnRequestPreflight(c *gin.Context, info *relaycommon.RelayInfo, request dto.Request) *types.NewAPIError
 }
 
 // NoOpRelayHook provides default no-op implementation.
@@ -93,6 +100,19 @@ func (hc *HookChain) snapshot() []RelayHook {
 func (hc *HookChain) OnInit(c *gin.Context, info *relaycommon.RelayInfo) error {
 	for _, h := range hc.snapshot() {
 		if err := h.OnInit(c, info); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (hc *HookChain) OnRequestPreflight(c *gin.Context, info *relaycommon.RelayInfo, request dto.Request) *types.NewAPIError {
+	for _, h := range hc.snapshot() {
+		preflight, ok := h.(RequestPreflightHook)
+		if !ok {
+			continue
+		}
+		if err := preflight.OnRequestPreflight(c, info, request); err != nil {
 			return err
 		}
 	}

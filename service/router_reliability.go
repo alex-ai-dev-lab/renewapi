@@ -99,6 +99,9 @@ func RecordRouterCooldownFailure(channelID int, info *relaycommon.RelayInfo, err
 	key := routerCooldownKey(channelID, info)
 	now := time.Now()
 	ttl := RouterCooldownTTL()
+	if err.RetryHint > 0 {
+		ttl = err.RetryHint
+	}
 	threshold := RouterCooldownThreshold()
 
 	routerCooldownTracker.Lock()
@@ -127,7 +130,7 @@ func ClearRouterCooldown(channelID int, info *relaycommon.RelayInfo) {
 }
 
 func ShouldRouterCooldownTrackError(err *types.NewAPIError) bool {
-	if err == nil || types.IsSkipRetryError(err) || IsTLSVerificationError(err) {
+	if err == nil || types.IsSkipRetryError(err) || types.IsClientCanceledError(err) || IsTLSVerificationError(err) {
 		return false
 	}
 	if err.GetErrorCode() == types.ErrorCodeDoRequestFailed ||
@@ -176,7 +179,7 @@ func RouterRetryBackoffDelay(retryIndex int) time.Duration {
 	}
 	jitterRange := int64(delay / 2)
 	if jitterRange > 0 {
-		jitter := rand.Int63n(jitterRange*2 + 1) - jitterRange
+		jitter := rand.Int63n(jitterRange*2+1) - jitterRange
 		delay += time.Duration(jitter)
 	}
 	if delay < 0 {

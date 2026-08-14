@@ -178,6 +178,23 @@ func TestGetSSRFProtectedHTTPClientFallsBackWhenProtectionDisabled(t *testing.T)
 	require.Same(t, expected, GetSSRFProtectedHTTPClient())
 }
 
+func TestStrictSSRFHTTPClientStillBlocksPrivateIPWhenGlobalProtectionDisabled(t *testing.T) {
+	fetchSetting := system_setting.GetFetchSetting()
+	original := *fetchSetting
+	t.Cleanup(func() { *fetchSetting = original })
+	fetchSetting.EnableSSRFProtection = false
+	fetchSetting.AllowPrivateIp = true
+
+	client, err := NewStrictSSRFHTTPClient(StrictSSRFHTTPClientOptions{})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:65535/private", nil)
+	require.NoError(t, err)
+	response, err := client.Do(request)
+	require.Error(t, err)
+	require.Nil(t, response)
+	require.Contains(t, err.Error(), "private IP address not allowed")
+}
+
 func TestProtectedFetchClientCacheIncludesProxyAndTLSOptions(t *testing.T) {
 	configureSSRFTestFetchSetting(t, false)
 	resetHTTPClientTestState(t)

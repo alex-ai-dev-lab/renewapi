@@ -34,6 +34,7 @@ import (
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/router"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/requestguard"
 	_ "github.com/QuantumNous/new-api/setting/performance_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
@@ -65,6 +66,7 @@ func main() {
 	startTime := time.Now()
 	signalCtx, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stopSignals()
+	requestguard.SetProcessContext(signalCtx)
 	workers := newBackgroundWorkers()
 	startWorker := func(name string, run func(context.Context)) {
 		workers.Go(name, func(ctx context.Context) {
@@ -506,6 +508,7 @@ func InitResources() error {
 	// Register compat hooks (Step 3: overlay layer)
 	compat.Register(errornorm.New())
 	compat.Register(toolschema.New())
+	compat.Register(compat.NewRequestGuardHook())
 
 	// Initialize errornorm DB-backed rules store (Step 4)
 	if err := errornorm.EnsureSchema(model.DB); err != nil {

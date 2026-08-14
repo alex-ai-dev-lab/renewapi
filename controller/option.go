@@ -139,7 +139,7 @@ func isSystemSettingsNavigationOptionValue(value string) bool {
 		},
 		"security": {
 			"rate-limit": {}, "sensitive-words": {}, "ssrf": {},
-			"upstream-error-rules": {}, "anti-poison-guard": {},
+			"upstream-error-rules": {}, "anti-poison-guard": {}, "request-guard": {},
 		},
 		"content": {
 			"dashboard": {}, "appearance": {}, "announcements": {},

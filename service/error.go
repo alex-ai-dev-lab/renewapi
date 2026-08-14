@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -84,7 +85,12 @@ func ClaudeErrorWrapperLocal(err error, code string, statusCode int) *dto.Claude
 }
 
 func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFail bool) (newApiErr *types.NewAPIError) {
-	newApiErr = types.InitOpenAIError(types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
+	retryHint, hasRetryHint := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+	options := make([]types.NewAPIErrorOptions, 0, 1)
+	if hasRetryHint {
+		options = append(options, types.ErrOptionWithRetryHint(retryHint))
+	}
+	newApiErr = types.InitOpenAIError(types.ErrorCodeBadResponseStatusCode, resp.StatusCode, options...)
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -116,18 +122,59 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 		// General format error (OpenAI, Anthropic, Gemini, etc.)
 		oaiError := errResponse.TryToOpenAIError()
 		if oaiError != nil {
-			newApiErr = types.WithOpenAIError(*oaiError, resp.StatusCode)
+			newApiErr = types.WithOpenAIError(*oaiError, resp.StatusCode, options...)
 			if showBodyWhenFail {
 				newApiErr.Err = buildErrWithBody(newApiErr.Error())
 			}
 			return
 		}
 	}
-	newApiErr = types.NewOpenAIError(errors.New(errResponse.ToMessage()), types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
+	newApiErr = types.NewOpenAIError(errors.New(errResponse.ToMessage()), types.ErrorCodeBadResponseStatusCode, resp.StatusCode, options...)
 	if showBodyWhenFail {
 		newApiErr.Err = buildErrWithBody(newApiErr.Error())
 	}
 	return
+}
+
+const (
+	minRetryAfterHint = time.Second
+	maxRetryAfterHint = 5 * time.Minute
+)
+
+func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+
+	var delay time.Duration
+	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
+		if seconds < 0 {
+			return 0, false
+		}
+		if seconds > int64(maxRetryAfterHint/time.Second) {
+			delay = maxRetryAfterHint
+		} else {
+			delay = time.Duration(seconds) * time.Second
+		}
+	} else {
+		when, err := http.ParseTime(value)
+		if err != nil {
+			return 0, false
+		}
+		delay = when.Sub(now)
+		if delay <= 0 {
+			return 0, false
+		}
+	}
+
+	if delay < minRetryAfterHint {
+		return minRetryAfterHint, true
+	}
+	if delay > maxRetryAfterHint {
+		return maxRetryAfterHint, true
+	}
+	return delay, true
 }
 
 func ResetStatusCode(newApiErr *types.NewAPIError, statusCodeMappingStr string) {

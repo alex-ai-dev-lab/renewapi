@@ -13,7 +13,13 @@ Build args:
 - `VERSION`
 - `COMMIT_SHA`
 - `BUILD_DATE`
+- `BUILD_CHANNEL`
 - `UPSTREAM_REF`
+
+`VERSION` is the RenewAPI product version. The other arguments identify the
+immutable build and audited upstream state; they are recorded as OCI labels.
+Product release Docker tags remove the leading `v` from `VERSION` (for example,
+`VERSION=v1.0.0-rc.1` publishes `1.0.0-rc.1`).
 
 Local build:
 
@@ -26,6 +32,9 @@ Multi-arch push:
 ```bash
 VERSION=v1.0.0 ./scripts/local-build.sh --push
 ```
+
+When `VERSION` is omitted, the local build scripts read the repository
+`VERSION` file. Set `BUILD_CHANNEL` to label a local build explicitly.
 
 Healthcheck:
 

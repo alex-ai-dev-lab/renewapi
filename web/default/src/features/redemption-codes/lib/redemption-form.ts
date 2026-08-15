@@ -53,6 +53,11 @@ export type RedemptionFormValues = {
   count?: number
 }
 
+export type RedemptionQuotaSubmission = {
+  originalQuota?: number
+  quotaDirty?: boolean
+}
+
 // ============================================================================
 // Form Defaults
 // ============================================================================
@@ -72,11 +77,18 @@ export const REDEMPTION_FORM_DEFAULT_VALUES: RedemptionFormValues = {
  * Transform form data to API payload
  */
 export function transformFormDataToPayload(
-  data: RedemptionFormValues
+  data: RedemptionFormValues,
+  quotaSubmission?: RedemptionQuotaSubmission
 ): RedemptionFormData {
+  const preserveOriginalQuota =
+    quotaSubmission?.quotaDirty === false &&
+    quotaSubmission.originalQuota !== undefined
+
   return {
     name: data.name,
-    quota: parseQuotaFromDollars(data.quota_dollars),
+    quota: preserveOriginalQuota
+      ? quotaSubmission.originalQuota!
+      : parseQuotaFromDollars(data.quota_dollars),
     expired_time: data.expired_time
       ? Math.floor(data.expired_time.getTime() / 1000)
       : 0,

@@ -212,9 +212,15 @@ func handleOAuthBind(c *gin.Context, provider oauth.Provider) {
 			return
 		}
 	} else {
-		// Built-in provider: update user record directly
-		provider.SetProviderUserID(&user, oauthUser.ProviderUserID)
-		err = user.Update(false)
+		// Built-in provider: update only its binding column. Writing the whole
+		// loaded user row here can overwrite concurrent quota, status, or group
+		// changes made after FillUserById.
+		bindingProvider, ok := provider.(oauth.BindingColumnProvider)
+		if !ok {
+			common.ApiError(c, fmt.Errorf("OAuth provider %s has no binding column", provider.GetName()))
+			return
+		}
+		err = model.UpdateUserBindColumn(user.Id, bindingProvider.BindingColumn(), oauthUser.ProviderUserID)
 		if err != nil {
 			common.ApiError(c, err)
 			return

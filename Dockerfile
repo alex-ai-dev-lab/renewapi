@@ -42,6 +42,7 @@ ARG TARGETARCH
 ARG VERSION=dev
 ARG COMMIT_SHA=unknown
 ARG BUILD_DATE=unknown
+ARG BUILD_CHANNEL=local
 ARG UPSTREAM_REF=unknown
 
 ENV CGO_ENABLED=0 \
@@ -70,6 +71,7 @@ FROM ${RUNTIME_IMAGE} AS runtime
 ARG VERSION=dev
 ARG COMMIT_SHA=unknown
 ARG BUILD_DATE=unknown
+ARG BUILD_CHANNEL=local
 ARG UPSTREAM_REF=unknown
 ARG RUNTIME_IMAGE=alpine:3.20
 
@@ -78,6 +80,7 @@ LABEL org.opencontainers.image.source="https://github.com/alex-ai-dev-lab/renewa
       org.opencontainers.image.revision="${COMMIT_SHA}" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.build.channel="${BUILD_CHANNEL}" \
       org.opencontainers.image.base.name="${RUNTIME_IMAGE}" \
       org.opencontainers.image.upstream-ref="${UPSTREAM_REF}"
 

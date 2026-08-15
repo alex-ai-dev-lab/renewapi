@@ -162,6 +162,10 @@ func (p *OIDCProvider) SetProviderUserID(user *model.User, providerUserID string
 	user.OidcId = providerUserID
 }
 
+func (p *OIDCProvider) BindingColumn() string {
+	return "oidc_id"
+}
+
 func (p *OIDCProvider) GetProviderPrefix() string {
 	return "oidc_"
 }

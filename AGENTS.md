@@ -1,8 +1,43 @@
-# AGENTS.md — Project Conventions for new-api
+# AGENTS.md — RenewAPI Engineering Rules
 
 ## Overview
 
-This is an AI API gateway/proxy built with Go. It aggregates 40+ upstream AI providers (OpenAI, Claude, Gemini, Azure, AWS Bedrock, etc.) behind a unified API, with user management, billing, rate limiting, and an admin dashboard.
+RenewAPI is an independently maintained downstream source fork of
+[QuantumNous/new-api](https://github.com/QuantumNous/new-api). It is an AI API
+gateway/proxy built with Go that aggregates 40+ upstream AI providers behind a
+unified API, with user management, billing, rate limiting, and an admin
+dashboard.
+
+NewAPI is the principal upstream/reference source, not a repository to merge
+or rebase blindly. Sub2API, CPA, and other external projects are reference
+sources only. Preserve RenewAPI compatibility, security controls, architecture,
+and product identity when adapting external behavior.
+
+## Sources of truth
+
+- Current project state: `docs/PROJECT_STATE.md`
+- Architecture: `docs/ARCHITECTURE.md`
+- Maintenance workflow: `docs/MAINTENANCE.md`
+- Upstream baseline: `UPSTREAM.md`
+- Upstream dispositions: `UPSTREAM_PORTS.md`
+- Durable decisions: `docs/decisions/`
+- Active large tasks: `tasks/active/`
+- Product version: `VERSION`
+- User-visible changes: `CHANGELOG.md`
+- Implementation history: Git
+
+Do not rely on prior Codex conversation as an authoritative project record.
+
+## Before substantial work
+
+1. Inspect `git status`, the current branch, and recent relevant history.
+2. Read `docs/PROJECT_STATE.md` and identify any matching task in
+   `tasks/active/`.
+3. Read only the architecture, ADR, upstream, and development documents that
+   are relevant to the change.
+4. Inspect the actual implementation and tests before proposing or editing.
+
+Unknown state must be recorded as unknown or verified, never guessed.
 
 ## Tech Stack
 
@@ -53,6 +88,40 @@ web/             — Frontend themes container
 - CLI tools: `bun run i18n:sync` (from `web/default/`)
 
 ## Rules
+
+### Rule 0: Durable maintenance records
+
+Permanent rules belong here; current state belongs in `docs/PROJECT_STATE.md`;
+long-lived reasons belong in ADRs; task handoffs belong in `tasks/active/` or
+`tasks/archive/`; detailed implementation history belongs in Git. Keep these
+files concise and do not turn them into a changelog.
+
+Before finishing substantial work, run relevant formatting, lint, tests, and
+build checks, then update the task, project state, ADR, upstream ledger, or
+changelog when those facts changed.
+
+### Rule 0.1: Version and release identity
+
+`VERSION` is the pure RenewAPI product version only. RenewAPI product Git tags
+use the `renewapi-` prefix (for example, `renewapi-v1.0.0-rc.1`) so raw
+`v*` upstream NewAPI tags remain in the shared Git namespace untouched. Keep
+product version, upstream baseline, Git commit, build time, and build channel
+separate. Historical tags and releases are immutable. Main builds are `edge`
+plus `sha-*`; product tags are the only path to prerelease/stable product
+releases; never make a SHA build the stable `latest` alias.
+
+### Rule 0.2: Upstream synchronization
+
+Do not merge or rebase the unrelated NewAPI history. For each candidate change,
+inspect intent, compare the RenewAPI implementation, port or adapt only the
+needed behavior, test it, and record the disposition in `UPSTREAM_PORTS.md`.
+
+### Rule 0.3: Durable decisions and task scope
+
+Create or update an ADR for architecture, compatibility, persistence,
+security, routing, release/version, or upstream-policy decisions that future
+maintainers might otherwise remove. Use a task document for work spanning
+multiple modules or sessions; archive it only after validation succeeds.
 
 ### Rule 1: JSON Package — Use `common/json.go`
 

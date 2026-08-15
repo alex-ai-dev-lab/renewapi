@@ -175,6 +175,32 @@ func geminiRelayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewA
 	return err
 }
 
+func dispatchRelayRequest(c *gin.Context, info *relaycommon.RelayInfo, relayFormat types.RelayFormat, ws *websocket.Conn) *types.NewAPIError {
+	switch relayFormat {
+	case types.RelayFormatOpenAIRealtime:
+		return relay.WssHelper(c, info)
+	case types.RelayFormatClaude:
+		return relay.ClaudeHelper(c, info)
+	case types.RelayFormatGemini:
+		return geminiRelayHandler(c, info)
+	default:
+		return relayHandler(c, info)
+	}
+}
+
+// These narrow boundaries keep the admission ordering executable in tests.
+// Production always uses the concrete implementations assigned here.
+var (
+	relayRequestPreflight = func(c *gin.Context, info *relaycommon.RelayInfo, request dto.Request) *types.NewAPIError {
+		return compat.Hooks().OnRequestPreflight(c, info, request)
+	}
+	relayPrepareRoutePlan = prepareDistributorResponsesRoutePlan
+	relayPriceHelper      = helper.ModelPriceHelper
+	relayPreConsume       = service.PreConsumeBilling
+	relaySelectChannel    = getChannel
+	relayDispatchUpstream = dispatchRelayRequest
+)
+
 func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	requestId := c.GetString(common.RequestIdKey)
@@ -300,7 +326,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 
 	relayInfo.SetEstimatePromptTokens(tokens)
-	if preflightErr := compat.Hooks().OnRequestPreflight(c, relayInfo, request); preflightErr != nil {
+	if preflightErr := relayRequestPreflight(c, relayInfo, request); preflightErr != nil {
 		if preflightErr.StatusCode >= http.StatusInternalServerError || preflightErr.StatusCode == 0 {
 			service.SetModelRouteOutcome(c, service.ModelRouteOutcomeServerError)
 		} else {
@@ -309,13 +335,13 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = preflightErr
 		return
 	}
-	if prepareErr := prepareDistributorResponsesRoutePlan(c, relayInfo); prepareErr != nil {
+	if prepareErr := relayPrepareRoutePlan(c, relayInfo); prepareErr != nil {
 		service.SetModelRouteOutcome(c, service.ModelRouteOutcomeRouteUnavailable)
 		newAPIError = prepareErr
 		return
 	}
 
-	priceData, err := helper.ModelPriceHelper(c, relayInfo, tokens, meta)
+	priceData, err := relayPriceHelper(c, relayInfo, tokens, meta)
 	if err != nil {
 		service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 		newAPIError = types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
@@ -327,7 +353,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	if priceData.FreeModel {
 		logger.LogInfo(c, fmt.Sprintf("模型 %s 免费，跳过预扣费", relayInfo.OriginModelName))
 	} else {
-		newAPIError = service.PreConsumeBilling(c, priceData.QuotaToPreConsume, relayInfo)
+		newAPIError = relayPreConsume(c, priceData.QuotaToPreConsume, relayInfo)
 		if newAPIError != nil {
 			service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 			return
@@ -478,7 +504,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			relayInfo.RetryIndex = retryParam.GetRetry()
 			service.SleepBeforeRouterRetry(c, relayInfo.RetryIndex)
 			service.ApplyRouterCooldownFilter(relayInfo, retryParam)
-			channel, channelErr := getChannel(c, relayInfo, retryParam)
+			channel, channelErr := relaySelectChannel(c, relayInfo, retryParam)
 			if channelErr != nil {
 				if maybeFallbackClaudeThinkingToSanitized(c, relayInfo, retryParam) {
 					retryParam.ResetRetryNextTry()
@@ -521,16 +547,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			}
 			c.Request.Body = io.NopCloser(bodyStorage)
 
-			switch relayFormat {
-			case types.RelayFormatOpenAIRealtime:
-				newAPIError = relay.WssHelper(c, relayInfo)
-			case types.RelayFormatClaude:
-				newAPIError = relay.ClaudeHelper(c, relayInfo)
-			case types.RelayFormatGemini:
-				newAPIError = geminiRelayHandler(c, relayInfo)
-			default:
-				newAPIError = relayHandler(c, relayInfo)
-			}
+			newAPIError = relayDispatchUpstream(c, relayInfo, relayFormat, ws)
 
 			if newAPIError == nil {
 				newAPIError = compatStreamRetryError(relayInfo)

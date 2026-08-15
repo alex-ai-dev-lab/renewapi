@@ -32,6 +32,7 @@ import {
   displayAmountToQuota,
 } from '../../../../helpers/quota';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
+import { resolveRedemptionSubmitQuota } from '../redemption-form';
 import {
   Button,
   Modal,
@@ -62,6 +63,8 @@ const EditRedemptionModal = (props) => {
   const [loading, setLoading] = useState(isEdit);
   const isMobile = useIsMobile();
   const formApiRef = useRef(null);
+  const originalQuotaRef = useRef(null);
+  const quotaDirtySourceRef = useRef(null);
   const [showQuotaInput, setShowQuotaInput] = useState(false);
 
   const getInitValues = () => ({
@@ -81,6 +84,7 @@ const EditRedemptionModal = (props) => {
     let res = await API.get(`/api/redemption/${props.editingRedemption.id}`);
     const { success, message, data } = res.data;
     if (success) {
+      originalQuotaRef.current = data.quota;
       if (data.expired_time === 0) {
         data.expired_time = null;
       } else {
@@ -88,6 +92,7 @@ const EditRedemptionModal = (props) => {
       }
       data.amount = Number(quotaToDisplayAmount(data.quota || 0).toFixed(6));
       formApiRef.current?.setValues({ ...getInitValues(), ...data });
+      quotaDirtySourceRef.current = null;
     } else {
       showError(message);
     }
@@ -99,7 +104,9 @@ const EditRedemptionModal = (props) => {
       if (isEdit) {
         loadRedemption();
       } else {
+        originalQuotaRef.current = null;
         formApiRef.current.setValues(getInitValues());
+        quotaDirtySourceRef.current = null;
       }
     }
   }, [props.editingRedemption.id]);
@@ -112,7 +119,14 @@ const EditRedemptionModal = (props) => {
     setLoading(true);
     let localInputs = { ...values };
     localInputs.count = parseInt(localInputs.count) || 0;
-    localInputs.quota = displayAmountToQuota(localInputs.amount);
+    localInputs.quota = resolveRedemptionSubmitQuota({
+      isEdit,
+      dirtySource: quotaDirtySourceRef.current,
+      originalQuota: originalQuotaRef.current,
+      quota: localInputs.quota,
+      amount: localInputs.amount,
+      convertAmountToQuota: displayAmountToQuota,
+    });
     if (localInputs.quota <= 0) {
       showError(t('请输入金额'));
       setLoading(false);
@@ -315,6 +329,7 @@ const EditRedemptionModal = (props) => {
                             'quota',
                             displayAmountToQuota(amount),
                           );
+                          quotaDirtySourceRef.current = 'amount';
                         }}
                         showClear
                       />
@@ -327,7 +342,10 @@ const EditRedemptionModal = (props) => {
                           ? `▾ ${t('收起原生额度输入')}`
                           : `▸ ${t('使用原生额度输入')}`}
                       </div>
-                      <div style={{ display: showQuotaInput ? 'block' : 'none' }} className='mt-2'>
+                      <div
+                        style={{ display: showQuotaInput ? 'block' : 'none' }}
+                        className='mt-2'
+                      >
                         <Form.InputNumber
                           field='quota'
                           label={t('额度')}
@@ -350,6 +368,7 @@ const EditRedemptionModal = (props) => {
                               'amount',
                               Number(quotaToDisplayAmount(quota).toFixed(6)),
                             );
+                            quotaDirtySourceRef.current = 'quota';
                           }}
                           style={{ width: '100%' }}
                           showClear

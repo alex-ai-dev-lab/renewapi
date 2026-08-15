@@ -1,7 +1,10 @@
 package common
 
 import (
+	"bytes"
+	"fmt"
 	"io"
+	"sync"
 	"testing"
 
 	rootcommon "github.com/QuantumNous/new-api/common"
@@ -35,4 +38,51 @@ func TestNewOutboundJSONBodyProvidesIndependentReplayReaders(t *testing.T) {
 	remainder, err := io.ReadAll(body)
 	require.NoError(t, err)
 	require.Equal(t, payload[7:], remainder)
+}
+
+func TestNewOutboundJSONBodyGetBodyIsConcurrentSafe(t *testing.T) {
+	original := rootcommon.GetDiskCacheConfig()
+	rootcommon.SetDiskCacheConfig(rootcommon.DiskCacheConfig{Enabled: true, ThresholdMB: 0, MaxSizeMB: 4, Path: t.TempDir()})
+	t.Cleanup(func() { rootcommon.SetDiskCacheConfig(original) })
+
+	payload := bytes.Repeat([]byte(`{"model":"test","input":"concurrent"}`), 1024)
+	_, _, getBody, closer, err := NewOutboundJSONBody(payload)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = closer.Close() })
+
+	const readers = 32
+	start := make(chan struct{})
+	errs := make(chan error, readers)
+	var wg sync.WaitGroup
+	wg.Add(readers)
+	for i := 0; i < readers; i++ {
+		go func() {
+			defer wg.Done()
+			<-start
+			replay, replayErr := getBody()
+			if replayErr != nil {
+				errs <- replayErr
+				return
+			}
+			data, readErr := io.ReadAll(replay)
+			closeErr := replay.Close()
+			if readErr != nil {
+				errs <- readErr
+				return
+			}
+			if closeErr != nil {
+				errs <- closeErr
+				return
+			}
+			if !bytes.Equal(payload, data) {
+				errs <- fmt.Errorf("replayed payload mismatch: got %d bytes", len(data))
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for replayErr := range errs {
+		require.NoError(t, replayErr)
+	}
 }

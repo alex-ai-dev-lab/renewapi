@@ -297,6 +297,24 @@ func CriticalRateLimit() func(c *gin.Context) {
 	return defNext
 }
 
+// UserCriticalRateLimit applies the critical-action budget to an authenticated
+// user and isolates each action with a stable scope. It must run after
+// UserAuth so the user ID is available in the Gin context.
+func UserCriticalRateLimit(scope string) func(c *gin.Context) {
+	if !common.CriticalRateLimitEnable {
+		return defNext
+	}
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		scope = "default"
+	}
+	return userRateLimitFactory(
+		common.CriticalRateLimitNum,
+		common.CriticalRateLimitDuration,
+		"CT:"+scope,
+	)
+}
+
 func DownloadRateLimit() func(c *gin.Context) {
 	return rateLimitFactory(common.DownloadRateLimitNum, common.DownloadRateLimitDuration, "DW")
 }

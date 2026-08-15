@@ -175,8 +175,7 @@ func WeChatBind(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	user.WeChatId = wechatId
-	err = user.Update(false)
+	err = model.UpdateUserBindColumn(user.Id, "wechat_id", wechatId)
 	if err != nil {
 		common.ApiError(c, err)
 		return

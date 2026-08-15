@@ -37,6 +37,24 @@ func (e *countingEvaluator) EvaluateEndpoint(context.Context, Snapshot, *operati
 	return e.result
 }
 
+type drainingEvaluator struct {
+	calls   atomic.Int64
+	started chan struct{}
+	release <-chan struct{}
+	once    sync.Once
+}
+
+func (e *drainingEvaluator) Evaluate(context.Context, Snapshot, *operation_setting.RequestGuardSetting, RequestMeta) Result {
+	e.calls.Add(1)
+	e.once.Do(func() { close(e.started) })
+	<-e.release
+	return Result{Kind: DecisionAllow, ReasonCode: "safe"}
+}
+
+func (e *drainingEvaluator) EvaluateEndpoint(context.Context, Snapshot, *operation_setting.RequestGuardSetting, string, string) Result {
+	return Result{Kind: DecisionAllow, ReasonCode: "safe"}
+}
+
 type scannerFunc func(context.Context, Snapshot, operation_setting.RequestGuardEndpoint, string, string) (Result, error)
 
 func (f scannerFunc) Evaluate(ctx context.Context, snapshot Snapshot, endpoint operation_setting.RequestGuardEndpoint, secret, requestHost string) (Result, error) {
@@ -162,6 +180,65 @@ func TestExtractTypedProtocolsAndUnicodeTruncation(t *testing.T) {
 	require.Contains(t, snapshot.Text(), "gemini text")
 }
 
+func TestExtractResponsesToolOutputsAndStopsAtRuneLimit(t *testing.T) {
+	responses := &dto.OpenAIResponsesRequest{Input: []byte(`[
+		{"type":"function_call_output","output":"tool output"},
+		{"role":"user","content":[
+			{"type":"input_text","text":"你好🙂abcdef"},
+			{"type":"input_image","image_url":"data:image/png;base64,secret"}
+		]},
+		{"role":"tool","content":[{"type":"tool_result","content":[{"type":"text","text":"not reached"}]}]}
+	]`)}
+
+	snapshot, err := Extract(responses, nil, 14, operation_setting.RequestGuardInputFullClientControlled)
+	require.NoError(t, err)
+	require.Equal(t, 14, snapshot.RuneCount)
+	require.True(t, snapshot.Truncated)
+	require.Contains(t, snapshot.Text(), "tool output")
+	require.Contains(t, snapshot.Text(), "你好🙂")
+	require.NotContains(t, snapshot.Text(), "base64")
+	require.NotContains(t, snapshot.Text(), "not reached")
+}
+
+func TestExtractClaudeNestedToolResultTextIgnoresBinaryParts(t *testing.T) {
+	claude := &dto.ClaudeRequest{Messages: []dto.ClaudeMessage{{
+		Role: "user",
+		Content: []any{
+			map[string]any{
+				"type": "tool_result",
+				"content": []any{
+					map[string]any{"type": "text", "text": "nested tool text"},
+					map[string]any{"type": "image", "source": map[string]any{"data": "base64-secret"}},
+				},
+			},
+			map[string]any{"type": "audio", "data": "audio-secret"},
+		},
+	}}}
+
+	snapshot, err := Extract(claude, nil, 100, operation_setting.RequestGuardInputFullClientControlled)
+	require.NoError(t, err)
+	require.Contains(t, snapshot.Text(), "nested tool text")
+	require.NotContains(t, snapshot.Text(), "base64-secret")
+	require.NotContains(t, snapshot.Text(), "audio-secret")
+}
+
+func TestExtractResponsesRejectsMalformedTextStructures(t *testing.T) {
+	tests := [][]byte{
+		[]byte(`[{`),
+		[]byte(`[{"type":"input_text","text":42}]`),
+		[]byte(`42`),
+	}
+	for _, input := range tests {
+		_, err := Extract(
+			&dto.OpenAIResponsesRequest{Input: input},
+			nil,
+			100,
+			operation_setting.RequestGuardInputFullClientControlled,
+		)
+		require.Error(t, err, string(input))
+	}
+}
+
 func TestCodecsDecodeStrictly(t *testing.T) {
 	qwen := qwen3GuardCodec{}
 	result, err := qwen.Decode("unsafe\ncategories: violence, fraud")
@@ -274,26 +351,86 @@ func TestObserveQueueDropAndFailurePolicies(t *testing.T) {
 	require.True(t, types.IsSkipRetryError(blocked))
 }
 
-func TestObserveWorkerStaysReadyUntilProcessShutdown(t *testing.T) {
-	previous := processCtx.Load()
-	ctx, cancel := context.WithCancel(context.Background())
-	SetProcessContext(ctx)
-	t.Cleanup(func() {
-		cancel()
-		if previous != nil {
-			SetProcessContext(previous.Context)
-		}
-	})
+func TestObserveWorkersStartResizeAndShutdown(t *testing.T) {
+	previousSetting := operation_setting.GetRequestGuardSetting()
+	setting := previousSetting
+	setting.Observe.WorkerCount = 2
+	operation_setting.ApplyRequestGuardSetting(setting)
+	t.Cleanup(func() { operation_setting.ApplyRequestGuardSetting(previousSetting) })
 
-	ensureObserveWorkers(getObserveQueue(), 1)
-	require.Equal(t, int64(1), CurrentMetrics().Workers)
-	time.Sleep(1100 * time.Millisecond)
-	require.Equal(t, int64(1), CurrentMetrics().Workers)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	done := make(chan struct{})
+	go func() {
+		RunObserveWorkers(ctx)
+		close(done)
+	}()
+	require.Eventually(t, func() bool {
+		return observeAccepting.Load() && CurrentMetrics().Workers == 2
+	}, time.Second, 10*time.Millisecond)
+
+	setting.Observe.WorkerCount = 1
+	operation_setting.ApplyRequestGuardSetting(setting)
+	require.Eventually(t, func() bool {
+		return CurrentMetrics().Workers == 1
+	}, time.Second, 10*time.Millisecond)
 
 	cancel()
-	require.Eventually(t, func() bool {
-		return CurrentMetrics().Workers == 0
-	}, time.Second, 10*time.Millisecond)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("observe worker manager did not stop")
+	}
+	require.False(t, observeAccepting.Load())
+	require.Equal(t, int64(0), CurrentMetrics().Workers)
+}
+
+func TestObserveWorkerShutdownDrainsQueuedJobs(t *testing.T) {
+	require.Zero(t, queuedJobs.Load())
+	previousSetting := operation_setting.GetRequestGuardSetting()
+	setting := requestGuardTestSetting()
+	setting.Observe.WorkerCount = 1
+	setting.Observe.QueueCapacity = 4
+	operation_setting.ApplyRequestGuardSetting(setting)
+	previousEvaluator := globalEvaluator
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	evaluator := &drainingEvaluator{started: make(chan struct{}), release: release}
+	globalEvaluator = evaluator
+	t.Cleanup(func() {
+		globalEvaluator = previousEvaluator
+		operation_setting.ApplyRequestGuardSetting(previousSetting)
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		releaseOnce.Do(func() { close(release) })
+	})
+	done := make(chan struct{})
+	go func() {
+		RunObserveWorkers(ctx)
+		close(done)
+	}()
+	require.Eventually(t, observeAccepting.Load, time.Second, 10*time.Millisecond)
+	require.True(t, enqueueObserve(observeJob{Setting: &setting, Meta: RequestMeta{Mode: operation_setting.RequestGuardModeObserve}}))
+	select {
+	case <-evaluator.started:
+	case <-time.After(time.Second):
+		t.Fatal("first observe job did not start")
+	}
+	require.True(t, enqueueObserve(observeJob{Setting: &setting, Meta: RequestMeta{Mode: operation_setting.RequestGuardModeObserve}}))
+
+	cancel()
+	releaseOnce.Do(func() { close(release) })
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("observe worker manager did not drain")
+	}
+	require.Equal(t, int64(2), evaluator.calls.Load())
+	require.Zero(t, queuedJobs.Load())
+	require.Zero(t, inFlightObserveJobs.Load())
 }
 
 func TestOpenAICompatibleScannerProbeResponse(t *testing.T) {

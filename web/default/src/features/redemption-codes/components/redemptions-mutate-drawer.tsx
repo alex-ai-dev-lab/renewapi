@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
@@ -78,6 +78,7 @@ export function RedemptionsMutateDrawer({
   const isUpdate = !!currentRow
   const { triggerRefresh } = useRedemptions()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const originalQuotaRef = useRef<number | undefined>(undefined)
 
   const form = useForm<RedemptionFormValues>({
     resolver: zodResolver(getRedemptionFormSchema(t)),
@@ -90,11 +91,13 @@ export function RedemptionsMutateDrawer({
       // For update, fetch fresh data
       getRedemption(currentRow.id).then((result) => {
         if (result.success && result.data) {
+          originalQuotaRef.current = result.data.quota
           form.reset(transformRedemptionToFormDefaults(result.data))
         }
       })
     } else if (open && !isUpdate) {
       // For create, reset to defaults
+      originalQuotaRef.current = undefined
       form.reset(REDEMPTION_FORM_DEFAULT_VALUES)
     }
   }, [open, isUpdate, currentRow, form])
@@ -102,7 +105,15 @@ export function RedemptionsMutateDrawer({
   const onSubmit = async (data: RedemptionFormValues) => {
     setIsSubmitting(true)
     try {
-      const basePayload = transformFormDataToPayload(data)
+      const basePayload = transformFormDataToPayload(
+        data,
+        isUpdate
+          ? {
+              originalQuota: originalQuotaRef.current,
+              quotaDirty: !!form.formState.dirtyFields.quota_dollars,
+            }
+          : undefined
+      )
 
       if (isUpdate && currentRow) {
         const result = await updateRedemption({
@@ -154,6 +165,7 @@ export function RedemptionsMutateDrawer({
       onOpenChange={(v) => {
         onOpenChange(v)
         if (!v) {
+          originalQuotaRef.current = undefined
           form.reset()
         }
       }}

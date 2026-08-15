@@ -3,8 +3,11 @@ package common
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 )
+
+type RawMessage = json.RawMessage
 
 func Unmarshal(data []byte, v any) error {
 	return json.Unmarshal(data, v)
@@ -16,6 +19,35 @@ func UnmarshalJsonStr(data string, v any) error {
 
 func DecodeJson(reader io.Reader, v any) error {
 	return json.NewDecoder(reader).Decode(v)
+}
+
+// WalkJsonArray decodes one raw element at a time and stops immediately when
+// visit returns false. Callers can therefore enforce their own bounded work
+// without materializing an entire JSON array.
+func WalkJsonArray(data []byte, visit func(RawMessage) bool) error {
+	if visit == nil {
+		return errors.New("JSON array visitor is nil")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delimiter, ok := token.(json.Delim)
+	if !ok || delimiter != '[' {
+		return errors.New("JSON value is not an array")
+	}
+	for decoder.More() {
+		var item RawMessage
+		if err := decoder.Decode(&item); err != nil {
+			return err
+		}
+		if !visit(item) {
+			return nil
+		}
+	}
+	_, err = decoder.Token()
+	return err
 }
 
 func Marshal(v any) ([]byte, error) {

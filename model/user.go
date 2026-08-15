@@ -18,6 +18,15 @@ import (
 
 const UserNameMaxLength = 20
 
+var userBindingColumns = map[string]struct{}{
+	"github_id":   {},
+	"discord_id":  {},
+	"oidc_id":     {},
+	"linux_do_id": {},
+	"telegram_id": {},
+	"wechat_id":   {},
+}
+
 // User if you add sensitive fields, don't forget to clean them in setupLogin function.
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
@@ -586,6 +595,28 @@ func (user *User) Update(updatePassword bool) error {
 		return err
 	}
 	return updateUserCache(*user)
+}
+
+// UpdateUserBindColumn updates exactly one whitelisted external-account
+// binding without writing a stale in-memory User snapshot back to the row.
+func UpdateUserBindColumn(userID int, column string, value string) error {
+	if userID <= 0 {
+		return errors.New("invalid user id")
+	}
+	if _, ok := userBindingColumns[column]; !ok {
+		return fmt.Errorf("unsupported user binding column %q", column)
+	}
+	if value == "" {
+		return errors.New("binding value is empty")
+	}
+	result := DB.Model(&User{}).Where("id = ?", userID).Update(column, value)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (user *User) UpdateWithTx(tx *gorm.DB, updatePassword bool) error {

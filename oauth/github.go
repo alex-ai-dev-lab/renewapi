@@ -163,6 +163,10 @@ func (p *GitHubProvider) SetProviderUserID(user *model.User, providerUserID stri
 	user.GitHubId = providerUserID
 }
 
+func (p *GitHubProvider) BindingColumn() string {
+	return "github_id"
+}
+
 func (p *GitHubProvider) GetProviderPrefix() string {
 	return "github_"
 }

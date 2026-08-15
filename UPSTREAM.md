@@ -1,10 +1,16 @@
-# Upstream
+# Upstream Baseline
 
 - Repository: `QuantumNous/new-api`
-- Last fully audited ref: `4e570389dd433a717373ce9c9b822b59f5ed3d5d`
-- Tag at audit time: `v1.0.0-rc.20`
+- Last fully audited ref: `58d4e9bd3bb035df8ea235dd682ccc8a45d0332a`
+- Release boundary: `v1.0.0-rc.24` plus post-release `main`
+- Audit completed: `2026-08-14`
+- RenewAPI commit at audit completion: `91d636fba97864e54a9aec2f55667e14bcd6ae34`
 - Audit ledger: `UPSTREAM_PORTS.md`
 - Sync strategy: selective manual ports; merge/rebase is refused because no common ancestor exists.
+
+The current checkout contains later RenewAPI commits after the audited fork
+review base. They do not change the audited upstream ref; review new upstream
+commits with the scripts and advance this baseline only after a complete audit.
 
 ## Fork Scope
 

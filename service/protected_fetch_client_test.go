@@ -19,6 +19,12 @@ import (
 
 type staticSSRFResolver map[string][]net.IPAddr
 
+type protectedFetchRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f protectedFetchRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
 func (r staticSSRFResolver) LookupIPAddr(_ context.Context, host string) ([]net.IPAddr, error) {
 	if ips, ok := r[host]; ok {
 		return ips, nil
@@ -125,6 +131,34 @@ func TestProtectedFetchRoundTripperRejectsPrivateTargetBeforeProxyDial(t *testin
 	require.Error(t, err)
 	require.Nil(t, resp)
 	require.Empty(t, dialed)
+}
+
+func TestProtectedFetchClientRejectsPublicRedirectToPrivateTarget(t *testing.T) {
+	configureSSRFTestFetchSetting(t, false)
+
+	calls := 0
+	client := &http.Client{
+		Transport: protectedFetchRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			calls++
+			require.Equal(t, "public.example", req.URL.Hostname())
+			return &http.Response{
+				StatusCode: http.StatusFound,
+				Header:     http.Header{"Location": []string{"http://127.0.0.1/private"}},
+				Body:       http.NoBody,
+				Request:    req,
+			}, nil
+		}),
+		CheckRedirect: checkProtectedFetchRedirect,
+	}
+
+	request, err := http.NewRequest(http.MethodGet, "https://public.example/start", nil)
+	require.NoError(t, err)
+	response, err := client.Do(request)
+	require.Error(t, err)
+	require.NotNil(t, response)
+	require.Equal(t, http.StatusFound, response.StatusCode)
+	require.Contains(t, err.Error(), "private IP address not allowed")
+	require.Equal(t, 1, calls, "blocked redirect must not reach the transport")
 }
 
 func TestProtectedFetchClientPreservesTLSAndProxyOptions(t *testing.T) {

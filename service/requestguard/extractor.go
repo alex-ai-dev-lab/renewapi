@@ -74,9 +74,13 @@ func Extract(request dto.Request, info *relaycommon.RelayInfo, limit int, inputM
 	case *dto.GeneralOpenAIRequest:
 		extractOpenAI(builder, typed)
 	case *dto.OpenAIResponsesRequest:
-		extractResponses(builder, typed.Instructions, typed.Input)
+		if err := extractResponses(builder, typed.Instructions, typed.Input); err != nil {
+			return Snapshot{}, err
+		}
 	case *dto.OpenAIResponsesCompactionRequest:
-		extractResponses(builder, typed.Instructions, typed.Input)
+		if err := extractResponses(builder, typed.Instructions, typed.Input); err != nil {
+			return Snapshot{}, err
+		}
 	case *dto.ClaudeRequest:
 		extractClaude(builder, typed)
 	case *dto.GeminiChatRequest:
@@ -123,14 +127,115 @@ func extractOpenAI(builder *snapshotBuilder, request *dto.GeneralOpenAIRequest) 
 	}
 }
 
-func extractResponses(builder *snapshotBuilder, instructions, input []byte) {
+type responsesGuardInput struct {
+	Type    string            `json:"type,omitempty"`
+	Role    string            `json:"role,omitempty"`
+	Text    common.RawMessage `json:"text,omitempty"`
+	Content common.RawMessage `json:"content,omitempty"`
+	Output  common.RawMessage `json:"output,omitempty"`
+}
+
+func extractResponses(builder *snapshotBuilder, instructions, input []byte) error {
 	appendJSONString(builder, "instructions", instructions)
-	request := &dto.OpenAIResponsesRequest{Input: input}
-	for _, item := range request.ParseInput() {
-		if item.Type == "input_text" && !builder.append("user", item.Text) {
-			return
-		}
+	if len(input) == 0 || builder.truncated {
+		return nil
 	}
+	switch common.GetJsonType(input) {
+	case "string":
+		return appendRequiredJSONString(builder, "user", input)
+	case "object":
+		return extractResponsesObject(builder, "user", input)
+	case "array":
+		var walkErr error
+		err := common.WalkJsonArray(input, func(raw common.RawMessage) bool {
+			walkErr = extractResponsesValue(builder, "user", raw)
+			return walkErr == nil && !builder.truncated
+		})
+		if err != nil {
+			return fmt.Errorf("decode Responses input array: %w", err)
+		}
+		return walkErr
+	default:
+		return fmt.Errorf("unsupported Responses input JSON type %q", common.GetJsonType(input))
+	}
+}
+
+func extractResponsesValue(builder *snapshotBuilder, role string, raw common.RawMessage) error {
+	if builder == nil || builder.truncated || len(raw) == 0 {
+		return nil
+	}
+	switch common.GetJsonType(raw) {
+	case "string":
+		return appendRequiredJSONString(builder, role, raw)
+	case "object":
+		return extractResponsesObject(builder, role, raw)
+	case "array":
+		var walkErr error
+		err := common.WalkJsonArray(raw, func(item common.RawMessage) bool {
+			walkErr = extractResponsesValue(builder, role, item)
+			return walkErr == nil && !builder.truncated
+		})
+		if err != nil {
+			return err
+		}
+		return walkErr
+	case "null":
+		return nil
+	default:
+		return fmt.Errorf("unsupported Responses text JSON type %q", common.GetJsonType(raw))
+	}
+}
+
+func extractResponsesObject(builder *snapshotBuilder, inheritedRole string, raw common.RawMessage) error {
+	var item responsesGuardInput
+	if err := common.Unmarshal(raw, &item); err != nil {
+		return fmt.Errorf("decode Responses input object: %w", err)
+	}
+	itemType := strings.ToLower(strings.TrimSpace(item.Type))
+	if isBinaryContentType(itemType) {
+		return nil
+	}
+	role := strings.TrimSpace(item.Role)
+	if role == "" {
+		role = inheritedRole
+	}
+	switch itemType {
+	case "input_text", "output_text", "text":
+		return appendRequiredJSONString(builder, role, item.Text)
+	case "function_call_output":
+		return extractResponsesValue(builder, "tool", item.Output)
+	case "tool_result":
+		return extractResponsesValue(builder, "tool", item.Content)
+	case "message", "":
+		if len(item.Text) > 0 {
+			if err := appendRequiredJSONString(builder, role, item.Text); err != nil || builder.truncated {
+				return err
+			}
+		}
+		if len(item.Content) > 0 {
+			return extractResponsesValue(builder, role, item.Content)
+		}
+		return nil
+	default:
+		// Unknown typed objects are deliberately ignored. Recursing arbitrary
+		// fields risks treating opaque provider or binary payloads as prompts.
+		return nil
+	}
+}
+
+func appendRequiredJSONString(builder *snapshotBuilder, role string, raw common.RawMessage) error {
+	if len(raw) == 0 || common.GetJsonType(raw) == "null" {
+		return nil
+	}
+	if common.GetJsonType(raw) != "string" {
+		return fmt.Errorf("expected JSON string, got %s", common.GetJsonType(raw))
+	}
+	var value string
+	if err := common.Unmarshal(raw, &value); err != nil {
+		return err
+	}
+	builder.append(role, value)
+	return nil
 }
 
 func extractClaude(builder *snapshotBuilder, request *dto.ClaudeRequest) {
@@ -200,6 +305,12 @@ func extractStringLike(builder *snapshotBuilder, role string, value any) bool {
 				return false
 			}
 		}
+	case []dto.ClaudeMediaMessage:
+		for i := range typed {
+			if !extractClaudeMediaMessage(builder, role, &typed[i]) {
+				return false
+			}
+		}
 	case []any:
 		for _, item := range typed {
 			if !extractStringLike(builder, role, item) {
@@ -207,15 +318,35 @@ func extractStringLike(builder *snapshotBuilder, role string, value any) bool {
 			}
 		}
 	case map[string]any:
-		for _, key := range []string{"text", "content", "output"} {
-			if text, ok := typed[key].(string); ok && text != "" {
-				return builder.append(role, text)
+		itemType, _ := typed["type"].(string)
+		itemType = strings.ToLower(strings.TrimSpace(itemType))
+		if isBinaryContentType(itemType) {
+			return true
+		}
+		switch itemType {
+		case "tool_result":
+			return extractStringLike(builder, "tool", typed["content"])
+		case "function_call_output":
+			return extractStringLike(builder, "tool", typed["output"])
+		case "text", "input_text", "output_text":
+			return extractStringLike(builder, role, typed["text"])
+		case "message":
+			return extractStringLike(builder, role, typed["content"])
+		case "":
+			for _, key := range []string{"text", "content", "output"} {
+				if value, ok := typed[key]; ok && !extractStringLike(builder, role, value) {
+					return false
+				}
 			}
 		}
 	case dto.MediaContent:
 		if typed.Type == dto.ContentTypeText {
 			return builder.append(role, typed.Text)
 		}
+	case dto.ClaudeMediaMessage:
+		return extractClaudeMediaMessage(builder, role, &typed)
+	case *dto.ClaudeMediaMessage:
+		return extractClaudeMediaMessage(builder, role, typed)
 	case dto.RerankDocument:
 		return extractStringLike(builder, role, typed.Text)
 	case *dto.RerankDocument:
@@ -226,6 +357,30 @@ func extractStringLike(builder *snapshotBuilder, role string, value any) bool {
 		_ = common.Interface2String(typed)
 	}
 	return !builder.truncated
+}
+
+func extractClaudeMediaMessage(builder *snapshotBuilder, role string, item *dto.ClaudeMediaMessage) bool {
+	if item == nil || isBinaryContentType(item.Type) {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(item.Type)) {
+	case "tool_result":
+		return extractStringLike(builder, "tool", item.Content)
+	case "text", "input_text", "output_text", "":
+		return builder.append(role, item.GetText())
+	default:
+		return true
+	}
+}
+
+func isBinaryContentType(itemType string) bool {
+	itemType = strings.ToLower(strings.TrimSpace(itemType))
+	for _, marker := range []string{"image", "audio", "video", "file", "binary", "blob", "screenshot"} {
+		if strings.Contains(itemType, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func appendJSONString(builder *snapshotBuilder, role string, raw []byte) {

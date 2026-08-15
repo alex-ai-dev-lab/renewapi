@@ -176,6 +176,10 @@ func (p *LinuxDOProvider) SetProviderUserID(user *model.User, providerUserID str
 	user.LinuxDOId = providerUserID
 }
 
+func (p *LinuxDOProvider) BindingColumn() string {
+	return "linux_do_id"
+}
+
 func (p *LinuxDOProvider) GetProviderPrefix() string {
 	return "linuxdo_"
 }

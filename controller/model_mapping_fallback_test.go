@@ -101,3 +101,41 @@ func TestSwitchRelayFallbackModelRepricesActualModel(t *testing.T) {
 	require.Positive(t, info.PriceData.QuotaToPreConsume)
 	require.Equal(t, info.PriceData.QuotaToPreConsume, billing.reserved)
 }
+
+func TestSwitchRelayFallbackModelRepricesUsingFinalRouteGroup(t *testing.T) {
+	originalPrices, err := common.Marshal(ratio_setting.GetModelPriceCopy())
+	require.NoError(t, err)
+	originalGroups := ratio_setting.GroupRatio2JSONString()
+	originalSpecialGroups := ratio_setting.GroupGroupRatio2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(originalPrices)))
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(originalGroups))
+		require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(originalSpecialGroups))
+	})
+	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"fallback-final-group":2}`))
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"fallback-route":3}`))
+	require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(`{}`))
+
+	writer := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(writer)
+	common.SetContextKey(c, constant.ContextKeyAutoGroup, "fallback-route")
+	billing := &recordingBillingSettler{}
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "primary-model",
+		UserGroup:       "default",
+		UsingGroup:      "default",
+		Billing:         billing,
+	}
+	retry := &service.RetryParam{
+		ModelName:          "primary-model",
+		Retry:              common.GetPointer(0),
+		ExcludedChannelIds: make(map[int]bool),
+	}
+
+	newAPIError := switchRelayFallbackModel(c, info, retry, "fallback-final-group", 100, &types.TokenCountMeta{})
+	require.Nil(t, newAPIError)
+	require.Equal(t, "fallback-route", info.UsingGroup)
+	require.Equal(t, 3.0, info.PriceData.GroupRatioInfo.GroupRatio)
+	require.Equal(t, int(2*common.QuotaPerUnit*3), info.PriceData.QuotaToPreConsume)
+	require.Equal(t, info.PriceData.QuotaToPreConsume, billing.reserved)
+}

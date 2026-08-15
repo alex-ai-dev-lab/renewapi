@@ -1,11 +1,16 @@
-name: Build renewapi source image package
+name: Build and release RenewAPI images
 
 on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'renewapi-v*'
   workflow_dispatch:
     inputs:
       expected_sha:
         description: "Exact source SHA authorized for this release."
-        required: true
+        required: false
         type: string
       image_tag:
         description: "Optional image tag. Defaults to the short source SHA."
@@ -15,9 +20,9 @@ on:
         description: "Create a GitHub Release with the image tarball."
         required: false
         type: boolean
-        default: true
+        default: false
       release_tag:
-        description: "Optional release tag. Defaults to newapi-source-<image tag>."
+        description: "Optional source-package release tag. Product tags use renewapi-v<version>."
         required: false
         type: string
       base_sha:
@@ -30,7 +35,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: newapi-source-image-package
+  group: renewapi-release-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -106,8 +111,12 @@ jobs:
 
       - name: Verify immutable release source
         env:
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          EXPECTED_SHA: ${{ inputs.expected_sha || github.sha }}
         run: test "$GITHUB_SHA" = "$EXPECTED_SHA"
+
+      - name: Verify product tag and VERSION
+        if: startsWith(github.ref, 'refs/tags/renewapi-v')
+        run: bash scripts/validate-release.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
 
       - uses: actions/setup-go@v5
         with:
@@ -148,7 +157,7 @@ jobs:
         run: |
           set -euo pipefail
           base="${INPUT_BASE_SHA:-$GITHUB_SHA^}"
-          added="$(git diff --unified=0 "$base" "$GITHUB_SHA" -- '*.go' | grep '^+' | grep -v '^+++' || true)"
+          added="$(git diff --unified=0 "$base" "$GITHUB_SHA" -- '*.go' ':(exclude)common/json.go' | grep '^+' | grep -v '^+++' || true)"
           violations="$(printf '%s\n' "$added" | grep -E '("encoding/json"|json\.(Marshal|Unmarshal|NewEncoder|NewDecoder)\()' || true)"
           if [[ -n "$violations" ]]; then
             printf '%s\n' 'New direct encoding/json usage is forbidden; use common.Marshal/common.Unmarshal and the shared JSON boundary:'
@@ -246,7 +255,13 @@ jobs:
     outputs:
       image: ${{ steps.meta.outputs.image }}
       tag: ${{ steps.meta.outputs.tag }}
+      image_tags: ${{ steps.meta.outputs.image_tags }}
       release_tag: ${{ steps.meta.outputs.release_tag }}
+      create_release: ${{ steps.meta.outputs.create_release }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      release_type: ${{ steps.meta.outputs.release_type }}
+      product_version: ${{ steps.meta.outputs.product_version }}
+      build_channel: ${{ steps.meta.outputs.build_channel }}
       tarball: ${{ steps.meta.outputs.tarball }}
     steps:
       - uses: actions/checkout@v4
@@ -264,25 +279,86 @@ jobs:
         env:
           INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          INPUT_CREATE_RELEASE: ${{ inputs.create_release }}
         run: |
           set -euo pipefail
           short="${GITHUB_SHA::12}"
-          raw_tag="${INPUT_IMAGE_TAG:-sha-$short}"
-          tag="$(printf '%s' "$raw_tag" | tr -c 'A-Za-z0-9_.-' '-')"
-          tag="${tag%-}"
-          if [ -z "$tag" ]; then
-            tag="sha-$short"
-          fi
-          release_tag="${INPUT_RELEASE_TAG:-renewapi-source-$tag}"
+          product_version="$(tr -d '\r\n' < VERSION)"
           image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/renewapi"
+          ref="${GITHUB_REF_NAME:-detached}"
+          tag=""
+          release_tag=""
+          release_name="RenewAPI edge $short"
+          release_type="edge"
+          build_channel="edge"
+          create_release="false"
+          prerelease="false"
+          tags=()
+
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$ref" == "main" ]]; then
+            tag="edge"
+            tags=("$image:edge" "$image:sha-$short")
+            build_channel="edge"
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$ref" == renewapi-v* ]]; then
+            product_version_from_tag="${ref#renewapi-}"
+            if [[ "$product_version" != "$product_version_from_tag" ]]; then
+              echo "VERSION ($product_version) does not match product tag version ($product_version_from_tag)" >&2
+              exit 1
+            fi
+            tag="${product_version_from_tag#v}"
+            if [[ "$product_version_from_tag" == *-* ]]; then
+              prerelease="true"
+              tags=("$image:$tag" "$image:rc" "$image:sha-$short")
+            else
+              minor="${tag%.*}"
+              major="${tag%%.*}"
+              tags=("$image:$tag" "$image:$minor" "$image:$major" "$image:latest" "$image:sha-$short")
+            fi
+            release_tag="$ref"
+            release_type="product"
+            release_name="RenewAPI $product_version"
+            build_channel="release"
+            create_release="true"
+          else
+            raw_tag="${INPUT_IMAGE_TAG:-sha-$short}"
+            tag="$(printf '%s' "$raw_tag" | tr -c 'A-Za-z0-9_.-' '-')"
+            tag="${tag%-}"
+            if [ -z "$tag" ]; then
+              tag="sha-$short"
+            fi
+            case "$tag" in
+              latest|rc|edge)
+                echo "manual source builds may not publish reserved alias: $tag" >&2
+                exit 1
+                ;;
+            esac
+            tags=("$image:$tag" "$image:sha-$short")
+            release_tag="${INPUT_RELEASE_TAG:-renewapi-source-$tag}"
+            if [[ "$release_tag" == renewapi-v* ]]; then
+              echo "manual source releases may not use the product tag namespace: $release_tag" >&2
+              exit 1
+            fi
+            release_type="source"
+            release_name="RenewAPI source image $tag"
+            build_channel="manual"
+            if [[ "$INPUT_CREATE_RELEASE" == "true" ]]; then
+              create_release="true"
+            fi
+          fi
+
           tarball="renewapi-${tag}-linux-amd64.tar.gz"
           {
             echo "short=$short"
             echo "tag=$tag"
+            echo "product_version=$product_version"
             echo "release_tag=$release_tag"
+            echo "release_name=$release_name"
+            echo "create_release=$create_release"
+            echo "prerelease=$prerelease"
+            echo "release_type=$release_type"
+            echo "build_channel=$build_channel"
             echo "image=$image"
             echo "tarball=$tarball"
-            ref="${GITHUB_REF_NAME:-detached}"
             cache_ref="$(printf '%s' "$ref" | tr -c 'A-Za-z0-9_.-' '-')"
             cache_ref="${cache_ref%-}"
             if [ -z "$cache_ref" ]; then
@@ -290,6 +366,9 @@ jobs:
             fi
             echo "cache_scope=renewapi-${GITHUB_EVENT_NAME}-${cache_ref}"
             echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo 'image_tags<<EOF'
+            printf '%s\n' "${tags[@]}"
+            echo EOF
           } >> "$GITHUB_OUTPUT"
 
       - uses: docker/login-action@v3
@@ -306,13 +385,13 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            VERSION=${{ steps.meta.outputs.tag }}
+            VERSION=${{ steps.meta.outputs.product_version }}
             COMMIT_SHA=${{ github.sha }}
             BUILD_DATE=${{ steps.meta.outputs.created }}
+            BUILD_CHANNEL=${{ steps.meta.outputs.build_channel }}
             UPSTREAM_REF=${{ env.UPSTREAM_REF }}
           tags: |
-            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
-            ${{ steps.meta.outputs.image }}:sha-${{ steps.meta.outputs.short }}
+            ${{ steps.meta.outputs.image_tags }}
           cache-from: type=gha,scope=${{ steps.meta.outputs.cache_scope }}
           # Frontend builders are intermediate stages; mode=max is required to
           # restore Bun/Vite/Rsbuild layers on the next run. Move to mode=min
@@ -347,10 +426,14 @@ jobs:
         env:
           IMAGE: ${{ steps.meta.outputs.image }}
           TAG: ${{ steps.meta.outputs.tag }}
+          PRODUCT_VERSION: ${{ steps.meta.outputs.product_version }}
+          BUILD_CHANNEL: ${{ steps.meta.outputs.build_channel }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           cat > release-assets/RELEASE_NOTES.md <<EOF
           Image: ${IMAGE}:${TAG}
+          Product version: ${PRODUCT_VERSION}
+          Build channel: ${BUILD_CHANNEL}
           Digest: ${DIGEST}
           Source commit: ${GITHUB_SHA}
           Audited upstream ref: ${UPSTREAM_REF}
@@ -385,15 +468,15 @@ jobs:
           )
 
       - name: Create GitHub Release
-        if: inputs.create_release
+        if: steps.meta.outputs.create_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.release_tag }}
           target_commitish: ${{ github.sha }}
-          name: renewapi source image ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.release_name }}
           body_path: release-assets/RELEASE_NOTES.md
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
           files: |
             release-assets/${{ steps.meta.outputs.tarball }}
             release-assets/compose.yaml
@@ -402,11 +485,16 @@ jobs:
             release-assets/CHECKSUMS.txt
 
       - name: Verify release tag source commit
-        if: inputs.create_release
+        if: steps.meta.outputs.create_release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
         run: |
           set -euo pipefail
+          object_type="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.type')"
           actual="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')"
+          while [[ "$object_type" == "tag" ]]; do
+            object_type="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${actual}" --jq '.object.type')"
+            actual="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${actual}" --jq '.object.sha')"
+          done
           test "$actual" = "$GITHUB_SHA"

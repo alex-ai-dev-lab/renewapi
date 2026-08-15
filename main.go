@@ -66,7 +66,6 @@ func main() {
 	startTime := time.Now()
 	signalCtx, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stopSignals()
-	requestguard.SetProcessContext(signalCtx)
 	workers := newBackgroundWorkers()
 	startWorker := func(name string, run func(context.Context)) {
 		workers.Go(name, func(ctx context.Context) {
@@ -107,6 +106,7 @@ func main() {
 		workers.cancel()
 		closeResources()
 	}()
+	startWorker("requestguard-observe", requestguard.RunObserveWorkers)
 	startWorker("system-monitor", common.RunSystemMonitor)
 
 	if common.RedisEnabled {

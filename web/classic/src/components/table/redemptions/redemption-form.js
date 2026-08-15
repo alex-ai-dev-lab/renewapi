@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2023-2026 QuantumNous
+Copyright (C) 2025 QuantumNous
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
@@ -16,19 +16,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-// ============================================================================
-// Utility Functions
-// ============================================================================
-export { isRedemptionExpired, isTimestampExpired } from './utils'
 
-// ============================================================================
-// Form Utilities
-// ============================================================================
-export {
-  getRedemptionFormSchema,
-  type RedemptionFormValues,
-  type RedemptionQuotaSubmission,
-  REDEMPTION_FORM_DEFAULT_VALUES,
-  transformFormDataToPayload,
-  transformRedemptionToFormDefaults,
-} from './redemption-form'
+export const resolveRedemptionSubmitQuota = ({
+  isEdit,
+  dirtySource,
+  originalQuota,
+  quota,
+  amount,
+  convertAmountToQuota,
+}) => {
+  if (isEdit && dirtySource === null && Number.isFinite(originalQuota)) {
+    return originalQuota;
+  }
+  if (isEdit && dirtySource === 'quota' && Number.isFinite(quota)) {
+    return quota;
+  }
+  return convertAmountToQuota(amount);
+};

@@ -10,6 +10,11 @@ Fork review base: `origin/main` at `91d636fba978`
 
 The fork and `QuantumNous/new-api` have no common Git ancestor. "Audited" means every upstream commit through the ref above was reviewed; it does not mean every feature was copied. Updates are ported as behavior-focused local commits so fork security, compatibility, and branding remain intact.
 
+Historical entries use the status vocabulary that was recorded at the time
+(`ALREADY_COVERED`, `ADAPT`, `DEFER`, and `REJECT`). New entries should use the
+normalized dispositions `PORTED`, `ADAPTED`, `ALREADY_PRESENT`,
+`NOT_APPLICABLE`, `SKIPPED`, `DEFERRED`, or `REJECTED`.
+
 ## Imported In This Audit
 
 | Upstream commit(s) | Local commit | Result |
@@ -31,7 +36,10 @@ Reviewed upstream through QuantumNous/new-api `main` at `58d4e9bd3bb035df8ea235d
 
 | Upstream ref | Classification | Local result |
 | --- | --- | --- |
-| `58d4e9b`, `ccd535e`, `50e5377`, `e926e5c`, `df43f80`, `cfaba1d` | `ALREADY_COVERED` | Existing BillingSession, explicit-column account updates, transport, thinking-budget, and compatibility behavior already cover these invariants; no duplicate port was added. |
+| `58d4e9b`, `ccd535e`, `50e5377`, `df43f80`, `cfaba1d` | `ALREADY_COVERED` | Existing BillingSession, transport, thinking-budget, and compatibility behavior already cover these invariants; no duplicate port was added. |
+| `e926e5c` | `ADAPTED` | Preserved the exact stored redemption quota when an edit leaves the amount unchanged in both default and classic frontends, while retaining existing create and explicit-edit conversion behavior. |
+| `d799267` | `ADAPTED` | Built-in OAuth and WeChat binding now update only a whitelisted binding column, preserving concurrent quota, status, group, and profile changes; custom OAuth bindings remain in `user_oauth_bindings`. |
+| `1da23d6` | `ADAPTED` | Added isolated per-user critical throttles for token regeneration and affiliate quota transfer using RenewAPI's existing limiter abstraction. |
 | `d6b5ce9`, `253a74d`, `2399de9`, `3d5dc36`, `d49160f`, `bd585d7` | `ADAPT` | Ported the relevant HTTP replay, Responses penalty, backend length validation, Gemini model listing, Ali `top_p`, cancellation, and bounded cooldown behavior in renewapi-native code and tests. |
 | CPA `Retry-After` edge cases | `ADAPT` | Retained the existing router reliability boundary and added only a bounded cooldown hint. |
 | DeepSeek Responses, broad UI/refactor/relaykit changes, and unrelated dependency churn | `DEFER` / `REJECT` | Not required by this audit or incompatible with the fork's current scope. |

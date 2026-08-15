@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -211,6 +212,7 @@ func TestRefundTaskQuota_Wallet(t *testing.T) {
 	seedUser(t, userID, initQuota)
 	seedToken(t, tokenID, userID, "sk-test-key", tokenRemain)
 	seedChannel(t, channelID)
+	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", tokenID).Update("used_quota", preConsumed).Error)
 
 	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
 
@@ -221,7 +223,7 @@ func TestRefundTaskQuota_Wallet(t *testing.T) {
 
 	// Token remain_quota should increase, used_quota should decrease
 	assert.Equal(t, tokenRemain+preConsumed, getTokenRemainQuota(t, tokenID))
-	assert.Equal(t, -preConsumed, getTokenUsedQuota(t, tokenID))
+	assert.Zero(t, getTokenUsedQuota(t, tokenID))
 
 	// A refund log should be created
 	log := getLastLog(t)
@@ -229,6 +231,64 @@ func TestRefundTaskQuota_Wallet(t *testing.T) {
 	assert.Equal(t, model.LogTypeRefund, log.Type)
 	assert.Equal(t, preConsumed, log.Quota)
 	assert.Equal(t, "test-model", log.ModelName)
+}
+
+func TestFinalizeTaskBillingTransitionConcurrentRefundAppliesOnce(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 5, 5, 5
+	const userQuotaAfterPreConsume, tokenRemainAfterPreConsume, preConsumed = 7000, 5000, 3000
+
+	seedUser(t, userID, userQuotaAfterPreConsume)
+	seedToken(t, tokenID, userID, "sk-concurrent-refund", tokenRemainAfterPreConsume)
+	seedChannel(t, channelID)
+	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", tokenID).Update("used_quota", preConsumed).Error)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	task.Status = model.TaskStatusInProgress
+	require.NoError(t, model.DB.Create(task).Error)
+
+	first := *task
+	first.Status = model.TaskStatusFailure
+	first.FailReason = "upstream failed"
+	second := first
+	start := make(chan struct{})
+	wins := make(chan bool, 2)
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for _, candidate := range []*model.Task{&first, &second} {
+		wg.Add(1)
+		go func(candidate *model.Task) {
+			defer wg.Done()
+			<-start
+			won, finalizeErr := FinalizeTaskBillingTransition(ctx, candidate, model.TaskStatusInProgress, 0, candidate.FailReason)
+			if finalizeErr != nil {
+				errs <- finalizeErr
+				return
+			}
+			wins <- won
+		}(candidate)
+	}
+	close(start)
+	wg.Wait()
+	close(wins)
+	close(errs)
+	for finalizeErr := range errs {
+		require.NoError(t, finalizeErr)
+	}
+
+	winCount := 0
+	for won := range wins {
+		if won {
+			winCount++
+		}
+	}
+	require.Equal(t, 1, winCount)
+	require.Equal(t, userQuotaAfterPreConsume+preConsumed, getUserQuota(t, userID))
+	require.Equal(t, tokenRemainAfterPreConsume+preConsumed, getTokenRemainQuota(t, tokenID))
+	require.Zero(t, getTokenUsedQuota(t, tokenID))
+	require.EqualValues(t, 1, countLogs(t))
 }
 
 func TestRefundTaskQuota_Subscription(t *testing.T) {

@@ -1,6 +1,8 @@
 package common
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"errors"
 	"io"
 	"os"
@@ -62,6 +64,30 @@ func TestOpenBodyStorageReaderUsesIndependentDiskFile(t *testing.T) {
 	_, err = io.ReadFull(storage, shared)
 	require.NoError(t, err)
 	require.Equal(t, []byte("ba"), shared)
+}
+
+func TestOpenBodyStorageReaderStreamsLargeDiskBackedPayload(t *testing.T) {
+	original := GetDiskCacheConfig()
+	SetDiskCacheConfig(DiskCacheConfig{Enabled: true, ThresholdMB: 1, MaxSizeMB: 16, Path: t.TempDir()})
+	t.Cleanup(func() { SetDiskCacheConfig(original) })
+
+	payload := bytes.Repeat([]byte("0123456789abcdef"), 128*1024)
+	storage, err := CreateBodyStorageFromReader(bytes.NewReader(payload), int64(len(payload)), int64(len(payload)))
+	require.NoError(t, err)
+	require.True(t, storage.IsDisk())
+	t.Cleanup(func() { _ = storage.Close() })
+
+	replay, err := OpenBodyStorageReader(storage)
+	require.NoError(t, err)
+	_, isFile := replay.(*os.File)
+	require.True(t, isFile, "disk-backed replay must remain file-backed")
+
+	hash := sha256.New()
+	written, err := io.Copy(hash, replay)
+	require.NoError(t, err)
+	require.NoError(t, replay.Close())
+	require.Equal(t, int64(len(payload)), written)
+	require.Equal(t, sha256.Sum256(payload), [sha256.Size]byte(hash.Sum(nil)))
 }
 
 func TestOpenBodyStorageReaderRejectsClosedStorage(t *testing.T) {

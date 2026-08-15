@@ -34,3 +34,10 @@ type Provider interface {
 	// GetProviderPrefix returns the prefix for auto-generated usernames (e.g., "github_")
 	GetProviderPrefix() string
 }
+
+// BindingColumnProvider is implemented by built-in providers whose account ID
+// is stored directly on the users table. Generic providers intentionally do
+// not implement it because they use user_oauth_bindings.
+type BindingColumnProvider interface {
+	BindingColumn() string
+}

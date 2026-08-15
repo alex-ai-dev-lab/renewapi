@@ -1,12 +1,12 @@
 # renewapi
 
-`renewapi` is a source fork of [QuantumNous/new-api](https://github.com/QuantumNous/new-api). Its independent history has been manually audited through upstream `v1.0.0-rc.20` (`4e570389`); imported and deferred changes are recorded in `UPSTREAM_PORTS.md`.
+`renewapi` is a source fork of [QuantumNous/new-api](https://github.com/QuantumNous/new-api). Its independent history has been manually audited through upstream `v1.0.0-rc.24` plus post-release `main` at `58d4e9bd3bb035df8ea235dd682ccc8a45d0332a`; imported and deferred changes are recorded in `UPSTREAM_PORTS.md`.
 
 It keeps the upstream API surface and data model compatible while adding a compatibility layer, profile-based anti-poison controls, hardened runtime defaults, and a source-first Docker build workflow.
 
 > Repository name: `renewapi`
 >
-> Published image: `ghcr.io/alex-ai-dev-lab/newapi-compat-image`
+> Published image: `ghcr.io/alex-ai-dev-lab/renewapi`
 >
 > Go module path remains `github.com/QuantumNous/new-api` to reduce upstream merge conflicts.
 
@@ -168,14 +168,14 @@ docker buildx build --platform linux/amd64,linux/arm64 \
   --build-arg VERSION=dev \
   --build-arg COMMIT_SHA="$(git rev-parse HEAD)" \
   --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  --build-arg UPSTREAM_REF=4e570389dd433a717373ce9c9b822b59f5ed3d5d \
-  -t ghcr.io/alex-ai-dev-lab/newapi-compat-image:dev .
+  --build-arg UPSTREAM_REF=58d4e9bd3bb035df8ea235dd682ccc8a45d0332a \
+  -t ghcr.io/alex-ai-dev-lab/renewapi:dev .
 ```
 
 Local single-arch build:
 
 ```powershell
-.\scripts\local-build.ps1 -Image ghcr.io/alex-ai-dev-lab/newapi-compat-image:dev -Load
+.\scripts\local-build.ps1 -Image ghcr.io/alex-ai-dev-lab/renewapi:dev -Load
 ```
 
 Multi-arch push:
@@ -191,7 +191,7 @@ CI publishes GHCR images through `.github/workflows/build-release.yml` with the 
 Local secrets are loaded from `Token/` and must not be committed.
 
 ```powershell
-.\scripts\deploy-server.ps1 -Image ghcr.io/alex-ai-dev-lab/newapi-compat-image:latest
+.\scripts\deploy-server.ps1 -Image ghcr.io/alex-ai-dev-lab/renewapi:latest
 .\scripts\rollback-server.ps1
 ```
 
@@ -220,6 +220,15 @@ go test ./relay/antipoison ./service ./model ./controller
 ```
 
 Rebuild frontend assets before publishing Docker images.
+
+## Version and release identity
+
+`VERSION` contains the pure RenewAPI product version only. The current product
+version is `v1.0.0-rc.2`; its exact product Git tag is
+`renewapi-v1.0.0-rc.2`. Build commit, build time, build channel, and the
+audited upstream reference are separate image/release metadata. Raw upstream
+`v1.0.0-rc.*` tags remain untouched and are never RenewAPI product triggers.
+See `docs/MAINTENANCE.md` and `docs/decisions/`.
 
 ## Security
 

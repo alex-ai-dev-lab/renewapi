@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -32,6 +33,9 @@ func setupUserUpdateTestState(t *testing.T) {
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
 	require.NoError(t, db.AutoMigrate(&User{}))
 	DB = db
 	common.RedisEnabled = false
@@ -159,4 +163,105 @@ func TestUpdateWithTxPreservesQuotaCounters(t *testing.T) {
 	assert.Equal(t, 100, stored.Quota)
 	assert.Equal(t, 20, stored.UsedQuota)
 	assert.Equal(t, 3, stored.RequestCount)
+}
+
+func TestUpdateUserBindColumnPreservesConcurrentAccountState(t *testing.T) {
+	setupUserUpdateTestState(t)
+
+	user := User{
+		Username: "binding-user", Password: "old", Email: "old@example.com",
+		AffCode: "binding", Quota: 100, Status: common.UserStatusEnabled,
+		Group: "default",
+	}
+	require.NoError(t, DB.Create(&user).Error)
+
+	// Simulate state changed after the binding handler loaded its User snapshot.
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", user.Id).Updates(map[string]any{
+		"quota":  275,
+		"status": common.UserStatusDisabled,
+		"group":  "vip",
+	}).Error)
+
+	require.NoError(t, UpdateUserBindColumn(user.Id, "github_id", "github-123"))
+
+	var stored User
+	require.NoError(t, DB.First(&stored, user.Id).Error)
+	assert.Equal(t, "github-123", stored.GitHubId)
+	assert.Equal(t, 275, stored.Quota)
+	assert.Equal(t, common.UserStatusDisabled, stored.Status)
+	assert.Equal(t, "vip", stored.Group)
+}
+
+func TestUpdateUserBindColumnDoesNotLoseConcurrentQuotaOrStatusUpdates(t *testing.T) {
+	setupUserUpdateTestState(t)
+
+	user := User{
+		Username: "binding-concurrent", Password: "old", AffCode: "binding-concurrent",
+		Quota: 100, Status: common.UserStatusEnabled, Group: "default",
+	}
+	require.NoError(t, DB.Create(&user).Error)
+
+	start := make(chan struct{})
+	errs := make(chan error, 3)
+	var wg sync.WaitGroup
+	operations := []func() error{
+		func() error { return UpdateUserBindColumn(user.Id, "github_id", "github-concurrent") },
+		func() error {
+			return DB.Model(&User{}).Where("id = ?", user.Id).Update("quota", gorm.Expr("quota + ?", 75)).Error
+		},
+		func() error {
+			return DB.Model(&User{}).Where("id = ?", user.Id).Updates(map[string]any{
+				"status": common.UserStatusDisabled,
+				"group":  "vip",
+			}).Error
+		},
+	}
+	for _, operation := range operations {
+		wg.Add(1)
+		go func(operation func() error) {
+			defer wg.Done()
+			<-start
+			errs <- operation()
+		}(operation)
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for operationErr := range errs {
+		require.NoError(t, operationErr)
+	}
+
+	var stored User
+	require.NoError(t, DB.First(&stored, user.Id).Error)
+	assert.Equal(t, "github-concurrent", stored.GitHubId)
+	assert.Equal(t, 175, stored.Quota)
+	assert.Equal(t, common.UserStatusDisabled, stored.Status)
+	assert.Equal(t, "vip", stored.Group)
+}
+
+func TestUpdateUserBindColumnRejectsUnknownColumn(t *testing.T) {
+	setupUserUpdateTestState(t)
+
+	user := User{Username: "binding-whitelist", Password: "old", AffCode: "binding-whitelist"}
+	require.NoError(t, DB.Create(&user).Error)
+
+	err := UpdateUserBindColumn(user.Id, "quota", "999999")
+	require.ErrorContains(t, err, "unsupported user binding column")
+
+	var stored User
+	require.NoError(t, DB.First(&stored, user.Id).Error)
+	assert.Zero(t, stored.Quota)
+}
+
+func TestUpdateUserBindColumnKeepsDuplicateDetection(t *testing.T) {
+	setupUserUpdateTestState(t)
+
+	first := User{Username: "binding-first", Password: "old", AffCode: "binding-first"}
+	second := User{Username: "binding-second", Password: "old", AffCode: "binding-second"}
+	require.NoError(t, DB.Create(&first).Error)
+	require.NoError(t, DB.Create(&second).Error)
+	require.NoError(t, UpdateUserBindColumn(first.Id, "wechat_id", "wechat-duplicate"))
+
+	assert.True(t, IsWeChatIdAlreadyTaken("wechat-duplicate"))
+	assert.False(t, IsWeChatIdAlreadyTaken("wechat-unused"))
 }

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -100,6 +101,39 @@ func TestRechargeWaffoPancake_RejectsMismatchedPaymentMethod(t *testing.T) {
 	require.NotNil(t, topUp)
 	assert.Equal(t, common.TopUpStatusPending, topUp.Status)
 	assert.Equal(t, 0, getUserQuotaForPaymentGuardTest(t, 101))
+}
+
+func TestRechargeWaffoPancakeConcurrentSettlementCreditsOnce(t *testing.T) {
+	truncateTables(t)
+
+	const userID = 102
+	const workers = 8
+	insertUserForPaymentGuardTest(t, userID, 0)
+	insertTopUpForPaymentGuardTest(t, "waffo-pancake-concurrent", userID, PaymentProviderWaffoPancake)
+
+	start := make(chan struct{})
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			errs <- RechargeWaffoPancake("waffo-pancake-concurrent")
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for rechargeErr := range errs {
+		require.NoError(t, rechargeErr)
+	}
+
+	require.Equal(t, common.TopUpStatusSuccess, getTopUpStatusForPaymentGuardTest(t, "waffo-pancake-concurrent"))
+	require.Equal(t, int(2*common.QuotaPerUnit), getUserQuotaForPaymentGuardTest(t, userID))
+	var logCount int64
+	require.NoError(t, LOG_DB.Model(&Log{}).Where("user_id = ? AND type = ?", userID, LogTypeTopup).Count(&logCount).Error)
+	require.EqualValues(t, 1, logCount)
 }
 
 func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T) {

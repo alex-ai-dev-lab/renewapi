@@ -1,7 +1,10 @@
 package channel
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -40,6 +43,47 @@ func TestDoRequestPropagatesInboundCancellation(t *testing.T) {
 	case <-upstreamCanceled:
 	case <-time.After(time.Second):
 		t.Fatal("upstream request did not inherit inbound cancellation")
+	}
+}
+
+func TestApplyUpstreamBodyMetadataSupportsMultipartReplay(t *testing.T) {
+	var payload bytes.Buffer
+	writer := multipart.NewWriter(&payload)
+	require.NoError(t, writer.WriteField("model", "whisper-1"))
+	part, err := writer.CreateFormFile("file", "sample.txt")
+	require.NoError(t, err)
+	_, err = part.Write([]byte("multipart replay"))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	body, size, getBody, closer, err := relaycommon.NewOutboundJSONBody(payload.Bytes())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = closer.Close() })
+	req, err := http.NewRequest(http.MethodPost, "https://example.com/v1/audio/transcriptions", body)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	ApplyUpstreamBodyMetadata(req, &relaycommon.RelayInfo{
+		UpstreamRequestBodySize: size,
+		UpstreamRequestGetBody:  getBody,
+	})
+
+	require.Equal(t, size, req.ContentLength)
+	require.NotNil(t, req.GetBody)
+	for range 2 {
+		replay, replayErr := req.GetBody()
+		require.NoError(t, replayErr)
+		form, parseErr := multipart.NewReader(replay, writer.Boundary()).ReadForm(1024)
+		require.NoError(t, parseErr)
+		require.Equal(t, []string{"whisper-1"}, form.Value["model"])
+		require.Len(t, form.File["file"], 1)
+		file, openErr := form.File["file"][0].Open()
+		require.NoError(t, openErr)
+		contents, readErr := io.ReadAll(file)
+		require.NoError(t, readErr)
+		require.NoError(t, file.Close())
+		require.Equal(t, "multipart replay", string(contents))
+		require.NoError(t, form.RemoveAll())
+		require.NoError(t, replay.Close())
 	}
 }
 

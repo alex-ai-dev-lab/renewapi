@@ -437,6 +437,9 @@ func responsesRoutingRequirement(c *gin.Context) *service.ResponsesRoutingRequir
 			kind = dto.ResponsesCompactEndpoint
 		}
 	}
+	if !service.RequiresResponsesCompactionCapability(kind) {
+		return nil
+	}
 	return &service.ResponsesRoutingRequirement{Kind: kind, ClientStream: c.GetBool("responses_client_stream")}
 }
 
@@ -526,7 +529,7 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 }
 
 func responsesRoutePlanEnabled(requirement *service.ResponsesRoutingRequirement) bool {
-	return requirement != nil && requirement.Kind != dto.ResponsesNormal &&
+	return requirement != nil && service.RequiresResponsesCompactionCapability(requirement.Kind) &&
 		common.GetEnvOrDefaultBool("RESPONSES_COMPACTION_ROUTE_PLAN_ENABLED", false)
 }
 

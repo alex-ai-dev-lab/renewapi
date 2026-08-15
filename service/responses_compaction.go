@@ -79,6 +79,18 @@ func ClassifyResponsesRequest(path string, signals ResponsesInputSignals) dto.Re
 	return dto.ResponsesNormal
 }
 
+// RequiresResponsesCompactionCapability reports whether the wire-level
+// Responses request needs a channel with verified compaction support.
+//
+// Ordinary Responses requests, including requests whose context was compacted
+// locally by the client, remain ordinary requests as long as they do not carry
+// the compaction endpoint or compaction item types. Keeping this predicate
+// centralized prevents normal traffic from accidentally inheriting the
+// compaction route constraint.
+func RequiresResponsesCompactionCapability(kind dto.ResponsesRequestKind) bool {
+	return kind != dto.ResponsesNormal
+}
+
 func ResponsesCompactionEnforcementStrict() bool {
 	return !strings.EqualFold(strings.TrimSpace(common.GetEnvOrDefaultString("RESPONSES_COMPACTION_ENFORCEMENT", "strict")), "observe")
 }
@@ -333,7 +345,7 @@ func effectiveCompactionCapability(channel *model.Channel, modelName string) dto
 }
 
 func ChannelMatchesResponsesRequirement(channel *model.Channel, modelName string, requirement *ResponsesRoutingRequirement, request dto.Request) bool {
-	if requirement == nil || requirement.Kind == dto.ResponsesNormal {
+	if requirement == nil || !RequiresResponsesCompactionCapability(requirement.Kind) {
 		return true
 	}
 	protocol := EvaluateChannelProtocolCapability(channel, modelName, types.RelayFormatOpenAIResponses, request)

@@ -63,6 +63,9 @@ func responsesRequirementForRelay(info *relaycommon.RelayInfo) *service.Response
 	if info == nil || (info.RelayMode != relayconstant.RelayModeResponses && info.RelayMode != relayconstant.RelayModeResponsesCompact) {
 		return nil
 	}
+	if !service.RequiresResponsesCompactionCapability(info.ResponsesRequestKind) {
+		return nil
+	}
 	requirement := &service.ResponsesRoutingRequirement{Kind: info.ResponsesRequestKind, ClientStream: info.IsStream}
 	if info.ResponsesRequestKind == dto.ResponsesCompactionTrigger &&
 		info.ClientModelName != "" &&
@@ -379,7 +382,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			getFallbackModels(c, relayInfo.OriginModelName),
 		)
 	}
-	if !distributorPlanned && responsesRequirement != nil && responsesRequirement.Kind != dto.ResponsesNormal &&
+	if !distributorPlanned && responsesRequirement != nil &&
+		service.RequiresResponsesCompactionCapability(responsesRequirement.Kind) &&
 		common.GetEnvOrDefaultBool("RESPONSES_COMPACTION_ROUTE_PLAN_ENABLED", false) {
 		concreteGroup := strings.TrimSpace(relayInfo.UsingGroup)
 		if concreteGroup == "" || strings.EqualFold(concreteGroup, "auto") {

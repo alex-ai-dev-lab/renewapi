@@ -76,6 +76,48 @@ func TestGetModelFromJSONBodyUsesCompactionDTOForCompactEndpoint(t *testing.T) {
 	require.Equal(t, "resp_1", routingRequest.PreviousResponseID)
 }
 
+func TestResponsesRoutingRequirementLeavesNormalResponsesUnconstrained(t *testing.T) {
+	writer := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(writer)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-5.5","input":"hello"}`))
+
+	ctx.Set(service.ContextKeyResponsesRequestKind, dto.ResponsesNormal)
+	require.Nil(t, responsesRoutingRequirement(ctx))
+
+	ctx.Set(service.ContextKeyResponsesRequestKind, dto.ResponsesCompactionTrigger)
+	require.NotNil(t, responsesRoutingRequirement(ctx))
+	require.Equal(t, dto.ResponsesCompactionTrigger, responsesRoutingRequirement(ctx).Kind)
+}
+
+func TestDistributeNormalResponsesDoesNotRequireCompactionCapability(t *testing.T) {
+	db := setupDistributorFallbackTestDB(t)
+	channel := distributorRouteTestChannel(71, "normal-only", "gpt-5.5", 20)
+	require.NoError(t, db.Create(channel).Error)
+	require.NoError(t, channel.AddAbilities(nil))
+	model.InitChannelCache()
+
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+	t.Setenv("RESPONSES_COMPACTION_ROUTE_PLAN_ENABLED", "true")
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	router.POST("/v1/responses",
+		distributorRouteAuthContext(),
+		Distribute(),
+		func(c *gin.Context) {
+			require.Equal(t, channel.Id, common.GetContextKeyInt(c, constant.ContextKeyChannelId))
+			_, found := common.GetContextKey(c, constant.ContextKeyResponsesRelayRoutePlan)
+			require.False(t, found)
+			c.Status(http.StatusNoContent)
+		},
+	)
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-5.5","input":"hello"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	require.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
+}
+
 func TestDistributeInstallsHighestPriorityChannelModelRouteBeforeRelay(t *testing.T) {
 	require.NoError(t, appI18n.Init())
 	oldDB := model.DB

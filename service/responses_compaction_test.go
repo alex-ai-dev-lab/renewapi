@@ -23,6 +23,10 @@ func TestChannelMatchesResponsesRequirement(t *testing.T) {
 	channel := func(channelType int, setting string) *model.Channel {
 		return &model.Channel{Type: channelType, Setting: common.GetPointer(setting)}
 	}
+	require.True(t, RequiresResponsesCompactionCapability(dto.ResponsesCompactionTrigger))
+	require.False(t, RequiresResponsesCompactionCapability(dto.ResponsesNormal))
+	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{}`), "gpt-5.4", nil, nil))
+	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{}`), "gpt-5.4", &ResponsesRoutingRequirement{Kind: dto.ResponsesNormal}, nil))
 	require.False(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{}`), "gpt-5.4", trigger, nil))
 	require.False(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"disabled"}}}`), "gpt-5.4", trigger, nil))
 	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"native_v2"}}}`), "gpt-5.4", trigger, nil))

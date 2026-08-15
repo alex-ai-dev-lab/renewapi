@@ -43,8 +43,7 @@ func TestResponsesRequirementForRelayDoesNotConstrainNormalRequests(t *testing.T
 	}
 
 	requirement := responsesRequirementForRelay(info)
-	require.NotNil(t, requirement)
-	require.Empty(t, requirement.RequiredContinuationModel)
+	require.Nil(t, requirement)
 }
 
 func TestPrepareDistributorResponsesRoutePlanAdvancesBeforePricingWhenFirstRouteBecomesInvalid(t *testing.T) {

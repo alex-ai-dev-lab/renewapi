@@ -35,7 +35,7 @@ type ResponsesCapabilityOutcome struct {
 }
 
 func (a ResponsesCapabilityAttempt) Related() bool {
-	return a.Kind != dto.ResponsesNormal
+	return RequiresResponsesCompactionCapability(a.Kind)
 }
 
 func compactFailureExplicitlyUnsupported(attempt ResponsesCapabilityAttempt, err *types.NewAPIError) bool {

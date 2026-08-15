@@ -14,11 +14,12 @@ upstream tag objects and remain untouched.
 Development branch:
 `fix/routing-rate-limit-channel-edit-20260814`
 
-Release preparation base commit:
-`4f3eeeb9c` (`fix: isolate compaction routing from normal responses`)
+Release commit:
+`f0f8e6ff034906ebb62a4cd752a47f1cca45d55c`
+(`release: prepare RenewAPI v1.0.0-rc.2`)
 
-The release commit containing this state is the only valid target for
-`renewapi-v1.0.0-rc.2`; the tag must not be moved after publication.
+The published annotated tag `renewapi-v1.0.0-rc.2` resolves to this release
+commit and must not be moved.
 
 ## Upstream baseline
 
@@ -36,7 +37,7 @@ See `UPSTREAM.md` and `UPSTREAM_PORTS.md`.
 - The complete 0815 correctness and RequestGuard hardening implementation is
   recorded in `tasks/archive/0815-implementation.md`.
 
-## Release readiness
+## Published prerelease
 
 - Local release preparation validation passed for
   `renewapi-v1.0.0-rc.2`.
@@ -44,14 +45,21 @@ See `UPSTREAM.md` and `UPSTREAM_PORTS.md`.
   production builds, and the SQLite RequestGuard migration check passed.
 - `CHANGELOG.md`, the upstream ledger, maintenance records, and version
   identity are synchronized for `v1.0.0-rc.2`.
+- GitHub Actions run `31881289216` passed the quality, MySQL/PostgreSQL
+  migration, multi-arch image, release-asset, and tag-source verification
+  gates.
+- GitHub Release `RenewAPI v1.0.0-rc.2` is published as a prerelease targeting
+  the release commit.
+- GHCR tags `1.0.0-rc.2`, `rc`, and `sha-f0f8e6ff0349` resolve to manifest
+  digest `sha256:9238b7cfcf842e754872fe78f605187038245ab2722ad26deb57f38fd57cf5fd`.
+- Stable `latest` remains on the older `sha-4a0d431e5d58` image at digest
+  `sha256:25796ecdec7a77c501bea1e9a4a6502d3a29d78025c5d975d889b0be9c8ae946`.
 
 ## Known high-priority technical debt
 
-- The existing GitHub workflow historically packaged source-SHA images and
-  releases; the updated workflow must be exercised by a real Actions run before
-  treating product-tag publishing as operationally proven.
-- Docker is unavailable in the current environment, so local image/runtime and
-  MySQL/PostgreSQL container migration checks remain publication-time checks.
+- Docker is unavailable in the current environment, so local image runtime was
+  not exercised. The hosted multi-arch build and MySQL/PostgreSQL migration
+  checks passed during publication.
 - Runtime endpoints expose the product version. Git commit, build time, build
   channel, and audited upstream identity remain build/image metadata rather
   than application response fields.
@@ -68,10 +76,3 @@ See `UPSTREAM.md` and `UPSTREAM_PORTS.md`.
   unchanged unless a separate feature or bug-fix task explicitly changes it.
 - Preserve fork-owned compatibility, anti-poison, security, billing, and
   deployment controls when adapting upstream behavior.
-
-## Remaining publish verification
-
-- No known local implementation blocker remains for the prerelease.
-- After explicit authorization, the final committed source must receive the
-  exact tag `renewapi-v1.0.0-rc.2`; Hosted Actions must then verify the GHCR
-  `1.0.0-rc.2`, `rc`, and `sha-*` tags without moving `latest`.

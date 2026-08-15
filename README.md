@@ -1,246 +1,157 @@
-# renewapi
+<div align="center">
 
-`renewapi` is a source fork of [QuantumNous/new-api](https://github.com/QuantumNous/new-api). Its independent history has been manually audited through upstream `v1.0.0-rc.24` plus post-release `main` at `58d4e9bd3bb035df8ea235dd682ccc8a45d0332a`; imported and deferred changes are recorded in `UPSTREAM_PORTS.md`.
+# RenewAPI
 
-It keeps the upstream API surface and data model compatible while adding a compatibility layer, profile-based anti-poison controls, hardened runtime defaults, and a source-first Docker build workflow.
+### A source-first AI gateway for multi-provider infrastructure
 
-> Repository name: `renewapi`
->
-> Published image: `ghcr.io/alex-ai-dev-lab/renewapi`
->
-> Go module path remains `github.com/QuantumNous/new-api` to reduce upstream merge conflicts.
+[![CI](https://github.com/alex-ai-dev-lab/renewapi/actions/workflows/build-release.yml/badge.svg?branch=main)](https://github.com/alex-ai-dev-lab/renewapi/actions/workflows/build-release.yml)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-2F855A.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg?logo=go&logoColor=white)](go.mod)
 
-## What It Is
+OpenAI- and Claude-compatible APIs, provider-aware routing, billing, rate
+limits, observability, and security controls in one operational surface.
 
-`renewapi` is an AI provider gateway and management panel. It exposes OpenAI / Claude compatible APIs to clients, then routes traffic through configured channels with quota, billing, rate limiting, observability, and admin controls.
+[Documentation](docs/) | [Deployment](docs/deploy.md) | [Releases](https://github.com/alex-ai-dev-lab/renewapi/releases) | [Security](SECURITY.md)
 
-This fork focuses on two areas:
+</div>
 
-- **Compatibility hardening**: safer sessions, automatic secure-cookie behavior, localhost-only pprof, provider error normalization, per-channel upstream TLS options, and deployment scripts.
-- **Anti-poison controls**: channel risk profiles, optional probes, response envelope validation, opaque payload scanning, and tool-call guard checks without injecting canary text into normal user requests.
+RenewAPI is an independently maintained source fork of
+[QuantumNous/new-api](https://github.com/QuantumNous/new-api). It preserves the
+upstream API surface and data model where compatibility matters, while adding a
+source-first build workflow, fork-owned runtime guardrails, and a deliberate
+upstream review process documented in [`UPSTREAM_PORTS.md`](UPSTREAM_PORTS.md).
 
-```mermaid
-flowchart LR
-  Client["Client SDK / Claude CLI / OpenAI API"] --> API["OpenAI / Claude compatible API"]
-  API --> Relay["Relay pipeline"]
-  Relay --> Compat["pkg/compat hooks"]
-  Relay --> AntiPoison["relay/antipoison"]
-  Relay --> Channel["Channel selector"]
-  Channel --> Providers["Upstream AI providers"]
-  Compat --> Admin["Admin panel and background jobs"]
-  AntiPoison --> Evidence["Redacted evidence logs"]
+## The Shape
+
+```text
+Client SDKs / Claude CLI
+          |
+          v
+OpenAI- and Claude-compatible API
+          |
+          v
+Relay + routing + billing + guardrails
+          |
+          v
+Configured provider channels
 ```
 
-## Tech Stack
+## Why RenewAPI
 
-| Layer | Stack |
+| Capability | What it means in practice |
+| --- | --- |
+| **One stable API** | Keep client integrations consistent while providers and models change behind the gateway. |
+| **Provider-aware routing** | Select, retry, rate-limit, and observe channels without scattering provider logic across clients. |
+| **Operational guardrails** | Apply compatibility hooks, anti-poison profiles, response checks, and redacted evidence logging at the relay boundary. |
+| **Production ownership** | Build from the checked-out source, publish immutable image metadata, and keep release identity separate from upstream tags. |
+
+## At A Glance
+
+| Area | Stack |
 | --- | --- |
 | Backend | Go, Gin, GORM v2 |
-| Frontend | `web/default`: React 19 + TypeScript + Rsbuild + Base UI + Tailwind |
-| Classic frontend | `web/classic`: React 18 + Vite + Semi Design; [retirement window](docs/classic-frontend-retirement.md) |
-| Frontend package manager | Bun |
-| Database | SQLite by default, MySQL and PostgreSQL supported |
+| Frontend | React 19, TypeScript, Rsbuild, Base UI, Tailwind CSS |
+| Frontend tooling | Bun |
+| Classic frontend | React 18, Vite, Semi Design; see the [retirement window](docs/classic-frontend-retirement.md) |
+| Data | SQLite by default; MySQL and PostgreSQL supported |
 | Cache | Redis and in-process cache |
-| Auth | JWT, WebAuthn, OAuth |
-| Image | Multi-stage Docker build, non-root Alpine runtime |
+| Authentication | JWT, WebAuthn / Passkeys, OAuth and OIDC providers |
+| Runtime | Multi-stage Docker build with a non-root Alpine image |
 
-## Repository Layout
+## Start In Minutes
 
-The project keeps the upstream NewAPI source layout:
-
-```text
-router/        route registration
-controller/    HTTP handlers
-service/       business logic
-model/         GORM models
-relay/         provider adapters and relay pipeline
-middleware/    request middleware
-setting/       runtime configuration
-web/default/   primary frontend
-web/classic/   classic frontend
-```
-
-Fork-specific compatibility and security work mainly lives in:
-
-```text
-pkg/compat/          relay hooks, error normalization, schedulers, price sync
-relay/antipoison/    channel profiles, envelope checks, scanners, tool guard
-scripts/             build, push, deploy, rollback, upstream sync helpers
-docs/                fork-specific notes
-docs/migration-from-patch-repo.md  legacy patch hashes and recovery pointers
-```
-
-## Compatibility Layer
-
-`pkg/compat` adds hook points around the relay flow instead of rewriting the upstream path directly.
-
-```mermaid
-sequenceDiagram
-  participant C as Client
-  participant R as Relay
-  participant H as Compat HookChain
-  participant P as Provider
-
-  C->>R: compatible request
-  R->>H: OnInit
-  R->>H: OnSelectRetryParam
-  R->>H: BeforeChannelCall
-  R->>P: upstream request
-  P-->>R: upstream response/error
-  R->>H: AfterChannelCall
-  R->>H: OnRetryDecision
-  R->>H: OnClientResponseError
-  R-->>C: normalized response
-```
-
-Hook rules:
-
-- Hooks should be idempotent.
-- Disabled features should add near-zero hot-path overhead.
-- Hook failures must not panic the relay path.
-- Default behavior is fail-open unless a strict policy explicitly blocks a response.
-
-## Anti-Poison Profiles
-
-Anti-poison behavior is optional and channel-scoped. Normal user traffic no longer receives canary text by default; probes use canaries separately.
-
-| Profile | Typical Use | Behavior |
-| --- | --- | --- |
-| `trusted` | Known-good production channel | Direct streaming, light scanning, no envelope requirement |
-| `unknown` | Newly added or unclassified channel | Short TTL probing, first-byte buffering, score-based opaque scanning |
-| `probation` | Production channel under stricter review | Non-stream envelope checks, stricter tool guard, streaming aggregation/replay |
-| `quarantine` | Unsafe or investigation-only channel | Probe-only, excluded from production routing |
-
-Per-channel override example:
-
-```json
-{"anti_poison_profile": "trusted"}
-```
-
-Main checks:
-
-- **Answer envelope**: probation non-stream responses can be required to bind output to a nonce.
-- **Opaque scan**: detects zero-width characters, bidi overrides, control characters, dense percent-encoding, long base64/hex blocks, and high-entropy fragments.
-- **Tool-call guard**: validates guard markers around real tool calls to reduce tool-call injection risk.
-- **Evidence logs**: writes redacted evidence under `/app/logs/anti-poison/`; authorization, key, token, and password-like fields are redacted.
-
-## Configuration Highlights
-
-| Variable | Purpose |
-| --- | --- |
-| `SESSION_SECRET` | Required. Startup should reject empty or default placeholder secrets. |
-| `COOKIE_SECURE` | Cookie Secure behavior; can be inferred from service URL. |
-| `SQL_DSN` | Database DSN. Empty value falls back to SQLite. |
-| `SQLITE_PATH` | SQLite database path. |
-| `REDIS_CONN_STRING` | Redis connection string. |
-| `PORT` | Container listen port, default `3000`. |
-| `NEWAPI_HOST_PORT` | Host port used by compose, default `3002`. |
-| `PUID` / `PGID` | Runtime user/group IDs for non-root execution. |
-| `TZ` | Runtime timezone. |
-| `ENABLE_PPROF` | Enables pprof on localhost only. |
-| `TLS_INSECURE_SKIP_VERIFY` | Global upstream TLS skip switch. Default `false`; prefer per-channel TLS settings. |
-| `OFFICIAL_PRICE_SYNC_ENABLED` | Enables scheduled official price sync from `https://models.dev/api.json` only. Default is on; set to `false` to disable. |
-
-For self-signed, expired, or private upstream certificates, prefer the channel-level "skip upstream TLS certificate verification" option instead of enabling the global TLS bypass.
-
-## Quick Start
+The default Compose path uses SQLite and persists data, logs, and public assets
+under the current directory.
 
 ```bash
+git clone https://github.com/alex-ai-dev-lab/renewapi.git
+cd renewapi
 cp .env.example .env
+openssl rand -hex 32   # put the result in .env as SESSION_SECRET
 docker compose -f compose.yaml up -d
+```
+
+Check the service:
+
+```bash
 curl -fsS http://127.0.0.1:3002/api/status
 ```
 
-The default compose path uses SQLite. MySQL and PostgreSQL examples are documented in `compose.yaml` and `docs/deploy.md`.
+The container image is published at
+`ghcr.io/alex-ai-dev-lab/renewapi`. Select a different image or host port in
+`.env` with `NEWAPI_IMAGE` and `NEWAPI_HOST_PORT`. See the
+[deployment guide](docs/deploy.md) for MySQL, PostgreSQL, proxy, permission,
+and rollback details.
 
-If old volumes were created as root, fix ownership once:
+## Build From Source
 
-```bash
-sudo chown -R 1000:1000 data logs public
-```
-
-## Build
-
-Docker builds directly from the current source tree:
-
-```bash
-docker buildx build --platform linux/amd64,linux/arm64 \
-  --build-arg VERSION=dev \
-  --build-arg COMMIT_SHA="$(git rev-parse HEAD)" \
-  --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  --build-arg UPSTREAM_REF=58d4e9bd3bb035df8ea235dd682ccc8a45d0332a \
-  -t ghcr.io/alex-ai-dev-lab/renewapi:dev .
-```
-
-Local single-arch build:
+RenewAPI is built from the checked-out source tree. A local single-architecture
+build is enough for development:
 
 ```powershell
-.\scripts\local-build.ps1 -Image ghcr.io/alex-ai-dev-lab/renewapi:dev -Load
+.\scripts\local-build.ps1 `
+  -Image ghcr.io/alex-ai-dev-lab/renewapi:dev `
+  -Load
 ```
 
-Multi-arch push:
+For a multi-architecture build or a release build, use the existing workflow
+and release scripts. Do not treat a raw upstream `v*` tag as a RenewAPI product
+release.
 
-```bash
-VERSION=v1.0.0 ./scripts/local-build.sh --push
+Upstream changes are reviewed and ported selectively with the
+[`UPSTREAM_PORTS.md`](UPSTREAM_PORTS.md) ledger and the
+[`scripts/check-upstream.*`](scripts/) helpers.
+
+## Project Map
+
+| Path | Responsibility |
+| --- | --- |
+| `router/`, `controller/`, `service/`, `model/` | HTTP surface, business logic, and persistence |
+| `relay/` | Provider adapters and the relay pipeline |
+| `middleware/`, `setting/`, `common/` | Runtime policy, configuration, and shared infrastructure |
+| `web/default/` | Primary React frontend |
+| `web/classic/` | Compatibility frontend retained during the documented retirement window |
+| `pkg/compat/` | Fork-owned relay hooks, normalization, scheduling, and price sync |
+| `relay/antipoison/` | Channel profiles, response checks, scanners, and tool-call guards |
+| `scripts/`, `docs/` | Build, deploy, rollback, upstream review, and maintenance workflows |
+
+## Compatibility And Security
+
+- The Go module path remains `github.com/QuantumNous/new-api` to reduce
+  upstream integration friction.
+- SQLite, MySQL >= 5.7.8, and PostgreSQL >= 9.6 remain supported through
+  cross-database-safe migrations and queries.
+- Anti-poison controls are channel-scoped and optional. They cover envelope
+  validation, opaque payload scanning, tool-call guard checks, and redacted
+  evidence logs without injecting canary text into normal user requests.
+- Secrets belong in `Token/` or local `.env` files. Never commit credentials,
+  private keys, or generated server access files.
+
+Read the [architecture notes](docs/ARCHITECTURE.md),
+[maintenance workflow](docs/MAINTENANCE.md), and
+[security policy](SECURITY.md) before making infrastructure or provider-level
+changes.
+
+## Releases
+
+RenewAPI product tags use the `renewapi-v<version>` namespace so imported
+upstream tags remain untouched. The current product prerelease is
+[`v1.0.0-rc.2`](https://github.com/alex-ai-dev-lab/renewapi/releases/tag/renewapi-v1.0.0-rc.2).
+
+Prerelease images use three identities:
+
+```text
+ghcr.io/alex-ai-dev-lab/renewapi:<version>
+ghcr.io/alex-ai-dev-lab/renewapi:rc
+ghcr.io/alex-ai-dev-lab/renewapi:sha-<source-commit>
 ```
 
-CI publishes GHCR images through `.github/workflows/build-release.yml` with the repository `GITHUB_TOKEN`.
-
-## Deploy
-
-Local secrets are loaded from `Token/` and must not be committed.
-
-```powershell
-.\scripts\deploy-server.ps1 -Image ghcr.io/alex-ai-dev-lab/renewapi:latest
-.\scripts\rollback-server.ps1
-```
-
-Use `-DryRun` on deployment scripts when checking generated commands before switching a live service.
-
-## Upstream Sync
-
-The fork and upstream have no common Git ancestor, so updates are reviewed and ported selectively. The sync helpers refuse unsafe merge/rebase operations and use `UPSTREAM_PORTS.md` as the audit checkpoint.
-
-```bash
-bash scripts/check-upstream.sh
-bash scripts/sync-upstream.sh --port
-```
-
-PowerShell equivalents:
-
-```powershell
-.\scripts\check-upstream.ps1
-.\scripts\sync-upstream.ps1 -Mode port
-```
-
-Port changes in focused commits, preserve fork compatibility/security behavior, and record the decision in the ledger. Run at least:
-
-```bash
-go test ./relay/antipoison ./service ./model ./controller
-```
-
-Rebuild frontend assets before publishing Docker images.
-
-## Version and release identity
-
-`VERSION` contains the pure RenewAPI product version only. The current product
-version is `v1.0.0-rc.2`; its exact product Git tag is
-`renewapi-v1.0.0-rc.2`. Build commit, build time, build channel, and the
-audited upstream reference are separate image/release metadata. Raw upstream
-`v1.0.0-rc.*` tags remain untouched and are never RenewAPI product triggers.
-See `docs/MAINTENANCE.md` and `docs/decisions/`.
-
-## Security
-
-- Never commit local credentials or generated secret files.
-- `Token/`, `.env`, `*.secret`, `*.local.env`, `github-auth.env`, `server-access.env`, `*.pem`, and `id_rsa*` are ignored by Git and Docker build context.
-- Scripts must not print tokens, passwords, sudo passwords, API keys, or bearer values.
-- Report security-sensitive issues privately to the repository owner.
+The stable `latest` alias is reserved for stable product releases. See
+[`docs/decisions/003-build-metadata-release-channels.md`](docs/decisions/003-build-metadata-release-channels.md)
+for the release-channel contract.
 
 ## License
 
-This fork follows the upstream license. See:
-
-- `LICENSE`
-- `NOTICE`
-- `THIRD-PARTY-LICENSES.md`
+RenewAPI follows the upstream
+[GNU Affero General Public License v3.0](LICENSE). Attribution and the
+additional notices in [`NOTICE`](NOTICE) must remain intact.

@@ -1,0 +1,2 @@
+event: response.output_item.done
+data: {"type":"response.output_item.done","item":

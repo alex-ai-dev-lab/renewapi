@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/responses_compaction_sse.sh
+source "$script_dir/lib/responses_compaction_sse.sh"
+
 : "${BASE_URL:?BASE_URL is required}"
 : "${API_KEY:?API_KEY is required}"
 MODEL="${MODEL:-gpt-5.6-sol}"
@@ -83,15 +87,54 @@ report_request() {
   return "$request_result"
 }
 
-extract_compaction_item() {
-  local response_file="$1"
-  local item_file="$2"
-  jq -e -c '
-    first(
-      (.output // .response.output // [])[]
-      | select((.type == "compaction" or .type == "context_compaction" or .type == "compaction_summary") and (.encrypted_content | type == "string") and (.encrypted_content | length > 0))
-    ) // empty
-  ' "$response_file" >"$item_file"
+report_sse_request() {
+  local facet="$1"
+  local path="$2"
+  local body_file="$3"
+  local output_file="$4"
+  local headers_file="$5"
+  local http_status
+
+  if http_status="$(curl --config "$curl_config" \
+    --dump-header "$headers_file" \
+    --output "$output_file" \
+    --write-out '%{http_code}' \
+    --data-binary "@${body_file}" \
+    "${base_url}${path}")"; then
+    :
+  else
+    LAST_HTTP_STATUS="${http_status:-000}"
+    LAST_RESULT=FAIL
+    return 1
+  fi
+
+  LAST_HTTP_STATUS="$http_status"
+  case "$http_status" in
+    2??)
+      LAST_RESULT=PASS
+      return 0
+      ;;
+    404|405|501)
+      LAST_RESULT=UNSUPPORTED
+      return 2
+      ;;
+    401|403)
+      LAST_RESULT=FAIL_AUTH_CONFIG
+      return 3
+      ;;
+    429|500|502|503|504)
+      LAST_RESULT=FAIL_TRANSIENT
+      return 4
+      ;;
+    400|422)
+      LAST_RESULT=FAIL_INVALID_PROBE
+      return 5
+      ;;
+    *)
+      LAST_RESULT=FAIL
+      return 1
+      ;;
+  esac
 }
 
 normal_body="$tmp_dir/normal-request.json"
@@ -119,14 +162,19 @@ fi
 
 stream_body="$tmp_dir/stream-request.json"
 stream_response="$tmp_dir/stream-response.txt"
+stream_headers="$tmp_dir/stream-headers.txt"
 jq -n --arg model "$MODEL" '{model:$model,input:[{role:"user",content:[{type:"input_text",text:"Compress this synthetic verification state."}]},{type:"compaction_trigger"}],store:false,stream:true}' >"$stream_body"
 stream_ok=false
-if report_request native_sse_http '/v1/responses' "$stream_body" "$stream_response"; then
-  if grep -q '^data:' "$stream_response"; then
+stream_item="$tmp_dir/stream-compaction-item.json"
+if report_sse_request native_sse_http '/v1/responses' "$stream_body" "$stream_response" "$stream_headers"; then
+  content_type="$(awk 'BEGIN{IGNORECASE=1} /^Content-Type:/ {sub(/^[^:]*:[[:space:]]*/, ""); value=$0} END{print value}' "$stream_headers" | tr -d '\r' | tr '[:upper:]' '[:lower:]')"
+  if [[ "$content_type" != text/event-stream* ]]; then
+    printf 'native_sse=FAIL invalid_content_type content_type=%s\n' "${content_type:-missing}"
+  elif extract_compaction_item_from_sse "$stream_response" "$stream_item"; then
     stream_ok=true
     printf 'native_sse=PASS\n'
   else
-    printf 'native_sse=FAIL missing_sse_data\n'
+    printf 'native_sse=FAIL %s\n' "$SSE_EXTRACT_REASON"
   fi
 else
   printf 'native_sse=SKIP http_request_failed\n'

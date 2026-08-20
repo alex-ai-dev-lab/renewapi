@@ -134,9 +134,14 @@ First bootstrap runbook for a new channel/model:
 - `go vet ./...`: PASS
 - `go build ./...`: PASS
 - `git diff --check`: PASS
-- runtime verifier: NOT RUN; Bash/jq and a live deployment are unavailable
+- runtime verifier: NOT RUN; no authorized live deployment or Test-group credentials
 - real Test-group channel inventory/capability evidence: BLOCKED_RUNTIME
 - native SSE fixture verifier: PASS using a temporary jq binary; temporary tool removed
+- hosted GitHub Actions release run `32357902879`: PASS (quality,
+  database-quality, multi-arch build, release assets, and tag-source check)
+- published prerelease: `renewapi-v1.0.0-rc.3`, source commit
+  `a3cfa2bd35998a665d912d87ffd19b09600c3620`, image digest
+  `sha256:fdc1c240644ae4d87acd917e7d1e4d7201f93753f84a9e1ae8fe8343625316dd`
 
 ## Current state
 
@@ -151,6 +156,8 @@ Completed:
   runtime verification workflow.
 - Route-plan-disabled diagnostics, explicit probe bootstrap documentation, and
   strict native SSE item validation with offline fixtures.
+- Source pushed to `main`; GitHub Actions built and published the rc.3
+  prerelease. No server build, deployment, or restart was performed.
 
 Remaining external work:
 - Apply the bootstrap configuration in an authorized deployment, establish

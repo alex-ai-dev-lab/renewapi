@@ -1,6 +1,6 @@
 # Responses Compaction 503 – gpt-5.6-sol
 
-Status: completed (runtime validation blocked)
+Status: BLOCKED_RUNTIME
 
 Created: 2026-08-20
 Last updated: 2026-08-20

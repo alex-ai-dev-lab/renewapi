@@ -136,7 +136,7 @@ changes.
 
 RenewAPI product tags use the `renewapi-v<version>` namespace so imported
 upstream tags remain untouched. The current product prerelease is
-[`v1.0.0-rc.2`](https://github.com/alex-ai-dev-lab/renewapi/releases/tag/renewapi-v1.0.0-rc.2).
+[`v1.0.0-rc.3`](https://github.com/alex-ai-dev-lab/renewapi/releases/tag/renewapi-v1.0.0-rc.3).
 
 Prerelease images use three identities:
 

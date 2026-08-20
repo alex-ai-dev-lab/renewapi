@@ -142,6 +142,141 @@ func TestDistributeCompaction503ReportsCapabilityRejectionReasons(t *testing.T) 
 	require.Contains(t, response.Body.String(), "capability_unknown_strict")
 }
 
+func TestDistributeCompactionRoutePlanDisabledReportsFacetRejectionReasons(t *testing.T) {
+	require.NoError(t, appI18n.Init())
+	db := setupDistributorFallbackTestDB(t)
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+	t.Setenv("RESPONSES_COMPACTION_ROUTE_PLAN_ENABLED", "false")
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name    string
+		id      int
+		setting dto.ChannelSettings
+		body    string
+		reason  string
+		path    string
+	}{
+		{
+			name:   "unknown capability",
+			id:     73,
+			body:   `{"model":"gpt-5.6-sol","input":[{"type":"compaction_trigger"}]}`,
+			reason: string(service.ResponsesRequirementReasonCapabilityUnknownStrict),
+			path:   "/v1/responses",
+		},
+		{
+			name: "native stream is not verified",
+			id:   74,
+			setting: dto.ChannelSettings{ResponsesCompaction: &dto.ResponsesCompactionSettings{
+				DefaultCapability: &dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionNativeV2},
+			}},
+			body:   `{"model":"gpt-5.6-sol","input":[{"type":"compaction_trigger"}],"stream":true}`,
+			reason: string(service.ResponsesRequirementReasonNativeStreamNotVerified),
+			path:   "/v1/responses",
+		},
+		{
+			name: "continuation is not verified",
+			id:   75,
+			setting: dto.ChannelSettings{ResponsesCompaction: &dto.ResponsesCompactionSettings{
+				DefaultCapability: &dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionNativeV2},
+			}},
+			body:   `{"model":"gpt-5.6-sol","input":[{"type":"compaction_summary","encrypted_content":"opaque"}]}`,
+			reason: string(service.ResponsesRequirementReasonContinuationNotVerified),
+			path:   "/v1/responses",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			channel := distributorRouteTestChannel(tc.id, tc.name, "gpt-5.6-sol", 20)
+			channel.SetSetting(tc.setting)
+			require.NoError(t, db.Create(channel).Error)
+			require.NoError(t, channel.AddAbilities(nil))
+			model.InitChannelCache()
+
+			router := gin.New()
+			router.POST(tc.path, distributorRouteAuthContext(), Distribute(), func(c *gin.Context) {
+				t.Fatal("ineligible compaction request must not reach relay")
+			})
+			request := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
+			require.Contains(t, response.Body.String(), `"code":"responses_compaction_no_eligible_channel"`)
+			require.Contains(t, response.Body.String(), tc.reason)
+		})
+	}
+}
+
+func TestDistributeCompactionRoutePlanDisabledAllowsVerifiedCandidate(t *testing.T) {
+	require.NoError(t, appI18n.Init())
+	db := setupDistributorFallbackTestDB(t)
+	channel := distributorRouteTestChannel(76, "verified-compaction", "gpt-5.6-sol", 20)
+	channel.SetSetting(dto.ChannelSettings{ResponsesCompaction: &dto.ResponsesCompactionSettings{
+		DefaultCapability: &dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionNativeV2, NativeStream: true, Continuation: true},
+	}})
+	require.NoError(t, db.Create(channel).Error)
+	require.NoError(t, channel.AddAbilities(nil))
+	model.InitChannelCache()
+
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+	t.Setenv("RESPONSES_COMPACTION_ROUTE_PLAN_ENABLED", "false")
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/v1/responses", distributorRouteAuthContext(), Distribute(), func(c *gin.Context) {
+		require.Equal(t, channel.Id, common.GetContextKeyInt(c, constant.ContextKeyChannelId))
+		c.Status(http.StatusNoContent)
+	})
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-5.6-sol","input":[{"type":"compaction_trigger"}]}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	require.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
+}
+
+func TestDistributeMissingCompactionModelKeepsModelNotFoundSemantics(t *testing.T) {
+	require.NoError(t, appI18n.Init())
+	setupDistributorFallbackTestDB(t)
+	model.InitChannelCache()
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+	t.Setenv("RESPONSES_COMPACTION_ROUTE_PLAN_ENABLED", "false")
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	router.POST("/v1/responses", distributorRouteAuthContext(), Distribute(), func(c *gin.Context) {
+		t.Fatal("missing model request must not reach relay")
+	})
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-missing","input":[{"type":"compaction_trigger"}]}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
+	require.Contains(t, response.Body.String(), `"code":"model_not_found"`)
+	require.NotContains(t, response.Body.String(), "responses_compaction_no_eligible_channel")
+}
+
+func TestDistributeOrdinaryMissingModelDoesNotMasqueradeAsCompactionRejection(t *testing.T) {
+	require.NoError(t, appI18n.Init())
+	setupDistributorFallbackTestDB(t)
+	model.InitChannelCache()
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+	t.Setenv("RESPONSES_COMPACTION_ROUTE_PLAN_ENABLED", "false")
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	router.POST("/v1/responses", distributorRouteAuthContext(), Distribute(), func(c *gin.Context) {
+		t.Fatal("missing ordinary model request must not reach relay")
+	})
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-missing","input":"hello"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
+	require.Contains(t, response.Body.String(), `"code":"model_not_found"`)
+	require.NotContains(t, response.Body.String(), "responses_compaction_no_eligible_channel")
+}
+
 func TestDistributeInstallsHighestPriorityChannelModelRouteBeforeRelay(t *testing.T) {
 	require.NoError(t, appI18n.Init())
 	oldDB := model.DB

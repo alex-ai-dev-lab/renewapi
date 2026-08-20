@@ -93,6 +93,17 @@ func Distribute() func(c *gin.Context) {
 			}
 			if !responsesRoutePlanEnabled(responsesRequirement) &&
 				!service.ChannelMatchesResponsesRequirement(channel, modelRequest.Model, responsesRequirement, modelRequest.RoutingRequest) {
+				if responsesRequirement != nil && service.RequiresResponsesCompactionCapability(responsesRequirement.Kind) {
+					diagnostics := service.ResponsesRoutePlanDiagnostics{CandidateTotal: 1, CandidateAfterGroupModel: 1}
+					decision := service.ResponsesRequirementDecisionForChannel(channel, modelRequest.Model, responsesRequirement, modelRequest.RoutingRequest)
+					diagnostics.RejectionReasonCounts = map[service.ResponsesRequirementReason]int{decision.Reason: 1}
+					routeErr := &service.ResponsesRoutePlanError{Message: "no channel/model candidate satisfies responses compaction requirements", Diagnostics: diagnostics}
+					service.SetModelRouteOutcome(c, service.ModelRouteOutcomeRouteUnavailable)
+					logResponsesCompactionRouteError(c, modelRequest, responsesRequirement, routeErr)
+					status, code := responsesCompactionRouteErrorStatusCode(routeErr)
+					abortWithOpenAiMessage(c, status, routeErr.Error(), code)
+					return
+				}
 				service.SetModelRouteOutcome(c, service.ModelRouteOutcomeClientRejected)
 				abortWithOpenAiMessage(c, http.StatusBadRequest, "selected channel does not satisfy responses compaction capability")
 				return
@@ -218,6 +229,14 @@ func Distribute() func(c *gin.Context) {
 						showGroup := usingGroup
 						if usingGroup == "auto" {
 							showGroup = fmt.Sprintf("auto(%s)", selectGroup)
+						}
+						var routeErr *service.ResponsesRoutePlanError
+						if errors.As(err, &routeErr) {
+							service.SetModelRouteOutcome(c, service.ModelRouteOutcomeRouteUnavailable)
+							logResponsesCompactionRouteError(c, modelRequest, responsesRequirement, routeErr)
+							status, code := responsesCompactionRouteErrorStatusCode(routeErr)
+							abortWithOpenAiMessage(c, status, routeErr.Error(), code)
+							return
 						}
 						message := i18n.T(c, i18n.MsgDistributorGetChannelFailed, map[string]any{"Group": showGroup, "Model": modelRequest.Model, "Error": err.Error()})
 						service.SetModelRouteOutcome(c, service.ModelRouteOutcomeServerError)
@@ -359,6 +378,10 @@ func selectDistributorInitialChannelWithSelector(
 	if requiresResponses {
 		clientFormat = types.RelayFormatOpenAIResponses
 	}
+	var responsesDiagnostics *service.ResponsesRoutePlanDiagnostics
+	if responsesRequirement != nil && service.RequiresResponsesCompactionCapability(responsesRequirement.Kind) {
+		responsesDiagnostics = &service.ResponsesRoutePlanDiagnostics{}
+	}
 	for index, candidate := range candidates {
 		candidate = strings.TrimSpace(candidate)
 		if candidate == "" {
@@ -382,6 +405,7 @@ func selectDistributorInitialChannelWithSelector(
 			ClientRelayFormat:             clientFormat,
 			ProviderRoutingPolicy:         modelRequest.ProviderPolicy,
 			ResponsesRequirement:          responsesRequirement,
+			ResponsesDiagnostics:          responsesDiagnostics,
 			RequiredModelName:             requiredContinuationModel,
 		})
 		if err != nil {
@@ -399,6 +423,12 @@ func selectDistributorInitialChannelWithSelector(
 			common.SetContextKey(c, constant.ContextKeyFallbackModels, remaining)
 		}
 		return channel, selectGroup, nil
+	}
+	if responsesDiagnostics != nil && responsesDiagnostics.CandidateTotal > 0 && responsesDiagnostics.CandidateAfterCompaction == 0 {
+		return nil, usingGroup, &service.ResponsesRoutePlanError{
+			Message:     "no channel/model candidate satisfies responses compaction requirements",
+			Diagnostics: *responsesDiagnostics,
+		}
 	}
 	return nil, usingGroup, nil
 }

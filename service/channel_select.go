@@ -35,6 +35,7 @@ type RetryParam struct {
 	LastSelectedChannelId                     int
 	ProviderRoutingPolicy                     *ProviderRoutingPolicy
 	ResponsesRequirement                      *ResponsesRoutingRequirement
+	ResponsesDiagnostics                      *ResponsesRoutePlanDiagnostics
 	RequiredModelName                         string
 	ModelMappingFallbackChannelId             int
 }
@@ -224,13 +225,29 @@ func channelMatchesRetryRequirements(param *RetryParam, channel *model.Channel) 
 	if param.RequireClaudeThinkingSupport && !ChannelSupportsClaudeThinking(channel) {
 		return false
 	}
+	if param.ResponsesRequirement != nil && RequiresResponsesCompactionCapability(param.ResponsesRequirement.Kind) {
+		if param.ResponsesDiagnostics != nil {
+			param.ResponsesDiagnostics.CandidateTotal++
+			param.ResponsesDiagnostics.CandidateAfterGroupModel++
+		}
+		decision := ResponsesRequirementDecisionForChannel(channel, param.ModelName, param.ResponsesRequirement, param.Request)
+		if !decision.Allowed {
+			if param.ResponsesDiagnostics != nil {
+				param.ResponsesDiagnostics.add(decision.Reason)
+			}
+			return false
+		}
+		if param.ResponsesDiagnostics != nil {
+			param.ResponsesDiagnostics.CandidateAfterCompaction++
+		}
+	}
 	if param.RequireOpenAIResponsesSupport {
 		capability := EvaluateChannelProtocolCapability(channel, param.ModelName, types.RelayFormatOpenAIResponses, param.Request)
 		if !capability.Supported || capability.Lossy {
 			return false
 		}
 	}
-	if !ChannelMatchesResponsesRequirement(channel, param.ModelName, param.ResponsesRequirement, param.Request) {
+	if param.ResponsesRequirement == nil && !ChannelMatchesResponsesRequirement(channel, param.ModelName, param.ResponsesRequirement, param.Request) {
 		return false
 	}
 	channelSetting := channelSettingForRouting(channel)

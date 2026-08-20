@@ -118,6 +118,30 @@ func TestDistributeNormalResponsesDoesNotRequireCompactionCapability(t *testing.
 	require.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
 }
 
+func TestDistributeCompaction503ReportsCapabilityRejectionReasons(t *testing.T) {
+	require.NoError(t, appI18n.Init())
+	db := setupDistributorFallbackTestDB(t)
+	channel := distributorRouteTestChannel(73, "unknown-compaction", "gpt-5.6-sol", 20)
+	require.NoError(t, db.Create(channel).Error)
+	require.NoError(t, channel.AddAbilities(nil))
+	model.InitChannelCache()
+
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+	t.Setenv("RESPONSES_COMPACTION_ROUTE_PLAN_ENABLED", "true")
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/v1/responses", distributorRouteAuthContext(), Distribute(), func(c *gin.Context) {
+		t.Fatal("ineligible compaction request must not reach relay")
+	})
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-5.6-sol","input":[{"type":"compaction_trigger"}]}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
+	require.Contains(t, response.Body.String(), `"code":"responses_compaction_no_eligible_channel"`)
+	require.Contains(t, response.Body.String(), "capability_unknown_strict")
+}
+
 func TestDistributeInstallsHighestPriorityChannelModelRouteBeforeRelay(t *testing.T) {
 	require.NoError(t, appI18n.Init())
 	oldDB := model.DB

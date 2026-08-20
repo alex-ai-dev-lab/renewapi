@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
@@ -11,6 +12,54 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 )
+
+type ResponsesRoutePlanDiagnostics struct {
+	CandidateTotal           int
+	CandidateAfterGroupModel int
+	CandidateAfterCompaction int
+	RejectionReasonCounts    map[ResponsesRequirementReason]int
+}
+
+func (d *ResponsesRoutePlanDiagnostics) add(reason ResponsesRequirementReason) {
+	if d == nil || reason == "" {
+		return
+	}
+	if d.RejectionReasonCounts == nil {
+		d.RejectionReasonCounts = make(map[ResponsesRequirementReason]int)
+	}
+	d.RejectionReasonCounts[reason]++
+}
+
+type ResponsesRoutePlanError struct {
+	Message     string
+	Diagnostics ResponsesRoutePlanDiagnostics
+}
+
+func (e *ResponsesRoutePlanError) Error() string {
+	if e == nil || e.Message == "" {
+		return "responses route plan failed"
+	}
+	return fmt.Sprintf(
+		"%s: candidate_total=%d candidate_after_group_model_filter=%d candidate_after_compaction_filter=%d rejection_reason_counts=%s",
+		e.Message,
+		e.Diagnostics.CandidateTotal,
+		e.Diagnostics.CandidateAfterGroupModel,
+		e.Diagnostics.CandidateAfterCompaction,
+		e.Diagnostics.RejectionReasonCountsString(),
+	)
+}
+
+func (d ResponsesRoutePlanDiagnostics) RejectionReasonCountsString() string {
+	if len(d.RejectionReasonCounts) == 0 {
+		return "none"
+	}
+	reasons := make([]string, 0, len(d.RejectionReasonCounts))
+	for reason, count := range d.RejectionReasonCounts {
+		reasons = append(reasons, fmt.Sprintf("%s=%d", reason, count))
+	}
+	sort.Strings(reasons)
+	return strings.Join(reasons, ",")
+}
 
 // RelayModelRoles names the models used at each boundary of a relay attempt.
 // Keeping these roles explicit prevents an upstream mapping or capability-only
@@ -50,6 +99,7 @@ type ResponsesRelayRoutePlanParams struct {
 	ProviderPolicy     *ProviderRoutingPolicy
 	TokenModelAllowed  func(string) bool
 	ChannelAllowed     func(*model.Channel) bool
+	Diagnostics        *ResponsesRoutePlanDiagnostics
 }
 
 // relayRoutePlanLimits 缓存一次请求内的环境变量取值。
@@ -169,6 +219,9 @@ func BuildResponsesRelayRoutePlan(params ResponsesRelayRoutePlanParams) (*RelayR
 	params.ClientModel = strings.TrimSpace(params.ClientModel)
 	params.PrimaryModel = strings.TrimSpace(params.PrimaryModel)
 	params.RequiredModel = strings.TrimSpace(params.RequiredModel)
+	if params.Diagnostics == nil {
+		params.Diagnostics = &ResponsesRoutePlanDiagnostics{}
+	}
 	groups := make([]string, 0, len(params.Groups)+1)
 	seenGroups := make(map[string]struct{}, len(params.Groups)+1)
 	for _, group := range append([]string{params.Group}, params.Groups...) {
@@ -197,7 +250,15 @@ func BuildResponsesRelayRoutePlan(params ResponsesRelayRoutePlanParams) (*RelayR
 	}
 	firstRoute, hasFirstRoute := firstRelayRoute(groupRoutes)
 	if !hasFirstRoute {
-		return nil, errors.New("no channel/model candidate satisfies responses compaction requirements")
+		return nil, &ResponsesRoutePlanError{
+			Message: "no channel/model candidate satisfies responses compaction requirements",
+			Diagnostics: func() ResponsesRoutePlanDiagnostics {
+				if params.Diagnostics != nil {
+					return *params.Diagnostics
+				}
+				return ResponsesRoutePlanDiagnostics{}
+			}(),
+		}
 	}
 	// Plans built after the distributor installed a context must retain the
 	// installed pair. Distributor-built plans leave InitialChannelId at zero and
@@ -212,7 +273,12 @@ func BuildResponsesRelayRoutePlan(params ResponsesRelayRoutePlanParams) (*RelayR
 	}
 	routes := flattenRelayRoutesWithBudget(groupRoutes, limits.maxCandidates)
 	if len(routes) == 0 {
-		return nil, errors.New("no channel/model candidate satisfies responses compaction requirements")
+		return nil, &ResponsesRoutePlanError{Message: "no channel/model candidate satisfies responses compaction requirements", Diagnostics: func() ResponsesRoutePlanDiagnostics {
+			if params.Diagnostics != nil {
+				return *params.Diagnostics
+			}
+			return ResponsesRoutePlanDiagnostics{}
+		}()}
 	}
 	return &RelayRoutePlan{routes: routes}, nil
 }
@@ -351,6 +417,7 @@ func buildResponsesRelayRoutesForGroup(
 				continue
 			}
 			seen[key] = struct{}{}
+			params.Diagnostics.CandidateTotal++
 			if params.TokenModelAllowed != nil && !params.TokenModelAllowed(modelName) {
 				continue
 			}
@@ -363,6 +430,7 @@ func buildResponsesRelayRoutesForGroup(
 			}
 			if !model.IsChannelEnabledForGroupModel(group, modelName, channel.Id) ||
 				model.IsChannelModelDisabledForGroup(channel.Id, group, modelName) {
+				params.Diagnostics.add(ResponsesRequirementReasonCapabilityDisabled)
 				continue
 			}
 			if requiredModel != "" && !strings.EqualFold(requiredModel, modelName) &&
@@ -372,9 +440,13 @@ func buildResponsesRelayRoutesForGroup(
 			}
 			requirement := *params.Requirement
 			requirement.RequiredContinuationModel = requiredModel
-			if !ChannelMatchesResponsesRequirement(channel, modelName, &requirement, params.Request) {
+			params.Diagnostics.CandidateAfterGroupModel++
+			decision := ResponsesRequirementDecisionForChannel(channel, modelName, &requirement, params.Request)
+			if !decision.Allowed {
+				params.Diagnostics.add(decision.Reason)
 				continue
 			}
+			params.Diagnostics.CandidateAfterCompaction++
 			candidates = append(candidates, modelName)
 		}
 		sort.SliceStable(candidates, func(i, j int) bool {

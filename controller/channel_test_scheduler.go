@@ -147,14 +147,26 @@ func responsesCompactionObservationComplete(record model.ChannelModelCapability)
 		record.ContinuationStatus != model.ChannelCapabilityStatusUnknown
 }
 
+func shouldSkipResponsesCompactionProbe(channel *model.Channel, modelName string, record model.ChannelModelCapability, found bool, now int64) bool {
+	if channel == nil || !found || record.NextProbeAt <= now || record.RouteFingerprint == "" {
+		return false
+	}
+	// Backoff belongs to the route that produced the evidence. A future
+	// NextProbeAt from a previous base URL, mapping, endpoint, or config version
+	// must never suppress an immediate probe for the current route.
+	if !strings.EqualFold(record.RouteFingerprint, service.ResponsesObservedRouteFingerprint(channel, modelName)) {
+		return false
+	}
+	return strings.EqualFold(record.Source, "probe") || responsesCompactionObservationComplete(record)
+}
+
 func probeResponsesCompactionCapabilities(ctx context.Context, channel *model.Channel, testUserID int) {
 	if !common.GetEnvOrDefaultBool("RESPONSES_COMPACTION_PROBE_ENABLED", false) {
 		return
 	}
 	for _, modelName := range responsesCompactionProbeModels(channel) {
-		if record, found := model.GetChannelModelCapability(channel.Id, modelName, model.ChannelCapabilityResponsesCompaction); found &&
-			record.NextProbeAt > common.GetTimestamp() &&
-			(strings.EqualFold(record.Source, "probe") || responsesCompactionObservationComplete(record)) {
+		record, found := model.GetChannelModelCapability(channel.Id, modelName, model.ChannelCapabilityResponsesCompaction)
+		if shouldSkipResponsesCompactionProbe(channel, modelName, record, found, common.GetTimestamp()) {
 			continue
 		}
 		if _, err := probeResponsesCompactionCapabilityModelContext(ctx, channel, testUserID, modelName); err != nil {
@@ -183,13 +195,20 @@ func runResponsesCapabilityProbe(ctx context.Context, call func() testResult) te
 }
 
 func observeResponsesCapabilityProbeResult(channel *model.Channel, modelName string, attempt service.ResponsesCapabilityAttempt, result testResult) error {
-	if result.localErr != nil {
-		if result.newAPIError != nil {
-			return errors.New(common.LocalLogPreview(result.newAPIError.MaskSensitiveErrorWithStatusCode()))
+	if result.newAPIError != nil {
+		if result.httpStatus > 0 {
+			result.newAPIError.StatusCode = result.httpStatus
 		}
+		outcome := service.ObserveResponsesCapabilityAttempt(channel, modelName, attempt, result.newAPIError)
+		if outcome.PersistenceError != nil {
+			return outcome.PersistenceError
+		}
+		return errors.New(common.LocalLogPreview(result.newAPIError.MaskSensitiveErrorWithStatusCode()))
+	}
+	if result.localErr != nil {
 		return errors.New(common.LocalLogPreview(common.MaskSensitiveInfo(result.localErr.Error())))
 	}
-	outcome := service.ObserveResponsesCapabilityAttempt(channel, modelName, attempt, result.newAPIError)
+	outcome := service.ObserveResponsesCapabilityAttempt(channel, modelName, attempt, nil)
 	return outcome.PersistenceError
 }
 
@@ -248,7 +267,10 @@ func probeResponsesCompactionCapabilityModelContext(ctx context.Context, channel
 			}
 		}
 
-		compactedItem := nativeResult.compactionItem
+		compactedItem := legacyResult.compactionItem
+		if len(compactedItem) == 0 {
+			compactedItem = nativeResult.compactionItem
+		}
 		if len(compactedItem) == 0 {
 			compactedItem = streamResult.compactionItem
 		}

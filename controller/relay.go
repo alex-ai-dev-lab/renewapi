@@ -432,7 +432,17 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			},
 		})
 		if planErr != nil {
-			newAPIError = types.NewError(planErr, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+			var routeErr *service.ResponsesRoutePlanError
+			if errors.As(planErr, &routeErr) {
+				newAPIError = types.NewErrorWithStatusCode(
+					planErr,
+					types.ErrorCodeResponsesCompactionNoEligibleChannel,
+					http.StatusServiceUnavailable,
+					types.ErrOptionWithSkipRetry(),
+				)
+			} else {
+				newAPIError = types.NewError(planErr, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+			}
 			return
 		}
 		routePlan = planned

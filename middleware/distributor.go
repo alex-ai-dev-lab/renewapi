@@ -101,7 +101,9 @@ func Distribute() func(c *gin.Context) {
 				plannedChannel, planErr := buildDistributorResponsesRoutePlan(c, modelRequest, responsesRequirement, requiredContinuationModel, channel.Id)
 				if planErr != nil {
 					service.SetModelRouteOutcome(c, service.ModelRouteOutcomeRouteUnavailable)
-					abortWithOpenAiMessage(c, http.StatusBadRequest, planErr.Error(), types.ErrorCodeModelNotFound)
+					status, code := responsesCompactionRouteErrorStatusCode(planErr)
+					logResponsesCompactionRouteError(c, modelRequest, responsesRequirement, planErr)
+					abortWithOpenAiMessage(c, status, planErr.Error(), code)
 					return
 				}
 				channel = plannedChannel
@@ -146,7 +148,9 @@ func Distribute() func(c *gin.Context) {
 					if planErr != nil {
 						showGroup := usingGroup
 						service.SetModelRouteOutcome(c, service.ModelRouteOutcomeRouteUnavailable)
-						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorGetChannelFailed, map[string]any{"Group": showGroup, "Model": modelRequest.Model, "Error": planErr.Error()}), types.ErrorCodeModelNotFound)
+						status, code := responsesCompactionRouteErrorStatusCode(planErr)
+						logResponsesCompactionRouteError(c, modelRequest, responsesRequirement, planErr)
+						abortWithOpenAiMessage(c, status, i18n.T(c, i18n.MsgDistributorGetChannelFailed, map[string]any{"Group": showGroup, "Model": modelRequest.Model, "Error": planErr.Error()}), code)
 						return
 					}
 					channel = plannedChannel
@@ -249,6 +253,30 @@ func Distribute() func(c *gin.Context) {
 			service.RecordCompactionResponseAffinity(c, finalChannelID, clientModel, common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
 		}
 	}
+}
+
+func responsesCompactionRouteErrorStatusCode(err error) (int, types.ErrorCode) {
+	var routeErr *service.ResponsesRoutePlanError
+	if errors.As(err, &routeErr) {
+		return http.StatusServiceUnavailable, types.ErrorCodeResponsesCompactionNoEligibleChannel
+	}
+	return http.StatusBadRequest, types.ErrorCodeModelNotFound
+}
+
+func logResponsesCompactionRouteError(c *gin.Context, request *ModelRequest, requirement *service.ResponsesRoutingRequirement, err error) {
+	if c == nil || request == nil || requirement == nil || err == nil {
+		return
+	}
+	common.SysLog(fmt.Sprintf(
+		"responses_compaction_route_unavailable request_id=%s group=%s requested_model=%s routing_model=%s request_kind=%s stream=%t error=%s",
+		c.GetString(common.RequestIdKey),
+		common.GetContextKeyString(c, constant.ContextKeyUsingGroup),
+		common.GetContextKeyString(c, constant.ContextKeyClientModel),
+		request.Model,
+		service.ResponsesRequestKindName(requirement.Kind),
+		requirement.ClientStream,
+		err.Error(),
+	))
 }
 
 // enforceTokenModelLimit checks the requested model against the model whitelist
@@ -543,6 +571,7 @@ func buildDistributorResponsesRoutePlan(
 	if c == nil || modelRequest == nil || modelRequest.RoutingRequest == nil || requirement == nil {
 		return nil, errors.New("responses route plan requires a fully decoded request")
 	}
+	diagnostics := &service.ResponsesRoutePlanDiagnostics{}
 	usingGroup := strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
 	preferredChannelID, preferredByCompaction := service.GetPreferredChannelByCompactionAffinity(
 		c,
@@ -570,6 +599,7 @@ func buildDistributorResponsesRoutePlan(
 		ChannelAllowed: func(channel *model.Channel) bool {
 			return channel != nil && !service.ShouldAvoidChannelForSession(c, channel.Id)
 		},
+		Diagnostics: diagnostics,
 	}
 	if strings.EqualFold(usingGroup, "auto") {
 		params.Group = ""

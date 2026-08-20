@@ -347,6 +347,30 @@ func TestBuildResponsesRelayRoutePlanStrictExcludesUnknownObserveIncludesIt(t *t
 	require.Len(t, routePlanEntries(observePlan), 2)
 }
 
+func TestBuildResponsesRelayRoutePlanReportsCapabilityRejectionReasons(t *testing.T) {
+	unknown := routePlanTestChannel(71, "unknown", "gpt-5.5", 20, nil)
+	streamOnly := routePlanTestChannel(89, "stream-only", "gpt-5.5", 10, &dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionNativeV2})
+	setupRelayRoutePlanTestDB(t, unknown, streamOnly)
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+	diagnostics := &ResponsesRoutePlanDiagnostics{}
+	_, err := BuildResponsesRelayRoutePlan(ResponsesRelayRoutePlanParams{
+		Group: "default", ClientModel: "gpt-5.5", PrimaryModel: "gpt-5.5",
+		Requirement: &ResponsesRoutingRequirement{Kind: dto.ResponsesCompactionTrigger, ClientStream: true},
+		Diagnostics: diagnostics,
+	})
+	require.Error(t, err)
+	var routeErr *ResponsesRoutePlanError
+	require.ErrorAs(t, err, &routeErr)
+	require.Contains(t, err.Error(), "rejection_reason_counts=")
+	// The concrete native_v2 declaration is rejected specifically because
+	// native streaming was not verified; the other candidate is unknown in strict.
+	require.Equal(t, 2, diagnostics.CandidateTotal)
+	require.Equal(t, 2, diagnostics.CandidateAfterGroupModel)
+	require.Equal(t, 0, diagnostics.CandidateAfterCompaction)
+	require.Equal(t, 1, diagnostics.RejectionReasonCounts[ResponsesRequirementReasonCapabilityUnknownStrict])
+	require.Equal(t, 1, diagnostics.RejectionReasonCounts[ResponsesRequirementReasonNativeStreamNotVerified])
+}
+
 func TestBuildResponsesRelayRoutePlanHonorsLimitRetryBudgetAndProviderOrder(t *testing.T) {
 	capability := &dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionNativeV2}
 	channelA := routePlanTestChannel(71, "provider-a", "gpt-5.4,gpt-5.5,gpt-5.6", 10, capability)

@@ -111,9 +111,6 @@ func updateObservedCapabilityFacet(record *model.ChannelModelCapability, attempt
 		}
 	case attempt.Kind == dto.ResponsesCompactedContextContinuation:
 		record.ContinuationStatus = status
-		if status == model.ChannelCapabilityStatusSupported {
-			record.NativeStatus = status
-		}
 	}
 	record.NativeStream = record.NativeStreamStatus == model.ChannelCapabilityStatusSupported
 	record.Continuation = record.ContinuationStatus == model.ChannelCapabilityStatusSupported
@@ -188,6 +185,13 @@ func ObserveResponsesCapabilityAttempt(
 	}
 
 	if !compactFailureExplicitlyUnsupported(attempt, err) {
+		if strings.EqualFold(record.Source, "probe") && (err.StatusCode == 400 || err.StatusCode == 422) {
+			// A generic client error can be caused by RenewAPI's synthetic request
+			// shape. Unless the upstream explicitly identifies compaction as
+			// unsupported, do not let an invalid probe create or modify capability
+			// evidence.
+			return outcome
+		}
 		if strings.EqualFold(record.Source, "probe") {
 			record.NextProbeAt = now.Add(6 * time.Hour).Unix()
 			record.LastStatusCode = err.StatusCode

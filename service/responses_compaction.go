@@ -34,6 +34,32 @@ type ResponsesRoutingRequirement struct {
 	RequiredContinuationModel string
 }
 
+// ResponsesRequirementReason is a stable, redacted reason used when a
+// channel/model candidate is excluded from a Responses compaction route.
+// These values are intentionally protocol/capability-only: they must never
+// contain upstream response bodies, credentials, or URLs.
+type ResponsesRequirementReason string
+
+const (
+	ResponsesRequirementReasonCapabilityUnknownStrict   ResponsesRequirementReason = "capability_unknown_strict"
+	ResponsesRequirementReasonCapabilityDisabled        ResponsesRequirementReason = "capability_disabled"
+	ResponsesRequirementReasonLegacyNotVerified         ResponsesRequirementReason = "legacy_not_verified"
+	ResponsesRequirementReasonNativeNotVerified         ResponsesRequirementReason = "native_not_verified"
+	ResponsesRequirementReasonNativeStreamNotVerified   ResponsesRequirementReason = "native_stream_not_verified"
+	ResponsesRequirementReasonContinuationNotVerified   ResponsesRequirementReason = "continuation_not_verified"
+	ResponsesRequirementReasonUnsupported               ResponsesRequirementReason = "unsupported"
+	ResponsesRequirementReasonStaleRouteFingerprint     ResponsesRequirementReason = "stale_route_fingerprint"
+	ResponsesRequirementReasonProtocolUnsupported       ResponsesRequirementReason = "protocol_unsupported"
+	ResponsesRequirementReasonProtocolLossy             ResponsesRequirementReason = "protocol_lossy"
+	ResponsesRequirementReasonContinuationRouteMismatch ResponsesRequirementReason = "continuation_route_incompatible"
+	ResponsesRequirementReasonTemporarilyBlocked        ResponsesRequirementReason = "temporarily_blocked"
+)
+
+type ResponsesRequirementDecision struct {
+	Allowed bool
+	Reason  ResponsesRequirementReason
+}
+
 type ResponsesExecutionPlan struct {
 	Kind              dto.ResponsesRequestKind
 	UpstreamPath      string
@@ -89,6 +115,21 @@ func ClassifyResponsesRequest(path string, signals ResponsesInputSignals) dto.Re
 // compaction route constraint.
 func RequiresResponsesCompactionCapability(kind dto.ResponsesRequestKind) bool {
 	return kind != dto.ResponsesNormal
+}
+
+func ResponsesRequestKindName(kind dto.ResponsesRequestKind) string {
+	switch kind {
+	case dto.ResponsesNormal:
+		return "normal"
+	case dto.ResponsesCompactionTrigger:
+		return "compaction_trigger"
+	case dto.ResponsesCompactEndpoint:
+		return "compact_endpoint"
+	case dto.ResponsesCompactedContextContinuation:
+		return "compacted_context_continuation"
+	default:
+		return fmt.Sprintf("unknown_%d", kind)
+	}
 }
 
 func ResponsesCompactionEnforcementStrict() bool {
@@ -151,24 +192,24 @@ func responsesRouteCompatibilityForModel(channel *model.Channel, modelName strin
 	}
 }
 
-func channelSupportsRequiredContinuation(channel *model.Channel, compactionModel string, requirement *ResponsesRoutingRequirement, request dto.Request) bool {
+func requiredContinuationDecision(channel *model.Channel, compactionModel string, requirement *ResponsesRoutingRequirement, request dto.Request) ResponsesRequirementDecision {
 	if requirement == nil || requirement.Kind != dto.ResponsesCompactionTrigger {
-		return true
+		return ResponsesRequirementDecision{Allowed: true}
 	}
 	continuationModel := strings.TrimSpace(requirement.RequiredContinuationModel)
 	if continuationModel == "" {
-		return true
+		return ResponsesRequirementDecision{Allowed: true}
 	}
 	if !strings.EqualFold(continuationModel, compactionModel) {
 		if !channelAdvertisesRoutingModel(channel, continuationModel) {
-			return false
+			return ResponsesRequirementDecision{Reason: ResponsesRequirementReasonContinuationNotVerified}
 		}
 		if responsesRouteCompatibilityForModel(channel, compactionModel) != responsesRouteCompatibilityForModel(channel, continuationModel) {
-			return false
+			return ResponsesRequirementDecision{Reason: ResponsesRequirementReasonContinuationRouteMismatch}
 		}
 	}
 	continuationRequirement := &ResponsesRoutingRequirement{Kind: dto.ResponsesCompactedContextContinuation}
-	return ChannelMatchesResponsesRequirement(channel, continuationModel, continuationRequirement, request)
+	return responsesRequirementDecision(channel, continuationModel, continuationRequirement, request)
 }
 
 func isConcreteCompactionCapability(capability dto.CompactionCapability) bool {
@@ -344,46 +385,84 @@ func effectiveCompactionCapability(channel *model.Channel, modelName string) dto
 	return dto.ResponsesCompactionCapabilityRecord{Capability: dto.CompactionUnknown}
 }
 
-func ChannelMatchesResponsesRequirement(channel *model.Channel, modelName string, requirement *ResponsesRoutingRequirement, request dto.Request) bool {
+func responsesRequirementDecision(channel *model.Channel, modelName string, requirement *ResponsesRoutingRequirement, request dto.Request) ResponsesRequirementDecision {
 	if requirement == nil || !RequiresResponsesCompactionCapability(requirement.Kind) {
-		return true
+		return ResponsesRequirementDecision{Allowed: true}
 	}
 	protocol := EvaluateChannelProtocolCapability(channel, modelName, types.RelayFormatOpenAIResponses, request)
-	if !protocol.Supported || protocol.Lossy {
-		return false
+	if !protocol.Supported {
+		return ResponsesRequirementDecision{Reason: ResponsesRequirementReasonProtocolUnsupported}
 	}
-	if !channelSupportsRequiredContinuation(channel, modelName, requirement, request) {
-		return false
+	if protocol.Lossy {
+		return ResponsesRequirementDecision{Reason: ResponsesRequirementReasonProtocolLossy}
 	}
 	_, manuallyConfigured := responseCapabilityRecord(channel, modelName)
 	if !manuallyConfigured {
+		if observed, found := model.GetChannelModelCapability(channel.Id, modelName, model.ChannelCapabilityResponsesCompaction); found {
+			currentFingerprint := ResponsesObservedRouteFingerprint(channel, modelName)
+			if observed.RouteFingerprint != "" && !strings.EqualFold(observed.RouteFingerprint, currentFingerprint) {
+				return ResponsesRequirementDecision{Reason: ResponsesRequirementReasonStaleRouteFingerprint}
+			}
+		}
 		if decided, allowed := observedCapabilityFacetDecision(channel, modelName, requirement); decided {
-			return allowed
+			if allowed {
+				return requiredContinuationDecision(channel, modelName, requirement, request)
+			}
+			return ResponsesRequirementDecision{Reason: ResponsesRequirementReasonUnsupported}
+		}
+		if observed, found := model.GetChannelModelCapability(channel.Id, modelName, model.ChannelCapabilityResponsesCompaction); found && observed.BlockedUntil > common.GetTimestamp() {
+			return ResponsesRequirementDecision{Reason: ResponsesRequirementReasonTemporarilyBlocked}
 		}
 	}
 	record := effectiveCompactionCapability(channel, modelName)
 	if record.Capability == dto.CompactionDisabled {
-		return false
+		return ResponsesRequirementDecision{Reason: ResponsesRequirementReasonCapabilityDisabled}
 	}
 	if record.Capability == dto.CompactionUnknown {
-		return !ResponsesCompactionEnforcementStrict()
+		return ResponsesRequirementDecision{Allowed: !ResponsesCompactionEnforcementStrict(), Reason: ResponsesRequirementReasonCapabilityUnknownStrict}
 	}
 	switch requirement.Kind {
 	case dto.ResponsesCompactionTrigger:
 		if record.Capability == dto.CompactionLegacy {
-			return true
+			return requiredContinuationDecision(channel, modelName, requirement, request)
 		}
 		if record.Capability != dto.CompactionNativeV2 && record.Capability != dto.CompactionNativeV2AndLegacy {
-			return false
+			return ResponsesRequirementDecision{Reason: ResponsesRequirementReasonNativeNotVerified}
 		}
-		return !requirement.ClientStream || record.NativeStream || record.Capability == dto.CompactionNativeV2AndLegacy
+		if requirement.ClientStream && !record.NativeStream && record.Capability != dto.CompactionNativeV2AndLegacy {
+			return ResponsesRequirementDecision{Reason: ResponsesRequirementReasonNativeStreamNotVerified}
+		}
+		return requiredContinuationDecision(channel, modelName, requirement, request)
 	case dto.ResponsesCompactEndpoint:
-		return record.Capability == dto.CompactionLegacy || record.Capability == dto.CompactionNativeV2AndLegacy
+		if record.Capability == dto.CompactionLegacy || record.Capability == dto.CompactionNativeV2AndLegacy {
+			return ResponsesRequirementDecision{Allowed: true}
+		}
+		return ResponsesRequirementDecision{Reason: ResponsesRequirementReasonLegacyNotVerified}
 	case dto.ResponsesCompactedContextContinuation:
-		return (record.Capability == dto.CompactionNativeV2 || record.Capability == dto.CompactionNativeV2AndLegacy) && record.Continuation
+		if record.Capability == dto.CompactionUnknown {
+			return ResponsesRequirementDecision{Reason: ResponsesRequirementReasonContinuationNotVerified}
+		}
+		if record.Capability == dto.CompactionDisabled {
+			return ResponsesRequirementDecision{Reason: ResponsesRequirementReasonUnsupported}
+		}
+		if !record.Continuation {
+			return ResponsesRequirementDecision{Reason: ResponsesRequirementReasonContinuationNotVerified}
+		}
+		return ResponsesRequirementDecision{Allowed: true}
 	default:
-		return true
+		return ResponsesRequirementDecision{Allowed: true}
 	}
+}
+
+func ChannelMatchesResponsesRequirement(channel *model.Channel, modelName string, requirement *ResponsesRoutingRequirement, request dto.Request) bool {
+	return responsesRequirementDecision(channel, modelName, requirement, request).Allowed
+}
+
+// ResponsesRequirementDecisionForChannel exposes the same strict routing
+// decision as ChannelMatchesResponsesRequirement together with a stable,
+// redacted reason suitable for distributor diagnostics.
+func ResponsesRequirementDecisionForChannel(channel *model.Channel, modelName string, requirement *ResponsesRoutingRequirement, request dto.Request) ResponsesRequirementDecision {
+	return responsesRequirementDecision(channel, modelName, requirement, request)
 }
 
 func PlanResponsesExecution(kind dto.ResponsesRequestKind, record dto.ResponsesCompactionCapabilityRecord, upstreamModel string, clientStream bool) (ResponsesExecutionPlan, error) {

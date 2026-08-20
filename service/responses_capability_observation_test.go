@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -256,6 +257,76 @@ func TestObservedCapabilityConfigChangeDoesNotReviveOldFacets(t *testing.T) {
 	require.Equal(t, model.ChannelCapabilityStatusSupported, record.NativeStatus)
 	require.Equal(t, model.ChannelCapabilityStatusUnknown, record.LegacyStatus)
 	require.Equal(t, model.ChannelCapabilityStatusUnknown, record.ContinuationStatus)
+}
+
+func TestResponsesRequirementDecisionDistinguishesUnknownAndStaleEvidence(t *testing.T) {
+	setupResponsesCapabilityTestDB(t)
+	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
+	channel := compactTestChannel()
+	requirement := &ResponsesRoutingRequirement{Kind: dto.ResponsesCompactionTrigger}
+
+	decision := ResponsesRequirementDecisionForChannel(channel, "gpt-5.5", requirement, nil)
+	require.False(t, decision.Allowed)
+	require.Equal(t, ResponsesRequirementReasonCapabilityUnknownStrict, decision.Reason)
+
+	require.NoError(t, model.UpsertChannelModelCapability(model.ChannelModelCapability{
+		ChannelId: channel.Id, ModelName: "gpt-5.5", Capability: model.ChannelCapabilityResponsesCompaction,
+		Status: model.ChannelCapabilityStatusSupported, NativeStatus: model.ChannelCapabilityStatusSupported,
+		RouteFingerprint: "stale-fingerprint", Source: "probe", VerifiedAt: time.Now().Unix(),
+	}))
+	decision = ResponsesRequirementDecisionForChannel(channel, "gpt-5.5", requirement, nil)
+	require.False(t, decision.Allowed)
+	require.Equal(t, ResponsesRequirementReasonStaleRouteFingerprint, decision.Reason)
+
+	require.NoError(t, model.UpsertChannelModelCapability(model.ChannelModelCapability{
+		ChannelId: channel.Id, ModelName: "gpt-5.5", Capability: model.ChannelCapabilityResponsesCompaction,
+		Status:       model.ChannelCapabilityStatusUnsupported,
+		LegacyStatus: model.ChannelCapabilityStatusUnsupported, NativeStatus: model.ChannelCapabilityStatusUnsupported,
+		RouteFingerprint: ResponsesObservedRouteFingerprint(channel, "gpt-5.5"), Source: "probe",
+		VerifiedAt: time.Now().Unix(), BlockedUntil: time.Now().Add(time.Hour).Unix(),
+	}))
+	decision = ResponsesRequirementDecisionForChannel(channel, "gpt-5.5", requirement, nil)
+	require.False(t, decision.Allowed)
+	require.Equal(t, ResponsesRequirementReasonUnsupported, decision.Reason)
+}
+
+func TestContinuationObservationDoesNotPromoteNativeCapability(t *testing.T) {
+	setupResponsesCapabilityTestDB(t)
+	channel := compactTestChannel()
+	outcome := ObserveResponsesCapabilityAttempt(channel, "gpt-5.5", ResponsesCapabilityAttempt{
+		Kind: dto.ResponsesCompactedContextContinuation,
+	}, nil)
+	require.False(t, outcome.Unsupported)
+	record, found := model.GetChannelModelCapability(channel.Id, "gpt-5.5", model.ChannelCapabilityResponsesCompaction)
+	require.True(t, found)
+	require.Equal(t, model.ChannelCapabilityStatusUnknown, record.NativeStatus)
+	require.Equal(t, model.ChannelCapabilityStatusSupported, record.ContinuationStatus)
+}
+
+func TestTransientProbeFailureDoesNotWriteUnsupported(t *testing.T) {
+	setupResponsesCapabilityTestDB(t)
+	channel := compactTestChannel()
+	transient := types.NewErrorWithStatusCode(errors.New("upstream unavailable"), types.ErrorCodeBadResponseStatusCode, http.StatusServiceUnavailable)
+	outcome := ObserveResponsesCapabilityAttempt(channel, "gpt-5.5", ResponsesCapabilityAttempt{
+		Kind: dto.ResponsesCompactionTrigger, Source: "probe",
+	}, transient)
+	require.False(t, outcome.Unsupported)
+	record, found := model.GetChannelModelCapability(channel.Id, "gpt-5.5", model.ChannelCapabilityResponsesCompaction)
+	require.True(t, found)
+	require.Equal(t, model.ChannelCapabilityStatusUnknown, record.NativeStatus)
+	require.NotZero(t, record.NextProbeAt)
+}
+
+func TestInvalidProbeRequestDoesNotPolluteCapabilityEvidence(t *testing.T) {
+	setupResponsesCapabilityTestDB(t)
+	channel := compactTestChannel()
+	invalid := types.NewErrorWithStatusCode(errors.New("invalid synthetic input shape"), types.ErrorCodeInvalidRequest, http.StatusBadRequest)
+	outcome := ObserveResponsesCapabilityAttempt(channel, "gpt-5.5", ResponsesCapabilityAttempt{
+		Kind: dto.ResponsesCompactionTrigger, Source: "probe",
+	}, invalid)
+	require.False(t, outcome.Unsupported)
+	_, found := model.GetChannelModelCapability(channel.Id, "gpt-5.5", model.ChannelCapabilityResponsesCompaction)
+	require.False(t, found)
 }
 
 func TestObservedCapabilitySerializesConcurrentFacetUpdates(t *testing.T) {

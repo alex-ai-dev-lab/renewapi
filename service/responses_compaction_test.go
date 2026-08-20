@@ -34,6 +34,7 @@ func TestChannelMatchesResponsesRequirement(t *testing.T) {
 	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"native_v2","native_stream":true,"continuation":true}}}`), "gpt-5.4", streamTrigger, nil))
 	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"native_v2_and_legacy"}}}`), "gpt-5.4", streamTrigger, nil))
 	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"native_v2","continuation":true}}}`), "gpt-5.4", continuation, nil))
+	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"legacy","continuation":true}}}`), "gpt-5.4", continuation, nil))
 	require.True(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeOpenAI, `{"responses_compaction":{"default_capability":{"capability":"legacy"}}}`), "gpt-5.4-openai-compact", legacyEndpoint, nil))
 	require.False(t, ChannelMatchesResponsesRequirement(channel(constant.ChannelTypeAnthropic, `{"responses_compaction":{"default_capability":{"capability":"native_v2_and_legacy","native_stream":true,"continuation":true}}}`), "gpt-5.4", trigger, nil))
 

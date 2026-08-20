@@ -2,13 +2,20 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/types"
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestGetEffectiveTestConfigUsesChannelIntervalMinutes(t *testing.T) {
@@ -135,6 +142,69 @@ func TestResponsesCompactionObservationCompleteRequiresNativeFacets(t *testing.T
 		NativeStatus: model.ChannelCapabilityStatusUnsupported,
 	}
 	require.True(t, responsesCompactionObservationComplete(record))
+}
+
+func TestShouldSkipResponsesCompactionProbeRequiresCurrentFingerprint(t *testing.T) {
+	oldDB := model.DB
+	oldMemoryCacheEnabled := common.MemoryCacheEnabled
+	t.Cleanup(func() {
+		model.DB = oldDB
+		common.MemoryCacheEnabled = oldMemoryCacheEnabled
+	})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.ModelEndpoint{}))
+	model.DB = db
+	common.MemoryCacheEnabled = false
+	channel := &model.Channel{
+		Id:            71,
+		Type:          1,
+		BaseURL:       common.GetPointer("https://api.example.com/v1"),
+		ConfigVersion: 1,
+	}
+	now := time.Now().Unix()
+	current := service.ResponsesObservedRouteFingerprint(channel, "gpt-5.6-sol")
+
+	record := model.ChannelModelCapability{Source: "probe", NextProbeAt: now + 3600, RouteFingerprint: current}
+	require.True(t, shouldSkipResponsesCompactionProbe(channel, "gpt-5.6-sol", record, true, now))
+
+	record.RouteFingerprint = "stale-fingerprint"
+	require.False(t, shouldSkipResponsesCompactionProbe(channel, "gpt-5.6-sol", record, true, now))
+
+	record.RouteFingerprint = ""
+	require.False(t, shouldSkipResponsesCompactionProbe(channel, "gpt-5.6-sol", record, true, now))
+
+	record.RouteFingerprint = current
+	record.NextProbeAt = now - 1
+	require.False(t, shouldSkipResponsesCompactionProbe(channel, "gpt-5.6-sol", record, true, now))
+	require.False(t, shouldSkipResponsesCompactionProbe(channel, "gpt-5.6-sol", record, false, now))
+}
+
+func TestObserveResponsesCapabilityProbeResultClassifiesUpstreamStatus(t *testing.T) {
+	oldDB := model.DB
+	oldMemoryCacheEnabled := common.MemoryCacheEnabled
+	t.Cleanup(func() {
+		model.DB = oldDB
+		common.MemoryCacheEnabled = oldMemoryCacheEnabled
+	})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.ChannelModelCapability{}, &model.ModelEndpoint{}))
+	model.DB = db
+	common.MemoryCacheEnabled = false
+	channel := &model.Channel{
+		Id: 71, Type: constant.ChannelTypeOpenAI, Models: "gpt-5.6-sol",
+		BaseURL: common.GetPointer("https://api.example.com/v1"), ConfigVersion: 1,
+	}
+	apiErr := types.NewErrorWithStatusCode(errors.New("method not allowed"), types.ErrorCodeBadResponseStatusCode, http.StatusInternalServerError)
+	err = observeResponsesCapabilityProbeResult(channel, "gpt-5.6-sol", service.ResponsesCapabilityAttempt{
+		Kind: dto.ResponsesCompactEndpoint, UsedLegacy: true, Source: "probe",
+	}, testResult{localErr: apiErr, newAPIError: apiErr, httpStatus: http.StatusMethodNotAllowed})
+	require.Error(t, err)
+	record, found := model.GetChannelModelCapability(channel.Id, "gpt-5.6-sol", model.ChannelCapabilityResponsesCompaction)
+	require.True(t, found)
+	require.Equal(t, model.ChannelCapabilityStatusUnsupported, record.LegacyStatus)
+	require.Equal(t, http.StatusMethodNotAllowed, record.LastStatusCode)
 }
 
 func TestResponsesCapabilityProbeSemaphoreHonorsCancellation(t *testing.T) {

@@ -101,6 +101,14 @@ func TestResponsesCompactionProbeModelsSkipConcreteManualDeclarations(t *testing
 	require.Equal(t, []string{"gpt-5.6"}, responsesCompactionProbeModels(channel))
 }
 
+func TestResponsesCompactionProbeModelsDoNotDiscoverOrdinaryAdvertisedModels(t *testing.T) {
+	t.Setenv("RESPONSES_COMPACTION_MODEL", "")
+	t.Setenv("RESPONSES_COMPACTION_PROBE_MAX_MODELS", "10")
+	channel := &model.Channel{Models: "gpt-5.6-sol"}
+
+	require.Empty(t, responsesCompactionProbeModels(channel))
+}
+
 func TestResponsesCompactionProbeModelsRevalidateMeasuredDeclarations(t *testing.T) {
 	t.Setenv("RESPONSES_COMPACTION_PROBE_MAX_MODELS", "10")
 	channel := &model.Channel{}

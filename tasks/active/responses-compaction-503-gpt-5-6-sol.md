@@ -18,11 +18,13 @@ enforcement.
 - Do not treat unknown capability as supported in strict mode.
 - Do not enable global cross-family fallback or remove the capability gate.
 - Do not infer compaction support from an ordinary Responses success.
-- Do not rewrite published migrations or create a product release.
+- Do not rewrite published migrations. Product release publication is handled
+  separately through the repository's `renewapi-v<version>` GitHub Actions
+  workflow after the source commits and release identity are validated.
 
 ## Baseline
 
-- base commit: `e9c2a5a074e7aa27338d91790a85499d1a0192c2`
+- base commit: `bd3d4c20aff85e89db07f5f0e109a20654d717a2`
 - branch: `main` (`origin/HEAD` is `origin/main`)
 - worktree initial state: dirty; no staged changes
 - pre-existing files:
@@ -46,6 +48,9 @@ enforcement.
 | ISSUE-009 | BLOCKED_RUNTIME | Strict Codex compact + continuation + repeated compact requires a live deployment, Test group, channel credentials, and upstream. | No runtime credentials or database endpoint established; no local service listener. | Run only in an authorized environment. | BLOCKED_RUNTIME. |
 | ISSUE-010 | FIXED | Continuation evidence is independent, and legacy compact output can seed continuation probing. | Native status is no longer promoted by continuation; scheduler prefers legacy output when available. | Full facet unit coverage added. | Focused unit tests PASS. |
 | ISSUE-011 | FIXED | Probe observer now classifies non-2xx upstream results and preserves actual HTTP status. | `localErr` + `newAPIError` no longer bypasses observation; generic invalid 400/422 does not write evidence. | Added explicit unsupported/status and invalid-probe tests. | Focused tests PASS. |
+| ISSUE-012 | FIXED | Route-plan-disabled distributor selection previously collapsed all compaction capability rejections into `model_not_found`. | Shared selector now records the same `ResponsesRequirementDecision` reason counts and returns `responses_compaction_no_eligible_channel` when actual candidates are rejected. | Route-plan-disabled unknown/native-stream/continuation and successful-candidate regressions; ordinary and missing-model semantics preserved. | Middleware/service tests PASS. |
+| ISSUE-013 | FIXED | `PROBE_ENABLED=true` does not discover every ordinary advertised model by design. | Candidate selection remains explicit: configured capability/evidence, compact suffix, TestModel with default capability, persisted capability rows, or matching `RESPONSES_COMPACTION_MODEL`; scheduler also requires auto-test prerequisites. | Force Probe is documented as first bootstrap; scheduler refresh and candidate-scope tests retained and extended. | Controller tests and documentation PASS. |
+| ISSUE-014 | FIXED | Native SSE verifier previously treated any `data:` frame as a compaction PASS. | Verifier now requires `text/event-stream`, parseable SSE JSON, and a real compaction item with non-empty `encrypted_content`; malformed/ordinary/missing-content fixtures are rejected. | Offline fixture harness added alongside the shared parser. | Bash syntax and fixture runtime PASS using a temporary jq binary. |
 
 ## Invariants
 
@@ -63,6 +68,8 @@ enforcement.
 | INV-010 logs do not leak API key / Authorization / Cookie | PASS | Diagnostics contain request id/group/model/kind/stream and stable reason counts only; focused 503 test PASS; runtime log inspection not run. |
 | INV-011 route config change permits timely relearning | PASS | Scheduler skips only when future `NextProbeAt` and current `ResponsesObservedRouteFingerprint` match; stale/empty/expired evidence re-probes. |
 | INV-012 migrations, if any, are backward compatible | NOT_APPLICABLE | No schema or migration change was made. |
+| INV-013 route-plan=false compaction diagnostics remain actionable | PASS | Shared selector emits the stable error code and evaluator reason counts; middleware regression covers unknown, native stream, continuation, ordinary, missing-model, and successful cases. |
+| INV-014 native SSE PASS requires a valid streamed compaction item | PASS | Shared verifier parser requires SSE content type, valid JSON frames, recognized compaction item type, and non-empty `encrypted_content`; fixture cases cover false positives and malformed data. |
 
 ## Runtime Validation
 
@@ -73,6 +80,8 @@ enforcement.
 - continuation: NOT RUN
 - compact again and continue: NOT RUN
 - stale fingerprint re-probe: PASS in controller regression; live runtime BLOCKED_RUNTIME
+- route-plan=false diagnostics: PASS in middleware regression
+- native SSE verifier fixtures: PASS with a temporary jq binary; parser syntax PASS
 
 ## Bootstrap / Final Configuration
 
@@ -105,6 +114,18 @@ applying and verifying the final scheduler-enabled configuration is an
 operational `BLOCKED_RUNTIME` item. Route planning remains disabled for this
 rollout.
 
+First bootstrap runbook for a new channel/model:
+
+1. Configure the channel and verify its model mapping.
+2. Call the root-authenticated Force Probe endpoint with
+   `model=gpt-5.6-sol`.
+3. Inspect legacy, native, native-stream, and continuation facet results plus
+   the current route fingerprint.
+4. Keep `RESPONSES_COMPACTION_ENFORCEMENT=strict` after evidence is valid.
+5. Leave the scheduler enabled for later refresh; it still requires the
+   ordinary channel auto-test, `AllowAutoTestAndRecover`, due interval, valid
+   time window, and master-node execution.
+
 ## Verification Record
 
 - `go test ./service ./controller ./middleware ./model`: PASS
@@ -115,6 +136,7 @@ rollout.
 - `git diff --check`: PASS
 - runtime verifier: NOT RUN; Bash/jq and a live deployment are unavailable
 - real Test-group channel inventory/capability evidence: BLOCKED_RUNTIME
+- native SSE fixture verifier: PASS using a temporary jq binary; temporary tool removed
 
 ## Current state
 
@@ -127,6 +149,8 @@ Completed:
 - Route-current probe scheduling, independent facet observation, rejection
   diagnostics, focused tests, repository-wide tests, ADR, task ledger, and
   runtime verification workflow.
+- Route-plan-disabled diagnostics, explicit probe bootstrap documentation, and
+  strict native SSE item validation with offline fixtures.
 
 Remaining external work:
 - Apply the bootstrap configuration in an authorized deployment, establish

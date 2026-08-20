@@ -24,14 +24,25 @@ capability evidence.
 
 Distributor route-plan failures use a stable
 `responses_compaction_no_eligible_channel` error code and redacted reason
-counts. The existing root-authenticated capability probe endpoint is the
-operational Force Probe entry point; the ordinary Channel Test remains a
-single endpoint/stream test and is not described as a full compaction probe.
+counts. The same evaluator and reason counts are used by the ordinary
+distributor selector when `RESPONSES_COMPACTION_ROUTE_PLAN_ENABLED=false`, so
+the diagnostics do not depend on the route-plan feature flag. The existing
+root-authenticated capability probe endpoint is the operational Force Probe
+entry point; the ordinary Channel Test remains a single endpoint/stream test
+and is not described as a full compaction probe.
 
 ## Consequences
 
-- Production bootstrap must establish evidence with the scheduler or Force
-  Probe before strict compaction routing can succeed.
+- Production bootstrap must establish evidence with Force Probe before strict
+  compaction routing can succeed for a new channel/model. The scheduler only
+  refreshes models selected by its explicit candidate policy after the channel
+  ordinary health test succeeds, the channel permits automatic testing, the
+  per-channel interval is due, and the configured time window permits a run.
+- `RESPONSES_COMPACTION_PROBE_ENABLED=true` is not a promise to probe every
+  advertised model. The documented bootstrap is: configure the channel,
+  verify model mapping, Force Probe `model=gpt-5.6-sol`, inspect legacy/native/
+  native-stream/continuation facets, verify the current route fingerprint,
+  then keep strict mode and let the scheduler refresh evidence.
 - Third-party ordinary `/responses` success does not imply compaction support.
 - No schema or migration change is required; existing capability rows and
   fields are reused.

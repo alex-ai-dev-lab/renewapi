@@ -237,12 +237,13 @@ export function ModelsTable() {
   return (
     <div className='space-y-3 sm:space-y-4'>
       <ModelsStats models={models} vendors={vendors} />
-
       <DataTablePage
         table={table}
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
+        tableHeaderClassName='bg-background/80 backdrop-blur-md sticky top-0 z-10'
+        tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
         emptyTitle={t('No Models Found')}
         emptyDescription={t(
           'No models available. Create your first model to get started.'

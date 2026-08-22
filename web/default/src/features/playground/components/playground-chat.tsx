@@ -89,7 +89,6 @@ export function PlaygroundChat({
     const content = message?.versions?.[0]?.content || ''
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditText(content)
-
     setOriginalText(content)
   }, [editingKey, messages])
 
@@ -99,11 +98,11 @@ export function PlaygroundChat({
     () => editText !== originalText,
     [editText, originalText]
   )
+
   return (
     <Conversation>
-      {/* Remove outer padding; apply padding to inner centered container to align with input */}
-      <ConversationContent className='p-0'>
-        <div className='mx-auto w-full max-w-4xl px-4 py-4'>
+      <ConversationContent className='bg-card/20 p-0'>
+        <div className='mx-auto w-full max-w-5xl px-4 py-6 sm:px-6'>
           {messages.map((message, messageIndex) => {
             const { versions = [] } = message
             const isLastAssistantMessage =
@@ -114,21 +113,27 @@ export function PlaygroundChat({
                 <BranchMessages>
                   {versions.map((version, versionIndex) => (
                     <Message
-                      className='group flex-row-reverse'
+                      className='group flex-row-reverse py-2'
                       from={message.from}
                       key={`${message.key}-${version.id}-${versionIndex}`}
                     >
-                      <div className='w-full min-w-0 flex-1 basis-full py-1'>
+                      <div
+                        className={cn(
+                          'w-full min-w-0 flex-1 basis-full',
+                          message.from === MESSAGE_ROLES.USER
+                            ? 'border-border/60 bg-card/70 rounded-[calc(var(--radius)*1.125)] border px-4 py-3 shadow-sm'
+                            : 'py-2'
+                        )}
+                      >
                         {isEditing(message.key) ? (
-                          <div className='space-y-2'>
+                          <div className='border-border/60 bg-card/70 space-y-3 rounded-[calc(var(--radius)*1.125)] border p-3 shadow-sm'>
                             <Textarea
                               value={editText}
                               onChange={(e) => setEditText(e.target.value)}
                               className='font-mono text-sm'
                               rows={8}
                             />
-                            <div className='flex gap-2'>
-                              {/* Save & Submit only makes sense for user messages */}
+                            <div className='flex flex-wrap gap-2'>
                               {message.from === MESSAGE_ROLES.USER && (
                                 <Button
                                   size='sm'
@@ -174,8 +179,6 @@ export function PlaygroundChat({
                                 (message.from === MESSAGE_ROLES.USER ||
                                   !message.isReasoningStreaming) &&
                                 !!version.content
-
-                              // Extract visible content (remove <think> tags for assistant messages)
                               const displayContent = isAssistant
                                 ? parseThinkTags(version.content).visibleContent
                                 : version.content
@@ -195,7 +198,6 @@ export function PlaygroundChat({
 
                               return (
                                 <>
-                                  {/* Sources */}
                                   {hasSources && (
                                     <Sources>
                                       <SourcesTrigger
@@ -215,7 +217,6 @@ export function PlaygroundChat({
                                     </Sources>
                                   )}
 
-                                  {/* Reasoning */}
                                   {showReasoning && (
                                     <Reasoning
                                       defaultOpen={true}
@@ -228,7 +229,6 @@ export function PlaygroundChat({
                                     </Reasoning>
                                   )}
 
-                                  {/* Loader */}
                                   {showLoader && (
                                     <div className='flex items-center gap-2 py-2'>
                                       <Loader />
@@ -238,7 +238,6 @@ export function PlaygroundChat({
                                     </div>
                                   )}
 
-                                  {/* Error or Content */}
                                   {message.status === 'error' ? (
                                     <>
                                       <MessageError
@@ -272,7 +271,6 @@ export function PlaygroundChat({
                   ))}
                 </BranchMessages>
 
-                {/* Branch selector for multiple versions */}
                 {versions.length > 1 && (
                   <BranchSelector className='px-0' from={message.from}>
                     <BranchPrevious />

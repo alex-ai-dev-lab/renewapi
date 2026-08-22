@@ -37,11 +37,6 @@ type SettingsPageProps<
   TSectionId extends string,
   TExtraArgs extends unknown[] = [],
 > = {
-  /**
-   * Kept for callers and for documentation purposes. The active section is
-   * resolved from the current match rather than from this path, so that both
-   * URL styles supported by the section registry keep working.
-   */
   routePath: string
   defaultSettings: TSettings
   defaultSection: TSectionId
@@ -88,7 +83,9 @@ function SettingsPageFrame(props: SettingsPageFrameProps) {
       <SectionPageLayout>
         <SectionPageLayout.Title>
           <span className='inline-flex max-w-full min-w-0 items-center gap-2 align-middle'>
-            <span className='truncate'>{props.title}</span>
+            <span className='truncate font-extrabold tracking-[-0.02em]'>
+              {props.title}
+            </span>
             <span
               ref={titleStatusContainerRef}
               className='inline-flex shrink-0'
@@ -102,7 +99,7 @@ function SettingsPageFrame(props: SettingsPageFrameProps) {
           />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <div className='flex w-full max-w-none flex-col gap-5 sm:gap-6'>
+          <div className='mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-5'>
             {props.children}
           </div>
         </SectionPageLayout.Content>
@@ -111,10 +108,6 @@ function SettingsPageFrame(props: SettingsPageFrameProps) {
   )
 }
 
-/**
- * Generic settings page component
- * Handles loading state, data fetching, and section rendering
- */
 export function SettingsPage<
   TSettings extends Record<string, string | number | boolean | unknown[]>,
   TSectionId extends string,
@@ -130,10 +123,6 @@ export function SettingsPage<
 }: SettingsPageProps<TSettings, TSectionId, TExtraArgs>) {
   const { t, ts } = useSystemSettingsTranslation()
   const { data, error, isError, isLoading, refetch } = useSystemOptions()
-  // The section registry supports two URL styles: `urlStyle: 'path'` puts the
-  // section in a route param, the default `'query'` style puts it in the
-  // search params. Read both, otherwise one of the two styles silently keeps
-  // rendering the default section no matter what the sidebar links to.
   const params = useParams({ strict: false }) as { section?: string }
   const search = useSearch({ strict: false }) as { section?: string }
   const activeSection = (params?.section ??
@@ -154,7 +143,7 @@ export function SettingsPage<
   if (isLoading) {
     return (
       <SettingsPageFrame title={t(sectionMeta.titleKey)}>
-        <div className='text-muted-foreground flex min-h-40 items-center justify-center text-sm'>
+        <div className='border-border/60 bg-card/55 text-muted-foreground flex min-h-40 items-center justify-center rounded-[calc(var(--radius)*1.125)] border text-sm'>
           {ts('settings.common.loading', {
             defaultValue: loadingMessage,
           })}

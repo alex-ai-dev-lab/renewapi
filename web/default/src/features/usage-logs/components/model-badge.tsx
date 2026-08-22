@@ -116,7 +116,7 @@ function ModelBadgeContent(props: ModelBadgeProps) {
             {getLobeIcon(provider.icon, 14)}
           </span>
         )}
-        <span title={props.modelName}>
+        <span className='truncate font-mono' title={props.modelName}>
           {props.modelName}
         </span>
       </span>

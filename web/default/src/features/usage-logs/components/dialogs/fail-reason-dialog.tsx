@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Copy, Check } from 'lucide-react'
+import { Check, Copy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { Button } from '@/components/ui/button'
@@ -46,7 +46,7 @@ export function FailReasonDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-lg'>
+      <DialogContent className='sm:max-w-xl'>
         <DialogHeader>
           <DialogTitle>{t('Fail Reason Details')}</DialogTitle>
           <DialogDescription>
@@ -57,10 +57,10 @@ export function FailReasonDialog({
         <ScrollArea className='max-h-[500px] pr-4'>
           <div className='space-y-4 py-4'>
             <div className='space-y-2'>
-              <Label className='text-sm font-semibold'>
+              <Label className='text-muted-foreground text-[10px] font-bold uppercase tracking-[1.2px]'>
                 {t('Error Message')}
               </Label>
-        <div className='relative rounded-md border border-destructive/25 bg-destructive/10 p-3'>
+              <div className='border-destructive/25 bg-destructive/10 relative rounded-[calc(var(--radius)*0.875)] border p-3.5'>
                 <Button
                   variant='ghost'
                   size='sm'
@@ -74,7 +74,7 @@ export function FailReasonDialog({
                     <Copy className='size-4' />
                   )}
                 </Button>
-                <p className='overflow-wrap-anywhere pr-10 text-sm leading-relaxed break-all whitespace-pre-wrap text-destructive'>
+                <p className='overflow-wrap-anywhere text-destructive pr-10 font-mono text-[13px] leading-5 break-all whitespace-pre-wrap'>
                   {failReason || '-'}
                 </p>
               </div>

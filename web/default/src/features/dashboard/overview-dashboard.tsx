@@ -16,10 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  useOverviewStats,
-  type TimeRange,
-} from './stats-api'
+import { useOverviewStats, type TimeRange } from './stats-api'
 import { KPICard } from './kpi-card'
 import { TimeRangeSelector } from './time-range-selector'
 import { AutoRefreshToggle } from './auto-refresh-toggle'
@@ -70,23 +67,19 @@ export function OverviewDashboard() {
     error,
     refetch,
     dataUpdatedAt,
-  } = useOverviewStats(
-    timeRange,
-    autoRefresh,
-    refreshInterval
-  )
+  } = useOverviewStats(timeRange, autoRefresh, refreshInterval)
 
   if (isLoading && !stats) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className='flex h-96 items-center justify-center'>
+        <Loader2 className='h-8 w-8 animate-spin text-muted-foreground' />
       </div>
     )
   }
 
   if (error) {
     return (
-      <Alert variant="destructive">
+      <Alert variant='destructive'>
         <AlertDescription>
           Failed to load statistics. Please try again later.
         </AlertDescription>
@@ -99,16 +92,18 @@ export function OverviewDashboard() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className='space-y-6 p-6'>
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
+          <h1 className='text-[32px] leading-[1.06] font-extrabold tracking-[-0.03em]'>
+            Dashboard
+          </h1>
+          <p className='text-muted-foreground'>
             Overview of your API usage and performance
           </p>
         </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
           <AutoRefreshToggle
             value={autoRefresh}
             onChange={setAutoRefresh}
@@ -123,50 +118,51 @@ export function OverviewDashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
         <KPICard
-          title="Total Requests"
+          title='Total Requests'
           value={stats.total_requests.toLocaleString()}
-          subtitle="API requests processed"
+          subtitle='API requests processed'
           icon={Activity}
         />
         <KPICard
-          title="Success Rate"
+          title='Success Rate'
           value={`${stats.success_rate.toFixed(2)}%`}
-          subtitle="Successful requests"
+          subtitle='Successful requests'
           icon={TrendingUp}
         />
         <KPICard
-          title="Avg First Token"
-          value={stats.avg_first_token_time > 0 ? `${stats.avg_first_token_time.toFixed(0)}ms` : 'N/A'}
-          subtitle="Average response time"
+          title='Avg First Token'
+          value={
+            stats.avg_first_token_time > 0
+              ? `${stats.avg_first_token_time.toFixed(0)}ms`
+              : 'N/A'
+          }
+          subtitle='Average response time'
           icon={Zap}
         />
         <KPICard
-          title="Total Cost"
+          title='Total Cost'
           value={`$${stats.total_cost.toFixed(2)}`}
-          subtitle="Total API cost"
+          subtitle='Total API cost'
           icon={DollarSign}
         />
       </div>
 
       {/* Charts and Tables */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <TrendChart
-          data={stats.trend}
-          storageKey='dashboard:overview:trend'
-        />
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+      <div className='grid gap-6 lg:grid-cols-2'>
+        <TrendChart data={stats.trend} storageKey='dashboard:overview:trend' />
+        <div className='space-y-4'>
+          <div className='grid grid-cols-2 gap-4'>
             <KPICard
-              title="Active Channels"
+              title='Active Channels'
               value={stats.active_channels}
-              className="col-span-1"
+              className='col-span-1'
             />
             <KPICard
-              title="Active Users"
+              title='Active Users'
               value={stats.active_users}
-              className="col-span-1"
+              className='col-span-1'
             />
           </div>
         </div>

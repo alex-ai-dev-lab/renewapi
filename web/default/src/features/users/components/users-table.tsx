@@ -103,7 +103,6 @@ export function UsersTable() {
     (columnFilters.find((filter) => filter.id === 'group')?.value as string) ??
     ''
 
-  // Fetch data with React Query
   const { data, isLoading, isFetching } = useQuery({
     queryKey: [
       'users',
@@ -216,6 +215,8 @@ export function UsersTable() {
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
+        tableHeaderClassName='sticky top-0 z-10 bg-background/80 backdrop-blur-md'
+        tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
         emptyTitle={t('No Users Found')}
         emptyDescription={t(
           'No users available. Try adjusting your search or filters.'

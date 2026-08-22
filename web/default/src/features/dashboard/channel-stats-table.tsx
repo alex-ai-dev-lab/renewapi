@@ -49,7 +49,7 @@ export function ChannelStatsTable({ data }: ChannelStatsTableProps) {
         <CardDescription>Channel performance statistics</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className='rounded-md border'>
+        <div className='border-border/60 overflow-hidden rounded-[calc(var(--radius)*1.125)] border'>
           <Table>
             <TableHeader>
               <TableRow>
@@ -79,7 +79,7 @@ export function ChannelStatsTable({ data }: ChannelStatsTableProps) {
                         #{channel.channel_id}
                       </span>
                     </TableCell>
-                    <TableCell className='text-right'>
+                    <TableCell className='text-right tabular-nums'>
                       {channel.total_requests.toLocaleString()}
                     </TableCell>
                     <TableCell className='text-right'>

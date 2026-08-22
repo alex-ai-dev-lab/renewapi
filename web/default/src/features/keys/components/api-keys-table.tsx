@@ -167,7 +167,6 @@ function ApiKeysMobileList({
               </div>
               <DataTableRowActions row={row} />
             </div>
-
             <div className='flex items-center justify-between gap-2 text-xs'>
               <span className='text-muted-foreground'>{t('Quota')}</span>
               {apiKey.unlimited_quota ? (
@@ -239,8 +238,6 @@ export function ApiKeysTable() {
   const tokenFilter = tokenFilterFromUrl
   const shouldSearch = Boolean(globalFilter?.trim() || tokenFilter.trim())
 
-  // Fetch data with React Query
-  // eslint-disable-next-line @tanstack/query/exhaustive-deps
   const { data, isLoading, isFetching } = useQuery({
     queryKey: [
       'keys',
@@ -328,6 +325,8 @@ export function ApiKeysTable() {
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
+        tableHeaderClassName='sticky top-0 z-10 bg-background/80 backdrop-blur-md'
+        tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
         emptyTitle={t('No API Keys Found')}
         emptyDescription={t(
           'No API keys available. Create your first API key to get started.'

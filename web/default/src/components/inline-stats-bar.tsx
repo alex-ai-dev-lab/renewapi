@@ -27,10 +27,10 @@ interface StatItem {
 }
 
 const toneClasses: Record<StatItemTone, string> = {
-  default: 'text-muted-foreground',
-  success: 'text-green-600 dark:text-green-400',
-  destructive: 'text-red-600 dark:text-red-400',
-  accent: 'text-blue-600 dark:text-blue-400',
+  default: 'text-foreground',
+  success: 'text-success',
+  destructive: 'text-destructive',
+  accent: 'text-primary',
 }
 
 export function InlineStatsBar({
@@ -43,16 +43,18 @@ export function InlineStatsBar({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-x-3 gap-y-1 text-xs',
+        'glass-tile flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3 text-xs',
         className
       )}
     >
       {items.map((item, index) => (
         <div key={index} className='flex items-center gap-1.5'>
-          <span className='text-muted-foreground'>{item.label}</span>
+          <span className='text-muted-foreground text-[10px] font-bold uppercase tracking-[1.2px]'>
+            {item.label}
+          </span>
           <span
             className={cn(
-              'font-medium tabular-nums',
+              'text-base font-extrabold tracking-[-0.02em] tabular-nums',
               toneClasses[item.tone ?? 'default']
             )}
           >

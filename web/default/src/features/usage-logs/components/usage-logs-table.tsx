@@ -53,7 +53,7 @@ import { UsageLogsMobileList } from './usage-logs-mobile-card'
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 
 const logTypeRowTint: Record<number, string> = {
-  [LOG_TYPE_ENUM.ERROR]: 'bg-rose-50/40 dark:bg-rose-950/20',
+  [LOG_TYPE_ENUM.ERROR]: 'bg-destructive/5 dark:bg-destructive/10',
   [LOG_TYPE_ENUM.REFUND]: 'bg-chart-1/10',
 }
 
@@ -149,7 +149,6 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         toast.error(result?.message || t('Failed to load logs'))
         return DEFAULT_LOGS_DATA
       }
-
       return result.data || DEFAULT_LOGS_DATA
     },
     placeholderData: (previousData, previousQuery) => {
@@ -207,7 +206,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       tableClassName={cn(
         'min-w-0 max-w-full [&_[data-slot=table]]:table-fixed [&_[data-slot=table]]:text-[13px] [&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
       )}
-      tableHeaderClassName='bg-muted/35 sticky top-0 z-10'
+      tableHeaderClassName='bg-background/80 backdrop-blur-md sticky top-0 z-10'
       mobile={
         <UsageLogsMobileList
           table={table}
@@ -231,11 +230,9 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       }
       renderRow={(row) => {
         const logType = (row.original as Record<string, unknown>).type as
-          | number
-          | undefined
+          number | undefined
         const tintClass =
           isCommon && logType != null ? (logTypeRowTint[logType] ?? '') : ''
-
         return (
           <TableRow key={row.id} className={cn('transition-colors', tintClass)}>
             {row.getVisibleCells().map((cell) => (

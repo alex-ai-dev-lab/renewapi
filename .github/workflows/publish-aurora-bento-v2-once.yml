@@ -1,0 +1,79 @@
+name: Publish Aurora Bento v2 source release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/publish-aurora-bento-v2-once.yml'
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: renewapi-edge-linux-amd64.tar.gz
+          path: release-assets
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 32562537386
+
+      - name: Verify release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f release-assets/renewapi-edge-linux-amd64.tar.gz
+          test -f release-assets/compose.yaml
+          test -f release-assets/docker-compose.yml
+          test -f release-assets/default.env.example
+          test -f release-assets/CHECKSUMS.txt
+          (
+            cd release-assets
+            sha256sum -c CHECKSUMS.txt
+          )
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: renewapi-source-aurora-bento-v2-a7244d8d1d00
+          target_commitish: a7244d8d1d009a733da0f6c4a5c7665e17475ad7
+          name: RenewAPI Aurora Bento v2
+          body: |
+            Aurora Bento v2 frontend refresh.
+
+            Source commit: a7244d8d1d009a733da0f6c4a5c7665e17475ad7
+            Verified workflow: https://github.com/alex-ai-dev-lab/renewapi/actions/runs/32562537386
+            Product version: v1.0.0-rc.3
+            Image: ghcr.io/alex-ai-dev-lab/renewapi:edge
+
+            The attached release assets are reused from the successful workflow run above and retain its checksum verification.
+          draft: false
+          prerelease: false
+          files: |
+            release-assets/renewapi-edge-linux-amd64.tar.gz
+            release-assets/compose.yaml
+            release-assets/docker-compose.yml
+            release-assets/default.env.example
+            release-assets/CHECKSUMS.txt
+
+      - name: Verify release tag source commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: renewapi-source-aurora-bento-v2-a7244d8d1d00
+          EXPECTED_SHA: a7244d8d1d009a733da0f6c4a5c7665e17475ad7
+        shell: bash
+        run: |
+          set -euo pipefail
+          object_type="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.type')"
+          actual="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')"
+          while [[ "$object_type" == "tag" ]]; do
+            object_type="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${actual}" --jq '.object.type')"
+            actual="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${actual}" --jq '.object.sha')"
+          done
+          test "$actual" = "$EXPECTED_SHA"

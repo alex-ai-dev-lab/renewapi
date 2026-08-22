@@ -103,6 +103,8 @@ export function UsersTable() {
     (columnFilters.find((filter) => filter.id === 'group')?.value as string) ??
     ''
 
+  // The full filter arrays are already part of the query key.
+  // eslint-disable-next-line @tanstack/query/exhaustive-deps
   const { data, isLoading, isFetching } = useQuery({
     queryKey: [
       'users',
@@ -255,7 +257,7 @@ export function UsersTable() {
               : DISABLED_ROW_DESKTOP
             : undefined
         }
-        bulkActions={<DataTableBulkActions table={table} />}
+        bulkActions={<DataTableBulkActions table={table} />
       />
     </div>
   )

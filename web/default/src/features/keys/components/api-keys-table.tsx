@@ -238,6 +238,8 @@ export function ApiKeysTable() {
   const tokenFilter = tokenFilterFromUrl
   const shouldSearch = Boolean(globalFilter?.trim() || tokenFilter.trim())
 
+  // shouldSearch is derived from keyed filters; t only localizes an error toast.
+  // eslint-disable-next-line @tanstack/query/exhaustive-deps
   const { data, isLoading, isFetching } = useQuery({
     queryKey: [
       'keys',

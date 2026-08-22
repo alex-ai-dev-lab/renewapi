@@ -257,7 +257,7 @@ export function UsersTable() {
               : DISABLED_ROW_DESKTOP
             : undefined
         }
-        bulkActions={<DataTableBulkActions table={table} />
+        bulkActions={<DataTableBulkActions table={table} />}
       />
     </div>
   )

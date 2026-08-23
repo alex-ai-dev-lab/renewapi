@@ -1,29 +1,29 @@
 # Aurora Bento v2 进度与验收总表
 
-> 最后更新：2026-08-23 15:15 +08:00  
+> 最后更新：2026-08-23 16:30 +08:00  
 > 仓库：`alex-ai-dev-lab/renewapi`  
 > 原稿：`renewapi-design-02-aurora-bento-v2`  
 > Desktop Light：`9f90bd234d1533dc4f4efb916cc826d5626d4737`  
 > Desktop Dark merge：`cf4961baf0a553d86b4c3f0ad90fd031f6c64633`  
 > Responsive Phase B merge：`02e467d95a36d0b7d54ea55f3db305205eadc857`  
-> 最新交互/无障碍审计产品 head：`38169318c1d8e8815ddb1084baf8fd12b9291da1`
+> Interaction / Accessibility merge：`d7fa60720457f00b4e1766f9443d0648fb6c225b`
 
 ## 1. 当前结论
 
-**Aurora Bento v2 的核心视觉与跨设备响应式基线已经完成。**
+**Aurora Bento v2 的核心视觉、跨设备响应式基线与 Settings 基础真实后端 mutation 已经完成。**
 
 - Desktop Light：✅ 完成
 - Desktop Dark：✅ 完成
 - Tablet / Mobile Phase B：✅ 完成当前可验证范围
-- Interaction / State Fidelity：🟡 部分完成，核心全局交互已验收；深层业务状态仍待做
+- Interaction / State Fidelity：🟡 部分完成，核心全局交互与 Settings foundation mutation 已验收；其他深层业务状态仍待做
 - Accessibility：🟡 部分完成，自动化/键盘采样通过；真实屏幕阅读器与完整对比度仍待做
-- Settings 真实后端 mutation：⏳ 待做
+- Settings 真实后端 mutation：✅ 完成
 - Secondary Surfaces：⏳ 待做
 - Release / 部署 smoke：⏳ 待做
 
 不能把当前状态表述为“全产品所有状态全部完成”；可以表述为：
 
-> **Desktop Light / Dark + 1024 / 768 / 375 核心页面与全局交互的浏览器 QA 已通过，当前剩余工作集中在真实后端 mutation、深层业务状态、辅助技术实测、Secondary Surfaces 与部署 smoke。**
+> **Desktop Light / Dark + 1024 / 768 / 375 核心页面、全局交互与 Settings foundation 真实后端 mutation/restart QA 已通过，当前剩余工作集中在其他深层业务状态、辅助技术实测、Secondary Surfaces 与部署 smoke。**
 
 ## 2. 已完成核心页面
 
@@ -35,7 +35,7 @@
 | Usage Logs | ✅ | ✅ | ✅ | KPI + 实时流 + 筛选/表格 |
 | Models | ✅ | ✅ | ✅ | Registry 六卡 + 真实定价 |
 | Users | ✅ | ✅ | ✅ | 用户 / 分组 / 状态统计 |
-| System Settings | ✅ | ✅ | ✅ | 6/6 + 12；基础输入已补语义标签 |
+| System Settings | ✅ | ✅ | ✅ | 6/6 + 12；基础输入语义标签 + real-backend mutation/restart PASS |
 
 ## 3. 主要验收证据
 
@@ -46,14 +46,17 @@
 | Desktop Dark final | `32618534536` | ✅ 7 页 + 工程门 PASS |
 | Responsive Phase B baseline | `32619390956` | ✅ Light/Dark × 1024/768/375；overflow 0 |
 | Interaction/A11y final P2-strict | `32624800840` | ✅ `issues=0`, console=0, unhandled=0 |
+| Settings real-backend final | `32628206857` | ✅ fresh SQLite + real root auth + single/bulk mutation + invalid atomicity + restart persistence |
 
-最新 Interaction/A11y artifact：`aurora-interaction-a11y-qa` / id `9489423724`。
+Interaction/A11y artifact：`aurora-interaction-a11y-qa` / id `9489423724`。  
+Settings real-backend artifact：`settings-real-backend-smoke` / id `9490331010` / digest `sha256:074ee2048a21fa809cb07b82b7b36ba813461e8e02d96a172c4178da08436ac2`。
 
 详细报告：
 
 - `design-qa.md`
 - `docs/aurora-responsive-phase-b-baseline.md`
 - `docs/aurora-interaction-accessibility-qa.md`
+- `docs/aurora-settings-real-backend-qa.md`
 
 ## 4. Phase A — Dark Mode
 
@@ -91,7 +94,7 @@
 
 ## 6. Phase C — Interaction / State Fidelity
 
-**状态：🟡 核心全局交互完成，业务深层状态待补**
+**状态：🟡 核心全局交互 + Settings foundation mutation 完成，其他业务深层状态待补**
 
 已验证：
 
@@ -102,17 +105,23 @@
 - [x] Desktop Config Drawer open state
 - [x] sampled focus / active navigation behavior
 - [x] global overlay viewport containment
+- [x] Settings real `/api/option/` read / single update
+- [x] Settings real `/api/option/bulk` valid update
+- [x] Settings invalid bulk validation / no partial persistence / local draft preservation
+- [x] Settings process restart persistence
+- [x] fresh install naturally serves redesigned default frontend
+- [x] persisted `classic` frontend remains a supported override
 
 仍待：
 
 - [ ] loading / skeleton 全面截图验收
 - [ ] empty state 全面截图验收
-- [ ] error state 全面截图验收
+- [ ] error state 全面截图验收（Settings foundation 已覆盖一条真实 validation error）
 - [ ] destructive / confirmation states
-- [ ] bulk actions
+- [ ] bulk actions（Settings foundation bulk save 已覆盖；其他业务 bulk action 待补）
 - [ ] filter / pagination 非默认状态
-- [ ] Settings mutation success / error / rollback
 - [ ] Model management expand / edit / destructive states
+- [ ] Advanced Settings sections 的逐项 mutation / destructive state 覆盖
 
 ## 7. Phase D — Accessibility
 
@@ -148,12 +157,13 @@
 5. Settings 三个 foundation inputs 仅有视觉标签、缺程序化名称。
 6. Recharts 3 默认 accessibility layer 产生无名 SVG Tab stop。
 7. Notification glass 在 overlay 状态下底层内容竞争过强，局部提高背景不透明度。
+8. fresh install 的权威 `ThemeSettings.Frontend` 仍为 `classic`，导致真实后端默认服务旧前端；现改为 `default`，并保留数据库显式 `classic` 覆盖兼容性。
 
-全部已进入最终 P2-strict run 并通过。
+前 7 项已进入 final P2-strict run 并通过；第 8 项已进入 Settings real-backend final run `32628206857` 并通过。
 
 ## 9. 工程质量门
 
-最新 final run 在浏览器审计前通过：
+核心 Aurora 浏览器审计已通过：
 
 - [x] `bun install --frozen-lockfile`
 - [x] `bun test`
@@ -163,22 +173,33 @@
 - [x] console errors = `0`
 - [x] unhandled QA API requests = `0`
 
-临时 QA workflow / generator / patch scripts 在合并前删除，不污染长期仓库维护面。
+Settings real-backend final run 额外通过：
+
+- [x] default + classic frontend production build
+- [x] authoritative theme Go regression tests
+- [x] real RenewAPI Go binary build
+- [x] production SQLite migrations `--up` / `--check`
+- [x] fresh database + real setup/login/RootAuth
+- [x] real single/bulk mutation + invalid atomicity
+- [x] process restart persistence
+- [x] browser console errors = `0`
+- [x] browser page errors = `0`
+
+一次性 QA workflow / harness 在最终合并前删除，不污染长期仓库维护面。
 
 ## 10. 下一步执行顺序
 
-1. **Settings 真实后端 mutation smoke**：真实 `/api/option/` 读取、单项 update、bulk update、失败回滚。
-2. **Phase C 深层状态**：loading / empty / error / destructive / bulk / pagination / model management。
-3. **Accessibility 实测补口**：screen reader、真 200% zoom、完整 contrast audit。
-4. **Secondary Surfaces 品牌统一**：登录、错误页、个人设置、非核心管理面。
-5. **正式 release / deployment smoke**：实际部署环境巡检。
+1. **Phase C 其他深层状态**：loading / empty / error / destructive / bulk / pagination / model management。
+2. **Accessibility 实测补口**：screen reader、真 200% zoom、完整 contrast audit。
+3. **Secondary Surfaces 品牌统一**：登录、错误页、个人设置、非核心管理面。
+4. **正式 release / deployment smoke**：实际部署环境巡检。
 
 ## 11. 完成定义
 
-当前已满足“核心 Aurora UI + 跨设备基础 + 核心全局交互”完成定义；以下全部完成后才能宣称 Aurora Bento v2 全产品 DoD：
+当前已满足“核心 Aurora UI + 跨设备基础 + 核心全局交互 + Settings foundation 真实后端 mutation”完成定义；以下全部完成后才能宣称 Aurora Bento v2 全产品 DoD：
 
-- [ ] Settings 真实后端 mutation smoke
-- [ ] Phase C 深层业务状态清零
+- [x] Settings 真实后端 mutation smoke
+- [ ] Phase C 其他深层业务状态清零
 - [ ] screen reader / true 200% zoom / exhaustive contrast
 - [ ] Secondary Surfaces brand unification
 - [ ] deployment smoke

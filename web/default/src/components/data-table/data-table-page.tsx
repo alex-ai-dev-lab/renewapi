@@ -23,8 +23,10 @@ import {
   type Row,
   type Table as TanstackTable,
 } from '@tanstack/react-table'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { useMediaQuery } from '@/hooks'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -69,6 +71,24 @@ export type DataTablePageProps<TData> = {
    * Refetch / background loading — dims the table without removing rows.
    */
   isFetching?: boolean
+
+  /**
+   * Persistent query failure state. Replaces the table/mobile list instead of
+   * allowing a request failure to masquerade as an ordinary empty result.
+   */
+  isError?: boolean
+
+  /**
+   * Error-state title and description. Consumers should localize these strings.
+   */
+  errorTitle?: string
+  errorDescription?: string
+
+  /**
+   * Optional retry action shown in the persistent error surface.
+   */
+  onRetry?: () => void
+  retryLabel?: string
 
   /**
    * Empty-state title (used for both desktop {@link TableEmpty} and mobile fallback).
@@ -200,7 +220,7 @@ export type DataTablePageProps<TData> = {
 /**
  * Unified table page wrapper. Encapsulates the canonical structure used across
  * all list pages: toolbar → desktop table / mobile list → pagination, plus
- * loading/empty states and an opt-in bulk action bar.
+ * loading/empty/error states and an opt-in bulk action bar.
  *
  * Most pages should be expressible as:
  * ```tsx
@@ -209,6 +229,9 @@ export type DataTablePageProps<TData> = {
  *   columns={columns}
  *   isLoading={isLoading}
  *   isFetching={isFetching}
+ *   isError={isError}
+ *   errorTitle={t('Failed to load data')}
+ *   onRetry={() => void refetch()}
  *   emptyTitle={t('No X Found')}
  *   toolbarProps={{ searchPlaceholder: t('Filter...'), filters }}
  *   bulkActions={<MyBulkActions table={table} />}
@@ -221,34 +244,39 @@ export type DataTablePageProps<TData> = {
 export function DataTablePage<TData>(props: DataTablePageProps<TData>) {
   const isMobile = useMediaQuery('(max-width: 640px)')
   const showMobile = isMobile && !props.hideMobile
+  const hasError = props.isError === true
 
   // Pagination defaults to inline (rendered inside the table card on desktop)
   // so it stays anchored to the table bottom instead of floating in the page
   // footer portal, which could overlap data-dense rows in scroll containers.
   const paginationInFooter = props.paginationInFooter === true
-  const showPagination = props.showPagination !== false
+  const showPagination = props.showPagination !== false && !hasError
   // On desktop, inline pagination is rendered inside the table card; on mobile
   // (or when the footer portal is explicitly requested) it renders separately.
   const inlineDesktopPagination = showPagination && !paginationInFooter
 
   const toolbarNode = renderToolbar(props)
-  const mobileNode = renderMobile(props, showMobile)
-  const desktopNode = renderDesktop(props, showMobile, {
-    showPagination: inlineDesktopPagination && !showMobile,
-  })
+  const errorNode = hasError ? renderError(props) : null
+  const mobileNode = hasError ? null : renderMobile(props, showMobile)
+  const desktopNode = hasError
+    ? null
+    : renderDesktop(props, showMobile, {
+        showPagination: inlineDesktopPagination && !showMobile,
+      })
 
   return (
     <>
       <div className={cn('max-w-full min-w-0 space-y-3', props.className)}>
         {toolbarNode}
+        {errorNode}
         {mobileNode}
         {desktopNode}
-        {props.afterTable}
+        {!hasError && props.afterTable}
       </div>
 
       {/* Bulk actions are typically a fixed-position toolbar; let the consumer
-          handle its own visibility, we just gate it to non-mobile. */}
-      {!showMobile && props.bulkActions}
+          handle its own visibility, we just gate it to non-mobile/error states. */}
+      {!hasError && !showMobile && props.bulkActions}
 
       {showPagination && paginationInFooter && (
         <PageFooterPortal>
@@ -280,6 +308,35 @@ function renderToolbar<TData>(
     return <DataTableToolbar table={props.table} {...props.toolbarProps} />
   }
   return null
+}
+
+function renderError<TData>(props: DataTablePageProps<TData>): React.ReactNode {
+  return (
+    <div
+      role='alert'
+      className='border-destructive/25 bg-destructive/5 flex min-h-44 flex-col items-center justify-center gap-3 rounded-lg border px-5 py-8 text-center'
+    >
+      <div className='bg-destructive/10 text-destructive flex size-11 items-center justify-center rounded-full'>
+        <AlertTriangle className='size-5' aria-hidden='true' />
+      </div>
+      <div className='max-w-lg space-y-1'>
+        <div className='text-foreground text-sm font-semibold'>
+          {props.errorTitle ?? 'Unable to load data'}
+        </div>
+        {props.errorDescription ? (
+          <p className='text-muted-foreground text-sm'>
+            {props.errorDescription}
+          </p>
+        ) : null}
+      </div>
+      {props.onRetry ? (
+        <Button variant='outline' size='sm' onClick={props.onRetry}>
+          <RefreshCw className='size-4' aria-hidden='true' />
+          {props.retryLabel ?? 'Retry'}
+        </Button>
+      ) : null}
+    </div>
+  )
 }
 
 function renderMobile<TData>(

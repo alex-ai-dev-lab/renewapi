@@ -1,0 +1,74 @@
+name: Settings real backend mutation smoke
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: settings-real-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Build default frontend
+        working-directory: web/default
+        run: |
+          bun install --frozen-lockfile
+          bun test
+          bun run typecheck
+          bun run build
+
+      - name: Build classic frontend
+        working-directory: web/classic
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Build real RenewAPI binary
+        run: go build -o "$RUNNER_TEMP/renewapi-settings-e2e" .
+
+      - name: Install Playwright for QA only
+        working-directory: web/default
+        run: |
+          bun add --no-save playwright@1.55.0
+          bunx playwright install --with-deps chromium
+
+      - name: Run real-backend Settings mutation smoke
+        working-directory: web/default
+        env:
+          QA_BINARY: ${{ runner.temp }}/renewapi-settings-e2e
+          QA_DB: ${{ runner.temp }}/renewapi-settings-e2e.db
+          QA_OUT: ../../qa-artifacts/settings-real-backend
+          QA_PORT: '4173'
+        run: bun ../../.github/settings-real-backend-smoke.mjs
+
+      - name: Show smoke summary
+        if: always()
+        run: |
+          cat qa-artifacts/settings-real-backend/summary.txt || true
+          cat qa-artifacts/settings-real-backend/failure.json || true
+
+      - name: Upload real-backend evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: settings-real-backend-smoke
+          path: qa-artifacts/settings-real-backend
+          if-no-files-found: error

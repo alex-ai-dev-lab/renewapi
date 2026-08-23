@@ -51,26 +51,37 @@ export function UsersStats(props: { users: User[] }) {
     staleTime: 30_000,
   })
 
-  const totalUsers = totalResponse?.data?.total ?? props.users.length
+  const totalUnavailable = totalResponse?.success === false
+  const disabledUnavailable = disabledResponse?.success === false
+  const totalUsers = totalUnavailable
+    ? null
+    : (totalResponse?.data?.total ?? props.users.length)
   const groups = groupsResponse?.data ?? []
-  const disabledUsers = disabledResponse?.data?.total ?? 0
+  const disabledUsers = disabledUnavailable
+    ? null
+    : (disabledResponse?.data?.total ?? 0)
   const groupNames = groups.slice(0, 5).join(' / ')
   const groupDetail =
     groupNames ||
     t('aurora.users.groups.empty', {
       defaultValue: isChinese ? '暂无分组' : 'No groups',
     })
+  const unavailableDetail = t('aurora.common.unavailable', {
+    defaultValue: isChinese ? '数据暂时不可用' : 'Data temporarily unavailable',
+  })
   const items = [
     {
       label: t('aurora.users.total.title', {
         defaultValue: isChinese ? '注册用户' : 'Total Users',
       }),
-      value: totalUsers,
-      detail: t('aurora.users.total.detail', {
-        defaultValue: isChinese
-          ? '全局账户总数'
-          : 'Total accounts across the gateway',
-      }),
+      value: totalUsers ?? '—',
+      detail: totalUnavailable
+        ? unavailableDetail
+        : t('aurora.users.total.detail', {
+            defaultValue: isChinese
+              ? '全局账户总数'
+              : 'Total accounts across the gateway',
+          }),
       tone: 'text-foreground',
     },
     {
@@ -85,13 +96,18 @@ export function UsersStats(props: { users: User[] }) {
       label: t('aurora.users.disabled.title', {
         defaultValue: isChinese ? '停用账户' : 'Disabled',
       }),
-      value: disabledUsers,
-      detail: t('aurora.users.disabled.detail', {
-        defaultValue: isChinese
-          ? '全局停用状态账户'
-          : 'Disabled accounts across the gateway',
-      }),
-      tone: disabledUsers > 0 ? 'text-warning' : 'text-foreground',
+      value: disabledUsers ?? '—',
+      detail: disabledUnavailable
+        ? unavailableDetail
+        : t('aurora.users.disabled.detail', {
+            defaultValue: isChinese
+              ? '全局停用状态账户'
+              : 'Disabled accounts across the gateway',
+          }),
+      tone:
+        disabledUsers != null && disabledUsers > 0
+          ? 'text-warning'
+          : 'text-foreground',
     },
   ]
 

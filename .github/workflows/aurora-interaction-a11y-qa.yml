@@ -63,6 +63,7 @@ jobs:
           ref_sha='3d91c3fd22fbfae284d48563d5a09ac046a81cd2'
           curl -fsSL "https://raw.githubusercontent.com/alex-ai-dev-lab/renewapi/${ref_sha}/.github/aurora-final-visual-qa.mjs" -o .aurora-interaction-base.mjs
           python3 ../../.github/generate-aurora-interaction-a11y.py
+          python3 ../../.github/patch-aurora-interaction-a11y.py
           test -s .aurora-interaction-a11y.mjs
 
       - name: Run interaction and accessibility audit

@@ -1,0 +1,89 @@
+name: Aurora Phase C deep-state QA
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aurora-deep-states-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deep-state-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install and verify default frontend
+        working-directory: web/default
+        run: |
+          bun install --frozen-lockfile
+          bun test
+          bun run typecheck
+          bun run build
+
+      - name: Check changed Aurora source formatting
+        working-directory: web/default
+        run: |
+          bunx prettier --check \
+            src/features/dashboard/aurora-overview-panels.tsx \
+            src/features/keys/components/api-keys-cells.tsx
+
+      - name: Install Playwright for QA only
+        working-directory: web/default
+        run: |
+          bun add --no-save playwright@1.55.0
+          bunx playwright install --with-deps chromium
+
+      - name: Prepare deterministic deep-state fixture
+        run: |
+          curl -fsSL \
+            https://raw.githubusercontent.com/alex-ai-dev-lab/renewapi/3d91c3fd22fbfae284d48563d5a09ac046a81cd2/.github/aurora-final-visual-qa.mjs \
+            -o /tmp/aurora-final-visual-qa.mjs
+          python3 .github/generate-aurora-deep-states.py
+          cp /tmp/aurora-deep-states.mjs web/default/.aurora-deep-states.mjs
+
+      - name: Start production preview
+        working-directory: web/default
+        run: |
+          nohup bun run preview -- --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/aurora-deep-preview.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/aurora-deep-preview.pid"
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:4173 >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/aurora-deep-preview.log"
+          exit 1
+
+      - name: Run P2-strict deep-state browser QA
+        working-directory: web/default
+        env:
+          QA_OUT: ../../qa-artifacts/aurora-deep-states
+          QA_PRODUCT_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: bun .aurora-deep-states.mjs
+
+      - name: Show deep-state report
+        if: always()
+        run: |
+          cat qa-artifacts/aurora-deep-states/report.json || true
+          cat qa-artifacts/aurora-deep-states/console-errors.txt || true
+          cat qa-artifacts/aurora-deep-states/unhandled.txt || true
+
+      - name: Upload deep-state evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurora-deep-states-qa
+          path: qa-artifacts/aurora-deep-states
+          if-no-files-found: error

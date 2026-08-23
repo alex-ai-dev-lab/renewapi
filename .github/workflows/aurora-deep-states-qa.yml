@@ -35,11 +35,14 @@ jobs:
         working-directory: web/default
         run: |
           files=(
+            src/components/data-table/bulk-actions.tsx
             src/components/data-table/data-table-page.tsx
             src/features/channels/components/channels-table.tsx
+            src/features/channels/components/data-table-row-actions.tsx
             src/features/dashboard/aurora-overview-panels.tsx
             src/features/keys/components/api-keys-cells.tsx
             src/features/keys/components/api-keys-table.tsx
+            src/features/models/components/data-table-row-actions.tsx
             src/features/models/components/models-stats.tsx
             src/features/models/components/models-table.tsx
             src/features/usage-logs/components/usage-logs-table.tsx
@@ -81,7 +84,7 @@ jobs:
         working-directory: web/default
         env:
           QA_OUT: ../../qa-artifacts/aurora-deep-states
-          QA_PRODUCT_HEAD: ${{ github.event.pull_request.head.sha }}
+          QA_PRODUCT_HEAD: ${{ github.sha }}
         run: bun .aurora-deep-states.mjs
 
       - name: Show deep-state report

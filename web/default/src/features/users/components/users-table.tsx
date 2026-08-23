@@ -32,7 +32,6 @@ import {
 } from '@tanstack/react-table'
 import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import {
   DISABLED_ROW_DESKTOP,
@@ -105,7 +104,7 @@ export function UsersTable() {
 
   // The full filter arrays are already part of the query key.
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: [
       'users',
       pagination.pageIndex + 1,
@@ -137,10 +136,9 @@ export function UsersTable() {
           : await getUsers(params)
 
       if (!result.success) {
-        toast.error(
+        throw new Error(
           result.message || `Failed to ${hasFilter ? 'search' : 'load'} users`
         )
-        return { items: [], total: 0 }
       }
 
       return {
@@ -217,6 +215,8 @@ export function UsersTable() {
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
+        isError={isError}
+        errorDescription={error instanceof Error ? error.message : undefined}
         tableHeaderClassName='sticky top-0 z-10 bg-background/80 backdrop-blur-md'
         tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
         emptyTitle={t('No Users Found')}

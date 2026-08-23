@@ -31,25 +31,33 @@ jobs:
           bun run typecheck
           bun run build
 
-      - name: Show exact Prettier normalization
+      - name: Verify changed product formatting
         working-directory: web/default
         run: |
           files=(
             src/components/data-table/bulk-actions.tsx
             src/components/data-table/data-table-page.tsx
+            src/features/channels/components/channels-aurora-overview.tsx
             src/features/channels/components/channels-table.tsx
+            src/features/channels/components/data-table-bulk-actions.tsx
             src/features/channels/components/data-table-row-actions.tsx
             src/features/dashboard/aurora-overview-panels.tsx
+            src/features/keys/components/api-keys-aurora-overview.tsx
             src/features/keys/components/api-keys-cells.tsx
             src/features/keys/components/api-keys-table.tsx
+            src/features/keys/components/data-table-bulk-actions.tsx
+            src/features/keys/components/data-table-row-actions.tsx
+            src/features/models/components/data-table-bulk-actions.tsx
             src/features/models/components/data-table-row-actions.tsx
             src/features/models/components/models-stats.tsx
             src/features/models/components/models-table.tsx
             src/features/usage-logs/components/usage-logs-table.tsx
+            src/features/users/components/users-stats.tsx
             src/features/users/components/users-table.tsx
+            src/lib/api-errors.ts
+            src/lib/api-errors.test.ts
           )
-          bunx prettier --write "${files[@]}"
-          git diff -- "${files[@]}"
+          bunx prettier --check "${files[@]}"
 
       - name: Install Playwright for QA only
         working-directory: web/default

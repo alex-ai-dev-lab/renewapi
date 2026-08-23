@@ -77,6 +77,16 @@ jobs:
             https://raw.githubusercontent.com/alex-ai-dev-lab/renewapi/6bcd52eef0101993221c8648cafef2b442494e0f/.github/settings-real-backend-hardened.mjs \
             -o /tmp/settings-real-backend-hardened.mjs
           python3 .github/patch-settings-advanced-phase-e.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('/tmp/settings-real-backend-hardened.mjs')
+          text = path.read_text()
+          old = "  ModelRequestRateLimitGroup: '',"
+          new = "  ModelRequestRateLimitGroup: '{}',"
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one explicit advanced baseline group marker, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
           cp /tmp/settings-real-backend-hardened.mjs web/default/.settings-advanced-phase-e-wave1.mjs
 
       - name: Run Advanced Settings real-backend Wave 1

@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import '@/styles/aurora-dark-reference.css'
 import '@/styles/aurora-reference.css'
+import '@/styles/aurora-accessibility.css'
 import { getCookie } from '@/lib/cookies'
 import { cn } from '@/lib/utils'
 import { LayoutProvider } from '@/context/layout-provider'

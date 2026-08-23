@@ -31,6 +31,7 @@ import {
 } from '@tanstack/react-table'
 import { useDebounce } from '@/hooks'
 import { useTranslation } from 'react-i18next'
+import { shouldRetryQuery, unwrapApiResponse } from '@/lib/api-errors'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { Input } from '@/components/ui/input'
@@ -219,7 +220,7 @@ export function ChannelsTable() {
     }),
     queryFn: async ({ signal }) => {
       if (shouldSearch) {
-        return searchChannels(
+        const result = await searchChannels(
           {
             keyword: globalFilter,
             model: modelFilter,
@@ -243,9 +244,10 @@ export function ChannelsTable() {
           },
           { signal }
         )
+        return unwrapApiResponse(result)
       }
 
-      return getChannels(
+      const result = await getChannels(
         {
           group:
             groupFilter.length > 0 && !groupFilter.includes('all')
@@ -267,7 +269,9 @@ export function ChannelsTable() {
         },
         { signal }
       )
+      return unwrapApiResponse(result)
     },
+    retry: shouldRetryQuery,
     placeholderData: (previousData) => previousData,
   })
 

@@ -73,6 +73,5 @@ jobs:
           git config user.email 'actions@users.noreply.github.com'
           git rm .github/workflows/aurora-phase-d-finalize-docs.yml
           git add docs/aurora-accessibility-phase-d-qa.md docs/aurora-bento-v2-progress.md
-          git diff --cached --check
           git commit -m 'docs: finalize Aurora Phase D evidence'
           git push origin HEAD:${{ github.event.pull_request.head.ref }}

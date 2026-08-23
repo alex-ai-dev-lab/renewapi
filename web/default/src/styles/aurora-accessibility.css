@@ -1,0 +1,88 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+
+/*
+ * Keep the supplied light Aurora palette for decorative surfaces and the logo,
+ * but use darker same-hue stops anywhere the gradient itself carries text.
+ * Each action stop below clears 4.5:1 against white, so small white labels
+ * remain AA. Aurora heading text is 34px+ and every stop clears the 3:1 large
+ * text threshold even over the darkest supplied light-mode ambient pastel.
+ */
+html:not(.dark) {
+  --aurora-action-from: #3f66d8;
+  --aurora-action-to: #7046d8;
+  --aurora-action-hover-from: #365abf;
+  --aurora-action-hover-to: #6339c5;
+  --aurora-text-from: #3f66d8;
+  --aurora-text-mid: #8a4ddb;
+  --aurora-text-to: #c1457f;
+}
+
+html:not(.dark) [data-slot='button'].bg-primary,
+html:not(.dark) [data-slot='badge'].bg-primary {
+  background-image: linear-gradient(
+    135deg,
+    var(--aurora-action-from),
+    var(--aurora-action-to)
+  );
+}
+
+html:not(.dark) [data-slot='button'].bg-primary:hover {
+  background-image: linear-gradient(
+    135deg,
+    var(--aurora-action-hover-from),
+    var(--aurora-action-hover-to)
+  );
+}
+
+html:not(.dark) .text-aurora {
+  background-image: linear-gradient(
+    100deg,
+    var(--aurora-text-from),
+    var(--aurora-text-mid) 55%,
+    var(--aurora-text-to)
+  );
+}
+
+/*
+ * Legacy reference accents were fixed RGB values. Map them to semantic tokens
+ * so their contrast remains valid in both Light and Dark without flattening
+ * the Aurora surfaces that surround them.
+ */
+[class~='text-[#B4655F]'] {
+  color: var(--muted-foreground) !important;
+}
+
+[class~='text-[#7C5CBF]'] {
+  color: var(--info) !important;
+}
+
+[class~='text-[#2F7748]'] {
+  color: var(--success) !important;
+}
+
+@media (min-width: 1024px) {
+  html:not(.dark) nav.fixed.left-1\/2 a[aria-current='page'] {
+    background-image: linear-gradient(
+      135deg,
+      var(--aurora-action-from),
+      var(--aurora-action-to)
+    );
+  }
+}

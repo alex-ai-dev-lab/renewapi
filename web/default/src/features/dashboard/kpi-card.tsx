@@ -60,7 +60,7 @@ export function KPICard(props: KPICardProps) {
             </span>
           )}
           {props.subtitle && (
-            <p className='truncate text-[11px] font-semibold text-[#3E8E5A]'>
+            <p className='truncate text-[11px] font-semibold text-[#2F7748]'>
               {props.subtitle}
             </p>
           )}

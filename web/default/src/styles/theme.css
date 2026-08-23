@@ -145,13 +145,13 @@ For commercial licensing, please contact support@quantumnous.com
   --muted-foreground: oklch(0.475 0.026 250);
   --accent: oklch(0.938 0.035 242);
   --accent-foreground: oklch(0.488 0.196 264.5);
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: oklch(0.48 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.628 0.148 165.5);
+  --success: oklch(0.46 0.148 165.5);
   --success-foreground: oklch(0.985 0 0);
-  --warning: oklch(0.681 0.162 75.834);
+  --warning: oklch(0.48 0.162 75.834);
   --warning-foreground: oklch(0.145 0 0);
-  --info: oklch(0.62 0.21 254);
+  --info: oklch(0.48 0.21 254);
   --info-foreground: oklch(0.985 0 0);
   --neutral: oklch(0.708 0 0);
   --neutral-foreground: oklch(0.21 0.024 255);

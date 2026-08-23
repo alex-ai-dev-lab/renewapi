@@ -254,7 +254,7 @@ export function CommonLogsFilterBar<TData>(
           )
         }}
       >
-        <SelectTrigger>
+        <SelectTrigger aria-label={t('Log Type')}>
           <SelectValue>{logTypeLabel}</SelectValue>
         </SelectTrigger>
         <SelectContent alignItemWithTrigger={false}>

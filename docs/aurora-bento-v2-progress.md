@@ -1,46 +1,50 @@
 # Aurora Bento v2 进度与验收总表
 
-> 最后更新：2026-08-23 21:20 +08:00  
+> 最后更新：2026-08-23  
 > 仓库：`alex-ai-dev-lab/renewapi`  
 > 原稿：`renewapi-design-02-aurora-bento-v2`  
 > Desktop Light：`9f90bd234d1533dc4f4efb916cc826d5626d4737`  
 > Desktop Dark merge：`cf4961baf0a553d86b4c3f0ad90fd031f6c64633`  
 > Responsive Phase B merge：`02e467d95a36d0b7d54ea55f3db305205eadc857`  
-> Interaction / Accessibility merge：`d7fa60720457f00b4e1766f9443d0648fb6c225b`  
+> Interaction / Accessibility baseline merge：`d7fa60720457f00b4e1766f9443d0648fb6c225b`  
 > Settings hardened validated product head：`8b56c883206a8077b3e9bf900ef9564551c93a13`  
-> Phase C final validated source head：`bf44a6b718472c304b2f43772155d108eeda049a`  
-> Phase C final validated PR merge tree：`95af96de02171e96dc4f4a852ec0f2fe263f1d37`  
-> Phase C one-time gate cleanup commit：`543d5dfe98043209f3a778af9deae98486dc595e`
+> Phase C merge：`57c4145fdb66c4cb912c5dcd9fb587713282e59c`  
+> Phase D final validated product head：`054378370c727b36e613c8c54cd7c85b4f9955b9`  
+> Phase D final validated PR merge tree：`f68be6c909dfe38ff0d15e46f6d811f86ceed996`
 
 ## 1. 当前结论
 
-**Aurora Bento v2 的核心视觉、跨设备响应式基线、核心交互/业务深层状态与 Settings 基础真实后端 mutation 已经完成。**
+**Aurora Bento v2 的核心视觉、跨设备响应式基线、核心业务深层状态、Settings foundation 真实后端 mutation，以及核心/深状态范围的自动化无障碍与对比度 hardening 已经完成。**
 
 - Desktop Light：✅ 完成
 - Desktop Dark：✅ 完成
-- Tablet / Mobile Phase B：✅ 完成当前可验证范围
-- Interaction / State Fidelity：✅ 核心全局交互 + Settings foundation mutation/error/restart + 核心业务 deep-state matrix 完成
-- Accessibility：🟡 自动化 hardening 与趋势数据辅助技术语义覆盖通过；真实屏幕阅读器、真 200% zoom 与完整对比度仍待做
-- Settings 真实后端 mutation：✅ 完成（hardened SQLite + intermediate restart evidence）
-- Advanced Settings expanded backend coverage：⏳ 逐项 mutation / destructive state 尚未穷尽
+- Tablet / Mobile Phase B：✅ 完成当前设计源可验证范围
+- Interaction / State Fidelity：✅ 核心全局交互 + 核心业务 deep states 完成
+- Settings foundation real-backend mutation：✅ 完成
+- Accessibility automation + core/deep-state contrast hardening：✅ 完成
+- Real desktop screen reader smoke：⏳ 环境依赖，待补
+- Literal browser UI 200% zoom：⏳ 环境依赖，待补
+- Advanced Settings expanded backend coverage：⏳ 待补
 - Secondary Surfaces：⏳ 待做
-- Release / 部署 smoke：⏳ 待做
+- Release / deployment smoke：⏳ 待做
 
-不能把当前状态表述为“全产品所有状态全部完成”；可以表述为：
+当前可以表述为：
 
-> **Desktop Light / Dark + 1024 / 768 / 375 核心页面、全局交互、核心业务 loading/empty/error/destructive/bulk/filter/pagination/model-management 深状态与 Settings foundation 真实后端 mutation/validation/SQLite/restart QA 已通过。当前剩余工作集中在辅助技术实测、Advanced Settings 扩展后端状态覆盖、Secondary Surfaces 与部署 smoke。**
+> **Desktop Light / Dark + 1024 / 768 / 375 核心页面、核心业务 loading/empty/error/destructive/bulk/filter/pagination/model-management 深状态、Settings foundation 真实后端 mutation/validation/SQLite/restart，以及核心/深状态 WCAG/ARIA/contrast 自动化 hardening 已通过。**
 
-## 2. 已完成核心页面
+不能把当前状态表述为“全产品 DoD 已全部完成”，因为真实桌面辅助技术、浏览器 UI 真 200% zoom、Advanced Settings 扩展后端覆盖、Secondary Surfaces 与部署 smoke 尚未清零。
 
-| 页面 | Desktop Light | Desktop Dark | 1024 / 768 / 375 | 备注 |
+## 2. 核心页面状态
+
+| 页面 | Desktop Light | Desktop Dark | 1024 / 768 / 375 | Deep states / A11y |
 |---|---:|---:|---:|---|
-| Dashboard | ✅ | ✅ | ✅ | Bento、图表、全局 overlay 已复核；请求趋势 24 点辅助技术语义已验收 |
-| Channels | ✅ | ✅ | ✅ | Provider overview + 生产表格；菜单语义、deep-state error/destructive/bulk/search 已验收 |
-| API Keys | ✅ | ✅ | ✅ | 管理表 + quota；copy / revealed-key 名称、deep-state 与按需明文 key 获取已验收 |
-| Usage Logs | ✅ | ✅ | ✅ | KPI + 实时流 + 筛选/表格；loading/empty/error/page-2 已验收 |
-| Models | ✅ | ✅ | ✅ | Registry 六卡 + 真实定价；management/edit/destructive/bulk/deep-state 与未过滤 registry total 已验收 |
-| Users | ✅ | ✅ | ✅ | 用户 / 分组 / 状态统计；loading/empty/error 已验收 |
-| System Settings | ✅ | ✅ | ✅ | 6/6 + 12；基础输入语义标签 + hardened real-backend mutation/validation/restart PASS |
+| Dashboard | ✅ | ✅ | ✅ | ✅ 趋势 24 点辅助技术语义、KPI/contrast hardening |
+| Channels | ✅ | ✅ | ✅ | ✅ loading/empty/error/destructive/bulk/search |
+| API Keys | ✅ | ✅ | ✅ | ✅ deep states、quota progress name、按需明文 key |
+| Usage Logs | ✅ | ✅ | ✅ | ✅ loading/empty/error/page-2/filter semantics |
+| Models | ✅ | ✅ | ✅ | ✅ management/edit/destructive/bulk、未过滤 registry total |
+| Users | ✅ | ✅ | ✅ | ✅ loading/empty/error、quota progress name |
+| System Settings | ✅ | ✅ | ✅ | ✅ foundation labels + real-backend mutation/restart |
 
 ## 3. 主要验收证据
 
@@ -50,19 +54,17 @@
 | Desktop Light quality | `32615101043` | ✅ Tests / TypeScript / Build PASS |
 | Desktop Dark final | `32618534536` | ✅ 7 页 + 工程门 PASS |
 | Responsive Phase B baseline | `32619390956` | ✅ Light/Dark × 1024/768/375；overflow 0 |
-| Interaction/A11y final P2-strict | `32624800840` | ✅ `issues=0`, console=0, unhandled=0 |
-| Settings real-backend hardened final | `32633291555` | ✅ fresh SQLite + real root auth + UI/API/SQLite mutation + invalid atomicity before overwrite + intermediate/final restart |
-| Phase C deep-state strict final | `32641303689` | ✅ 全 deep-state matrix + Models `42 registered / 1 filtered` regression；P0/P1/P2/P3=0；console/page/unhandled=0；53 tests/typecheck/build/Prettier PASS |
+| Interaction/A11y baseline final | `32624800840` | ✅ P2-strict；console/unhandled 0 |
+| Settings real-backend hardened final | `32633291555` | ✅ fresh SQLite + real root auth + UI/API/SQLite mutation + restart |
+| Phase C deep-state strict final | `32641303689` | ✅ deep-state matrix + Models `42 registered / 1 filtered`; P0/P1/P2/P3=0 |
+| Phase D accessibility final proof | `32645510077` | ✅ axe violations=0；P0/P1/P2=0；14/14 high-DPI no overflow；28 ARIA snapshots |
 
-Interaction/A11y artifact：`aurora-interaction-a11y-qa` / id `9489423724`。  
-Settings hardened artifact：`settings-real-backend-hardened` / id `9491668465` / digest `sha256:a7f925ed004f102a63db904545c96cb3fbf792555f7d2452401b07c783db2839`。  
-Phase C final artifact：`aurora-phase-c-final` / id `9493701166` / digest `sha256:b76715327e3762ea1505bcbe14e7f0892a366c50ef176628c4ce79b7e3cc326b`。
+关键 artifact：
 
-旧 Settings run `32628206857` 已被 hardened run 取代为最终证据：旧 run 的产品路径通过，但 invalid-bulk 检查主要读取运行时 OptionMap；新 run 在任何后续成功覆盖写入之前直接读取 SQLite，并执行一次中间进程重启验证，因此证据链更强。
-
-Phase C 的早期全绿 run `32640473832` 已被更严格的 final gate `32641303689` 取代为最终证据：final gate 在相同 deep-state matrix 基础上额外验证 Models registry headline 在搜索结果 `total=1` 时仍保持未过滤注册总数 `42`，并重新通过完整工程门与 Prettier check。
-
-Phase C final 证据额外确认：API Keys 仅打开行菜单/删除确认时不会请求 `/api/token/{id}/key`；明文 key 仅在 Copy / Copy Connection / CC Switch / Chat 真正执行时按需获取。
+- Interaction/A11y：`aurora-interaction-a11y-qa` / id `9489423724`
+- Settings hardened：id `9491668465` / digest `sha256:a7f925ed004f102a63db904545c96cb3fbf792555f7d2452401b07c783db2839`
+- Phase C final：id `9493701166` / digest `sha256:b76715327e3762ea1505bcbe14e7f0892a366c50ef176628c4ce79b7e3cc326b`
+- Phase D final proof：`aurora-accessibility-phase-d-final-proof` / id `9494793377` / digest `sha256:c29272a0b22e45a6452934cfe95c21dfd8531173fb3bc3a6334c6d0e84d19be0`
 
 详细报告：
 
@@ -70,7 +72,8 @@ Phase C final 证据额外确认：API Keys 仅打开行菜单/删除确认时�
 - `docs/aurora-responsive-phase-b-baseline.md`
 - `docs/aurora-interaction-accessibility-qa.md`
 - `docs/aurora-settings-real-backend-qa.md`
-- 本总表第 6、8、9 节记录 Phase C deep-state 最终验收结论；一次性浏览器 harness / final gate 已在合并前移除
+- `docs/aurora-accessibility-phase-d-plan.md`
+- `docs/aurora-accessibility-phase-d-qa.md`
 
 ## 4. Phase A — Dark Mode
 
@@ -80,7 +83,7 @@ Phase C final 证据额外确认：API Keys 仅打开行菜单/删除确认时�
 - [x] deep navy / blue-cyan Aurora 视觉层
 - [x] Dark glass hierarchy / borders / semantic states
 - [x] Dock、data panel、Models、Settings 专项复核
-- [x] 代表性语义色 WCAG 对比度抽样
+- [x] 代表性语义色对比度抽样
 - [x] 最终 P0/P1/P2 = 0
 - [x] console / fixture API = 0
 - [x] tests / typecheck / build 全绿
@@ -102,99 +105,113 @@ Phase C final 证据额外确认：API Keys 仅打开行菜单/删除确认时�
 - [x] en-US 长文案 / 375px Header smoke
 - [x] page-level horizontal overflow = 0
 
-关键修复：移动端 Search 在 `<sm` 变为 32px 图标按钮，避免英文 Header 把头像推到 viewport 外。
+关键修复：移动端 Search 在 `<sm` 变为图标按钮，避免英文 Header 把头像推到 viewport 外。
 
 限制：设计包没有 Tablet/Mobile board，所以不宣称不存在的移动端像素级原稿 parity。
 
 ## 6. Phase C — Interaction / State Fidelity
 
-**状态：✅ 核心业务深层状态完成；Advanced Settings 逐项 mutation / destructive 作为 expanded backend coverage 仍待补**
+**状态：✅ 核心业务 deep states 完成；Advanced Settings expanded backend coverage 仍待补**
 
 已验证：
 
-- [x] Mobile Sidebar open state
-- [x] Mobile Command/Search dialog open state
-- [x] Mobile Notification popover open state
-- [x] Desktop Quick Tools open state
-- [x] Desktop Config Drawer open state
+- [x] Mobile Sidebar / Command / Notification open states
+- [x] Desktop Quick Tools / Config Drawer open states
 - [x] sampled focus / active navigation behavior
 - [x] global overlay viewport containment
-- [x] Settings real `/api/option/` read / single update
-- [x] Settings `RetryTimes` UI ↔ API ↔ SQLite 同步 `0 -> 2 -> 0`
-- [x] Settings real `/api/option/bulk` valid update
-- [x] Settings invalid bulk validation / no partial SQLite persistence / local 3-field draft preservation
-- [x] Settings invalid bulk 后的中间 process restart 仍保持 baseline
-- [x] Settings valid bulk SQLite persistence + final process restart
-- [x] Settings validation error 不再与旧 success toast 同时显示
-- [x] fresh install naturally serves redesigned default frontend
-- [x] persisted `classic` frontend remains a supported override
-- [x] Channels / API Keys / Usage Logs / Models / Users loading / skeleton 截图验收
-- [x] Channels / API Keys / Usage Logs / Models / Users empty state 截图验收
-- [x] Channels / API Keys / Usage Logs / Models / Users forced business-error state 截图验收
-- [x] destructive / confirmation states（Channels / Keys / Models，含 zh-CN 抽样）
-- [x] bulk actions（Channels / Keys / Models，含 zh-CN accessible-name/live-region 抽样）
-- [x] Channels 非默认 search/filter path
-- [x] Usage Logs page-2 pagination path
+- [x] Channels / Keys / Logs / Models / Users loading / skeleton
+- [x] Channels / Keys / Logs / Models / Users empty state
+- [x] Channels / Keys / Logs / Models / Users forced business-error state
+- [x] destructive confirmations（Channels / Keys / Models，含 zh-CN 抽样）
+- [x] bulk actions（Channels / Keys / Models，含 zh-CN a11y 抽样）
+- [x] Channels search/filter path
+- [x] Usage Logs page-2 pagination
 - [x] Models management expand / edit / destructive states
-- [x] Models registry headline 使用独立未过滤 total；搜索/供应商过滤只影响当前展示与 matching rows，不会把 “registered models” 总数降成过滤结果数
-- [x] HTTP 200 `{ success: false }` 不再伪装成正常 empty result，而是进入持久 `role=alert` error surface
-- [x] deterministic business error 不重试；transport/network error 保留最多两次有限重试
-- [x] API Keys 行菜单打开不再预取明文 key；敏感值改为动作触发时按需获取
-- [x] 最终 deep-state P2-strict gate：P0/P1/P2/P3 = 0；console/page/unhandled = 0
+- [x] Models registry headline 使用独立未过滤 total；过滤结果不污染全局 registered count
+- [x] HTTP 200 `{ success: false }` 转为持久 error surface
+- [x] deterministic business error 不重试；transport/network error 有限重试
+- [x] API Keys 行菜单打开不预取明文 key；敏感值仅动作触发时按需获取
+- [x] deep-state P2-strict：P0/P1/P2/P3=0，console/page/unhandled=0
 
-扩展覆盖仍待：
+Settings foundation real-backend 已验证：
 
-- [ ] Advanced Settings sections 的逐项 mutation / destructive state 穷尽覆盖
-
-## 7. Phase D — Accessibility
-
-**状态：🟡 自动化 hardening PASS，辅助技术实测待补**
-
-已验证：
-
-- [x] audited visible controls accessible-name 检查
-- [x] sampled keyboard Tab order
-- [x] sampled visible focus indicator
-- [x] icon-only Channels / API Key controls语义修复
-- [x] Settings foundation inputs 程序化标签
-- [x] 冗余 Recharts 图形退出 Tab 顺序 / accessibility tree
-- [x] Dashboard request trend 提供完整 24 点 sr-only 有序数据；装饰性 Recharts 图层退出辅助技术树
-- [x] WCAG 2.2 AA `24px` persistent mobile-header target floor
-- [x] `prefers-reduced-motion: reduce` browser emulation
-- [x] `720px` CSS viewport 作为 1440px / 200% zoom 响应式代理检查
-- [x] final P2-strict gate：任何 P0/P1/P2 都失败
-
-Interaction/A11y final run `32624800840`：`issues=[]`。  
-Phase C final run `32641303689` 再次验证 Dashboard 24 点趋势语义、API Key localization regression 与全部 deep states：`issues=[]`。
+- [x] `/api/option/` read / single update
+- [x] `RetryTimes` UI ↔ API ↔ SQLite `0 -> 2 -> 0`
+- [x] `/api/option/bulk` valid update
+- [x] invalid bulk validation / no partial SQLite persistence / local draft preservation
+- [x] invalid bulk 中间 restart 保持 baseline
+- [x] valid bulk SQLite persistence + final restart
+- [x] validation error 与旧 success toast 不再同时显示
+- [x] fresh install 默认服务 redesigned frontend；persisted `classic` 仍支持显式 override
 
 仍待：
 
-- [ ] 真实 screen reader smoke（VoiceOver / NVDA 等）
-- [ ] 浏览器 UI 真 200% zoom 实测
-- [ ] 全页面/全 transient state 对比度扫描
+- [ ] Advanced Settings sections 的逐项 mutation / destructive state 扩展覆盖
 
-## 8. 本轮发现并修复的问题
+## 7. Phase D — Accessibility
+
+**状态：✅ 自动化与核心/深状态 contrast hardening 完成；真实桌面辅助技术与 literal browser zoom 待补**
+
+自动化已验证：
+
+- [x] audited visible controls accessible-name 检查
+- [x] sampled keyboard Tab order / visible focus indicator
+- [x] icon-only / Select / progressbar field-specific accessible names
+- [x] Settings foundation inputs 程序化标签
+- [x] 冗余 Recharts 图形退出 Tab 顺序 / accessibility tree
+- [x] Dashboard request trend 24 点 sr-only 有序数据
+- [x] `prefers-reduced-motion: reduce` browser emulation
+- [x] WCAG A/AA axe 扫描覆盖 Phase C deep states + 7 核心页 Light/Dark
+- [x] axe final violations = `0`
+- [x] P0/P1/P2 = `0`
+- [x] `720×500 CSS px @ DPR2` Light/Dark 14/14 页面无横向溢出
+- [x] 28 份 ARIA snapshot
+- [x] console / page errors / unhandled fixture API = `0`
+
+对比度 hardening 已验证/人工复核：
+
+- [x] Light success / warning / info / destructive 小字语义 token 加深
+- [x] Dashboard KPI/request-rate 小字从固定 RGB 改为主题语义色
+- [x] avatar fallback palette 全 hue 约束；白字最差约 `5.00:1`
+- [x] 承载白字的 Light Aurora action gradient 端点均 `>4.5:1`
+- [x] `text-aurora` 仅用于捕获到的 34–38px 大标题，端点满足大文字阈值
+- [x] legacy `#B4655F / #7C5CBF / #2F7748` 固定色映射到 theme-aware token
+- [x] axe `color-contrast` incomplete 保留为 P3 并人工分类，没有通过禁用规则制造“绿灯”
+
+最终 proof run `32645510077`：自动化 gate 全绿，并验证 `#7C5CBF → --info` 的最终 contrast 修正。详细证据见 `docs/aurora-accessibility-phase-d-qa.md`。
+
+明确未宣称完成：
+
+- [ ] 真实 screen reader smoke（VoiceOver / NVDA / JAWS 等）
+- [ ] 浏览器 UI literal 200% zoom 实测
+- [ ] 非核心/未进入 deep-state fixture 的全部 Secondary Surfaces 全量 contrast 审计
+
+## 8. 主要问题与修复摘要
+
+已关闭的代表性问题包括：
 
 1. 375px en-US Header 横向溢出。
-2. Channels 页面工具菜单缺可访问名称。
-3. Channels row-actions 图标菜单缺明确名称。
-4. API Key copy / revealed-key input 语义名称不足。
-5. Settings 三个 foundation inputs 仅有视觉标签、缺程序化名称。
-6. Recharts 3 默认 accessibility layer 产生无名 SVG Tab stop。
-7. Notification glass 在 overlay 状态下底层内容竞争过强，局部提高背景不透明度。
-8. fresh install 的权威 `ThemeSettings.Frontend` 仍为 `classic`，导致真实后端默认服务旧前端；现改为 `default`，并保留数据库显式 `classic` 覆盖兼容性。
-9. Settings validation error 会与前一笔 single mutation 的绿色 success toast 同时残留，造成成功/失败状态冲突；现 single/bulk mutation 共用稳定 toast id，让最新结果替换旧 Settings 提示而不全局清空其他通知。
-10. 核心列表 API 的 HTTP 200 `{ success: false }` 会被 React Query 当作成功，从而把业务失败渲染成“0 条数据”；现统一通过 `ApiBusinessError` / `unwrapApiResponse` 转成持久 error surface。
-11. 明确的 business error 仍沿用默认 query retry，造成错误态延迟；现统一 `shouldRetryQuery`：业务失败立即终止，网络/transport 异常保留有限重试，并有单测覆盖。
-12. API Keys 行菜单此前在仅打开菜单时就预取完整明文 key，既扩大敏感值暴露面，也会触发 Provider-wide state 更新；现改为 Copy / Connection / CC Switch / Chat 动作执行时按需获取，删除场景 request log 已验证不触发 `/api/token/{id}/key`。
-13. Deep-state QA 还修复并验证了 destructive/bulk 的 zh-CN 可访问文案、Models management 状态、Usage Logs page-2 路径，以及 Dashboard 请求趋势 24 点辅助技术语义。
-14. Models registry headline 曾复用当前过滤查询的 `total`，搜索后会把全局 “registered models” 总数错误降成 matching count；现独立读取未过滤 registry total，并由 final gate 构造 `42 registered / 1 filtered` 场景验证。
-
-前 7 项已进入 Interaction/A11y final P2-strict run 并通过；第 8、9 项以及更强的 SQLite/重启证据已进入 Settings hardened final run `32633291555` 并通过；第 10–14 项已进入 Phase C strict final run `32641303689` 并通过。
+2. Channels/API Key/Models 多处 icon-only 或 menu trigger 缺 accessible name。
+3. Settings foundation inputs 缺程序化名称。
+4. Recharts 默认 accessibility layer 产生无名 SVG Tab stop。
+5. fresh install 权威 frontend 仍为 `classic`；已改为 `default` 并保留显式兼容 override。
+6. Settings validation error 与旧 success toast 冲突。
+7. 核心列表 HTTP 200 business failure 被误当 empty result。
+8. deterministic business error 不必要重试。
+9. API Keys 菜单打开时提前读取明文 key。
+10. Models registry 总数错误复用 filtered total。
+11. page-size / refresh interval / log type / model vendor-template selectors 缺字段语义名称。
+12. API Key / User quota progressbar 缺 accessible name。
+13. Models loading 容器使用 prohibited generic `aria-label`。
+14. Light semantic status colors 在 11–13px 文本上对比度不足。
+15. Dashboard KPI 固定绿色小字不足 4.5:1。
+16. avatar fallback 单字符在旧半透明 palette 上可能低至约 3.43:1。
+17. 原稿 Light Aurora action gradient 承载白色小字时端点对比不足。
+18. 旧固定 accent RGB 在 Light/Dark 之间存在跨主题对比度失败。
 
 ## 9. 工程质量门
 
-核心 Aurora 浏览器审计已通过：
+已通过的长期产品工程门包括：
 
 - [x] `bun install --frozen-lockfile`
 - [x] `bun test`
@@ -202,54 +219,46 @@ Phase C final run `32641303689` 再次验证 Dashboard 24 点趋势语义、API 
 - [x] `bun run build`
 - [x] deterministic browser fixture
 - [x] console errors = `0`
+- [x] page errors = `0`
 - [x] unhandled QA API requests = `0`
 
-Settings hardened final run 额外通过：
+Settings hardened final 另通过：
 
-- [x] default frontend `bun test` / typecheck / production build
 - [x] classic frontend production build
 - [x] authoritative theme Go regression tests
 - [x] real RenewAPI Go binary build
 - [x] production SQLite migrations `--up` / `--check`
 - [x] fresh database + real setup/login/RootAuth
-- [x] real single mutation UI/API/SQLite synchronization
-- [x] invalid bulk API + direct SQLite atomicity before overwrite
-- [x] invalid bulk intermediate process restart baseline persistence
-- [x] valid bulk API + SQLite persistence
-- [x] final process restart persistence
-- [x] drained backend logs end in `server exited`
-- [x] browser console errors = `0`
-- [x] browser page errors = `0`
+- [x] real single/bulk mutation UI/API/SQLite synchronization
+- [x] invalid bulk direct SQLite atomicity + intermediate restart
+- [x] final restart persistence
 
-Phase C strict final run `32641303689` 额外通过：
+Phase C final `32641303689`：`53 pass / 0 fail / 104 expect()` + TypeScript/build/Prettier + deep-state matrix。  
+Phase D final `32644742739`：同一产品工程门 + axe/ARIA/high-DPI/contrast matrix 全绿。
 
-- [x] `53 pass / 0 fail / 104 expect()`
-- [x] TypeScript typecheck / production build
-- [x] changed Aurora files Prettier `--check` 全部通过
-- [x] loading / empty / error / destructive / bulk / filter / pagination / model-management matrix
-- [x] Models registry total regression：真实注册总数 `42`，过滤结果 `1`，headline 仍显示 `42 registered models`
-- [x] P0 / P1 / P2 / P3 = `0`
-- [x] browser console errors = `0`
-- [x] browser page errors = `0`
-- [x] unhandled fixture API = `0`
-- [x] API Key delete-menu 场景无 plaintext-key endpoint request
-
-一次性 hardened / deep-state QA workflow 与 harness 在最终合并前删除，不污染长期仓库维护面；artifact 与 run id 保留为可追溯证据。
+一次性 QA workflow / patch 在最终合并前删除；artifact/run id 与 durable docs 保留为可追溯证据。
 
 ## 10. 下一步执行顺序
 
-1. **Accessibility 实测补口**：screen reader、真 200% zoom、完整 contrast audit。
-2. **Advanced Settings expanded backend coverage**：逐项 mutation / destructive state 覆盖。
-3. **Secondary Surfaces 品牌统一**：登录、错误页、个人设置、非核心管理面。
+1. **Advanced Settings expanded backend coverage**：逐项 mutation / destructive state / persistence / validation / restart 扩展。
+2. **Secondary Surfaces 品牌统一**：登录、错误页、个人设置、钱包及其他非核心管理面。
+3. **真实辅助技术补口**：有合适桌面环境时执行 VoiceOver/NVDA/JAWS smoke 与 literal browser UI 200% zoom。
 4. **正式 release / deployment smoke**：实际部署环境巡检。
 
 ## 11. 完成定义
 
-当前已满足“核心 Aurora UI + 跨设备基础 + 核心全局交互 + 核心业务 deep states + Settings foundation 真实后端 mutation”完成定义；以下全部完成后才能宣称 Aurora Bento v2 全产品 DoD：
+当前已满足：
 
-- [x] Settings 真实后端 mutation smoke
-- [x] Phase C 核心业务深层状态清零
+- [x] 核心 Aurora UI / Light / Dark
+- [x] 跨设备基础
+- [x] 核心全局交互
+- [x] 核心业务 deep states
+- [x] Settings foundation real-backend mutation
+- [x] 核心/深状态 automated accessibility + manual contrast hardening
+
+以下清零后才能宣称 Aurora Bento v2 全产品 DoD：
+
 - [ ] Advanced Settings expanded mutation / destructive coverage
-- [ ] screen reader / true 200% zoom / exhaustive contrast
-- [ ] Secondary Surfaces brand unification
+- [ ] real screen reader / literal browser UI 200% zoom
+- [ ] Secondary Surfaces brand unification / non-core contrast sweep
 - [ ] deployment smoke

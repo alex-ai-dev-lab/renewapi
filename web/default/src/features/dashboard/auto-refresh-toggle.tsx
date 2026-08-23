@@ -16,7 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Switch } from '@/components/ui/switch'
+import { useId } from 'react'
+import { RefreshCw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -25,10 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Button } from '@/components/ui/button'
-import { RefreshCw } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { useId } from 'react'
+import { Switch } from '@/components/ui/switch'
 import {
   DEFAULT_REFRESH_INTERVAL_MS,
   type RefreshIntervalMs,
@@ -77,6 +78,7 @@ export function AutoRefreshToggle({
   className,
 }: AutoRefreshToggleProps) {
   const id = useId()
+  const { t } = useTranslation()
   const lastUpdatedLabel = formatLastUpdated(lastUpdatedAt)
 
   return (
@@ -98,12 +100,18 @@ export function AutoRefreshToggle({
         </Button>
       ) : (
         <RefreshCw
-          className={cn('h-4 w-4 text-muted-foreground', isRefreshing && 'animate-spin')}
+          className={cn(
+            'text-muted-foreground h-4 w-4',
+            isRefreshing && 'animate-spin'
+          )}
           aria-hidden='true'
         />
       )}
       <Switch id={id} checked={value} onCheckedChange={onChange} />
-      <Label htmlFor={id} className="text-sm text-muted-foreground cursor-pointer">
+      <Label
+        htmlFor={id}
+        className='text-muted-foreground cursor-pointer text-sm'
+      >
         自动刷新
       </Label>
       {onIntervalChange ? (
@@ -114,7 +122,10 @@ export function AutoRefreshToggle({
           }
           disabled={!value}
         >
-          <SelectTrigger className='h-8 w-20'>
+          <SelectTrigger
+            className='h-8 w-20'
+            aria-label={t('Refresh interval')}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -126,12 +137,14 @@ export function AutoRefreshToggle({
           </SelectContent>
         </Select>
       ) : (
-        <span className='text-sm text-muted-foreground'>
-          {REFRESH_INTERVAL_OPTIONS.find((option) => option.value === intervalMs)?.label ?? '5s'}
+        <span className='text-muted-foreground text-sm'>
+          {REFRESH_INTERVAL_OPTIONS.find(
+            (option) => option.value === intervalMs
+          )?.label ?? '5s'}
         </span>
       )}
       {lastUpdatedLabel ? (
-        <span className='text-xs text-muted-foreground tabular-nums'>
+        <span className='text-muted-foreground text-xs tabular-nums'>
           {lastUpdatedLabel}
         </span>
       ) : null}

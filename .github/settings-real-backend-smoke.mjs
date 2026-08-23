@@ -135,16 +135,36 @@ async function setupAndLogin(context, { allowSetup }) {
     observations.push({ type: 'setup', status: initializeResponse.status() })
   }
 
-  const loginResponse = await context.request.post(`${baseURL}/api/user/login`, {
-    data: { username, password },
-  })
-  const loginBody = await readJson(loginResponse)
-  assert(loginBody.success === true && loginBody.data?.id, 'Root login failed', {
-    status: loginResponse.status(),
-    body: loginBody,
-  })
-  const user = loginBody.data
-  observations.push({ type: 'login', status: loginResponse.status(), userId: user.id, role: user.role })
+  const authPage = await context.newPage()
+  let loginResult
+  try {
+    await authPage.goto(`${baseURL}/sign-in`, { waitUntil: 'domcontentloaded' })
+    loginResult = await authPage.evaluate(
+      async ({ loginUsername, loginPassword }) => {
+        const response = await fetch('/api/user/login', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: loginUsername, password: loginPassword }),
+        })
+        const text = await response.text()
+        let body = null
+        try {
+          body = JSON.parse(text)
+        } catch {
+          body = { success: false, message: `Non-JSON login response: ${text.slice(0, 300)}` }
+        }
+        return { status: response.status, body }
+      },
+      { loginUsername: username, loginPassword: password }
+    )
+  } finally {
+    await authPage.close()
+  }
+
+  assert(loginResult.status === 200 && loginResult.body?.success === true && loginResult.body?.data?.id, 'Root login failed', loginResult)
+  const user = loginResult.body.data
+  observations.push({ type: 'login', status: loginResult.status, userId: user.id, role: user.role })
 
   await context.addInitScript((seedUser) => {
     localStorage.setItem('user', JSON.stringify(seedUser))

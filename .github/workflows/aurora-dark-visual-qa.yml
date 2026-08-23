@@ -46,7 +46,8 @@ jobs:
       - name: Verify changed frontend quality
         working-directory: web/default
         run: |
-          bunx prettier --check src/styles/aurora-dark-reference.css src/components/layout/components/authenticated-layout.tsx
+          bunx prettier --write src/styles/aurora-dark-reference.css src/components/layout/components/authenticated-layout.tsx
+          git diff --exit-code -- src/styles/aurora-dark-reference.css src/components/layout/components/authenticated-layout.tsx
           bunx eslint src/components/layout/components/authenticated-layout.tsx
           bun run copyright:check -- src/components/layout/components/authenticated-layout.tsx
 

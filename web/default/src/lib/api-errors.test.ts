@@ -20,6 +20,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   ApiBusinessError,
   getApiErrorMessage,
+  shouldRetryQuery,
   unwrapApiResponse,
 } from './api-errors'
 
@@ -41,6 +42,18 @@ describe('api business error handling', () => {
       expect(error).toBeInstanceOf(ApiBusinessError)
       expect(getApiErrorMessage(error)).toBe('invalid setting')
     }
+  })
+
+  test('does not retry deterministic business failures', () => {
+    const businessError = new ApiBusinessError({
+      success: false,
+      message: 'invalid setting',
+    })
+
+    expect(shouldRetryQuery(0, businessError)).toBe(false)
+    expect(shouldRetryQuery(0, new Error('network failed'))).toBe(true)
+    expect(shouldRetryQuery(1, new Error('network failed'))).toBe(true)
+    expect(shouldRetryQuery(2, new Error('network failed'))).toBe(false)
   })
 
   test('prefers transport response messages over generic error text', () => {

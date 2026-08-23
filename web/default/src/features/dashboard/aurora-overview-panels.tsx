@@ -39,8 +39,21 @@ export function RequestVolumePanel(props: {
   const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
   const isDaily = props.timeRange === '1d'
   const data = props.stats.trend.map((point) => ({
+    timestamp: point.timestamp,
     requests: point.requests,
   }))
+  const requestLabel = t('aurora.common.requests', {
+    defaultValue: isChinese ? '请求' : 'Requests',
+  })
+  const trendTimeFormatter = new Intl.DateTimeFormat(
+    i18n.resolvedLanguage ?? 'en-US',
+    {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }
+  )
 
   let volumeTitle = t('aurora.dashboard.requests.range', {
     defaultValue: isChinese ? '区间请求量' : 'Request volume',
@@ -76,10 +89,7 @@ export function RequestVolumePanel(props: {
           </div>
         </div>
 
-        <div
-          className='mt-[14px] min-h-[150px] flex-1'
-          aria-hidden={data.length > 0}
-        >
+        <div className='mt-[14px] min-h-[150px] flex-1'>
           {data.length === 0 ? (
             <div className='text-muted-foreground flex h-full items-center justify-center text-sm'>
               {t('aurora.dashboard.requests.empty', {
@@ -89,40 +99,56 @@ export function RequestVolumePanel(props: {
               })}
             </div>
           ) : (
-            <ResponsiveContainer width='100%' height='100%'>
-              <AreaChart
-                data={data}
-                accessibilityLayer={false}
-                margin={{ top: 2, right: 2, left: 2, bottom: 2 }}
-              >
-                <Tooltip
-                  cursor={false}
-                  contentStyle={{
-                    background: 'rgba(255,255,255,.88)',
-                    border: '1px solid rgba(31,36,48,.08)',
-                    borderRadius: 12,
-                    fontSize: 12,
-                    backdropFilter: 'blur(16px)',
-                  }}
-                  formatter={(value) => [
-                    Number(value).toLocaleString(),
-                    t('aurora.common.requests', {
-                      defaultValue: isChinese ? '请求' : 'Requests',
-                    }),
-                  ]}
-                  labelFormatter={() => ''}
-                />
-                <Area
-                  type='monotone'
-                  dataKey='requests'
-                  stroke='#6D8BFF'
-                  strokeWidth={2.5}
-                  fill='rgba(109,139,255,.12)'
-                  activeDot={{ r: 3.5, fill: '#6D8BFF', strokeWidth: 0 }}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            <>
+              <ol className='sr-only' aria-label={volumeTitle}>
+                {data.map((point) => (
+                  <li key={point.timestamp}>
+                    {trendTimeFormatter.format(
+                      new Date(point.timestamp * 1000)
+                    )}
+                    : {point.requests.toLocaleString()} {requestLabel}
+                  </li>
+                ))}
+              </ol>
+              <div className='h-full' aria-hidden='true'>
+                <ResponsiveContainer width='100%' height='100%'>
+                  <AreaChart
+                    data={data}
+                    accessibilityLayer={false}
+                    margin={{ top: 2, right: 2, left: 2, bottom: 2 }}
+                  >
+                    <Tooltip
+                      cursor={false}
+                      contentStyle={{
+                        background: 'rgba(255,255,255,.88)',
+                        border: '1px solid rgba(31,36,48,.08)',
+                        borderRadius: 12,
+                        fontSize: 12,
+                        backdropFilter: 'blur(16px)',
+                      }}
+                      formatter={(value) => [
+                        Number(value).toLocaleString(),
+                        requestLabel,
+                      ]}
+                      labelFormatter={() => ''}
+                    />
+                    <Area
+                      type='monotone'
+                      dataKey='requests'
+                      stroke='#6D8BFF'
+                      strokeWidth={2.5}
+                      fill='rgba(109,139,255,.12)'
+                      activeDot={{
+                        r: 3.5,
+                        fill: '#6D8BFF',
+                        strokeWidth: 0,
+                      }}
+                      isAnimationActive={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </>
           )}
         </div>
       </CardContent>

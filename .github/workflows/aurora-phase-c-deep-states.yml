@@ -65,7 +65,7 @@ jobs:
         env:
           QA_OUT: ../../qa-artifacts/phase-c
         run: |
-          cp ../../.github/aurora-phase-c-deep-states-qa.mjs ./.aurora-phase-c-deep-states-qa.mjs
+          cp ../../.github/aurora-phase-c-deep-states-qa-v2.mjs ./.aurora-phase-c-deep-states-qa.mjs
           bun ./.aurora-phase-c-deep-states-qa.mjs
 
       - name: Show QA summary

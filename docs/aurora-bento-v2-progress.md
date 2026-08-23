@@ -9,8 +9,8 @@
 > Interaction / Accessibility baseline merge：`d7fa60720457f00b4e1766f9443d0648fb6c225b`  
 > Settings hardened validated product head：`8b56c883206a8077b3e9bf900ef9564551c93a13`  
 > Phase C merge：`57c4145fdb66c4cb912c5dcd9fb587713282e59c`  
-> Phase D final validated source head：`f07f6423abb0c524cb07b6d397cf146c94a3186a`  
-> Phase D final validated PR merge tree：`7ceb2b31d07630e3a7fad7dda82086cb92e34f6b`
+> Phase D final validated product head：`054378370c727b36e613c8c54cd7c85b4f9955b9`  
+> Phase D final validated PR merge tree：`f68be6c909dfe38ff0d15e46f6d811f86ceed996`
 
 ## 1. 当前结论
 
@@ -57,14 +57,14 @@
 | Interaction/A11y baseline final | `32624800840` | ✅ P2-strict；console/unhandled 0 |
 | Settings real-backend hardened final | `32633291555` | ✅ fresh SQLite + real root auth + UI/API/SQLite mutation + restart |
 | Phase C deep-state strict final | `32641303689` | ✅ deep-state matrix + Models `42 registered / 1 filtered`; P0/P1/P2/P3=0 |
-| Phase D accessibility final | `32644742739` | ✅ axe violations=0；P0/P1/P2=0；14/14 high-DPI no overflow；28 ARIA snapshots |
+| Phase D accessibility final proof | `32645510077` | ✅ axe violations=0；P0/P1/P2=0；14/14 high-DPI no overflow；28 ARIA snapshots |
 
 关键 artifact：
 
 - Interaction/A11y：`aurora-interaction-a11y-qa` / id `9489423724`
 - Settings hardened：id `9491668465` / digest `sha256:a7f925ed004f102a63db904545c96cb3fbf792555f7d2452401b07c783db2839`
 - Phase C final：id `9493701166` / digest `sha256:b76715327e3762ea1505bcbe14e7f0892a366c50ef176628c4ce79b7e3cc326b`
-- Phase D final：id `9494583726` / digest `sha256:3b7d60938088aa5fa416ec180d14ea1959139a7566f66a08a6206418299af9e0`
+- Phase D final proof：`aurora-accessibility-phase-d-final-proof` / id `9494793377` / digest `sha256:c29272a0b22e45a6452934cfe95c21dfd8531173fb3bc3a6334c6d0e84d19be0`
 
 详细报告：
 
@@ -178,7 +178,7 @@ Settings foundation real-backend 已验证：
 - [x] legacy `#B4655F / #7C5CBF / #2F7748` 固定色映射到 theme-aware token
 - [x] axe `color-contrast` incomplete 保留为 P3 并人工分类，没有通过禁用规则制造“绿灯”
 
-最终 run `32644742739`：自动化 gate 全绿。详细证据见 `docs/aurora-accessibility-phase-d-qa.md`。
+最终 proof run `32645510077`：自动化 gate 全绿，并验证 `#7C5CBF → --info` 的最终 contrast 修正。详细证据见 `docs/aurora-accessibility-phase-d-qa.md`。
 
 明确未宣称完成：
 

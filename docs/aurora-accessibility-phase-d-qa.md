@@ -1,10 +1,10 @@
 # Aurora Bento v2 — Phase D Accessibility QA
 
-> Final validated source head: `f07f6423abb0c524cb07b6d397cf146c94a3186a`  
-> Validated PR merge tree: `7ceb2b31d07630e3a7fad7dda82086cb92e34f6b`  
-> GitHub Actions run: `32644742739`  
-> Artifact: `aurora-accessibility-phase-d` / id `9494583726`  
-> Artifact digest: `sha256:3b7d60938088aa5fa416ec180d14ea1959139a7566f66a08a6206418299af9e0`
+> Final validated product head: `054378370c727b36e613c8c54cd7c85b4f9955b9`  
+> Validated PR merge tree: `f68be6c909dfe38ff0d15e46f6d811f86ceed996`  
+> GitHub Actions final proof run: `32645510077`  
+> Artifact: `aurora-accessibility-phase-d-final-proof` / id `9494793377`  
+> Artifact digest: `sha256:c29272a0b22e45a6452934cfe95c21dfd8531173fb3bc3a6334c6d0e84d19be0`
 
 ## 1. Conclusion
 
@@ -99,7 +99,7 @@ The active Light desktop Dock item is explicitly mapped to the accessible action
 Three legacy fixed RGB utility colors surfaced during manual review of axe incomplete nodes. They are now mapped to theme-aware tokens:
 
 - `text-[#B4655F]` → `var(--muted-foreground)`
-- `text-[#7C5CBF]` → `var(--primary)`
+- `text-[#7C5CBF]` → `var(--info)`
 - `text-[#2F7748]` → `var(--success)`
 
 This removes the cross-theme failure mode where a color that was safe in Light became insufficient on Dark glass.

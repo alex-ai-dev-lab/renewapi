@@ -120,4 +120,10 @@ source = source.replace(
     1,
 )
 
+old_gate = "if(runtimeErrors.length||unhandled.length||issues.some(x=>x.severity==='P0'||x.severity==='P1')){"
+new_gate = "if(runtimeErrors.length||unhandled.length||issues.length){"
+if old_gate not in source:
+    raise SystemExit('QA severity gate not found')
+source = source.replace(old_gate, new_gate, 1)
+
 path.write_text(source)

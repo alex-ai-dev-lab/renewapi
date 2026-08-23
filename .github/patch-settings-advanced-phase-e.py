@@ -55,7 +55,7 @@ const advancedPersisted = {
   'fetch_setting.ip_filter_mode': false,
   'fetch_setting.domain_list': '["example.com","api.example.com"]',
   'fetch_setting.ip_list': '["192.0.2.1","198.51.100.0/24"]',
-  'fetch_setting.allowed_ports': '[80,443]',
+  'fetch_setting.allowed_ports': '["80","443"]',
   'fetch_setting.apply_ip_filter_for_domain': true,
 }
 
@@ -413,6 +413,7 @@ async function runSsrfWave(context, user) {
       'SSRF apply-IP-filter'
     )
 
+    const saveMutationStart = optionMutations.length
     await page.getByRole('button', { name: 'Save SSRF settings' }).click()
     await waitForOptionValues(
       context,
@@ -430,6 +431,25 @@ async function runSsrfWave(context, user) {
       },
       'SSRF valid API'
     )
+    const ssrfMutations = optionMutations.slice(saveMutationStart)
+    assert(
+      ssrfMutations.length === 1 &&
+        ssrfMutations[0].url.includes('/api/option/bulk'),
+      'SSRF save must use exactly one atomic bulk mutation',
+      ssrfMutations
+    )
+    const ssrfRequest = JSON.parse(ssrfMutations[0].postData || '{}')
+    assert(
+      ssrfRequest.options?.['fetch_setting.allowed_ports'] ===
+        '["80","443"]',
+      'SSRF allowed_ports must preserve the backend []string contract',
+      ssrfRequest
+    )
+    observations.push({
+      type: 'ssrf-atomic-bulk-request',
+      mutationCount: ssrfMutations.length,
+      allowedPorts: ssrfRequest.options?.['fetch_setting.allowed_ports'],
+    })
     expectDbOptionValues(
       {
         'fetch_setting.domain_filter_mode':
@@ -469,7 +489,7 @@ async function runAdvancedSettingsWave1(context, user) {
     worker: 'invalid-local-validation + valid mutation passed',
     rateLimit: 'invalid-local-validation + valid bulk mutation passed',
     checkin: 'cross-field validation + valid bulk mutation passed',
-    ssrf: 'normalized sequential mutations passed',
+    ssrf: 'normalized atomic bulk mutation passed',
     apiSqliteSynchronized: true,
   }
 }

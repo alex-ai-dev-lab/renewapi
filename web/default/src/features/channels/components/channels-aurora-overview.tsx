@@ -64,7 +64,9 @@ export function ChannelsAuroraOverview() {
   const unavailableMessage =
     (unavailable && data?.message) ||
     t('aurora.common.unavailable', {
-      defaultValue: isChinese ? '数据暂时不可用' : 'Data temporarily unavailable',
+      defaultValue: isChinese
+        ? '数据暂时不可用'
+        : 'Data temporarily unavailable',
     })
   const allChannels = data?.data?.items ?? []
   const dailyStatsById = new Map(
@@ -139,7 +141,8 @@ export function ChannelsAuroraOverview() {
           : surfacedChannels.map((channel, index) => {
               const enabled = channel.status === CHANNEL_STATUS.ENABLED
               const stat = dailyStatsById.get(channel.id)
-              const latency = stat?.avg_first_token || channel.response_time || 0
+              const latency =
+                stat?.avg_first_token || channel.response_time || 0
               const successRate = stat?.success_rate ?? 0
               const hasTraffic = Boolean(stat && stat.total_requests > 0)
               const degraded =
@@ -237,8 +240,8 @@ export function ChannelsAuroraOverview() {
                       />
                     </div>
                     <div className='text-muted-foreground mt-1.5 font-mono text-[10px]'>
-                      {t('Group')} {channel.group || 'default'} · {t('Priority')}{' '}
-                      {channel.priority ?? '—'} ·{' '}
+                      {t('Group')} {channel.group || 'default'} ·{' '}
+                      {t('Priority')} {channel.priority ?? '—'} ·{' '}
                       {t('aurora.common.today', {
                         defaultValue: isChinese ? '今日' : 'Today',
                       })}{' '}

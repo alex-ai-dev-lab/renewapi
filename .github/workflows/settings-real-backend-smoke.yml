@@ -57,7 +57,9 @@ jobs:
           QA_DB: ${{ runner.temp }}/renewapi-settings-e2e.db
           QA_OUT: ../../qa-artifacts/settings-real-backend
           QA_PORT: '4173'
-        run: bun ../../.github/settings-real-backend-smoke.mjs
+        run: |
+          cp ../../.github/settings-real-backend-smoke.mjs .settings-real-backend-smoke.mjs
+          bun .settings-real-backend-smoke.mjs
 
       - name: Show smoke summary
         if: always()

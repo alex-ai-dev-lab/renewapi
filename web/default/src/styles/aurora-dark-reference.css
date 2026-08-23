@@ -1,0 +1,70 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+Aurora Bento v2 Dark Mode foundation.
+This file defines the dark visual language before page-level QA.
+*/
+
+/* Dark Aurora: deep navy canvas + glass surfaces + blue/cyan glow. */
+html.dark {
+  --aurora-dark-canvas: #0b1020;
+  --aurora-dark-canvas-2: #111a2e;
+  --aurora-dark-glass: rgba(18, 28, 48, 0.72);
+  --aurora-dark-glass-strong: rgba(20, 31, 54, 0.88);
+  --aurora-dark-line: rgba(148, 180, 255, 0.16);
+  --aurora-dark-glow: rgba(79, 124, 255, 0.34);
+  --aurora-dark-cyan: #55d9ff;
+  --aurora-dark-blue: #78a7ff;
+  --aurora-dark-green: #5ee0ae;
+  --aurora-dark-warning: #ffc56a;
+  --aurora-dark-danger: #ff8c9a;
+}
+
+html.dark body {
+  background:
+    radial-gradient(900px 520px at 8% -12%, rgba(85, 217, 255, 0.16), transparent 60%),
+    radial-gradient(850px 520px at 92% 0%, rgba(120, 167, 255, 0.18), transparent 58%),
+    radial-gradient(900px 620px at 50% 110%, rgba(94, 224, 174, 0.12), transparent 62%),
+    var(--aurora-dark-canvas);
+  background-attachment: fixed;
+}
+
+html.dark [data-slot='card'],
+html.dark [data-slot='primitive-data-table'] {
+  background: var(--aurora-dark-glass);
+  border-color: var(--aurora-dark-line);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(20px) saturate(1.35);
+  -webkit-backdrop-filter: blur(20px) saturate(1.35);
+}
+
+html.dark [data-slot='table-row']:hover {
+  background: rgba(120, 167, 255, 0.08);
+}
+
+html.dark [data-slot='button'].bg-primary {
+  background-image: linear-gradient(135deg, #78a7ff, #55d9ff);
+  color: #08111f;
+  box-shadow: 0 10px 30px var(--aurora-dark-glow);
+}
+
+html.dark .text-aurora {
+  background-image: linear-gradient(100deg, #78a7ff, #55d9ff);
+}
+
+html.dark .aurora-data-panel {
+  border-color: var(--aurora-dark-line);
+  background: var(--aurora-dark-glass);
+}
+
+html.dark [data-slot='popover-content'],
+html.dark [data-slot='dialog-content'],
+html.dark [data-slot='sheet-content'] {
+  background: var(--aurora-dark-glass-strong);
+  border-color: var(--aurora-dark-line);
+  backdrop-filter: blur(24px) saturate(1.4);
+}
+
+html.dark .aurora-pulse-dot {
+  background: var(--aurora-dark-green);
+}

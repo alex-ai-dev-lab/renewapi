@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { CSSProperties } from 'react'
 import type { TFunction } from 'i18next'
 import { Bell, Megaphone } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -307,6 +308,12 @@ export function NotificationPopover({
         align='end'
         sideOffset={8}
         className='w-[min(26rem,calc(100vw-1rem))] gap-3 p-3'
+        style={
+          {
+            '--aurora-glass-strong':
+              'color-mix(in oklch, var(--popover) 96%, transparent)',
+          } as CSSProperties
+        }
       >
         <PopoverHeader className='gap-1 px-1'>
           <PopoverTitle>{t('System Announcements')}</PopoverTitle>

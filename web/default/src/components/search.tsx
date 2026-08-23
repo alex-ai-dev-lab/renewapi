@@ -36,7 +36,7 @@ export function Search({ className = '', placeholder }: SearchProps) {
     <Button
       variant='outline'
       className={cn(
-        'bg-muted/25 group text-muted-foreground hover:bg-accent relative h-8 w-full flex-1 justify-start rounded-md text-sm font-normal shadow-none sm:w-40 sm:pe-12 md:flex-none lg:w-52 xl:w-64',
+        'bg-muted/25 group text-muted-foreground hover:bg-accent relative size-8 flex-none justify-center rounded-md px-0 text-sm font-normal shadow-none sm:h-8 sm:w-40 sm:flex-1 sm:justify-start sm:px-3 sm:pe-12 md:flex-none lg:w-52 xl:w-64',
         className
       )}
       onClick={() => setOpen(true)}
@@ -44,10 +44,12 @@ export function Search({ className = '', placeholder }: SearchProps) {
     >
       <SearchIcon
         aria-hidden='true'
-        className='absolute start-1.5 top-1/2 -translate-y-1/2'
+        className='absolute start-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 sm:start-1.5 sm:translate-x-0'
         size={16}
       />
-      <span className='ms-4'>{resolvedPlaceholder}</span>
+      <span className='sr-only sm:not-sr-only sm:ms-4'>
+        {resolvedPlaceholder}
+      </span>
     </Button>
   )
 }

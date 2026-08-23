@@ -229,6 +229,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             <Button
               variant='ghost'
               className='data-popup-open:bg-muted flex h-8 w-8 p-0'
+              aria-label={t('Open menu')}
             />
           }
         >

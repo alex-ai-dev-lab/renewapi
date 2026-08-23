@@ -75,10 +75,20 @@ html.dark body {
 }
 
 html.dark [data-slot='card'],
-html.dark [data-slot='primitive-data-table'],
-html.dark .glass-tile {
+html.dark [data-slot='primitive-data-table'] {
   border-color: var(--aurora-line);
   background: var(--aurora-glass) !important;
+  box-shadow:
+    0 16px 44px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  backdrop-filter: blur(20px) saturate(1.35);
+  -webkit-backdrop-filter: blur(20px) saturate(1.35);
+}
+
+/* Keep utility glass overridable by intentional per-card inline tone gradients. */
+html.dark .glass-tile {
+  border-color: var(--aurora-line);
+  background: var(--aurora-glass);
   box-shadow:
     0 16px 44px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.025);

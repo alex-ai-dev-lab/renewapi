@@ -51,6 +51,11 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
   const resolvedFullKey = resolvedKeys[apiKey.id]
   const isCopied = copiedKeyId === apiKey.id
   const maskedKey = `sk-${apiKey.key}`
+  const copyLabel = isLoading
+    ? t('Loading...')
+    : isCopied
+      ? t('Copied!')
+      : t('Copy API key')
 
   const handlePopoverOpen = useCallback(
     (open: boolean) => {
@@ -84,6 +89,7 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
               variant='ghost'
               size='sm'
               className='text-muted-foreground h-7 font-mono text-xs'
+              aria-label={t('Show full API key')}
             />
           }
         >
@@ -106,6 +112,7 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
               <input
                 readOnly
                 value={resolvedFullKey || maskedKey}
+                aria-label={t('Full API Key')}
                 autoFocus
                 onFocus={(e) => e.target.select()}
                 className='bg-muted/40 border-border/60 w-full min-w-[280px] rounded-lg border px-3 py-2 font-mono text-xs tracking-tight outline-none'
@@ -129,6 +136,7 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
                 if (!resolvedFullKey) void resolveRealKey(apiKey.id)
               }}
               disabled={isLoading}
+              aria-label={copyLabel}
             />
           }
         >
@@ -140,13 +148,7 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
             <Copy className='size-3.5' />
           )}
         </TooltipTrigger>
-        <TooltipContent>
-          {isLoading
-            ? t('Loading...')
-            : isCopied
-              ? t('Copied!')
-              : t('Copy API key')}
-        </TooltipContent>
+        <TooltipContent>{copyLabel}</TooltipContent>
       </Tooltip>
     </div>
   )

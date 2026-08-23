@@ -15,6 +15,7 @@ concurrency:
 jobs:
   qa:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -22,13 +23,21 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Install and verify frontend
+      - name: Install application dependencies
         working-directory: web/default
-        run: |
-          bun install --frozen-lockfile
-          bun test
-          bun run typecheck
-          bun run build
+        run: bun install --frozen-lockfile
+
+      - name: Run frontend tests
+        working-directory: web/default
+        run: bun test
+
+      - name: Typecheck frontend
+        working-directory: web/default
+        run: bun run typecheck
+
+      - name: Build application
+        working-directory: web/default
+        run: bun run build
 
       - name: Install Playwright for QA only
         working-directory: web/default
@@ -36,39 +45,39 @@ jobs:
           bun add --no-save playwright@1.55.0
           bunx playwright install --with-deps chromium
 
-      - name: Start production preview
-        working-directory: web/default
+      - name: Start implementation preview
+        shell: bash
         run: |
-          nohup bun run preview -- --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/aurora-phase-c-preview.log" 2>&1 &
-          for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+          set -euo pipefail
+          cd web/default
+          bun run preview -- --host 127.0.0.1 --port 4173 >/tmp/aurora-phase-c-app.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4173 >/dev/null; then
               exit 0
             fi
             sleep 1
           done
-          cat "$RUNNER_TEMP/aurora-phase-c-preview.log"
+          cat /tmp/aurora-phase-c-app.log || true
           exit 1
 
-      - name: Run deep-state browser matrix
+      - name: Run deep-state browser QA
         working-directory: web/default
         env:
-          QA_OUT: ../../qa-artifacts/phase-c-deep-states
+          QA_OUT: ../../qa-artifacts/phase-c
         run: |
-          cp ../../.github/aurora-phase-c-deep-states.mjs .aurora-phase-c-deep-states.mjs
-          bun .aurora-phase-c-deep-states.mjs
+          cp ../../.github/aurora-phase-c-deep-states-qa.mjs ./.aurora-phase-c-deep-states-qa.mjs
+          bun ./.aurora-phase-c-deep-states-qa.mjs
 
       - name: Show QA summary
         if: always()
         run: |
-          cat qa-artifacts/phase-c-deep-states/summary.txt || true
-          cat qa-artifacts/phase-c-deep-states/issues.json || true
-          cat qa-artifacts/phase-c-deep-states/unhandled.txt || true
-          cat qa-artifacts/phase-c-deep-states/console-errors.txt || true
+          cat qa-artifacts/phase-c/summary.txt 2>/dev/null || true
+          cat qa-artifacts/phase-c/summary.json 2>/dev/null || true
 
-      - name: Upload deep-state evidence
+      - name: Upload Phase C evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: aurora-phase-c-deep-states
-          path: qa-artifacts/phase-c-deep-states
-          if-no-files-found: error
+          path: qa-artifacts/phase-c
+          if-no-files-found: warn

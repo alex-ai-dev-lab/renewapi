@@ -89,7 +89,7 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
               variant='ghost'
               size='sm'
               className='text-muted-foreground h-7 font-mono text-xs'
-              aria-label={t('Show full API key')}
+              aria-label={t('Full API Key')}
             />
           }
         >
@@ -143,7 +143,7 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
           {isLoading ? (
             <Loader2 className='size-3.5 animate-spin' />
           ) : isCopied ? (
-            <Check className='size-3.5 text-success' />
+            <Check className='text-success size-3.5' />
           ) : (
             <Copy className='size-3.5' />
           )}

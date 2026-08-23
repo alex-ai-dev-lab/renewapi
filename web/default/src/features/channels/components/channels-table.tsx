@@ -31,6 +31,7 @@ import {
 } from '@tanstack/react-table'
 import { useDebounce } from '@/hooks'
 import { useTranslation } from 'react-i18next'
+import { shouldRetryQuery, unwrapApiResponse } from '@/lib/api-errors'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { Input } from '@/components/ui/input'
@@ -195,7 +196,7 @@ export function ChannelsTable() {
 
   // Fetch channels data
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: channelsQueryKeys.list({
       keyword: globalFilter,
       model: modelFilter,
@@ -219,7 +220,7 @@ export function ChannelsTable() {
     }),
     queryFn: async ({ signal }) => {
       if (shouldSearch) {
-        return searchChannels(
+        const result = await searchChannels(
           {
             keyword: globalFilter,
             model: modelFilter,
@@ -243,31 +244,34 @@ export function ChannelsTable() {
           },
           { signal }
         )
-      } else {
-        return getChannels(
-          {
-            group:
-              groupFilter.length > 0 && !groupFilter.includes('all')
-                ? groupFilter[0]
-                : undefined,
-            status:
-              statusFilter.length > 0 && !statusFilter.includes('all')
-                ? statusFilter[0]
-                : undefined,
-            type:
-              typeFilter.length > 0 && !typeFilter.includes('all')
-                ? Number(typeFilter[0])
-                : undefined,
-            tag_mode: enableTagMode,
-            id_sort: idSort,
-            ...sortParams,
-            p: pagination.pageIndex + 1,
-            page_size: pagination.pageSize,
-          },
-          { signal }
-        )
+        return unwrapApiResponse(result)
       }
+
+      const result = await getChannels(
+        {
+          group:
+            groupFilter.length > 0 && !groupFilter.includes('all')
+              ? groupFilter[0]
+              : undefined,
+          status:
+            statusFilter.length > 0 && !statusFilter.includes('all')
+              ? statusFilter[0]
+              : undefined,
+          type:
+            typeFilter.length > 0 && !typeFilter.includes('all')
+              ? Number(typeFilter[0])
+              : undefined,
+          tag_mode: enableTagMode,
+          id_sort: idSort,
+          ...sortParams,
+          p: pagination.pageIndex + 1,
+          page_size: pagination.pageSize,
+        },
+        { signal }
+      )
+      return unwrapApiResponse(result)
     },
+    retry: shouldRetryQuery,
     placeholderData: (previousData) => previousData,
   })
 
@@ -390,6 +394,8 @@ export function ChannelsTable() {
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
+        isError={isError}
+        errorDescription={error instanceof Error ? error.message : undefined}
         tableHeaderClassName='bg-background/80 backdrop-blur-md sticky top-0 z-10'
         tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
         emptyTitle={t('未找到渠道')}

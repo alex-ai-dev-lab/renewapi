@@ -26,6 +26,7 @@ import {
   type VisibilityState,
 } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
+import { shouldRetryQuery, unwrapApiResponse } from '@/lib/api-errors'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { DataTablePage } from '@/components/data-table'
 import { FilterPills } from '@/components/page-primitives'
@@ -127,7 +128,7 @@ export function ModelsTable() {
 
   // Fetch models data
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: modelsQueryKeys.list({
       keyword: globalFilter,
       vendor: activeVendorFilter,
@@ -144,9 +145,26 @@ export function ModelsTable() {
     }),
     queryFn: async () => {
       if (shouldSearch || activeVendorFilter) {
-        return searchModels({
-          keyword: globalFilter,
-          vendor: activeVendorFilter,
+        return unwrapApiResponse(
+          await searchModels({
+            keyword: globalFilter,
+            vendor: activeVendorFilter,
+            status:
+              statusFilter.length > 0 && !statusFilter.includes('all')
+                ? statusFilter[0]
+                : undefined,
+            sync_official:
+              syncFilter.length > 0 && !syncFilter.includes('all')
+                ? syncFilter[0]
+                : undefined,
+            p: pagination.pageIndex + 1,
+            page_size: pagination.pageSize,
+          })
+        )
+      }
+
+      return unwrapApiResponse(
+        await getModels({
           status:
             statusFilter.length > 0 && !statusFilter.includes('all')
               ? statusFilter[0]
@@ -158,27 +176,16 @@ export function ModelsTable() {
           p: pagination.pageIndex + 1,
           page_size: pagination.pageSize,
         })
-      }
-
-      return getModels({
-        status:
-          statusFilter.length > 0 && !statusFilter.includes('all')
-            ? statusFilter[0]
-            : undefined,
-        sync_official:
-          syncFilter.length > 0 && !syncFilter.includes('all')
-            ? syncFilter[0]
-            : undefined,
-        p: pagination.pageIndex + 1,
-        page_size: pagination.pageSize,
-      })
+      )
     },
+    retry: shouldRetryQuery,
     placeholderData: (previousData) => previousData,
   })
 
   const models = data?.data?.items || []
   const totalCount = data?.data?.total || 0
   const vendorCounts = data?.data?.vendor_counts
+  const errorDescription = error instanceof Error ? error.message : undefined
 
   // Columns configuration
   const columns = useModelsColumns(vendors)
@@ -241,6 +248,10 @@ export function ModelsTable() {
       <ModelsStats
         models={models}
         vendors={vendors}
+        totalModels={totalCount}
+        isLoading={isLoading}
+        isError={isError}
+        errorDescription={errorDescription}
         managementOpen={managementOpen}
         onManagementToggle={() => setManagementOpen((open) => !open)}
       />
@@ -263,6 +274,8 @@ export function ModelsTable() {
             columns={columns}
             isLoading={isLoading}
             isFetching={isFetching}
+            isError={isError}
+            errorDescription={errorDescription}
             tableHeaderClassName='bg-background/80 backdrop-blur-md sticky top-0 z-10'
             tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
             emptyTitle={t('No Models Found')}

@@ -32,7 +32,11 @@ import {
 } from '@tanstack/react-table'
 import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
+import {
+  ApiBusinessError,
+  shouldRetryQuery,
+  unwrapApiResponse,
+} from '@/lib/api-errors'
 import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
@@ -123,7 +127,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     ],
   })
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: [
       'logs',
       logCategory,
@@ -135,7 +139,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       t,
     ],
     queryFn: async ({ signal }) => {
-      const result = await fetchLogsByCategory({
+      const response = await fetchLogsByCategory({
         logCategory,
         isAdmin,
         page: pagination.pageIndex + 1,
@@ -145,12 +149,17 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         signal,
       })
 
-      if (!result?.success) {
-        toast.error(result?.message || t('Failed to load logs'))
-        return DEFAULT_LOGS_DATA
+      if (!response) {
+        throw new ApiBusinessError({
+          success: false,
+          message: t('Failed to load logs'),
+        })
       }
+
+      const result = unwrapApiResponse(response)
       return result.data || DEFAULT_LOGS_DATA
     },
+    retry: shouldRetryQuery,
     placeholderData: (previousData, previousQuery) => {
       if (previousQuery?.queryKey[1] === logCategory) {
         return previousData
@@ -197,6 +206,8 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       columns={columns as ColumnDef<Record<string, unknown>>[]}
       isLoading={isLoadingData}
       isFetching={isFetching}
+      isError={isError}
+      errorDescription={error instanceof Error ? error.message : undefined}
       emptyTitle={t('No Logs Found')}
       emptyDescription={t(
         'No usage logs available. Logs will appear here once API calls are made.'
@@ -230,7 +241,8 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       }
       renderRow={(row) => {
         const logType = (row.original as Record<string, unknown>).type as
-          number | undefined
+          | number
+          | undefined
         const tintClass =
           isCommon && logType != null ? (logTypeRowTint[logType] ?? '') : ''
         return (

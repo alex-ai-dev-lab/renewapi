@@ -51,6 +51,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
   const isEnabled = isModelEnabled(model)
+  const deleteDescription = `${t('Are you sure you want to delete')}${t('? This action cannot be undone.')}`
 
   const handleEdit = () => {
     setCurrentRow(model)
@@ -75,7 +76,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         <span className='sr-only'>{t('Open menu')}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-48'>
-        {/* Edit */}
         <DropdownMenuItem onClick={handleEdit}>
           {t('Edit')}
           <DropdownMenuShortcut>
@@ -85,7 +85,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
 
         <DropdownMenuSeparator />
 
-        {/* Enable/Disable */}
         <DropdownMenuItem onClick={handleToggleStatus}>
           {isEnabled ? (
             <>
@@ -106,7 +105,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
 
         <DropdownMenuSeparator />
 
-        {/* Delete */}
         <DropdownMenuItem
           onSelect={(e) => {
             e.preventDefault()
@@ -125,8 +123,8 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
         title={t('Delete Model')}
-        desc={`Are you sure you want to delete "${model.model_name}"? This action cannot be undone.`}
-        confirmText='Delete'
+        desc={deleteDescription}
+        confirmText={t('Delete')}
         destructive
         handleConfirm={() => {
           handleDeleteModel(model.id, queryClient)

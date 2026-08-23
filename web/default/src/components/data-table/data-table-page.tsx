@@ -24,6 +24,8 @@ import {
   type Table as TanstackTable,
 } from '@tanstack/react-table'
 import { useMediaQuery } from '@/hooks'
+import { TriangleAlert } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import {
   Table,
@@ -34,6 +36,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { PageFooterPortal } from '@/components/layout'
+import { EmptyState } from '@/components/page-primitives'
 import { MobileCardList } from './mobile-card-list'
 import { DataTablePagination } from './pagination'
 import { TableEmpty } from './table-empty'
@@ -69,6 +72,26 @@ export type DataTablePageProps<TData> = {
    * Refetch / background loading — dims the table without removing rows.
    */
   isFetching?: boolean
+
+  /**
+   * Failed query state. Keeps failure feedback separate from a legitimate empty result.
+   */
+  isError?: boolean
+
+  /**
+   * Error-state title. Defaults to the localized generic Error label.
+   */
+  errorTitle?: string
+
+  /**
+   * Human-readable error detail, usually supplied by the failed request.
+   */
+  errorDescription?: string
+
+  /**
+   * Optional recovery action rendered inside the error surface.
+   */
+  errorAction?: React.ReactNode
 
   /**
    * Empty-state title (used for both desktop {@link TableEmpty} and mobile fallback).
@@ -200,55 +223,54 @@ export type DataTablePageProps<TData> = {
 /**
  * Unified table page wrapper. Encapsulates the canonical structure used across
  * all list pages: toolbar → desktop table / mobile list → pagination, plus
- * loading/empty states and an opt-in bulk action bar.
- *
- * Most pages should be expressible as:
- * ```tsx
- * <DataTablePage
- *   table={table}
- *   columns={columns}
- *   isLoading={isLoading}
- *   isFetching={isFetching}
- *   emptyTitle={t('No X Found')}
- *   toolbarProps={{ searchPlaceholder: t('Filter...'), filters }}
- *   bulkActions={<MyBulkActions table={table} />}
- * />
- * ```
- *
- * For complex layouts (custom mobile, expanded rows, custom toolbar), use the
- * `toolbar` / `mobile` / `renderRow` slots instead of the `*Props` variants.
+ * loading/empty/error states and an opt-in bulk action bar.
  */
 export function DataTablePage<TData>(props: DataTablePageProps<TData>) {
+  const { t } = useTranslation()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const showMobile = isMobile && !props.hideMobile
+  const hasError = props.isError === true
 
   // Pagination defaults to inline (rendered inside the table card on desktop)
   // so it stays anchored to the table bottom instead of floating in the page
-  // footer portal, which could overlap data-dense rows in scroll containers.
+  // footer portal, which could overlap data-dense rows in internal scroll containers.
   const paginationInFooter = props.paginationInFooter === true
-  const showPagination = props.showPagination !== false
+  const showPagination = props.showPagination !== false && !hasError
   // On desktop, inline pagination is rendered inside the table card; on mobile
   // (or when the footer portal is explicitly requested) it renders separately.
   const inlineDesktopPagination = showPagination && !paginationInFooter
 
   const toolbarNode = renderToolbar(props)
-  const mobileNode = renderMobile(props, showMobile)
-  const desktopNode = renderDesktop(props, showMobile, {
-    showPagination: inlineDesktopPagination && !showMobile,
-  })
+  const mobileNode = hasError ? null : renderMobile(props, showMobile)
+  const desktopNode = hasError
+    ? null
+    : renderDesktop(props, showMobile, {
+        showPagination: inlineDesktopPagination && !showMobile,
+      })
+  const errorNode = hasError ? (
+    <EmptyState
+      role='alert'
+      className='min-h-[300px]'
+      icon={<TriangleAlert className='text-destructive size-6' />}
+      title={props.errorTitle ?? t('Error')}
+      description={props.errorDescription}
+      action={props.errorAction}
+    />
+  ) : null
 
   return (
     <>
       <div className={cn('max-w-full min-w-0 space-y-3', props.className)}>
         {toolbarNode}
+        {errorNode}
         {mobileNode}
         {desktopNode}
-        {props.afterTable}
+        {!hasError && props.afterTable}
       </div>
 
       {/* Bulk actions are typically a fixed-position toolbar; let the consumer
           handle its own visibility, we just gate it to non-mobile. */}
-      {!showMobile && props.bulkActions}
+      {!hasError && !showMobile && props.bulkActions}
 
       {showPagination && paginationInFooter && (
         <PageFooterPortal>

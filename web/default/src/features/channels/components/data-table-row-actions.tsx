@@ -170,6 +170,8 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     }
   }
 
+  const deleteDescription = `${t('Are you sure you want to delete')}${t('? This action cannot be undone.')}`
+
   return (
     <div className='flex items-center justify-end gap-1'>
       <Tooltip>
@@ -237,7 +239,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           <span className='sr-only'>{t('Open menu')}</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end' className='w-48'>
-          {/* Edit */}
           <DropdownMenuItem onClick={handleEdit}>
             {t('Edit')}
             <DropdownMenuShortcut>
@@ -245,7 +246,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 
-          {/* Test Connection */}
           <DropdownMenuItem onClick={handleTest}>
             {t('Test Connection')}
             <DropdownMenuShortcut>
@@ -253,7 +253,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 
-          {/* Query Balance */}
           <DropdownMenuItem onClick={handleQueryBalance}>
             {t('Query Balance')}
             <DropdownMenuShortcut>
@@ -268,7 +267,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 
-          {/* Fetch Models */}
           <DropdownMenuItem onClick={handleFetchModels}>
             {t('Fetch Models')}
             <DropdownMenuShortcut>
@@ -276,7 +274,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 
-          {/* Detect Upstream Updates (only for fetchable channel types) */}
           {MODEL_FETCHABLE_TYPES.has(channel.type) && (
             <DropdownMenuItem
               onClick={() => {
@@ -303,7 +300,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuItem>
           )}
 
-          {/* Ollama Models (only for Ollama channels) */}
           {channel.type === 4 && (
             <DropdownMenuItem onClick={handleManageOllamaModels}>
               {t('Manage Ollama Models')}
@@ -315,7 +311,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
 
           <DropdownMenuSeparator />
 
-          {/* Copy Channel */}
           <DropdownMenuItem onClick={handleCopy}>
             {t('Copy Channel')}
             <DropdownMenuShortcut>
@@ -323,7 +318,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 
-          {/* Manage Keys (only for multi-key channels) */}
           {isMultiKey && (
             <DropdownMenuItem onClick={handleManageKeys}>
               {t('Manage Keys')}
@@ -334,7 +328,10 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           )}
 
           {hasAntiPoisonRisk && (
-            <DropdownMenuItem onClick={handleClearRisk} disabled={isClearingRisk}>
+            <DropdownMenuItem
+              onClick={handleClearRisk}
+              disabled={isClearingRisk}
+            >
               {t('Clear Anti-poison Risk')}
               <DropdownMenuShortcut>
                 {isClearingRisk ? (
@@ -348,7 +345,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
 
           <DropdownMenuSeparator />
 
-          {/* Delete */}
           <DropdownMenuItem
             onSelect={(e) => {
               e.preventDefault()
@@ -368,8 +364,8 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
         title={t('Delete Channel')}
-        desc={`Are you sure you want to delete "${channel.name}"? This action cannot be undone.`}
-        confirmText='Delete'
+        desc={deleteDescription}
+        confirmText={t('Delete')}
         destructive
         handleConfirm={() => {
           handleDeleteChannel(channel.id, queryClient)

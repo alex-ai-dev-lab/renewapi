@@ -42,6 +42,7 @@ export function ApiKeysAuroraOverview() {
     staleTime: 30_000,
   })
 
+  const unavailable = data?.success === false
   const items = data?.data?.items ?? []
   const total = data?.data?.total ?? items.length
   const isComplete = items.length >= total
@@ -52,6 +53,13 @@ export function ApiKeysAuroraOverview() {
     name: item.name,
     used: Math.max(0, item.used_quota),
   }))
+  const unavailableMessage =
+    (unavailable && data?.message) ||
+    t('aurora.common.unavailable', {
+      defaultValue: isChinese
+        ? '数据暂时不可用'
+        : 'Data temporarily unavailable',
+    })
 
   let consumptionTitle = t('aurora.keys.consumption.total', {
     defaultValue: isChinese ? '累计消耗' : 'Total consumption',
@@ -75,6 +83,13 @@ export function ApiKeysAuroraOverview() {
       loaded: items.length,
       total,
     })
+  }
+
+  if (unavailable) {
+    consumptionTitle = t('aurora.keys.consumption.unavailable', {
+      defaultValue: isChinese ? '令牌数据不可用' : 'Token data unavailable',
+    })
+    consumptionDetail = unavailableMessage
   }
 
   if (isLoading && items.length === 0) {
@@ -102,7 +117,11 @@ export function ApiKeysAuroraOverview() {
               })}
             </div>
             <div className='mt-2 h-[170px]'>
-              {chartData.length === 0 ? (
+              {unavailable ? (
+                <div className='text-muted-foreground flex h-full items-center justify-center text-sm'>
+                  {unavailableMessage}
+                </div>
+              ) : chartData.length === 0 ? (
                 <div className='text-muted-foreground flex h-full items-center justify-center text-sm'>
                   {t('aurora.keys.emptyLimited', {
                     defaultValue: isChinese
@@ -153,7 +172,7 @@ export function ApiKeysAuroraOverview() {
               {consumptionTitle}
             </div>
             <div className='mt-2 text-[34px] leading-none font-extrabold tracking-[-0.035em] tabular-nums'>
-              {formatQuota(usedQuota)}
+              {unavailable ? '—' : formatQuota(usedQuota)}
             </div>
             <div className='mt-2 text-[11px] font-semibold text-[#B4655F]'>
               {consumptionDetail}

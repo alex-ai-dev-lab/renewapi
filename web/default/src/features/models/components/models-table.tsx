@@ -127,7 +127,7 @@ export function ModelsTable() {
 
   // Fetch models data
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: modelsQueryKeys.list({
       keyword: globalFilter,
       vendor: activeVendorFilter,
@@ -179,6 +179,7 @@ export function ModelsTable() {
   const models = data?.data?.items || []
   const totalCount = data?.data?.total || 0
   const vendorCounts = data?.data?.vendor_counts
+  const errorDescription = error instanceof Error ? error.message : undefined
 
   // Columns configuration
   const columns = useModelsColumns(vendors)
@@ -241,6 +242,10 @@ export function ModelsTable() {
       <ModelsStats
         models={models}
         vendors={vendors}
+        totalModels={totalCount}
+        isLoading={isLoading}
+        isError={isError}
+        errorDescription={errorDescription}
         managementOpen={managementOpen}
         onManagementToggle={() => setManagementOpen((open) => !open)}
       />
@@ -263,6 +268,8 @@ export function ModelsTable() {
             columns={columns}
             isLoading={isLoading}
             isFetching={isFetching}
+            isError={isError}
+            errorDescription={errorDescription}
             tableHeaderClassName='bg-background/80 backdrop-blur-md sticky top-0 z-10'
             tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
             emptyTitle={t('No Models Found')}

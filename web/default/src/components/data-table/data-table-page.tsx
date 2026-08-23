@@ -23,12 +23,10 @@ import {
   type Row,
   type Table as TanstackTable,
 } from '@tanstack/react-table'
+import { useMediaQuery } from '@/hooks'
 import { TriangleAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useMediaQuery } from '@/hooks'
 import { cn } from '@/lib/utils'
-import { PageFooterPortal } from '@/components/layout'
-import { EmptyState } from '@/components/page-primitives'
 import {
   Table,
   TableBody,
@@ -37,6 +35,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { PageFooterPortal } from '@/components/layout'
+import { EmptyState } from '@/components/page-primitives'
 import { MobileCardList } from './mobile-card-list'
 import { DataTablePagination } from './pagination'
 import { TableEmpty } from './table-empty'

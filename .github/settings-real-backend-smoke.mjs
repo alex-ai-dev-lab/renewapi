@@ -217,9 +217,6 @@ async function main() {
   let server = null
   let browser = null
   try {
-    if (fs.existsSync(dbPath)) fs.rmSync(dbPath, { force: true })
-    for (const suffix of ['-shm', '-wal']) fs.rmSync(`${dbPath}${suffix}`, { force: true })
-
     server = await startBackend('initial')
     browser = await chromium.launch({ headless: true })
     const context = await browser.newContext({

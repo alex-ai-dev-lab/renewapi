@@ -30,8 +30,9 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
+import { useMediaQuery } from '@/hooks'
+import { unwrapApiResponse } from '@/lib/api-errors'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import {
   DISABLED_ROW_DESKTOP,
@@ -124,7 +125,7 @@ export function UsersTable() {
         page_size: pagination.pageSize,
       }
 
-      const result =
+      const result = unwrapApiResponse(
         hasFilter || hasColumnFilter
           ? await searchUsers({
               ...params,
@@ -134,12 +135,7 @@ export function UsersTable() {
               group: groupFilter,
             })
           : await getUsers(params)
-
-      if (!result.success) {
-        throw new Error(
-          result.message || `Failed to ${hasFilter ? 'search' : 'load'} users`
-        )
-      }
+      )
 
       return {
         items: result.data?.items || [],

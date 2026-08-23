@@ -1,0 +1,126 @@
+name: Aurora responsive visual QA
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aurora-responsive-visual-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install application dependencies
+        working-directory: web/default
+        run: bun install --frozen-lockfile
+
+      - name: Verify application build
+        working-directory: web/default
+        run: |
+          bun run typecheck
+          bun run build
+
+      - name: Install Playwright for QA only
+        working-directory: web/default
+        run: |
+          bun add --no-save playwright@1.55.0
+          bunx playwright install --with-deps chromium
+
+      - name: Start implementation server
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd web/default
+          bun run preview -- --host 127.0.0.1 --port 4173 >/tmp/aurora-responsive-app.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4173 >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/aurora-responsive-app.log || true
+          exit 1
+
+      - name: Restore proven deterministic seven-page harness
+        working-directory: web/default
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref_sha='3d91c3fd22fbfae284d48563d5a09ac046a81cd2'
+          curl -fsSL "https://raw.githubusercontent.com/alex-ai-dev-lab/renewapi/${ref_sha}/.github/aurora-final-visual-qa.mjs" -o .aurora-responsive-base.mjs
+
+      - name: Capture responsive Light and Dark matrices
+        working-directory: web/default
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ../../qa-artifacts
+
+          capture_variant() {
+            theme="$1"
+            width="$2"
+            height="$3"
+            label="${theme}-${width}x${height}"
+            script=".aurora-${label}.mjs"
+
+            sed \
+              -e "s/width:1440,height:1000/width:${width},height:${height}/" \
+              -e "s/colorScheme:'light'/colorScheme:'${theme}'/" \
+              -e "s/localStorage.setItem('theme','light')/localStorage.setItem('theme','${theme}')/" \
+              .aurora-responsive-base.mjs > "$script"
+
+            grep -q "width:${width},height:${height}" "$script"
+            grep -q "colorScheme:'${theme}'" "$script"
+            QA_OUT="../../qa-artifacts/${label}" bun "$script"
+          }
+
+          capture_variant light 1024 1000
+          capture_variant dark 1024 1000
+          capture_variant light 768 1000
+          capture_variant dark 768 1000
+          capture_variant light 375 812
+          capture_variant dark 375 812
+
+      - name: Enforce clean responsive browser runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          failures=0
+          while IFS= read -r file; do
+            if [ -s "$file" ]; then
+              echo "Unexpected browser output in $file:" >&2
+              cat "$file" >&2
+              failures=1
+            fi
+          done < <(find qa-artifacts -type f \( -name 'console-errors.txt' -o -name 'unhandled.txt' \) | sort)
+          test "$failures" -eq 0
+
+          printf '%s\n' \
+            'variants=light/dark x 1024x1000,768x1000,375x812' \
+            'deviceScaleFactor=1' \
+            'locale=zh-CN' \
+            'timezone=Asia/Taipei' \
+            'pages=dashboard,channels,keys,logs,models,users,settings' \
+            'consoleErrors=0' \
+            'unhandledApiRequests=0' > qa-artifacts/qa-summary.txt
+
+      - name: Upload responsive visual QA artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurora-responsive-visual-qa
+          path: qa-artifacts
+          if-no-files-found: error

@@ -337,6 +337,9 @@ export function SettingsLanding() {
                 onChange={(event) =>
                   editDraft({ serverAddress: event.target.value })
                 }
+                aria-label={t('aurora.settings.serverAddress.title', {
+                  defaultValue: isChinese ? '网关基础地址' : 'Gateway base URL',
+                })}
                 placeholder='https://api.example.com'
                 className='h-10 w-full rounded-xl bg-white/55 lg:w-[240px]'
               />
@@ -356,6 +359,9 @@ export function SettingsLanding() {
                 onChange={(event) =>
                   editDraft({ systemName: event.target.value })
                 }
+                aria-label={t('aurora.settings.systemName.title', {
+                  defaultValue: isChinese ? '系统名称' : 'System name',
+                })}
                 className='h-10 w-full rounded-xl bg-white/55 lg:w-[240px]'
               />
             </FoundationRow>
@@ -376,6 +382,9 @@ export function SettingsLanding() {
                 onChange={(event) =>
                   editDraft({ newUserQuota: event.target.value })
                 }
+                aria-label={t('aurora.settings.newUserQuota.title', {
+                  defaultValue: isChinese ? '新用户初始额度' : 'New-user quota',
+                })}
                 className='h-10 w-full rounded-xl bg-white/55 lg:w-[240px]'
               />
             </FoundationRow>

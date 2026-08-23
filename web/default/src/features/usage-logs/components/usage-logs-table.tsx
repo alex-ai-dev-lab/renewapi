@@ -30,14 +30,18 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { useTranslation } from 'react-i18next'
 import { useMediaQuery } from '@/hooks'
-import { ApiBusinessError, unwrapApiResponse } from '@/lib/api-errors'
+import { useTranslation } from 'react-i18next'
+import {
+  ApiBusinessError,
+  shouldRetryQuery,
+  unwrapApiResponse,
+} from '@/lib/api-errors'
 import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
-import { DataTablePage } from '@/components/data-table'
 import { TableCell, TableRow } from '@/components/ui/table'
+import { DataTablePage } from '@/components/data-table'
 import {
   DEFAULT_LOGS_DATA,
   LOG_TYPE_ALL_VALUE,
@@ -155,6 +159,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       const result = unwrapApiResponse(response)
       return result.data || DEFAULT_LOGS_DATA
     },
+    retry: shouldRetryQuery,
     placeholderData: (previousData, previousQuery) => {
       if (previousQuery?.queryKey[1] === logCategory) {
         return previousData
@@ -236,8 +241,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       }
       renderRow={(row) => {
         const logType = (row.original as Record<string, unknown>).type as
-          | number
-          | undefined
+          number | undefined
         const tintClass =
           isCommon && logType != null ? (logTypeRowTint[logType] ?? '') : ''
         return (

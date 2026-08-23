@@ -76,7 +76,10 @@ export function RequestVolumePanel(props: {
           </div>
         </div>
 
-        <div className='mt-[14px] min-h-[150px] flex-1' aria-hidden='true'>
+        <div
+          className='mt-[14px] min-h-[150px] flex-1'
+          aria-hidden={data.length > 0}
+        >
           {data.length === 0 ? (
             <div className='text-muted-foreground flex h-full items-center justify-center text-sm'>
               {t('aurora.dashboard.requests.empty', {
@@ -179,7 +182,10 @@ export function SpendPanel(props: {
         <div className='mt-2 min-h-4 text-[11px] font-semibold text-[#7C5CBF]'>
           {costDetail}
         </div>
-        <div className='mx-auto mt-[18px] h-[110px] w-[110px]' aria-hidden='true'>
+        <div
+          className='mx-auto mt-[18px] h-[110px] w-[110px]'
+          aria-hidden='true'
+        >
           <ResponsiveContainer width='100%' height='100%'>
             <PieChart accessibilityLayer={false}>
               <Pie
@@ -189,6 +195,7 @@ export function SpendPanel(props: {
                 outerRadius={55}
                 startAngle={90}
                 endAngle={-270}
+                rootTabIndex={-1}
                 stroke='transparent'
                 isAnimationActive={false}
               >

@@ -143,7 +143,9 @@ export function ModelsStats(props: {
 
   if (props.isLoading) {
     registryHeadline = t('aurora.models.registry.loading', {
-      defaultValue: isChinese ? '正在载入模型注册表…' : 'Loading model registry…',
+      defaultValue: isChinese
+        ? '正在载入模型注册表…'
+        : 'Loading model registry…',
     })
     registryStatus = t('aurora.models.registry.loadingHint', {
       defaultValue: isChinese
@@ -152,7 +154,9 @@ export function ModelsStats(props: {
     })
   } else if (props.isError) {
     registryHeadline = t('aurora.models.registry.error', {
-      defaultValue: isChinese ? '模型注册表暂时不可用' : 'Model registry unavailable',
+      defaultValue: isChinese
+        ? '模型注册表暂时不可用'
+        : 'Model registry unavailable',
     })
     registryStatus =
       props.errorDescription ||

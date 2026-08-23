@@ -143,7 +143,7 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
           {isLoading ? (
             <Loader2 className='size-3.5 animate-spin' />
           ) : isCopied ? (
-            <Check className='size-3.5 text-success' />
+            <Check className='text-success size-3.5' />
           ) : (
             <Copy className='size-3.5' />
           )}

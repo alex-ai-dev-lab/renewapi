@@ -79,7 +79,6 @@ export function ChannelsTable() {
   const { t } = useTranslation()
   const { enableTagMode, idSort } = useChannels()
 
-  // Table state
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     models: true,
@@ -92,7 +91,6 @@ export function ChannelsTable() {
   const [rowSelection, setRowSelection] = useState({})
   const [expanded, setExpanded] = useState<ExpandedState>({})
 
-  // URL state management
   const {
     globalFilter,
     onGlobalFilterChange,
@@ -117,7 +115,6 @@ export function ChannelsTable() {
     ],
   })
 
-  // Extract filters from column filters
   const statusFilter =
     (columnFilters.find((f) => f.id === 'status')?.value as string[]) || []
   const typeFilter =
@@ -127,16 +124,13 @@ export function ChannelsTable() {
   const modelFilterFromUrl =
     (columnFilters.find((f) => f.id === 'model')?.value as string) || ''
 
-  // Local state for immediate input feedback
   const [modelFilterInput, setModelFilterInput] = useState(modelFilterFromUrl)
   const debouncedModelFilter = useDebounce(modelFilterInput, 500)
 
-  // Sync local input with URL when URL changes (e.g., from back/forward navigation)
   useEffect(() => {
     setModelFilterInput(modelFilterFromUrl)
   }, [modelFilterFromUrl])
 
-  // Update URL when debounced value changes
   useEffect(() => {
     if (debouncedModelFilter !== modelFilterFromUrl) {
       onColumnFiltersChange((prev) => {
@@ -149,8 +143,6 @@ export function ChannelsTable() {
   }, [debouncedModelFilter, modelFilterFromUrl, onColumnFiltersChange])
 
   const modelFilter = modelFilterFromUrl
-
-  // Determine whether to use search or regular list API
   const shouldSearch = Boolean(globalFilter?.trim() || modelFilter.trim())
 
   const sortParams = useMemo(() => {
@@ -178,7 +170,6 @@ export function ChannelsTable() {
     })
   }
 
-  // Fetch groups for filter
   const { data: groupsData } = useQuery({
     queryKey: ['groups'],
     queryFn: ({ signal }) => getGroups({ signal, timeoutClass: 'interactive' }),
@@ -193,9 +184,8 @@ export function ChannelsTable() {
     [groupsData]
   )
 
-  // Fetch channels data
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: channelsQueryKeys.list({
       keyword: globalFilter,
       model: modelFilter,
@@ -218,60 +208,62 @@ export function ChannelsTable() {
       page_size: pagination.pageSize,
     }),
     queryFn: async ({ signal }) => {
-      if (shouldSearch) {
-        return searchChannels(
-          {
-            keyword: globalFilter,
-            model: modelFilter,
-            group:
-              groupFilter.length > 0 && !groupFilter.includes('all')
-                ? groupFilter[0]
-                : undefined,
-            status:
-              statusFilter.length > 0 && !statusFilter.includes('all')
-                ? statusFilter[0]
-                : undefined,
-            type:
-              typeFilter.length > 0 && !typeFilter.includes('all')
-                ? Number(typeFilter[0])
-                : undefined,
-            tag_mode: enableTagMode,
-            id_sort: idSort,
-            ...sortParams,
-            p: pagination.pageIndex + 1,
-            page_size: pagination.pageSize,
-          },
-          { signal }
-        )
-      } else {
-        return getChannels(
-          {
-            group:
-              groupFilter.length > 0 && !groupFilter.includes('all')
-                ? groupFilter[0]
-                : undefined,
-            status:
-              statusFilter.length > 0 && !statusFilter.includes('all')
-                ? statusFilter[0]
-                : undefined,
-            type:
-              typeFilter.length > 0 && !typeFilter.includes('all')
-                ? Number(typeFilter[0])
-                : undefined,
-            tag_mode: enableTagMode,
-            id_sort: idSort,
-            ...sortParams,
-            p: pagination.pageIndex + 1,
-            page_size: pagination.pageSize,
-          },
-          { signal }
-        )
+      const result = shouldSearch
+        ? await searchChannels(
+            {
+              keyword: globalFilter,
+              model: modelFilter,
+              group:
+                groupFilter.length > 0 && !groupFilter.includes('all')
+                  ? groupFilter[0]
+                  : undefined,
+              status:
+                statusFilter.length > 0 && !statusFilter.includes('all')
+                  ? statusFilter[0]
+                  : undefined,
+              type:
+                typeFilter.length > 0 && !typeFilter.includes('all')
+                  ? Number(typeFilter[0])
+                  : undefined,
+              tag_mode: enableTagMode,
+              id_sort: idSort,
+              ...sortParams,
+              p: pagination.pageIndex + 1,
+              page_size: pagination.pageSize,
+            },
+            { signal }
+          )
+        : await getChannels(
+            {
+              group:
+                groupFilter.length > 0 && !groupFilter.includes('all')
+                  ? groupFilter[0]
+                  : undefined,
+              status:
+                statusFilter.length > 0 && !statusFilter.includes('all')
+                  ? statusFilter[0]
+                  : undefined,
+              type:
+                typeFilter.length > 0 && !typeFilter.includes('all')
+                  ? Number(typeFilter[0])
+                  : undefined,
+              tag_mode: enableTagMode,
+              id_sort: idSort,
+              ...sortParams,
+              p: pagination.pageIndex + 1,
+              page_size: pagination.pageSize,
+            },
+            { signal }
+          )
+
+      if (!result?.success) {
+        throw new Error(result?.message || t('Failed to load channels'))
       }
+      return result
     },
     placeholderData: (previousData) => previousData,
   })
 
-  // Apply tag aggregation if tag mode is enabled
   const channels = useMemo(() => {
     const rawChannels = data?.data?.items || []
 
@@ -284,11 +276,8 @@ export function ChannelsTable() {
 
   const totalCount = data?.data?.total || 0
   const typeCounts = data?.data?.type_counts
-
-  // Columns configuration
   const columns = useChannelsColumns()
 
-  // React Table instance
   const table = useReactTable({
     data: channels,
     columns,
@@ -318,13 +307,11 @@ export function ChannelsTable() {
     manualFiltering: true,
   })
 
-  // Ensure page is in range when total count changes
   const pageCount = table.getPageCount()
   useEffect(() => {
     ensurePageInRange(pageCount)
   }, [pageCount, ensurePageInRange])
 
-  // Prepare filter options from existing channel types only.
   const typeFilterOptions = useMemo(() => {
     const counts = typeCounts || {}
     const typeIds = Object.entries(counts)
@@ -383,13 +370,20 @@ export function ChannelsTable() {
 
   return (
     <div className='space-y-3 sm:space-y-4'>
-      <ChannelsStats channels={channels} />
+      {!isError ? <ChannelsStats channels={channels} /> : null}
 
       <DataTablePage
         table={table}
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
+        isError={isError}
+        errorTitle={t('Failed to load channels')}
+        errorDescription={
+          error instanceof Error ? error.message : t('Please try again.')
+        }
+        retryLabel={t('Retry')}
+        onRetry={() => void refetch()}
         tableHeaderClassName='bg-background/80 backdrop-blur-md sticky top-0 z-10'
         tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
         emptyTitle={t('未找到渠道')}

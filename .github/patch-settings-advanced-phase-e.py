@@ -390,7 +390,7 @@ async function runCheckinWave(context, user) {
 }
 
 async function runSsrfWave(context, user) {
-  const { page } = await openAdvancedPage(
+  const { page, optionMutations } = await openAdvancedPage(
     context,
     '/system-settings/security/ssrf',
     'advanced-ssrf'

@@ -34,12 +34,19 @@ jobs:
       - name: Show exact Prettier normalization
         working-directory: web/default
         run: |
-          bunx prettier --write \
-            src/features/dashboard/aurora-overview-panels.tsx \
+          files=(
+            src/components/data-table/data-table-page.tsx
+            src/features/channels/components/channels-table.tsx
+            src/features/dashboard/aurora-overview-panels.tsx
             src/features/keys/components/api-keys-cells.tsx
-          git diff -- \
-            src/features/dashboard/aurora-overview-panels.tsx \
-            src/features/keys/components/api-keys-cells.tsx
+            src/features/keys/components/api-keys-table.tsx
+            src/features/models/components/models-stats.tsx
+            src/features/models/components/models-table.tsx
+            src/features/usage-logs/components/usage-logs-table.tsx
+            src/features/users/components/users-table.tsx
+          )
+          bunx prettier --write "${files[@]}"
+          git diff -- "${files[@]}"
 
       - name: Install Playwright for QA only
         working-directory: web/default
@@ -53,6 +60,7 @@ jobs:
             https://raw.githubusercontent.com/alex-ai-dev-lab/renewapi/3d91c3fd22fbfae284d48563d5a09ac046a81cd2/.github/aurora-final-visual-qa.mjs \
             -o /tmp/aurora-final-visual-qa.mjs
           python3 .github/generate-aurora-deep-states.py
+          python3 .github/patch-aurora-deep-states-v2.py
           cp /tmp/aurora-deep-states.mjs web/default/.aurora-deep-states.mjs
 
       - name: Start production preview

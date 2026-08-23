@@ -121,11 +121,7 @@ html.dark .aurora-reference-surface-2 {
 html.dark [data-slot='card'].aurora-reference-surface-3,
 html.dark .aurora-reference-surface-3 {
   background:
-    linear-gradient(
-      135deg,
-      rgba(94, 224, 174, 0.12),
-      rgba(85, 217, 255, 0.05)
-    ),
+    linear-gradient(135deg, rgba(94, 224, 174, 0.12), rgba(85, 217, 255, 0.05)),
     var(--aurora-glass) !important;
 }
 
@@ -296,8 +292,7 @@ html.dark
   [data-slot='card']:has(a[href='/system-settings/operations/behavior']),
 html.dark
   [data-slot='card']:has(a[href='/system-settings/security/anti-poison-guard']),
-html.dark
-  [data-slot='card']:has(a[href='/system-settings/site/system-info']) {
+html.dark [data-slot='card']:has(a[href='/system-settings/site/system-info']) {
   gap: 0;
 }
 

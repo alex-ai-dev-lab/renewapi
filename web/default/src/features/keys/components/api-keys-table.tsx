@@ -33,7 +33,7 @@ import {
 import { Database } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useDebounce } from '@/hooks'
-import { unwrapApiResponse } from '@/lib/api-errors'
+import { shouldRetryQuery, unwrapApiResponse } from '@/lib/api-errors'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
@@ -267,6 +267,7 @@ export function ApiKeysTable() {
         total: result.data?.total || 0,
       }
     },
+    retry: shouldRetryQuery,
     placeholderData: (previousData) => previousData,
   })
 

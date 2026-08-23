@@ -17,14 +17,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { CSSProperties } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { TriangleAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { shouldRetryQuery, unwrapApiResponse } from '@/lib/api-errors'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePricingData } from '@/features/pricing/hooks'
 import { formatPrice, formatRequestPrice } from '@/features/pricing/lib/price'
 import type { PricingModel } from '@/features/pricing/types'
+import { getModels } from '../api'
 import type { Model, Vendor } from '../types'
 
 const toneBackgrounds: CSSProperties['background'][] = [
@@ -102,6 +105,14 @@ export function ModelsStats(props: {
     usdExchangeRate,
     isLoading: pricingLoading,
   } = usePricingData()
+  const { data: registryCountResponse } = useQuery({
+    queryKey: ['models', 'aurora-registry-total'],
+    queryFn: async () =>
+      unwrapApiResponse(await getModels({ p: 1, page_size: 1 })),
+    staleTime: 60_000,
+    retry: shouldRetryQuery,
+  })
+  const registryTotal = registryCountResponse?.data?.total
   const vendorNames = new Map(
     props.vendors.map((vendor) => [vendor.id, vendor.name])
   )
@@ -130,7 +141,7 @@ export function ModelsStats(props: {
     defaultValue: isChinese
       ? '{{models}} 个登记模型 · {{vendors}} 家供应商 · 当前展示 {{visible}} 个'
       : '{{models}} registered models · {{vendors}} vendors · showing {{visible}}',
-    models: props.totalModels,
+    models: registryTotal ?? '—',
     vendors: props.vendors.length,
     visible: visibleModels.length,
   })
@@ -165,7 +176,7 @@ export function ModelsStats(props: {
           ? '无法载入模型数据，请稍后重试。'
           : 'Model data could not be loaded. Please try again.',
       })
-  } else if (visibleModels.length === 0) {
+  } else if (visibleModels.length === 0 && registryTotal === 0) {
     registryHeadline = t('aurora.models.registry.empty', {
       defaultValue: isChinese ? '还没有登记模型' : 'No models registered yet',
     })
@@ -173,6 +184,13 @@ export function ModelsStats(props: {
       defaultValue: isChinese
         ? '打开模型管理以创建或同步第一个模型。'
         : 'Open model management to create or sync the first model.',
+    })
+  } else if (visibleModels.length === 0) {
+    registryHeadline = registrySummary
+    registryStatus = t('aurora.models.registry.noMatches', {
+      defaultValue: isChinese
+        ? '当前筛选或分页没有可展示的模型。'
+        : 'No models are visible for the current filters or page.',
     })
   } else if (pricingLoading) {
     registryStatus = t('aurora.models.registry.pricingLoading', {

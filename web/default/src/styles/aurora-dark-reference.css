@@ -1,18 +1,40 @@
 /*
 Copyright (C) 2023-2026 QuantumNous
 
-Aurora Bento v2 Dark Mode foundation.
-This file defines the dark visual language before page-level QA.
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
 */
 
-/* Dark Aurora: deep navy canvas + glass surfaces + blue/cyan glow. */
+/*
+ * Aurora Bento v2 — independently art-directed Dark mode.
+ * The supplied source board is Light-only, so structural geometry is kept
+ * identical while color, glass depth, and ambient light are derived for Dark.
+ */
 html.dark {
-  --aurora-dark-canvas: #0b1020;
-  --aurora-dark-canvas-2: #111a2e;
-  --aurora-dark-glass: rgba(18, 28, 48, 0.72);
-  --aurora-dark-glass-strong: rgba(20, 31, 54, 0.88);
-  --aurora-dark-line: rgba(148, 180, 255, 0.16);
-  --aurora-dark-glow: rgba(79, 124, 255, 0.34);
+  --aurora-from: #78a7ff;
+  --aurora-mid: #68c8ff;
+  --aurora-to: #55d9ff;
+  --aurora-glow: rgba(84, 150, 255, 0.3);
+  --aurora-line: rgba(149, 181, 255, 0.15);
+  --aurora-glass: rgba(14, 25, 44, 0.72);
+  --aurora-glass-strong: rgba(16, 29, 50, 0.9);
+  --aurora-dark-canvas: #080e1a;
+  --aurora-dark-glass: var(--aurora-glass);
+  --aurora-dark-glass-strong: var(--aurora-glass-strong);
+  --aurora-dark-line: var(--aurora-line);
+  --aurora-dark-glow: var(--aurora-glow);
   --aurora-dark-cyan: #55d9ff;
   --aurora-dark-blue: #78a7ff;
   --aurora-dark-green: #5ee0ae;
@@ -20,51 +42,290 @@ html.dark {
   --aurora-dark-danger: #ff8c9a;
 }
 
+/* The desktop shell must expose the Aurora canvas instead of Sidebar chrome. */
+html.dark [data-slot='sidebar-wrapper'],
+html.dark [data-slot='sidebar-inset'] {
+  background: transparent !important;
+}
+
 html.dark body {
   background:
-    radial-gradient(900px 520px at 8% -12%, rgba(85, 217, 255, 0.16), transparent 60%),
-    radial-gradient(850px 520px at 92% 0%, rgba(120, 167, 255, 0.18), transparent 58%),
-    radial-gradient(900px 620px at 50% 110%, rgba(94, 224, 174, 0.12), transparent 62%),
+    radial-gradient(
+      980px 560px at 6% -10%,
+      rgba(85, 217, 255, 0.18),
+      transparent 62%
+    ),
+    radial-gradient(
+      880px 540px at 94% 0%,
+      rgba(120, 167, 255, 0.2),
+      transparent 60%
+    ),
+    radial-gradient(
+      940px 660px at 52% 112%,
+      rgba(94, 224, 174, 0.13),
+      transparent 64%
+    ),
+    radial-gradient(
+      640px 460px at 34% 54%,
+      rgba(255, 197, 106, 0.045),
+      transparent 60%
+    ),
     var(--aurora-dark-canvas);
   background-attachment: fixed;
 }
 
 html.dark [data-slot='card'],
-html.dark [data-slot='primitive-data-table'] {
-  background: var(--aurora-dark-glass);
-  border-color: var(--aurora-dark-line);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+html.dark [data-slot='primitive-data-table'],
+html.dark .glass-tile {
+  border-color: var(--aurora-line);
+  background: var(--aurora-glass) !important;
+  box-shadow:
+    0 16px 44px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
   backdrop-filter: blur(20px) saturate(1.35);
   -webkit-backdrop-filter: blur(20px) saturate(1.35);
 }
 
-html.dark [data-slot='table-row']:hover {
-  background: rgba(120, 167, 255, 0.08);
+html.dark [data-slot='card'].aurora-reference-surface-1,
+html.dark .aurora-reference-surface-1 {
+  background:
+    linear-gradient(
+      135deg,
+      rgba(120, 167, 255, 0.16),
+      rgba(85, 217, 255, 0.055)
+    ),
+    var(--aurora-glass) !important;
 }
 
-html.dark [data-slot='button'].bg-primary {
-  background-image: linear-gradient(135deg, #78a7ff, #55d9ff);
-  color: #08111f;
-  box-shadow: 0 10px 30px var(--aurora-dark-glow);
+html.dark [data-slot='card'].aurora-reference-surface-2,
+html.dark .aurora-reference-surface-2 {
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 140, 154, 0.1),
+      rgba(255, 197, 106, 0.055)
+    ),
+    var(--aurora-glass) !important;
+}
+
+html.dark [data-slot='card'].aurora-reference-surface-3,
+html.dark .aurora-reference-surface-3 {
+  background:
+    linear-gradient(
+      135deg,
+      rgba(94, 224, 174, 0.12),
+      rgba(85, 217, 255, 0.05)
+    ),
+    var(--aurora-glass) !important;
+}
+
+html.dark [data-slot='button'].bg-primary,
+html.dark [data-slot='badge'].bg-primary {
+  border-color: transparent;
+  border-radius: 999px;
+  background-image: linear-gradient(
+    135deg,
+    var(--aurora-from),
+    var(--aurora-to)
+  );
+  color: #07111f;
+  box-shadow: 0 9px 24px var(--aurora-glow);
+}
+
+html.dark [data-slot='button'].bg-primary:hover {
+  background-image: linear-gradient(135deg, #8cb5ff, #6fe2ff);
+  box-shadow: 0 11px 28px rgba(84, 150, 255, 0.38);
 }
 
 html.dark .text-aurora {
-  background-image: linear-gradient(100deg, #78a7ff, #55d9ff);
+  background-image: linear-gradient(
+    100deg,
+    var(--aurora-from),
+    var(--aurora-mid) 55%,
+    var(--aurora-to)
+  );
 }
 
-html.dark .aurora-data-panel {
-  border-color: var(--aurora-dark-line);
-  background: var(--aurora-dark-glass);
+html.dark .aurora-reference-progress {
+  background-image: linear-gradient(
+    90deg,
+    var(--aurora-from),
+    var(--aurora-to)
+  );
+}
+
+html.dark [data-slot='table-row']:hover {
+  background: rgba(120, 167, 255, 0.075);
 }
 
 html.dark [data-slot='popover-content'],
 html.dark [data-slot='dialog-content'],
-html.dark [data-slot='sheet-content'] {
-  background: var(--aurora-dark-glass-strong);
-  border-color: var(--aurora-dark-line);
+html.dark [data-slot='alert-dialog-content'],
+html.dark [data-slot='sheet-content'],
+html.dark [data-slot='dropdown-menu-content'],
+html.dark [data-slot='select-content'] {
+  border-color: var(--aurora-line);
+  background: var(--aurora-glass-strong) !important;
+  box-shadow: 0 20px 54px rgba(0, 0, 0, 0.34);
   backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}
+
+html.dark [data-slot='input']:focus-visible,
+html.dark [data-slot='textarea']:focus-visible,
+html.dark [data-slot='select-trigger']:focus-visible {
+  border-color: rgba(120, 167, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(120, 167, 255, 0.15);
 }
 
 html.dark .aurora-pulse-dot {
   background: var(--aurora-dark-green);
+}
+
+/* Keep the accepted desktop shell geometry identical in Dark. */
+@media (min-width: 1024px) {
+  html.dark nav.fixed.left-1\/2 {
+    width: max-content;
+    max-width: calc(100vw - 32px);
+    border-color: var(--aurora-line);
+    background: rgba(8, 15, 27, 0.82) !important;
+    box-shadow:
+      0 14px 42px rgba(0, 0, 0, 0.36),
+      inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  }
+}
+
+/* Production table controls remain functional but read as one glass panel. */
+html.dark main .border-border.bg-card.rounded-lg.border.p-2\.5 {
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none;
+  padding: 0 0 8px;
+}
+
+html.dark
+  main
+  .border-border.bg-card.max-w-full.min-w-0.overflow-hidden.rounded-lg.border {
+  border-color: var(--aurora-line);
+  border-radius: 22px;
+  background: var(--aurora-glass) !important;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(20px) saturate(1.35);
+  -webkit-backdrop-filter: blur(20px) saturate(1.35);
+}
+
+html.dark main [data-slot='table-header'] {
+  background: rgba(120, 167, 255, 0.045);
+}
+
+html.dark main [data-slot='table-head'] {
+  height: auto;
+  padding: 10px 14px;
+  color: #9aa8c0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+html.dark main [data-slot='table-cell'] {
+  padding: 12px 14px;
+  font-size: 13px;
+}
+
+html.dark .aurora-data-panel {
+  overflow: hidden;
+  border: 1px solid var(--aurora-line);
+  border-radius: 22px;
+  background: var(--aurora-glass) !important;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(20px) saturate(1.35);
+  -webkit-backdrop-filter: blur(20px) saturate(1.35);
+}
+
+html.dark .aurora-data-panel .aurora-data-toolbar {
+  border: 0;
+  border-bottom: 1px solid var(--aurora-line);
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none;
+  padding: 10px 14px;
+}
+
+html.dark .aurora-data-panel .aurora-data-table {
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none;
+}
+
+html.dark .aurora-data-panel [data-slot='table-header'] {
+  background: rgba(120, 167, 255, 0.045);
+}
+
+/* Settings checked state must remain visibly active in Dark. */
+html.dark .aurora-settings-switch[data-checked],
+html.dark .aurora-settings-switch[data-state='checked'],
+html.dark [data-slot='switch'][data-checked],
+html.dark [data-slot='switch'][data-state='checked'] {
+  border-color: transparent;
+  background-image: linear-gradient(
+    135deg,
+    var(--aurora-from),
+    var(--aurora-to)
+  );
+  box-shadow: 0 3px 12px rgba(84, 150, 255, 0.28);
+}
+
+html.dark .aurora-settings-switch [data-slot='switch-thumb'] {
+  background: #f8fbff;
+}
+
+html.dark
+  [data-slot='card']:has(a[href='/system-settings/operations/behavior']),
+html.dark
+  [data-slot='card']:has(a[href='/system-settings/security/anti-poison-guard']),
+html.dark
+  [data-slot='card']:has(a[href='/system-settings/site/system-info']) {
+  gap: 0;
+}
+
+/* Preserve the accepted above-the-fold Model Registry density. */
+html.dark main .glass-tile:has(> .grid > article.glass-tile) {
+  padding: 16px !important;
+}
+
+html.dark main article.glass-tile {
+  min-height: 140px !important;
+  padding: 16px !important;
+}
+
+html.dark main article.glass-tile p.line-clamp-2 {
+  display: none;
+}
+
+html.dark main article.glass-tile .border-t {
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+@media (min-width: 1024px) {
+  html.dark
+    main
+    .border-border.bg-card.max-w-full.min-w-0.overflow-hidden.rounded-lg.border
+    > .max-w-full.overflow-x-auto {
+    max-height: 250px;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  html.dark
+    main
+    .border-border.bg-card.max-w-full.min-w-0.overflow-hidden.rounded-lg.border
+    [data-slot='table-header'] {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
 }

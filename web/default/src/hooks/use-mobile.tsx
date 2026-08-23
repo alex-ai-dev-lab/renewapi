@@ -18,7 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import * as React from 'react'
 
-const MOBILE_BREAKPOINT = 768
+// Keep the Sidebar mobile/Sheet boundary aligned with the Aurora desktop shell.
+// Below lg the app uses AppHeader + overlay navigation; at lg and above Aurora
+// switches to the dedicated Topbar + floating Dock desktop experience.
+const MOBILE_BREAKPOINT = 1024
 
 export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)

@@ -66,6 +66,7 @@ jobs:
           python3 .github/patch-aurora-deep-states-v2.py
           python3 .github/patch-aurora-deep-states-v3.py
           python3 .github/patch-aurora-deep-states-v4.py
+          python3 .github/patch-aurora-deep-states-v5.py
           cp /tmp/aurora-deep-states.mjs web/default/.aurora-deep-states.mjs
 
       - name: Start production preview

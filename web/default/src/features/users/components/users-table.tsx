@@ -30,9 +30,9 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { useTranslation } from 'react-i18next'
 import { useMediaQuery } from '@/hooks'
-import { unwrapApiResponse } from '@/lib/api-errors'
+import { useTranslation } from 'react-i18next'
+import { shouldRetryQuery, unwrapApiResponse } from '@/lib/api-errors'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import {
   DISABLED_ROW_DESKTOP,
@@ -142,6 +142,7 @@ export function UsersTable() {
         total: result.data?.total || 0,
       }
     },
+    retry: shouldRetryQuery,
     placeholderData: (previousData) => previousData,
   })
 

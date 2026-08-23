@@ -113,7 +113,7 @@ export function DeploymentsTable() {
   const [deleteTarget, setDeleteTarget] = useState<Deployment | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: deploymentsQueryKeys.list({
       keyword,
       status: activeStatus,
@@ -121,19 +121,23 @@ export function DeploymentsTable() {
       page_size: pagination.pageSize,
     }),
     queryFn: async () => {
-      if (keyword.trim()) {
-        return searchDeployments({
-          keyword,
-          status: activeStatus,
-          p: pagination.pageIndex + 1,
-          page_size: pagination.pageSize,
-        })
+      const result = keyword.trim()
+        ? await searchDeployments({
+            keyword,
+            status: activeStatus,
+            p: pagination.pageIndex + 1,
+            page_size: pagination.pageSize,
+          })
+        : await listDeployments({
+            status: activeStatus,
+            p: pagination.pageIndex + 1,
+            page_size: pagination.pageSize,
+          })
+
+      if (!result?.success) {
+        throw new Error(result?.message || t('Failed to load deployments'))
       }
-      return listDeployments({
-        status: activeStatus,
-        p: pagination.pageIndex + 1,
-        page_size: pagination.pageSize,
-      })
+      return result
     },
     placeholderData: (prev) => prev,
   })
@@ -231,6 +235,13 @@ export function DeploymentsTable() {
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
+        isError={isError}
+        errorTitle={t('Failed to load deployments')}
+        errorDescription={
+          error instanceof Error ? error.message : t('Please try again.')
+        }
+        retryLabel={t('Retry')}
+        onRetry={() => void refetch()}
         tableHeaderClassName='sticky top-0 z-10 bg-background/80 backdrop-blur-md'
         tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
         emptyTitle={t('No Deployments Found')}

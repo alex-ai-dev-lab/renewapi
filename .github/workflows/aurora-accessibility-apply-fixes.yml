@@ -1,0 +1,55 @@
+name: Apply Aurora Phase D accessibility fixes
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fixes:
+    if: github.head_ref == 'qa/aurora-accessibility-phase-d'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Apply asserted source patches
+        run: python3 .github/apply-aurora-accessibility-fixes.py
+
+      - name: Format touched product files
+        working-directory: web/default
+        run: |
+          bun install --frozen-lockfile
+          bunx prettier --write \
+            src/components/data-table/pagination.tsx \
+            src/features/dashboard/auto-refresh-toggle.tsx \
+            src/features/dashboard/aurora-overview-panels.tsx \
+            src/features/usage-logs/components/common-logs-filter-bar.tsx \
+            src/features/models/components/drawers/model-mutate-drawer.tsx \
+            src/features/models/components/data-table-row-actions.tsx \
+            src/features/models/components/models-stats.tsx \
+            src/features/keys/components/api-keys-columns.tsx \
+            src/features/users/components/users-columns.tsx \
+            src/styles/theme.css
+
+      - name: Commit fixes to PR branch
+        run: |
+          git config user.name 'Aurora QA'
+          git config user.email 'actions@users.noreply.github.com'
+          git add web/default/src
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No source changes to commit.'
+            exit 0
+          fi
+          git commit -m 'fix(web): close Phase D accessibility findings'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}

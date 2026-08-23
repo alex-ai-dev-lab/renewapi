@@ -56,7 +56,9 @@ export function ApiKeysAuroraOverview() {
   const unavailableMessage =
     (unavailable && data?.message) ||
     t('aurora.common.unavailable', {
-      defaultValue: isChinese ? '数据暂时不可用' : 'Data temporarily unavailable',
+      defaultValue: isChinese
+        ? '数据暂时不可用'
+        : 'Data temporarily unavailable',
     })
 
   let consumptionTitle = t('aurora.keys.consumption.total', {

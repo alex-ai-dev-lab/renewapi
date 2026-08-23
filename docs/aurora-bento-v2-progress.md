@@ -1,6 +1,6 @@
 # Aurora Bento v2 进度与验收总表
 
-> 最后更新：2026-08-23 20:52 +08:00  
+> 最后更新：2026-08-23 21:20 +08:00  
 > 仓库：`alex-ai-dev-lab/renewapi`  
 > 原稿：`renewapi-design-02-aurora-bento-v2`  
 > Desktop Light：`9f90bd234d1533dc4f4efb916cc826d5626d4737`  
@@ -8,8 +8,9 @@
 > Responsive Phase B merge：`02e467d95a36d0b7d54ea55f3db305205eadc857`  
 > Interaction / Accessibility merge：`d7fa60720457f00b4e1766f9443d0648fb6c225b`  
 > Settings hardened validated product head：`8b56c883206a8077b3e9bf900ef9564551c93a13`  
-> Phase C deep-state branch head：`262c5989731d9dd91f63e4284df0437ce1057db7`  
-> Phase C validated PR merge tree：`e6528a8b265162496951604a44c8bf48bd50db0f`
+> Phase C final validated source head：`bf44a6b718472c304b2f43772155d108eeda049a`  
+> Phase C final validated PR merge tree：`95af96de02171e96dc4f4a852ec0f2fe263f1d37`  
+> Phase C one-time gate cleanup commit：`543d5dfe98043209f3a778af9deae98486dc595e`
 
 ## 1. 当前结论
 
@@ -37,7 +38,7 @@
 | Channels | ✅ | ✅ | ✅ | Provider overview + 生产表格；菜单语义、deep-state error/destructive/bulk/search 已验收 |
 | API Keys | ✅ | ✅ | ✅ | 管理表 + quota；copy / revealed-key 名称、deep-state 与按需明文 key 获取已验收 |
 | Usage Logs | ✅ | ✅ | ✅ | KPI + 实时流 + 筛选/表格；loading/empty/error/page-2 已验收 |
-| Models | ✅ | ✅ | ✅ | Registry 六卡 + 真实定价；management/edit/destructive/bulk/deep-state 已验收 |
+| Models | ✅ | ✅ | ✅ | Registry 六卡 + 真实定价；management/edit/destructive/bulk/deep-state 与未过滤 registry total 已验收 |
 | Users | ✅ | ✅ | ✅ | 用户 / 分组 / 状态统计；loading/empty/error 已验收 |
 | System Settings | ✅ | ✅ | ✅ | 6/6 + 12；基础输入语义标签 + hardened real-backend mutation/validation/restart PASS |
 
@@ -51,15 +52,17 @@
 | Responsive Phase B baseline | `32619390956` | ✅ Light/Dark × 1024/768/375；overflow 0 |
 | Interaction/A11y final P2-strict | `32624800840` | ✅ `issues=0`, console=0, unhandled=0 |
 | Settings real-backend hardened final | `32633291555` | ✅ fresh SQLite + real root auth + UI/API/SQLite mutation + invalid atomicity before overwrite + intermediate/final restart |
-| Phase C deep-state P2-strict final | `32640473832` | ✅ loading/empty/error/destructive/bulk/filter/pagination/model-management；P0/P1/P2/P3=0；console/page/unhandled=0 |
+| Phase C deep-state strict final | `32641303689` | ✅ 全 deep-state matrix + Models `42 registered / 1 filtered` regression；P0/P1/P2/P3=0；console/page/unhandled=0；53 tests/typecheck/build/Prettier PASS |
 
 Interaction/A11y artifact：`aurora-interaction-a11y-qa` / id `9489423724`。  
 Settings hardened artifact：`settings-real-backend-hardened` / id `9491668465` / digest `sha256:a7f925ed004f102a63db904545c96cb3fbf792555f7d2452401b07c783db2839`。  
-Phase C deep-state artifact：`aurora-deep-states-qa` / id `9493489716` / digest `sha256:ca1deb4c6b4bd755ae638592d175972dbeafb56e138f7e51bd489cbfe7f4e763`。
+Phase C final artifact：`aurora-phase-c-final` / id `9493701166` / digest `sha256:b76715327e3762ea1505bcbe14e7f0892a366c50ef176628c4ce79b7e3cc326b`。
 
 旧 Settings run `32628206857` 已被 hardened run 取代为最终证据：旧 run 的产品路径通过，但 invalid-bulk 检查主要读取运行时 OptionMap；新 run 在任何后续成功覆盖写入之前直接读取 SQLite，并执行一次中间进程重启验证，因此证据链更强。
 
-Phase C deep-state 最终证据额外确认：API Keys 仅打开行菜单/删除确认时不会请求 `/api/token/{id}/key`；明文 key 仅在 Copy / Copy Connection / CC Switch / Chat 真正执行时按需获取。
+Phase C 的早期全绿 run `32640473832` 已被更严格的 final gate `32641303689` 取代为最终证据：final gate 在相同 deep-state matrix 基础上额外验证 Models registry headline 在搜索结果 `total=1` 时仍保持未过滤注册总数 `42`，并重新通过完整工程门与 Prettier check。
+
+Phase C final 证据额外确认：API Keys 仅打开行菜单/删除确认时不会请求 `/api/token/{id}/key`；明文 key 仅在 Copy / Copy Connection / CC Switch / Chat 真正执行时按需获取。
 
 详细报告：
 
@@ -67,7 +70,7 @@ Phase C deep-state 最终证据额外确认：API Keys 仅打开行菜单/删除
 - `docs/aurora-responsive-phase-b-baseline.md`
 - `docs/aurora-interaction-accessibility-qa.md`
 - `docs/aurora-settings-real-backend-qa.md`
-- 本总表第 6、8、9 节记录 Phase C deep-state 最终验收结论；一次性浏览器 harness 在合并前移除
+- 本总表第 6、8、9 节记录 Phase C deep-state 最终验收结论；一次性浏览器 harness / final gate 已在合并前移除
 
 ## 4. Phase A — Dark Mode
 
@@ -133,6 +136,7 @@ Phase C deep-state 最终证据额外确认：API Keys 仅打开行菜单/删除
 - [x] Channels 非默认 search/filter path
 - [x] Usage Logs page-2 pagination path
 - [x] Models management expand / edit / destructive states
+- [x] Models registry headline 使用独立未过滤 total；搜索/供应商过滤只影响当前展示与 matching rows，不会把 “registered models” 总数降成过滤结果数
 - [x] HTTP 200 `{ success: false }` 不再伪装成正常 empty result，而是进入持久 `role=alert` error surface
 - [x] deterministic business error 不重试；transport/network error 保留最多两次有限重试
 - [x] API Keys 行菜单打开不再预取明文 key；敏感值改为动作触发时按需获取
@@ -161,7 +165,7 @@ Phase C deep-state 最终证据额外确认：API Keys 仅打开行菜单/删除
 - [x] final P2-strict gate：任何 P0/P1/P2 都失败
 
 Interaction/A11y final run `32624800840`：`issues=[]`。  
-Phase C deep-state final run `32640473832` 再次验证 Dashboard 24 点趋势语义与 API Key localization regression：`issues=[]`。
+Phase C final run `32641303689` 再次验证 Dashboard 24 点趋势语义、API Key localization regression 与全部 deep states：`issues=[]`。
 
 仍待：
 
@@ -184,8 +188,9 @@ Phase C deep-state final run `32640473832` 再次验证 Dashboard 24 点趋势�
 11. 明确的 business error 仍沿用默认 query retry，造成错误态延迟；现统一 `shouldRetryQuery`：业务失败立即终止，网络/transport 异常保留有限重试，并有单测覆盖。
 12. API Keys 行菜单此前在仅打开菜单时就预取完整明文 key，既扩大敏感值暴露面，也会触发 Provider-wide state 更新；现改为 Copy / Connection / CC Switch / Chat 动作执行时按需获取，删除场景 request log 已验证不触发 `/api/token/{id}/key`。
 13. Deep-state QA 还修复并验证了 destructive/bulk 的 zh-CN 可访问文案、Models management 状态、Usage Logs page-2 路径，以及 Dashboard 请求趋势 24 点辅助技术语义。
+14. Models registry headline 曾复用当前过滤查询的 `total`，搜索后会把全局 “registered models” 总数错误降成 matching count；现独立读取未过滤 registry total，并由 final gate 构造 `42 registered / 1 filtered` 场景验证。
 
-前 7 项已进入 Interaction/A11y final P2-strict run 并通过；第 8、9 项以及更强的 SQLite/重启证据已进入 Settings hardened final run `32633291555` 并通过；第 10–13 项已进入 Phase C deep-state final run `32640473832` 并通过。
+前 7 项已进入 Interaction/A11y final P2-strict run 并通过；第 8、9 项以及更强的 SQLite/重启证据已进入 Settings hardened final run `32633291555` 并通过；第 10–14 项已进入 Phase C strict final run `32641303689` 并通过。
 
 ## 9. 工程质量门
 
@@ -216,12 +221,13 @@ Settings hardened final run 额外通过：
 - [x] browser console errors = `0`
 - [x] browser page errors = `0`
 
-Phase C deep-state final run `32640473832` 额外通过：
+Phase C strict final run `32641303689` 额外通过：
 
 - [x] `53 pass / 0 fail / 104 expect()`
 - [x] TypeScript typecheck / production build
-- [x] changed Aurora files Prettier 全部 `unchanged`，`git diff` 为空
+- [x] changed Aurora files Prettier `--check` 全部通过
 - [x] loading / empty / error / destructive / bulk / filter / pagination / model-management matrix
+- [x] Models registry total regression：真实注册总数 `42`，过滤结果 `1`，headline 仍显示 `42 registered models`
 - [x] P0 / P1 / P2 / P3 = `0`
 - [x] browser console errors = `0`
 - [x] browser page errors = `0`

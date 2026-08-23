@@ -30,13 +30,14 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
+import { useMediaQuery } from '@/hooks'
+import { ApiBusinessError, unwrapApiResponse } from '@/lib/api-errors'
 import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
-import { TableCell, TableRow } from '@/components/ui/table'
 import { DataTablePage } from '@/components/data-table'
+import { TableCell, TableRow } from '@/components/ui/table'
 import {
   DEFAULT_LOGS_DATA,
   LOG_TYPE_ALL_VALUE,
@@ -134,7 +135,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       t,
     ],
     queryFn: async ({ signal }) => {
-      const result = await fetchLogsByCategory({
+      const response = await fetchLogsByCategory({
         logCategory,
         isAdmin,
         page: pagination.pageIndex + 1,
@@ -144,9 +145,14 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         signal,
       })
 
-      if (!result?.success) {
-        throw new Error(result?.message || t('Failed to load logs'))
+      if (!response) {
+        throw new ApiBusinessError({
+          success: false,
+          message: t('Failed to load logs'),
+        })
       }
+
+      const result = unwrapApiResponse(response)
       return result.data || DEFAULT_LOGS_DATA
     },
     placeholderData: (previousData, previousQuery) => {
@@ -230,7 +236,8 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       }
       renderRow={(row) => {
         const logType = (row.original as Record<string, unknown>).type as
-          number | undefined
+          | number
+          | undefined
         const tintClass =
           isCommon && logType != null ? (logTypeRowTint[logType] ?? '') : ''
         return (

@@ -44,6 +44,22 @@ jobs:
       - name: Build real RenewAPI binary
         run: go build -o "$RUNNER_TEMP/renewapi-settings-e2e" .
 
+      - name: Bootstrap isolated SQLite with production migrations
+        env:
+          SQLITE_PATH: ${{ runner.temp }}/renewapi-settings-e2e.db
+          SESSION_SECRET: settings-real-backend-smoke-2026-08-23-9f47b2c1d6e8a305
+          GIN_MODE: release
+          DEBUG: 'false'
+          MEMORY_CACHE_ENABLED: 'false'
+          OFFICIAL_PRICE_SYNC_ENABLED: 'false'
+          UPDATE_TASK: 'false'
+          BATCH_UPDATE_ENABLED: 'false'
+          NODE_TYPE: slave
+          TZ: Asia/Taipei
+        run: |
+          "$RUNNER_TEMP/renewapi-settings-e2e" migrate --up
+          "$RUNNER_TEMP/renewapi-settings-e2e" migrate --check
+
       - name: Install Playwright for QA only
         working-directory: web/default
         run: |

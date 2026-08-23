@@ -26,6 +26,7 @@ import {
   type VisibilityState,
 } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
+import { shouldRetryQuery, unwrapApiResponse } from '@/lib/api-errors'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { DataTablePage } from '@/components/data-table'
 import { FilterPills } from '@/components/page-primitives'
@@ -144,9 +145,26 @@ export function ModelsTable() {
     }),
     queryFn: async () => {
       if (shouldSearch || activeVendorFilter) {
-        return searchModels({
-          keyword: globalFilter,
-          vendor: activeVendorFilter,
+        return unwrapApiResponse(
+          await searchModels({
+            keyword: globalFilter,
+            vendor: activeVendorFilter,
+            status:
+              statusFilter.length > 0 && !statusFilter.includes('all')
+                ? statusFilter[0]
+                : undefined,
+            sync_official:
+              syncFilter.length > 0 && !syncFilter.includes('all')
+                ? syncFilter[0]
+                : undefined,
+            p: pagination.pageIndex + 1,
+            page_size: pagination.pageSize,
+          })
+        )
+      }
+
+      return unwrapApiResponse(
+        await getModels({
           status:
             statusFilter.length > 0 && !statusFilter.includes('all')
               ? statusFilter[0]
@@ -158,21 +176,9 @@ export function ModelsTable() {
           p: pagination.pageIndex + 1,
           page_size: pagination.pageSize,
         })
-      }
-
-      return getModels({
-        status:
-          statusFilter.length > 0 && !statusFilter.includes('all')
-            ? statusFilter[0]
-            : undefined,
-        sync_official:
-          syncFilter.length > 0 && !syncFilter.includes('all')
-            ? syncFilter[0]
-            : undefined,
-        p: pagination.pageIndex + 1,
-        page_size: pagination.pageSize,
-      })
+      )
     },
+    retry: shouldRetryQuery,
     placeholderData: (previousData) => previousData,
   })
 

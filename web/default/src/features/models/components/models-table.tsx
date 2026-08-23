@@ -48,7 +48,6 @@ export function ModelsTable() {
   const { t } = useTranslation()
   const { selectedVendor } = useModels()
 
-  // Table state
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     id: false,
@@ -64,7 +63,6 @@ export function ModelsTable() {
   const [rowSelection, setRowSelection] = useState({})
   const [managementOpen, setManagementOpen] = useState(false)
 
-  // URL state management
   const {
     globalFilter,
     onGlobalFilterChange,
@@ -88,7 +86,6 @@ export function ModelsTable() {
     ],
   })
 
-  // Extract filters from column filters
   const statusFilter =
     (columnFilters.find((f) => f.id === 'status')?.value as string[]) || []
   const vendorFilter =
@@ -97,7 +94,6 @@ export function ModelsTable() {
     (columnFilters.find((f) => f.id === 'sync_official')?.value as string[]) ||
     []
 
-  // Fetch vendors for filter
   const { data: vendorsData } = useQuery({
     queryKey: vendorsQueryKeys.list(),
     queryFn: () => getVendors({ page_size: 1000 }),
@@ -115,19 +111,16 @@ export function ModelsTable() {
     }))
   }, [vendors])
 
-  // Determine whether to use search or regular list API
   const shouldSearch = Boolean(globalFilter?.trim())
 
-  // Apply selected vendor from context or filter
   const activeVendorFilter =
     selectedVendor ||
     (vendorFilter.length > 0 && !vendorFilter.includes('all')
       ? vendorFilter[0]
       : undefined)
 
-  // Fetch models data
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: modelsQueryKeys.list({
       keyword: globalFilter,
       vendor: activeVendorFilter,
@@ -143,35 +136,39 @@ export function ModelsTable() {
       page_size: pagination.pageSize,
     }),
     queryFn: async () => {
-      if (shouldSearch || activeVendorFilter) {
-        return searchModels({
-          keyword: globalFilter,
-          vendor: activeVendorFilter,
-          status:
-            statusFilter.length > 0 && !statusFilter.includes('all')
-              ? statusFilter[0]
-              : undefined,
-          sync_official:
-            syncFilter.length > 0 && !syncFilter.includes('all')
-              ? syncFilter[0]
-              : undefined,
-          p: pagination.pageIndex + 1,
-          page_size: pagination.pageSize,
-        })
-      }
+      const result =
+        shouldSearch || activeVendorFilter
+          ? await searchModels({
+              keyword: globalFilter,
+              vendor: activeVendorFilter,
+              status:
+                statusFilter.length > 0 && !statusFilter.includes('all')
+                  ? statusFilter[0]
+                  : undefined,
+              sync_official:
+                syncFilter.length > 0 && !syncFilter.includes('all')
+                  ? syncFilter[0]
+                  : undefined,
+              p: pagination.pageIndex + 1,
+              page_size: pagination.pageSize,
+            })
+          : await getModels({
+              status:
+                statusFilter.length > 0 && !statusFilter.includes('all')
+                  ? statusFilter[0]
+                  : undefined,
+              sync_official:
+                syncFilter.length > 0 && !syncFilter.includes('all')
+                  ? syncFilter[0]
+                  : undefined,
+              p: pagination.pageIndex + 1,
+              page_size: pagination.pageSize,
+            })
 
-      return getModels({
-        status:
-          statusFilter.length > 0 && !statusFilter.includes('all')
-            ? statusFilter[0]
-            : undefined,
-        sync_official:
-          syncFilter.length > 0 && !syncFilter.includes('all')
-            ? syncFilter[0]
-            : undefined,
-        p: pagination.pageIndex + 1,
-        page_size: pagination.pageSize,
-      })
+      if (!result?.success) {
+        throw new Error(result?.message || t('Failed to load models'))
+      }
+      return result
     },
     placeholderData: (previousData) => previousData,
   })
@@ -179,11 +176,8 @@ export function ModelsTable() {
   const models = data?.data?.items || []
   const totalCount = data?.data?.total || 0
   const vendorCounts = data?.data?.vendor_counts
-
-  // Columns configuration
   const columns = useModelsColumns(vendors)
 
-  // React Table instance
   const table = useReactTable({
     data: models,
     columns,
@@ -209,13 +203,11 @@ export function ModelsTable() {
     manualFiltering: true,
   })
 
-  // Ensure page is in range when total count changes
   const pageCount = table.getPageCount()
   useEffect(() => {
     ensurePageInRange(pageCount)
   }, [pageCount, ensurePageInRange])
 
-  // Prepare filter options
   const vendorFilterOptions = [
     {
       label: `${t('All Vendors')}${vendorCounts?.all ? ` (${vendorCounts.all})` : ''}`,
@@ -236,33 +228,44 @@ export function ModelsTable() {
     })),
   ]
 
+  const showManagementSurface = managementOpen || isError
+
   return (
     <div className='space-y-3 sm:space-y-4'>
       <ModelsStats
-        models={models}
+        models={isError ? [] : models}
         vendors={vendors}
         managementOpen={managementOpen}
         onManagementToggle={() => setManagementOpen((open) => !open)}
       />
 
-      {managementOpen ? (
+      {showManagementSurface ? (
         <div className='space-y-3'>
-          <div className='flex flex-wrap items-center justify-end gap-2 px-1'>
-            <Link
-              to='/models/$section'
-              params={{ section: 'deployments' }}
-              className='border-border/60 bg-background/45 text-muted-foreground hover:bg-background/75 hover:text-foreground inline-flex h-8 items-center rounded-full border px-3 text-xs font-semibold transition-colors'
-            >
-              {t('Deployments')}
-            </Link>
-            <ModelsPrimaryButtons />
-          </div>
+          {managementOpen && !isError ? (
+            <div className='flex flex-wrap items-center justify-end gap-2 px-1'>
+              <Link
+                to='/models/$section'
+                params={{ section: 'deployments' }}
+                className='border-border/60 bg-background/45 text-muted-foreground hover:bg-background/75 hover:text-foreground inline-flex h-8 items-center rounded-full border px-3 text-xs font-semibold transition-colors'
+              >
+                {t('Deployments')}
+              </Link>
+              <ModelsPrimaryButtons />
+            </div>
+          ) : null}
 
           <DataTablePage
             table={table}
             columns={columns}
             isLoading={isLoading}
             isFetching={isFetching}
+            isError={isError}
+            errorTitle={t('Failed to load models')}
+            errorDescription={
+              error instanceof Error ? error.message : t('Please try again.')
+            }
+            retryLabel={t('Retry')}
+            onRetry={() => void refetch()}
             tableHeaderClassName='bg-background/80 backdrop-blur-md sticky top-0 z-10'
             tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
             emptyTitle={t('No Models Found')}

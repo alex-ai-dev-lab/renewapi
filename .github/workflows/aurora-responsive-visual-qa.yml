@@ -27,9 +27,17 @@ jobs:
         working-directory: web/default
         run: bun install --frozen-lockfile
 
-      - name: Verify application build
+      - name: Verify changed frontend quality
         working-directory: web/default
         run: |
+          bunx prettier --check src/hooks/use-mobile.ts src/hooks/use-mobile.tsx
+          bunx eslint src/hooks/use-mobile.ts src/hooks/use-mobile.tsx
+          bun run copyright:check -- src/hooks/use-mobile.ts src/hooks/use-mobile.tsx
+
+      - name: Verify application tests and build
+        working-directory: web/default
+        run: |
+          bun test
           bun run typecheck
           bun run build
 
@@ -62,6 +70,18 @@ jobs:
           ref_sha='3d91c3fd22fbfae284d48563d5a09ac046a81cd2'
           curl -fsSL "https://raw.githubusercontent.com/alex-ai-dev-lab/renewapi/${ref_sha}/.github/aurora-final-visual-qa.mjs" -o .aurora-responsive-base.mjs
 
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.aurora-responsive-base.mjs')
+          source = path.read_text()
+          needle = "await page.evaluate(()=>document.fonts?.ready);await page.screenshot"
+          replacement = """await page.evaluate(()=>document.fonts?.ready);const layout=await page.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth,bodyScrollWidth:document.body.scrollWidth,bodyClientWidth:document.body.clientWidth}));await fs.appendFile(path.join(outDir,'layout-metrics.txt'),`${name}\\t${JSON.stringify(layout)}\\n`);if(layout.scrollWidth>layout.clientWidth+1||layout.bodyScrollWidth>layout.bodyClientWidth+1){await fs.appendFile(path.join(outDir,'layout-errors.txt'),`${name}\\t${JSON.stringify(layout)}\\n`)}await page.screenshot"""
+          if needle not in source:
+              raise SystemExit('Unable to inject responsive overflow metrics into QA harness')
+          path.write_text(source.replace(needle, replacement, 1))
+          PY
+
       - name: Capture responsive Light and Dark matrices
         working-directory: web/default
         shell: bash
@@ -84,6 +104,7 @@ jobs:
 
             grep -q "width:${width},height:${height}" "$script"
             grep -q "colorScheme:'${theme}'" "$script"
+            grep -q 'layout-metrics.txt' "$script"
             QA_OUT="../../qa-artifacts/${label}" bun "$script"
           }
 
@@ -105,7 +126,7 @@ jobs:
               cat "$file" >&2
               failures=1
             fi
-          done < <(find qa-artifacts -type f \( -name 'console-errors.txt' -o -name 'unhandled.txt' \) | sort)
+          done < <(find qa-artifacts -type f \( -name 'console-errors.txt' -o -name 'unhandled.txt' -o -name 'layout-errors.txt' \) | sort)
           test "$failures" -eq 0
 
           printf '%s\n' \
@@ -115,7 +136,8 @@ jobs:
             'timezone=Asia/Taipei' \
             'pages=dashboard,channels,keys,logs,models,users,settings' \
             'consoleErrors=0' \
-            'unhandledApiRequests=0' > qa-artifacts/qa-summary.txt
+            'unhandledApiRequests=0' \
+            'horizontalOverflow=0' > qa-artifacts/qa-summary.txt
 
       - name: Upload responsive visual QA artifact
         if: always()

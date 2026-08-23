@@ -24,6 +24,7 @@ import { SectionPageLayout } from '@/components/layout'
 import type { NavGroup } from '@/components/layout/types'
 import { SegmentedTabs } from '@/components/page-primitives'
 import { CacheStatsDialog } from '@/features/system-settings/general/channel-affinity/cache-stats-dialog'
+import { CommonLogsStats } from './components/common-logs-stats'
 import { UserInfoDialog } from './components/dialogs/user-info-dialog'
 import {
   UsageLogsProvider,
@@ -52,7 +53,8 @@ const SECTION_META: Record<UsageLogsSectionId, { titleKey: string }> = {
 }
 
 function UsageLogsContent() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
   const navigate = useNavigate()
   const params = route.useParams()
   const activeCategory: UsageLogsSectionId =
@@ -103,8 +105,7 @@ function UsageLogsContent() {
     [navigate]
   )
 
-  const pageMeta =
-    activeCategory === 'common' ? SECTION_META.common : SECTION_META.task
+  const pageMeta = SECTION_META[activeCategory]
   const showTaskSwitcher =
     activeCategory !== 'common' && visibleSections.length > 1
 
@@ -114,8 +115,18 @@ function UsageLogsContent() {
         <SectionPageLayout.Title>
           {t(pageMeta.titleKey)}
         </SectionPageLayout.Title>
+        {activeCategory !== 'common' ? (
+          <SectionPageLayout.Description>
+            {t('aurora.logs.tasks.description', {
+              defaultValue: isChinese
+                ? '查看异步任务与绘图请求的执行记录、状态和资源消耗。'
+                : 'Inspect execution history, status and resource usage for asynchronous tasks and drawing requests.',
+            })}
+          </SectionPageLayout.Description>
+        ) : null}
         <SectionPageLayout.Content>
-          <div className='max-w-full min-w-0 space-y-3'>
+          <div className='max-w-full min-w-0 space-y-4'>
+            {activeCategory === 'common' && <CommonLogsStats variant='bento' />}
             {showTaskSwitcher && (
               <SegmentedTabs
                 value={activeCategory}

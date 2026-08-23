@@ -32,48 +32,39 @@ interface KPICardProps {
   className?: string
 }
 
-export function KPICard({
-  title,
-  value,
-  subtitle,
-  icon: Icon,
-  trend,
-  className,
-}: KPICardProps) {
+export function KPICard(props: KPICardProps) {
   return (
-    <Card className={cn('transition-all', className)}>
-      <CardContent className='p-6'>
-        <div className='flex items-start justify-between'>
-          <div className='flex-1 space-y-2'>
-            <p className='text-muted-foreground text-[11px] font-bold tracking-[1.4px] uppercase'>
-              {title}
-            </p>
-            <p className='text-3xl font-extrabold tracking-[-0.03em] tabular-nums'>
-              {value}
-            </p>
-            {subtitle && (
-              <p className='text-muted-foreground text-xs'>{subtitle}</p>
-            )}
-          </div>
-          {Icon && (
-            <div className='flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-(--aurora-from) to-(--aurora-to) shadow-[0_6px_18px_var(--aurora-glow)]'>
-              <Icon className='h-6 w-6 text-white' />
-            </div>
-          )}
-        </div>
-        {trend && (
-          <div className='mt-4 flex items-center gap-1 text-sm'>
+    <Card
+      className={cn(
+        'border-border/60 bg-card/70 min-h-[120px] overflow-hidden',
+        props.className
+      )}
+    >
+      <CardContent className='h-full p-5'>
+        <p className='text-muted-foreground text-[11px] font-bold tracking-[1.2px] uppercase'>
+          {props.title}
+        </p>
+        <p className='mt-2 text-[34px] leading-none font-extrabold tracking-[-0.03em] tabular-nums'>
+          {props.value}
+        </p>
+        <div className='mt-2 flex min-w-0 items-center gap-2'>
+          {props.trend && (
             <span
               className={cn(
-                'font-medium',
-                trend.isPositive ? 'text-success' : 'text-destructive'
+                'shrink-0 text-[11px] font-semibold',
+                props.trend.isPositive ? 'text-success' : 'text-destructive'
               )}
             >
-              {trend.isPositive ? '↑' : '↓'} {Math.abs(trend.value).toFixed(1)}%
+              {props.trend.isPositive ? '▲' : '▼'}{' '}
+              {Math.abs(props.trend.value).toFixed(1)}%
             </span>
-            <span className='text-muted-foreground'>vs last period</span>
-          </div>
-        )}
+          )}
+          {props.subtitle && (
+            <p className='truncate text-[11px] font-semibold text-[#3E8E5A]'>
+              {props.subtitle}
+            </p>
+          )}
+        </div>
       </CardContent>
     </Card>
   )

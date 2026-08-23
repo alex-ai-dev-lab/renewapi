@@ -16,35 +16,129 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useQuery } from '@tanstack/react-query'
+import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { InlineStatsBar } from '@/components/inline-stats-bar'
-import { USER_STATUS, isUserDeleted } from '../constants'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { getGroups, getUsers, searchUsers } from '../api'
+import { USER_STATUS } from '../constants'
 import type { User } from '../types'
+import { useUsers } from './users-provider'
 
-const DAY_MS = 24 * 60 * 60 * 1000
-
-export function UsersStats({ users }: { users: User[] }) {
-  const { t } = useTranslation()
-  const now = Date.now()
-  const disabledUsers = users.filter(
-    (user) => isUserDeleted(user) || user.status === USER_STATUS.DISABLED
-  )
-  const newToday = users.filter((user) => {
-    if (!user.created_at) return false
-    return now - user.created_at * 1000 < DAY_MS
+export function UsersStats(props: { users: User[] }) {
+  const { t, i18n } = useTranslation()
+  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
+  const { setOpen, setCurrentRow } = useUsers()
+  const { data: totalResponse } = useQuery({
+    queryKey: ['users', 'aurora-stats', 'total'],
+    queryFn: () => getUsers({ p: 1, page_size: 1 }),
+    staleTime: 30_000,
+  })
+  const { data: groupsResponse } = useQuery({
+    queryKey: ['groups', 'aurora-user-stats'],
+    queryFn: () => getGroups({ timeoutClass: 'background' }),
+    staleTime: 60_000,
+  })
+  const { data: disabledResponse } = useQuery({
+    queryKey: ['users', 'aurora-stats', 'disabled'],
+    queryFn: () =>
+      searchUsers({
+        status: String(USER_STATUS.DISABLED),
+        p: 1,
+        page_size: 1,
+      }),
+    staleTime: 30_000,
   })
 
+  const totalUsers = totalResponse?.data?.total ?? props.users.length
+  const groups = groupsResponse?.data ?? []
+  const disabledUsers = disabledResponse?.data?.total ?? 0
+  const groupNames = groups.slice(0, 5).join(' / ')
+  const groupDetail =
+    groupNames ||
+    t('aurora.users.groups.empty', {
+      defaultValue: isChinese ? '暂无分组' : 'No groups',
+    })
+  const items = [
+    {
+      label: t('aurora.users.total.title', {
+        defaultValue: isChinese ? '注册用户' : 'Total Users',
+      }),
+      value: totalUsers,
+      detail: t('aurora.users.total.detail', {
+        defaultValue: isChinese
+          ? '全局账户总数'
+          : 'Total accounts across the gateway',
+      }),
+      tone: 'text-foreground',
+    },
+    {
+      label: t('aurora.users.groups.title', {
+        defaultValue: isChinese ? '计费分组' : 'Billing groups',
+      }),
+      value: groups.length,
+      detail: groupDetail,
+      tone: 'text-primary',
+    },
+    {
+      label: t('aurora.users.disabled.title', {
+        defaultValue: isChinese ? '停用账户' : 'Disabled',
+      }),
+      value: disabledUsers,
+      detail: t('aurora.users.disabled.detail', {
+        defaultValue: isChinese
+          ? '全局停用状态账户'
+          : 'Disabled accounts across the gateway',
+      }),
+      tone: disabledUsers > 0 ? 'text-warning' : 'text-foreground',
+    },
+  ]
+
+  const handleCreate = () => {
+    setCurrentRow(null)
+    setOpen('create')
+  }
+
   return (
-    <InlineStatsBar
-      items={[
-        { label: t('Total Users'), value: users.length },
-        { label: t('New Today'), value: newToday.length, tone: 'accent' },
-        {
-          label: t('Disabled'),
-          value: disabledUsers.length,
-          tone: disabledUsers.length > 0 ? 'destructive' : 'default',
-        },
-      ]}
-    />
+    <div className='space-y-4'>
+      <div className='grid gap-4 sm:grid-cols-3'>
+        {items.map((item) => (
+          <div key={item.label} className='glass-tile min-h-[118px] p-5'>
+            <div className='flex h-full flex-col justify-between gap-3'>
+              <span className='text-muted-foreground text-[10px] font-bold tracking-[1.35px] uppercase'>
+                {item.label}
+              </span>
+              <div>
+                <div
+                  className={cn(
+                    'text-[28px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
+                    item.tone
+                  )}
+                >
+                  {item.value}
+                </div>
+                <div className='text-muted-foreground mt-1 truncate text-[10px]'>
+                  {item.detail}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className='flex items-center justify-between gap-3 px-1 pt-1'>
+        <h2 className='text-[15px] font-extrabold tracking-[-0.01em]'>
+          {t('aurora.users.list.title', {
+            defaultValue: isChinese ? '用户与分组' : 'Users & groups',
+          })}
+        </h2>
+        <Button size='sm' onClick={handleCreate}>
+          <Plus className='size-4' />
+          {t('aurora.users.add', {
+            defaultValue: isChinese ? '添加用户' : 'Add User',
+          })}
+        </Button>
+      </div>
+    </div>
   )
 }

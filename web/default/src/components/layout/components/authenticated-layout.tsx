@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import '@/styles/aurora-reference.css'
 import { getCookie } from '@/lib/cookies'
 import { cn } from '@/lib/utils'
 import { LayoutProvider } from '@/context/layout-provider'
@@ -25,6 +26,7 @@ import { AnimatedOutlet } from '@/components/page-transition'
 import { SkipToMain } from '@/components/skip-to-main'
 import { AppHeader } from './app-header'
 import { AppSidebar } from './app-sidebar'
+import { AuroraDock, AuroraTopbar } from './aurora-shell'
 import { CommandPalette } from './command-palette'
 
 type AuthenticatedLayoutProps = {
@@ -40,18 +42,26 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
         <SidebarProvider defaultOpen={defaultOpen} className='flex-col'>
           <SkipToMain />
           <CommandPalette />
-          <AppHeader />
+          <div className='lg:hidden'>
+            <AppHeader showTopNav={false} />
+          </div>
           <div className='flex min-h-0 w-full flex-1'>
-            <AppSidebar />
+            <div className='lg:hidden'>
+              <AppSidebar />
+            </div>
             <SidebarInset
               className={cn(
-                '@container/content',
-                'h-[calc(100svh-var(--app-header-height,0px))]',
+                '@container/content bg-transparent',
+                'h-[calc(100svh-var(--app-header-height,0px))] lg:h-svh',
                 'min-h-0 min-w-0 overflow-hidden',
-                'peer-data-[variant=inset]:h-[calc(100svh-var(--app-header-height,0px)-(var(--spacing)*4))]'
+                'peer-data-[variant=inset]:h-[calc(100svh-var(--app-header-height,0px)-(var(--spacing)*4))] lg:peer-data-[variant=inset]:h-svh'
               )}
             >
-              {props.children ?? <AnimatedOutlet />}
+              <AuroraTopbar />
+              <div className='flex min-h-0 min-w-0 flex-1 flex-col'>
+                {props.children ?? <AnimatedOutlet />}
+              </div>
+              <AuroraDock />
             </SidebarInset>
           </div>
         </SidebarProvider>

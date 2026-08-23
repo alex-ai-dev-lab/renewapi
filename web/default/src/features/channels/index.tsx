@@ -18,27 +18,49 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 import { SectionPageLayout } from '@/components/layout'
+import { ChannelsAuroraOverview } from './components/channels-aurora-overview'
 import { ChannelsDialogs } from './components/channels-dialogs'
 import { ChannelsPrimaryButtons } from './components/channels-primary-buttons'
 import { ChannelsProvider } from './components/channels-provider'
 import { ChannelsTable } from './components/channels-table'
 
 export function Channels() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
+
   return (
     <ChannelsProvider>
       <SectionPageLayout>
-        <SectionPageLayout.Title>{t('Channels')}</SectionPageLayout.Title>
+        <SectionPageLayout.Title>
+          {t('aurora.channels.hero.lead', {
+            defaultValue: isChinese ? '渠道' : 'Channel',
+          })}{' '}
+          <span className='text-aurora'>
+            {t('aurora.channels.hero.accent', {
+              defaultValue: isChinese ? '编排' : 'orchestration',
+            })}
+          </span>
+        </SectionPageLayout.Title>
         <SectionPageLayout.Description>
-          {t(
-            'Manage upstream providers, health, failover posture, and routing readiness from one control surface.'
-          )}
+          {t('aurora.channels.hero.description', {
+            defaultValue: isChinese
+              ? '选择 · 重试 · 限流 · 观测，一站式完成'
+              : 'Selection · retries · rate limits · observability, in one place',
+          })}
         </SectionPageLayout.Description>
-        <SectionPageLayout.Actions>
-          <ChannelsPrimaryButtons />
-        </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <ChannelsTable />
+          <div className='space-y-4'>
+            <ChannelsAuroraOverview />
+            <div className='flex flex-wrap items-center justify-between gap-3 px-1 pt-1'>
+              <h2 className='text-[15px] font-extrabold tracking-[-0.01em]'>
+                {t('aurora.channels.list.title', {
+                  defaultValue: isChinese ? '渠道清单' : 'Channel list',
+                })}
+              </h2>
+              <ChannelsPrimaryButtons variant='tools' />
+            </div>
+            <ChannelsTable />
+          </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

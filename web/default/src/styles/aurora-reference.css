@@ -1,0 +1,269 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+/*
+ * Browser-rendered fidelity overrides for the supplied Aurora Bento v2
+ * reference. These values intentionally follow the reference art direction
+ * instead of deriving the light-mode brand treatment from the current theme
+ * accent. Dark mode remains governed by the existing Aurora/theme layers.
+ */
+html:not(.dark) {
+  --aurora-from: #4f7cff;
+  --aurora-violet: #8a5bff;
+  --aurora-mid: #b16bff;
+  --aurora-pink: #ff7ab8;
+  --aurora-to: #8a5bff;
+  --aurora-glow: rgba(96, 110, 255, 0.35);
+  --aurora-line: rgba(31, 36, 48, 0.08);
+  --aurora-glass: rgba(255, 255, 255, 0.62);
+  --aurora-glass-strong: rgba(255, 255, 255, 0.8);
+}
+
+html:not(.dark) body {
+  background:
+    radial-gradient(900px 500px at 8% -10%, #dbeafe 0%, transparent 60%),
+    radial-gradient(800px 480px at 92% 4%, #fce7f3 0%, transparent 55%),
+    radial-gradient(900px 620px at 55% 110%, #d1fae5 0%, transparent 60%),
+    radial-gradient(600px 400px at 30% 55%, #fef3c7 0%, transparent 55%),
+    #f6f7fb;
+  background-attachment: fixed;
+}
+
+html:not(.dark) [data-slot='card'],
+html:not(.dark) [data-slot='primitive-data-table'] {
+  background: var(--aurora-glass) !important;
+  border-color: var(--aurora-line);
+  border-radius: 22px;
+  box-shadow: 0 8px 30px rgba(80, 90, 140, 0.08);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+
+html:not(.dark) [data-slot='button'].bg-primary,
+html:not(.dark) [data-slot='badge'].bg-primary {
+  border-color: transparent;
+  border-radius: 999px;
+  background-image: linear-gradient(135deg, #4f7cff, #8a5bff);
+  box-shadow: 0 8px 20px rgba(96, 110, 255, 0.35);
+}
+
+html:not(.dark) [data-slot='button'].bg-primary:hover {
+  background-image: linear-gradient(135deg, #456fe8, #7b50ea);
+  box-shadow: 0 10px 24px rgba(96, 110, 255, 0.42);
+}
+
+html:not(.dark) .text-aurora {
+  background-image: linear-gradient(100deg, #4f7cff, #b16bff 55%, #ff7ab8);
+}
+
+html:not(.dark) [data-slot='card'].aurora-reference-surface-1,
+html:not(.dark) .aurora-reference-surface-1 {
+  background:
+    linear-gradient(135deg, rgba(79, 124, 255, 0.14), rgba(138, 91, 255, 0.1)),
+    var(--aurora-glass) !important;
+}
+
+html:not(.dark) [data-slot='card'].aurora-reference-surface-2,
+html:not(.dark) .aurora-reference-surface-2 {
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 122, 184, 0.14),
+      rgba(255, 196, 110, 0.1)
+    ),
+    var(--aurora-glass) !important;
+}
+
+html:not(.dark) [data-slot='card'].aurora-reference-surface-3,
+html:not(.dark) .aurora-reference-surface-3 {
+  background:
+    linear-gradient(135deg, rgba(52, 199, 149, 0.14), rgba(79, 124, 255, 0.08)),
+    var(--aurora-glass) !important;
+}
+
+html:not(.dark) .aurora-reference-progress {
+  background-image: linear-gradient(90deg, #4f7cff, #b16bff);
+}
+
+/* Match the source dock's shrink-to-content pill instead of the flex inset. */
+@media (min-width: 1024px) {
+  html:not(.dark) nav.fixed.left-1\/2 {
+    width: max-content;
+    max-width: calc(100vw - 32px);
+  }
+}
+
+/* The reference Hero lands its Bento grid noticeably closer to the subtitle. */
+@media (min-width: 640px) {
+  main .mb-\[26px\] {
+    margin-bottom: 12px;
+  }
+}
+
+/*
+ * Production tables keep every filter/action, but their chrome is visually
+ * demoted so the list reads as one soft Aurora glass surface rather than a
+ * stack of admin-console cards.
+ */
+html:not(.dark) main .border-border.bg-card.rounded-lg.border.p-2\.5 {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 0 8px;
+}
+
+html:not(.dark)
+  main
+  .border-border.bg-card.max-w-full.min-w-0.overflow-hidden.rounded-lg.border {
+  border-color: var(--aurora-line);
+  border-radius: 22px;
+  background: var(--aurora-glass);
+  box-shadow: 0 8px 30px rgba(80, 90, 140, 0.08);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+
+html:not(.dark) main [data-slot='table-header'] {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+html:not(.dark) main [data-slot='table-head'] {
+  height: auto;
+  padding: 10px 14px;
+  color: #6e7484;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+html:not(.dark) main [data-slot='table-cell'] {
+  padding: 12px 14px;
+  font-size: 13px;
+}
+
+/* Reference-size toggles used only by the Aurora Settings landing. */
+.aurora-settings-switch {
+  width: 46px !important;
+  height: 27px !important;
+}
+
+html:not(.dark) .aurora-settings-switch[data-checked] {
+  background-image: linear-gradient(135deg, #4f7cff, #8a5bff);
+}
+
+.aurora-settings-switch [data-slot='switch-thumb'] {
+  width: 21px !important;
+  height: 21px !important;
+  transform: translateX(0) !important;
+}
+
+.aurora-settings-switch[data-checked] [data-slot='switch-thumb'] {
+  transform: translateX(19px) !important;
+}
+
+/*
+ * Settings uses the source's near-white glass panels. The feature structure
+ * is real React UI; these selectors only remove Card's default inter-child
+ * gap and keep the landing density aligned with the supplied reference.
+ */
+html:not(.dark)
+  [data-slot='card']:has(a[href='/system-settings/operations/behavior']),
+html:not(.dark)
+  [data-slot='card']:has(a[href='/system-settings/security/anti-poison-guard']),
+html:not(.dark)
+  [data-slot='card']:has(a[href='/system-settings/site/system-info']) {
+  gap: 0;
+  background: var(--aurora-glass) !important;
+}
+
+/* Model Registry in the source is intentionally compact above the fold. */
+html:not(.dark) main .glass-tile:has(> .grid > article.glass-tile) {
+  padding: 16px !important;
+}
+
+html:not(.dark) main article.glass-tile {
+  min-height: 140px !important;
+  padding: 16px !important;
+}
+
+html:not(.dark) main article.glass-tile p.line-clamp-2 {
+  display: none;
+}
+
+html:not(.dark) main article.glass-tile .border-t {
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+/* Reference-style unified data panel. Feature pages opt into these classes. */
+html:not(.dark) .aurora-data-panel {
+  overflow: hidden;
+  border: 1px solid var(--aurora-line);
+  border-radius: 22px;
+  background: var(--aurora-glass);
+  box-shadow: 0 8px 30px rgba(80, 90, 140, 0.08);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+
+.aurora-data-panel .aurora-data-stack > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0;
+}
+
+html:not(.dark) .aurora-data-panel .aurora-data-toolbar {
+  border: 0;
+  border-bottom: 1px solid var(--aurora-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 10px 14px;
+}
+
+html:not(.dark) .aurora-data-panel .aurora-data-table {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+html:not(.dark) .aurora-data-panel [data-slot='table-header'] {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Final reference-density table viewport */
+@media (min-width: 1024px) {
+  html:not(.dark)
+    main
+    .border-border.bg-card.max-w-full.min-w-0.overflow-hidden.rounded-lg.border
+    > .max-w-full.overflow-x-auto {
+    max-height: 250px;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  html:not(.dark)
+    main
+    .border-border.bg-card.max-w-full.min-w-0.overflow-hidden.rounded-lg.border
+    [data-slot='table-header'] {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+}

@@ -16,9 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useMemo, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getRouteApi } from '@tanstack/react-router'
+import { getRouteApi, Link } from '@tanstack/react-router'
 import {
   getCoreRowModel,
   useReactTable,
@@ -38,6 +38,7 @@ import {
 import { modelsQueryKeys, vendorsQueryKeys } from '../lib'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { useModelsColumns } from './models-columns'
+import { ModelsPrimaryButtons } from './models-primary-buttons'
 import { useModels } from './models-provider'
 import { ModelsStats } from './models-stats'
 
@@ -61,6 +62,7 @@ export function ModelsTable() {
     updated_time: false,
   })
   const [rowSelection, setRowSelection] = useState({})
+  const [managementOpen, setManagementOpen] = useState(false)
 
   // URL state management
   const {
@@ -156,20 +158,20 @@ export function ModelsTable() {
           p: pagination.pageIndex + 1,
           page_size: pagination.pageSize,
         })
-      } else {
-        return getModels({
-          status:
-            statusFilter.length > 0 && !statusFilter.includes('all')
-              ? statusFilter[0]
-              : undefined,
-          sync_official:
-            syncFilter.length > 0 && !syncFilter.includes('all')
-              ? syncFilter[0]
-              : undefined,
-          p: pagination.pageIndex + 1,
-          page_size: pagination.pageSize,
-        })
       }
+
+      return getModels({
+        status:
+          statusFilter.length > 0 && !statusFilter.includes('all')
+            ? statusFilter[0]
+            : undefined,
+        sync_official:
+          syncFilter.length > 0 && !syncFilter.includes('all')
+            ? syncFilter[0]
+            : undefined,
+        p: pagination.pageIndex + 1,
+        page_size: pagination.pageSize,
+      })
     },
     placeholderData: (previousData) => previousData,
   })
@@ -236,55 +238,76 @@ export function ModelsTable() {
 
   return (
     <div className='space-y-3 sm:space-y-4'>
-      <ModelsStats models={models} vendors={vendors} />
-      <DataTablePage
-        table={table}
-        columns={columns}
-        isLoading={isLoading}
-        isFetching={isFetching}
-        tableHeaderClassName='bg-background/80 backdrop-blur-md sticky top-0 z-10'
-        tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
-        emptyTitle={t('No Models Found')}
-        emptyDescription={t(
-          'No models available. Create your first model to get started.'
-        )}
-        skeletonKeyPrefix='model-skeleton'
-        toolbarProps={{
-          searchPlaceholder: t('Filter by model name...'),
-          additionalSearch: (
-            <FilterPills
-              value={activeSync}
-              options={syncPillOptions}
-              onValueChange={(value) => {
-                onColumnFiltersChange((prev) => {
-                  const filtered = prev.filter(
-                    (filter) => filter.id !== 'sync_official'
-                  )
-                  return value === 'all'
-                    ? filtered
-                    : [...filtered, { id: 'sync_official', value: [value] }]
-                })
-              }}
-              className='min-w-0'
-            />
-          ),
-          filters: [
-            {
-              columnId: 'status',
-              title: t('Status'),
-              options: [...getModelStatusOptions(t)],
-              singleSelect: true,
-            },
-            {
-              columnId: 'vendor_id',
-              title: t('Vendor'),
-              options: vendorFilterOptions,
-              singleSelect: true,
-            },
-          ],
-        }}
-        bulkActions={<DataTableBulkActions table={table} />}
+      <ModelsStats
+        models={models}
+        vendors={vendors}
+        managementOpen={managementOpen}
+        onManagementToggle={() => setManagementOpen((open) => !open)}
       />
+
+      {managementOpen ? (
+        <div className='space-y-3'>
+          <div className='flex flex-wrap items-center justify-end gap-2 px-1'>
+            <Link
+              to='/models/$section'
+              params={{ section: 'deployments' }}
+              className='border-border/60 bg-background/45 text-muted-foreground hover:bg-background/75 hover:text-foreground inline-flex h-8 items-center rounded-full border px-3 text-xs font-semibold transition-colors'
+            >
+              {t('Deployments')}
+            </Link>
+            <ModelsPrimaryButtons />
+          </div>
+
+          <DataTablePage
+            table={table}
+            columns={columns}
+            isLoading={isLoading}
+            isFetching={isFetching}
+            tableHeaderClassName='bg-background/80 backdrop-blur-md sticky top-0 z-10'
+            tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
+            emptyTitle={t('No Models Found')}
+            emptyDescription={t(
+              'No models available. Create your first model to get started.'
+            )}
+            skeletonKeyPrefix='model-skeleton'
+            toolbarProps={{
+              searchPlaceholder: t('Filter by model name...'),
+              additionalSearch: (
+                <FilterPills
+                  value={activeSync}
+                  options={syncPillOptions}
+                  onValueChange={(value) => {
+                    onColumnFiltersChange((prev) => {
+                      const filtered = prev.filter(
+                        (filter) => filter.id !== 'sync_official'
+                      )
+                      return value === 'all'
+                        ? filtered
+                        : [...filtered, { id: 'sync_official', value: [value] }]
+                    })
+                  }}
+                  className='min-w-0'
+                />
+              ),
+              filters: [
+                {
+                  columnId: 'status',
+                  title: t('Status'),
+                  options: [...getModelStatusOptions(t)],
+                  singleSelect: true,
+                },
+                {
+                  columnId: 'vendor_id',
+                  title: t('Vendor'),
+                  options: vendorFilterOptions,
+                  singleSelect: true,
+                },
+              ],
+            }}
+            bulkActions={<DataTableBulkActions table={table} />}
+          />
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -25,13 +25,16 @@ function formatLatency(value: number): string {
   return `${Math.round(value)} ms`
 }
 
-export function ChannelsStats({ channels }: { channels: Channel[] }) {
+export function ChannelsStats(props: { channels: Channel[] }) {
   const { t } = useTranslation()
-  const leafChannels = channels.filter(
-    (channel) => !(channel as Channel & { children?: Channel[] }).children?.length
+  const leafChannels = props.channels.filter(
+    (channel) =>
+      !(channel as Channel & { children?: Channel[] }).children?.length
   )
   const enabledChannels = leafChannels.filter((channel) => channel.status === 1)
-  const abnormalChannels = leafChannels.filter((channel) => channel.status !== 1)
+  const abnormalChannels = leafChannels.filter(
+    (channel) => channel.status !== 1
+  )
   const latencySamples = enabledChannels
     .map((channel) => channel.response_time)
     .filter((value) => Number.isFinite(value) && value > 0)
@@ -43,6 +46,7 @@ export function ChannelsStats({ channels }: { channels: Channel[] }) {
 
   return (
     <InlineStatsBar
+      className='hidden'
       items={[
         { label: t('Total Channels'), value: leafChannels.length },
         { label: t('Enabled'), value: enabledChannels.length, tone: 'success' },
@@ -51,7 +55,11 @@ export function ChannelsStats({ channels }: { channels: Channel[] }) {
           value: abnormalChannels.length,
           tone: abnormalChannels.length > 0 ? 'destructive' : 'default',
         },
-        { label: t('Avg. Latency'), value: formatLatency(averageLatency), tone: 'accent' },
+        {
+          label: t('Avg. Latency'),
+          value: formatLatency(averageLatency),
+          tone: 'accent',
+        },
       ]}
     />
   )

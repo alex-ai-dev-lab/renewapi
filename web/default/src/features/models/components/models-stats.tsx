@@ -16,30 +16,273 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { CSSProperties } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { InlineStatsBar } from '@/components/inline-stats-bar'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { usePricingData } from '@/features/pricing/hooks'
+import { formatPrice, formatRequestPrice } from '@/features/pricing/lib/price'
+import type { PricingModel } from '@/features/pricing/types'
+import { getModels } from '../api'
 import type { Model, Vendor } from '../types'
 
-export function ModelsStats({
-  models,
-  vendors,
-}: {
+const toneBackgrounds: CSSProperties['background'][] = [
+  'linear-gradient(135deg, color-mix(in oklch, var(--primary) 13%, transparent), color-mix(in oklch, var(--card) 88%, transparent))',
+  'linear-gradient(135deg, color-mix(in oklch, var(--warning) 12%, transparent), color-mix(in oklch, var(--card) 89%, transparent))',
+  'linear-gradient(135deg, color-mix(in oklch, var(--success) 13%, transparent), color-mix(in oklch, var(--card) 88%, transparent))',
+]
+
+type PricingCopy = {
+  unavailable: string
+  dynamic: string
+  requestUnit: string
+  input: string
+  output: string
+}
+
+function getPricingLine(
+  pricingModel: PricingModel | undefined,
+  priceRate: number,
+  usdExchangeRate: number,
+  copy: PricingCopy
+) {
+  if (!pricingModel) return copy.unavailable
+
+  if (
+    pricingModel.billing_mode === 'tiered_expr' &&
+    Boolean(pricingModel.billing_expr)
+  ) {
+    return copy.dynamic
+  }
+
+  if (pricingModel.quota_type === 1) {
+    return `${formatRequestPrice(
+      pricingModel,
+      false,
+      priceRate,
+      usdExchangeRate
+    )} / ${copy.requestUnit}`
+  }
+
+  const input = formatPrice(
+    pricingModel,
+    'input',
+    'M',
+    false,
+    priceRate,
+    usdExchangeRate
+  )
+  const output = formatPrice(
+    pricingModel,
+    'output',
+    'M',
+    false,
+    priceRate,
+    usdExchangeRate
+  )
+  return `${copy.input} ${input}/1M · ${copy.output} ${output}/1M`
+}
+
+export function ModelsStats(props: {
   models: Model[]
   vendors: Vendor[]
+  managementOpen: boolean
+  onManagementToggle: () => void
 }) {
-  const { t } = useTranslation()
-  const enabledModels = models.filter((model) => model.status === 1)
-  const syncedModels = models.filter((model) => model.sync_official === 1)
-  const activeVendorIds = new Set(models.map((model) => model.vendor_id).filter(Boolean))
+  const { t, i18n } = useTranslation()
+  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
+  const {
+    models: pricingModels,
+    priceRate,
+    usdExchangeRate,
+    isLoading: pricingLoading,
+  } = usePricingData()
+  const { data: registryCountResponse } = useQuery({
+    queryKey: ['models', 'aurora-registry-total'],
+    queryFn: () => getModels({ p: 1, page_size: 1 }),
+    staleTime: 60_000,
+  })
+  const vendorNames = new Map(
+    props.vendors.map((vendor) => [vendor.id, vendor.name])
+  )
+  const pricingByName = new Map(
+    pricingModels.map((model) => [model.model_name, model])
+  )
+  const visibleModels = props.models.slice(0, 6)
+  const totalModels = registryCountResponse?.data?.total ?? props.models.length
+  const pricingCopy: PricingCopy = {
+    unavailable: t('aurora.models.pricing.unavailable', {
+      defaultValue: isChinese ? '价格待同步' : 'Pricing unavailable',
+    }),
+    dynamic: t('aurora.models.pricing.dynamic', {
+      defaultValue: isChinese ? '动态定价' : 'Dynamic pricing',
+    }),
+    requestUnit: t('aurora.models.pricing.requestUnit', {
+      defaultValue: isChinese ? '次' : 'request',
+    }),
+    input: t('aurora.models.pricing.input', {
+      defaultValue: isChinese ? '输入' : 'Input',
+    }),
+    output: t('aurora.models.pricing.output', {
+      defaultValue: isChinese ? '输出' : 'Output',
+    }),
+  }
+  const registrySummary = t('aurora.models.registry.summary', {
+    defaultValue: isChinese
+      ? '{{models}} 个登记模型 · {{vendors}} 家供应商 · 当前展示 {{visible}} 个'
+      : '{{models}} registered models · {{vendors}} vendors · showing {{visible}}',
+    models: totalModels,
+    vendors: props.vendors.length,
+    visible: visibleModels.length,
+  })
+  let pricingStatus = t('aurora.models.registry.pricingReady', {
+    defaultValue: isChinese
+      ? '当前视图模型使用实时定价数据'
+      : 'Current-view models use live pricing data',
+  })
+  if (pricingLoading) {
+    pricingStatus = t('aurora.models.registry.pricingLoading', {
+      defaultValue: isChinese ? '正在同步实时定价…' : 'Syncing live pricing…',
+    })
+  }
+
+  if (visibleModels.length === 0) return null
 
   return (
-    <InlineStatsBar
-      items={[
-        { label: t('Total Models'), value: models.length },
-        { label: t('Enabled'), value: enabledModels.length, tone: 'success' },
-        { label: t('Official Sync'), value: syncedModels.length, tone: 'accent' },
-        { label: t('Active Vendors'), value: activeVendorIds.size || vendors.length },
-      ]}
-    />
+    <div className='space-y-4'>
+      <div className='glass-tile flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between'>
+        <div>
+          <div className='text-muted-foreground text-[10px] font-bold tracking-[1.35px] uppercase'>
+            {t('aurora.models.registry.title', {
+              defaultValue: 'Model Registry',
+            })}
+          </div>
+          <div className='mt-1 text-[20px] font-extrabold tracking-[-0.025em]'>
+            {registrySummary}
+          </div>
+          <div className='text-muted-foreground mt-1 text-xs'>
+            {pricingStatus}
+          </div>
+        </div>
+        <Button
+          type='button'
+          variant='outline'
+          size='sm'
+          onClick={props.onManagementToggle}
+          className='shrink-0 rounded-full bg-white/45 px-4'
+          aria-expanded={props.managementOpen}
+        >
+          {props.managementOpen
+            ? t('aurora.models.management.close', {
+                defaultValue: isChinese ? '收起管理' : 'Close management',
+              })
+            : t('aurora.models.management.open', {
+                defaultValue: isChinese ? '管理模型' : 'Manage models',
+              })}
+        </Button>
+      </div>
+
+      <div className='glass-tile p-4 sm:p-5'>
+        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
+          {visibleModels.map((model, index) => {
+            const pricingModel = pricingByName.get(model.model_name)
+            const pricingLine = getPricingLine(
+              pricingModel,
+              priceRate,
+              usdExchangeRate,
+              pricingCopy
+            )
+            const vendorLabel = model.vendor_id
+              ? vendorNames.get(model.vendor_id) || t('Vendor')
+              : t('Model')
+            const statusLabel =
+              model.status === 1 ? t('Enabled') : t('Disabled')
+            const pricingLabel =
+              pricingLoading && !pricingModel
+                ? t('aurora.models.pricing.loading', {
+                    defaultValue: isChinese
+                      ? '价格同步中…'
+                      : 'Loading pricing…',
+                  })
+                : pricingLine
+            const description =
+              model.description ||
+              t('aurora.models.card.description', {
+                defaultValue: isChinese
+                  ? '模型元数据、定价与路由配置'
+                  : 'Model metadata, pricing and routing configuration',
+              })
+            const syncLabel =
+              model.sync_official === 1
+                ? t('aurora.models.sync.official', {
+                    defaultValue: isChinese ? '官方同步' : 'official',
+                  })
+                : t('aurora.models.sync.local', {
+                    defaultValue: isChinese ? '本地' : 'local',
+                  })
+
+            return (
+              <article
+                key={model.id}
+                className='glass-tile min-h-[174px] p-5'
+                style={{
+                  background: toneBackgrounds[index % toneBackgrounds.length],
+                }}
+              >
+                <div className='flex h-full flex-col'>
+                  <div className='flex items-start justify-between gap-3'>
+                    <div className='text-muted-foreground text-[10px] font-bold tracking-[1.25px] uppercase'>
+                      {vendorLabel}
+                    </div>
+                    <span
+                      className={cn(
+                        'rounded-full px-2 py-1 text-[10px] font-bold',
+                        model.status === 1
+                          ? 'bg-success/12 text-success'
+                          : 'bg-muted text-muted-foreground'
+                      )}
+                    >
+                      {statusLabel}
+                    </span>
+                  </div>
+                  <div className='mt-3 truncate font-mono text-[17px] font-extrabold tracking-[-0.02em]'>
+                    {model.model_name}
+                  </div>
+                  <div className='text-foreground mt-1.5 truncate font-mono text-[11px] font-semibold tabular-nums'>
+                    {pricingLabel}
+                  </div>
+                  <p className='text-muted-foreground mt-1 line-clamp-2 min-h-9 text-xs leading-[18px]'>
+                    {description}
+                  </p>
+                  <div className='text-muted-foreground border-border/40 mt-auto flex items-center justify-between gap-3 border-t pt-3 text-[10px]'>
+                    <span>
+                      {t('aurora.models.channelCount', {
+                        defaultValue: isChinese
+                          ? '{{count}} 个渠道'
+                          : '{{count}} channels',
+                        count: model.bound_channels?.length ?? 0,
+                      })}
+                    </span>
+                    <span>
+                      {t('aurora.models.matchCount', {
+                        defaultValue: isChinese
+                          ? '{{count}} 个匹配'
+                          : '{{count}} matches',
+                        count:
+                          model.matched_count ??
+                          model.matched_models?.length ??
+                          0,
+                      })}
+                    </span>
+                    <span>{syncLabel}</span>
+                  </div>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      </div>
+    </div>
   )
 }

@@ -47,6 +47,11 @@ export function unwrapApiResponse<T>(data: T): T {
   return data
 }
 
+export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
+  if (error instanceof ApiBusinessError) return false
+  return failureCount < 2
+}
+
 export function getApiErrorMessage(
   error: unknown,
   fallback = 'Request failed'

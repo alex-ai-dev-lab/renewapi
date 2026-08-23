@@ -241,7 +241,8 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       }
       renderRow={(row) => {
         const logType = (row.original as Record<string, unknown>).type as
-          number | undefined
+          | number
+          | undefined
         const tintClass =
           isCommon && logType != null ? (logTypeRowTint[logType] ?? '') : ''
         return (

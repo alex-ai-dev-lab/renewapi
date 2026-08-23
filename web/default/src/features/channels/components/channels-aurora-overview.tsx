@@ -60,6 +60,12 @@ export function ChannelsAuroraOverview() {
   const { data: dailyChannelStats = [] } = useChannelStats('1d')
   const { data: dailyOverview } = useOverviewStats('1d')
 
+  const unavailable = data?.success === false
+  const unavailableMessage =
+    (unavailable && data?.message) ||
+    t('aurora.common.unavailable', {
+      defaultValue: isChinese ? '数据暂时不可用' : 'Data temporarily unavailable',
+    })
   const allChannels = data?.data?.items ?? []
   const dailyStatsById = new Map(
     dailyChannelStats.map((stat) => [stat.channel_id, stat])
@@ -85,6 +91,18 @@ export function ChannelsAuroraOverview() {
   const chartData = (dailyOverview?.trend ?? []).map((point) => ({
     requests: Math.max(0, point.requests),
   }))
+  const routingSummary = unavailable
+    ? t('aurora.channels.routing.unavailable', {
+        defaultValue: isChinese
+          ? '渠道清单暂时不可用'
+          : 'Channel inventory unavailable',
+      })
+    : t('aurora.channels.routing.summary', {
+        defaultValue: isChinese
+          ? '{{total}} 个渠道 · 按健康度与优先级自动编排'
+          : '{{total}} channels · health-aware orchestration',
+        total: total.toLocaleString(),
+      })
 
   return (
     <div className='grid grid-cols-12 gap-4'>
@@ -97,135 +115,139 @@ export function ChannelsAuroraOverview() {
               })}
             </div>
             <div className='mt-1 text-[20px] font-extrabold tracking-[-0.025em]'>
-              {t('aurora.channels.routing.summary', {
-                defaultValue: isChinese
-                  ? '{{total}} 个渠道 · 按健康度与优先级自动编排'
-                  : '{{total}} channels · health-aware orchestration',
-                total: total.toLocaleString(),
-              })}
+              {routingSummary}
             </div>
+            {unavailable ? (
+              <div className='text-muted-foreground mt-1 text-xs'>
+                {unavailableMessage}
+              </div>
+            ) : null}
           </div>
           <ChannelsPrimaryButtons variant='create' />
         </CardContent>
       </Card>
 
-      {isLoading && surfacedChannels.length === 0
-        ? Array.from({ length: 6 }).map((_, index) => (
-            <div
-              key={index}
-              className='bg-card/55 col-span-12 h-[136px] animate-pulse rounded-[22px] border sm:col-span-6 lg:col-span-4'
-            />
-          ))
-        : surfacedChannels.map((channel, index) => {
-            const enabled = channel.status === CHANNEL_STATUS.ENABLED
-            const stat = dailyStatsById.get(channel.id)
-            const latency = stat?.avg_first_token || channel.response_time || 0
-            const successRate = stat?.success_rate ?? 0
-            const hasTraffic = Boolean(stat && stat.total_requests > 0)
-            const degraded =
-              hasTraffic &&
-              successRate < healthThresholds.successRateGoodThreshold
-            const critical =
-              hasTraffic &&
-              successRate < healthThresholds.successRateDegradedThreshold
+      {unavailable
+        ? null
+        : isLoading && surfacedChannels.length === 0
+          ? Array.from({ length: 6 }).map((_, index) => (
+              <div
+                key={index}
+                className='bg-card/55 col-span-12 h-[136px] animate-pulse rounded-[22px] border sm:col-span-6 lg:col-span-4'
+              />
+            ))
+          : surfacedChannels.map((channel, index) => {
+              const enabled = channel.status === CHANNEL_STATUS.ENABLED
+              const stat = dailyStatsById.get(channel.id)
+              const latency = stat?.avg_first_token || channel.response_time || 0
+              const successRate = stat?.success_rate ?? 0
+              const hasTraffic = Boolean(stat && stat.total_requests > 0)
+              const degraded =
+                hasTraffic &&
+                successRate < healthThresholds.successRateGoodThreshold
+              const critical =
+                hasTraffic &&
+                successRate < healthThresholds.successRateDegradedThreshold
 
-            let statusLabel = t('aurora.status.healthy', {
-              defaultValue: isChinese ? '正常' : 'Healthy',
-            })
-            let statusClassName = 'bg-success/12 text-success'
-            if (!enabled) {
-              statusLabel = t('aurora.status.disabled', {
-                defaultValue: isChinese ? '停用' : 'Disabled',
+              let statusLabel = t('aurora.status.healthy', {
+                defaultValue: isChinese ? '正常' : 'Healthy',
               })
-              statusClassName = 'bg-destructive/10 text-destructive'
-            } else if (critical) {
-              statusLabel = t('aurora.status.critical', {
-                defaultValue: isChinese ? '异常' : 'Critical',
-              })
-              statusClassName = 'bg-destructive/10 text-destructive'
-            } else if (degraded) {
-              statusLabel = t('aurora.status.degraded', {
-                defaultValue: isChinese ? '告警' : 'Degraded',
-              })
-              statusClassName = 'bg-warning/14 text-warning'
-            }
+              let statusClassName = 'bg-success/12 text-success'
+              if (!enabled) {
+                statusLabel = t('aurora.status.disabled', {
+                  defaultValue: isChinese ? '停用' : 'Disabled',
+                })
+                statusClassName = 'bg-destructive/10 text-destructive'
+              } else if (critical) {
+                statusLabel = t('aurora.status.critical', {
+                  defaultValue: isChinese ? '异常' : 'Critical',
+                })
+                statusClassName = 'bg-destructive/10 text-destructive'
+              } else if (degraded) {
+                statusLabel = t('aurora.status.degraded', {
+                  defaultValue: isChinese ? '告警' : 'Degraded',
+                })
+                statusClassName = 'bg-warning/14 text-warning'
+              }
 
-            let successWidth = 0
-            if (enabled) successWidth = hasTraffic ? successRate : 100
+              let successWidth = 0
+              if (enabled) successWidth = hasTraffic ? successRate : 100
 
-            return (
-              <Card
-                key={channel.id}
-                className={cn(
-                  'border-border/60 col-span-12 min-h-[136px] overflow-hidden sm:col-span-6 lg:col-span-4',
-                  toneClasses[index % toneClasses.length]
-                )}
-              >
-                <CardContent className='p-4'>
-                  <div className='flex items-start justify-between gap-3'>
-                    <div className='min-w-0'>
-                      <div className='text-muted-foreground text-[10px] font-bold tracking-[1.2px] uppercase'>
-                        {t(getChannelTypeLabel(channel.type))}
+              return (
+                <Card
+                  key={channel.id}
+                  className={cn(
+                    'border-border/60 col-span-12 min-h-[136px] overflow-hidden sm:col-span-6 lg:col-span-4',
+                    toneClasses[index % toneClasses.length]
+                  )}
+                >
+                  <CardContent className='p-4'>
+                    <div className='flex items-start justify-between gap-3'>
+                      <div className='min-w-0'>
+                        <div className='text-muted-foreground text-[10px] font-bold tracking-[1.2px] uppercase'>
+                          {t(getChannelTypeLabel(channel.type))}
+                        </div>
+                        <div className='mt-1 truncate text-[19px] font-extrabold tracking-[-0.025em]'>
+                          {channel.name}
+                        </div>
                       </div>
-                      <div className='mt-1 truncate text-[19px] font-extrabold tracking-[-0.025em]'>
-                        {channel.name}
-                      </div>
+                      <span
+                        className={cn(
+                          'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold',
+                          statusClassName
+                        )}
+                      >
+                        <span className='size-1.5 rounded-full bg-current' />
+                        {statusLabel}
+                      </span>
                     </div>
-                    <span
-                      className={cn(
-                        'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold',
-                        statusClassName
-                      )}
-                    >
-                      <span className='size-1.5 rounded-full bg-current' />
-                      {statusLabel}
-                    </span>
-                  </div>
-                  <div className='mt-3 flex gap-[18px]'>
-                    <Metric
-                      label={t('aurora.metric.latency', {
-                        defaultValue: isChinese ? '延迟' : 'Latency',
-                      })}
-                      value={latency > 0 ? `${latency.toFixed(0)}ms` : t('N/A')}
-                    />
-                    <Metric
-                      label={t('aurora.metric.successRate', {
-                        defaultValue: isChinese ? '成功率' : 'Success rate',
-                      })}
-                      value={
-                        hasTraffic ? `${successRate.toFixed(1)}%` : t('N/A')
-                      }
-                    />
-                    <Metric
-                      label={t('aurora.metric.models', {
-                        defaultValue: isChinese ? '模型' : 'Models',
-                      })}
-                      value={t('aurora.common.modelCount', {
-                        defaultValue: isChinese ? '{{count}}个' : '{{count}}',
-                        count: modelCount(channel.models),
-                      })}
-                    />
-                  </div>
-                  <div className='bg-foreground/8 mt-2 h-1.5 overflow-hidden rounded-full'>
-                    <div
-                      className='aurora-reference-progress h-full rounded-full'
-                      style={{
-                        width: `${Math.min(100, Math.max(0, successWidth))}%`,
-                      }}
-                    />
-                  </div>
-                  <div className='text-muted-foreground mt-1.5 font-mono text-[10px]'>
-                    {t('Group')} {channel.group || 'default'} · {t('Priority')}{' '}
-                    {channel.priority ?? '—'} ·{' '}
-                    {t('aurora.common.today', {
-                      defaultValue: isChinese ? '今日' : 'Today',
-                    })}{' '}
-                    ${(stat?.total_cost ?? 0).toFixed(2)}
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
+                    <div className='mt-3 flex gap-[18px]'>
+                      <Metric
+                        label={t('aurora.metric.latency', {
+                          defaultValue: isChinese ? '延迟' : 'Latency',
+                        })}
+                        value={
+                          latency > 0 ? `${latency.toFixed(0)}ms` : t('N/A')
+                        }
+                      />
+                      <Metric
+                        label={t('aurora.metric.successRate', {
+                          defaultValue: isChinese ? '成功率' : 'Success rate',
+                        })}
+                        value={
+                          hasTraffic ? `${successRate.toFixed(1)}%` : t('N/A')
+                        }
+                      />
+                      <Metric
+                        label={t('aurora.metric.models', {
+                          defaultValue: isChinese ? '模型' : 'Models',
+                        })}
+                        value={t('aurora.common.modelCount', {
+                          defaultValue: isChinese ? '{{count}}个' : '{{count}}',
+                          count: modelCount(channel.models),
+                        })}
+                      />
+                    </div>
+                    <div className='bg-foreground/8 mt-2 h-1.5 overflow-hidden rounded-full'>
+                      <div
+                        className='aurora-reference-progress h-full rounded-full'
+                        style={{
+                          width: `${Math.min(100, Math.max(0, successWidth))}%`,
+                        }}
+                      />
+                    </div>
+                    <div className='text-muted-foreground mt-1.5 font-mono text-[10px]'>
+                      {t('Group')} {channel.group || 'default'} · {t('Priority')}{' '}
+                      {channel.priority ?? '—'} ·{' '}
+                      {t('aurora.common.today', {
+                        defaultValue: isChinese ? '今日' : 'Today',
+                      })}{' '}
+                      ${(stat?.total_cost ?? 0).toFixed(2)}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
 
       <Card className='border-border/60 bg-card/70 col-span-12 overflow-hidden shadow-[0_8px_30px_rgba(80,90,140,0.08)]'>
         <CardContent className='p-4'>

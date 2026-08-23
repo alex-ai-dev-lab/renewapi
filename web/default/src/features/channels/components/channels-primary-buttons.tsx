@@ -136,7 +136,13 @@ export function ChannelsPrimaryButtons(props: ChannelsPrimaryButtonsProps) {
         {showTools ? (
           <DropdownMenu>
             <DropdownMenuTrigger
-              render={<Button variant='outline' size='sm' />}
+              render={
+                <Button
+                  variant='outline'
+                  size='sm'
+                  aria-label={t('Open menu')}
+                />
+              }
             >
               <MoreHorizontal className='size-4' />
             </DropdownMenuTrigger>

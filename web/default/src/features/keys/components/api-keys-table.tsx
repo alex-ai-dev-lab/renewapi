@@ -33,7 +33,6 @@ import {
 import { useDebounce } from '@/hooks'
 import { Database } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
@@ -238,9 +237,9 @@ export function ApiKeysTable() {
   const tokenFilter = tokenFilterFromUrl
   const shouldSearch = Boolean(globalFilter?.trim() || tokenFilter.trim())
 
-  // shouldSearch is derived from keyed filters; t only localizes an error toast.
+  // shouldSearch is derived from keyed filters; t localizes the fallback error.
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: [
       'keys',
       pagination.pageIndex + 1,
@@ -263,7 +262,7 @@ export function ApiKeysTable() {
           })
 
       if (!result.success) {
-        toast.error(
+        throw new Error(
           result.message ||
             t(
               shouldSearch
@@ -271,7 +270,6 @@ export function ApiKeysTable() {
                 : ERROR_MESSAGES.LOAD_FAILED
             )
         )
-        return { items: [], total: 0 }
       }
 
       return {
@@ -327,6 +325,8 @@ export function ApiKeysTable() {
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
+        isError={isError}
+        errorDescription={error instanceof Error ? error.message : undefined}
         tableHeaderClassName='sticky top-0 z-10 bg-background/80 backdrop-blur-md'
         tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
         emptyTitle={t('No API Keys Found')}

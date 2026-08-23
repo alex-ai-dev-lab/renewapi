@@ -89,7 +89,7 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
               variant='ghost'
               size='sm'
               className='text-muted-foreground h-7 font-mono text-xs'
-              aria-label={t('Show full API key')}
+              aria-label={t('Full API Key')}
             />
           }
         >

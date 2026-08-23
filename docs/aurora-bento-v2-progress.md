@@ -1,12 +1,13 @@
 # Aurora Bento v2 进度与验收总表
 
-> 最后更新：2026-08-23 16:30 +08:00  
+> 最后更新：2026-08-23 18:20 +08:00  
 > 仓库：`alex-ai-dev-lab/renewapi`  
 > 原稿：`renewapi-design-02-aurora-bento-v2`  
 > Desktop Light：`9f90bd234d1533dc4f4efb916cc826d5626d4737`  
 > Desktop Dark merge：`cf4961baf0a553d86b4c3f0ad90fd031f6c64633`  
 > Responsive Phase B merge：`02e467d95a36d0b7d54ea55f3db305205eadc857`  
-> Interaction / Accessibility merge：`d7fa60720457f00b4e1766f9443d0648fb6c225b`
+> Interaction / Accessibility merge：`d7fa60720457f00b4e1766f9443d0648fb6c225b`  
+> Settings hardened validated product head：`8b56c883206a8077b3e9bf900ef9564551c93a13`
 
 ## 1. 当前结论
 
@@ -15,15 +16,15 @@
 - Desktop Light：✅ 完成
 - Desktop Dark：✅ 完成
 - Tablet / Mobile Phase B：✅ 完成当前可验证范围
-- Interaction / State Fidelity：🟡 部分完成，核心全局交互与 Settings foundation mutation 已验收；其他深层业务状态仍待做
+- Interaction / State Fidelity：🟡 部分完成，核心全局交互与 Settings foundation mutation/error/restart 已验收；其他深层业务状态仍待做
 - Accessibility：🟡 部分完成，自动化/键盘采样通过；真实屏幕阅读器与完整对比度仍待做
-- Settings 真实后端 mutation：✅ 完成
+- Settings 真实后端 mutation：✅ 完成（hardened SQLite + intermediate restart evidence）
 - Secondary Surfaces：⏳ 待做
 - Release / 部署 smoke：⏳ 待做
 
 不能把当前状态表述为“全产品所有状态全部完成”；可以表述为：
 
-> **Desktop Light / Dark + 1024 / 768 / 375 核心页面、全局交互与 Settings foundation 真实后端 mutation/restart QA 已通过，当前剩余工作集中在其他深层业务状态、辅助技术实测、Secondary Surfaces 与部署 smoke。**
+> **Desktop Light / Dark + 1024 / 768 / 375 核心页面、全局交互与 Settings foundation 真实后端 mutation/validation/SQLite/restart QA 已通过，当前剩余工作集中在其他深层业务状态、辅助技术实测、Secondary Surfaces 与部署 smoke。**
 
 ## 2. 已完成核心页面
 
@@ -35,7 +36,7 @@
 | Usage Logs | ✅ | ✅ | ✅ | KPI + 实时流 + 筛选/表格 |
 | Models | ✅ | ✅ | ✅ | Registry 六卡 + 真实定价 |
 | Users | ✅ | ✅ | ✅ | 用户 / 分组 / 状态统计 |
-| System Settings | ✅ | ✅ | ✅ | 6/6 + 12；基础输入语义标签 + real-backend mutation/restart PASS |
+| System Settings | ✅ | ✅ | ✅ | 6/6 + 12；基础输入语义标签 + hardened real-backend mutation/validation/restart PASS |
 
 ## 3. 主要验收证据
 
@@ -46,10 +47,12 @@
 | Desktop Dark final | `32618534536` | ✅ 7 页 + 工程门 PASS |
 | Responsive Phase B baseline | `32619390956` | ✅ Light/Dark × 1024/768/375；overflow 0 |
 | Interaction/A11y final P2-strict | `32624800840` | ✅ `issues=0`, console=0, unhandled=0 |
-| Settings real-backend final | `32628206857` | ✅ fresh SQLite + real root auth + single/bulk mutation + invalid atomicity + restart persistence |
+| Settings real-backend hardened final | `32633291555` | ✅ fresh SQLite + real root auth + UI/API/SQLite mutation + invalid atomicity before overwrite + intermediate/final restart |
 
 Interaction/A11y artifact：`aurora-interaction-a11y-qa` / id `9489423724`。  
-Settings real-backend artifact：`settings-real-backend-smoke` / id `9490331010` / digest `sha256:074ee2048a21fa809cb07b82b7b36ba813461e8e02d96a172c4178da08436ac2`。
+Settings hardened artifact：`settings-real-backend-hardened` / id `9491668465` / digest `sha256:a7f925ed004f102a63db904545c96cb3fbf792555f7d2452401b07c783db2839`。
+
+旧 Settings run `32628206857` 已被 hardened run 取代为最终证据：旧 run 的产品路径通过，但 invalid-bulk 检查主要读取运行时 OptionMap；新 run 在任何后续成功覆盖写入之前直接读取 SQLite，并执行一次中间进程重启验证，因此证据链更强。
 
 详细报告：
 
@@ -94,7 +97,7 @@ Settings real-backend artifact：`settings-real-backend-smoke` / id `9490331010`
 
 ## 6. Phase C — Interaction / State Fidelity
 
-**状态：🟡 核心全局交互 + Settings foundation mutation 完成，其他业务深层状态待补**
+**状态：🟡 核心全局交互 + Settings foundation mutation/error/restart 完成，其他业务深层状态待补**
 
 已验证：
 
@@ -106,9 +109,12 @@ Settings real-backend artifact：`settings-real-backend-smoke` / id `9490331010`
 - [x] sampled focus / active navigation behavior
 - [x] global overlay viewport containment
 - [x] Settings real `/api/option/` read / single update
+- [x] Settings `RetryTimes` UI ↔ API ↔ SQLite 同步 `0 -> 2 -> 0`
 - [x] Settings real `/api/option/bulk` valid update
-- [x] Settings invalid bulk validation / no partial persistence / local draft preservation
-- [x] Settings process restart persistence
+- [x] Settings invalid bulk validation / no partial SQLite persistence / local 3-field draft preservation
+- [x] Settings invalid bulk 后的中间 process restart 仍保持 baseline
+- [x] Settings valid bulk SQLite persistence + final process restart
+- [x] Settings validation error 不再与旧 success toast 同时显示
 - [x] fresh install naturally serves redesigned default frontend
 - [x] persisted `classic` frontend remains a supported override
 
@@ -158,8 +164,9 @@ Settings real-backend artifact：`settings-real-backend-smoke` / id `9490331010`
 6. Recharts 3 默认 accessibility layer 产生无名 SVG Tab stop。
 7. Notification glass 在 overlay 状态下底层内容竞争过强，局部提高背景不透明度。
 8. fresh install 的权威 `ThemeSettings.Frontend` 仍为 `classic`，导致真实后端默认服务旧前端；现改为 `default`，并保留数据库显式 `classic` 覆盖兼容性。
+9. Settings validation error 会与前一笔 single mutation 的绿色 success toast 同时残留，造成成功/失败状态冲突；现 single/bulk mutation 共用稳定 toast id，让最新结果替换旧 Settings 提示而不全局清空其他通知。
 
-前 7 项已进入 final P2-strict run 并通过；第 8 项已进入 Settings real-backend final run `32628206857` 并通过。
+前 7 项已进入 final P2-strict run 并通过；第 8、9 项以及更强的 SQLite/重启证据已进入 Settings hardened final run `32633291555` 并通过。
 
 ## 9. 工程质量门
 
@@ -173,19 +180,24 @@ Settings real-backend artifact：`settings-real-backend-smoke` / id `9490331010`
 - [x] console errors = `0`
 - [x] unhandled QA API requests = `0`
 
-Settings real-backend final run 额外通过：
+Settings hardened final run 额外通过：
 
-- [x] default + classic frontend production build
+- [x] default frontend `bun test` / typecheck / production build
+- [x] classic frontend production build
 - [x] authoritative theme Go regression tests
 - [x] real RenewAPI Go binary build
 - [x] production SQLite migrations `--up` / `--check`
 - [x] fresh database + real setup/login/RootAuth
-- [x] real single/bulk mutation + invalid atomicity
-- [x] process restart persistence
+- [x] real single mutation UI/API/SQLite synchronization
+- [x] invalid bulk API + direct SQLite atomicity before overwrite
+- [x] invalid bulk intermediate process restart baseline persistence
+- [x] valid bulk API + SQLite persistence
+- [x] final process restart persistence
+- [x] drained backend logs end in `server exited`
 - [x] browser console errors = `0`
 - [x] browser page errors = `0`
 
-一次性 QA workflow / harness 在最终合并前删除，不污染长期仓库维护面。
+一次性 hardened QA workflow / harness 在最终合并前删除，不污染长期仓库维护面。
 
 ## 10. 下一步执行顺序
 

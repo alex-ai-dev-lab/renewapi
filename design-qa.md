@@ -2,12 +2,12 @@
 
 ## Current acceptance state
 
-Aurora Bento v2 has passed browser-rendered Design QA for the seven core authenticated pages across its Desktop Light, Desktop Dark, Tablet and Mobile baseline scopes. The System Settings foundation path has additionally passed real-backend mutation and restart QA against a production RenewAPI binary and isolated SQLite database.
+Aurora Bento v2 has passed browser-rendered Design QA for the seven core authenticated pages across its Desktop Light, Desktop Dark, Tablet and Mobile baseline scopes. The System Settings foundation path has additionally passed hardened real-backend mutation, validation and restart QA against a production RenewAPI binary and isolated SQLite database.
 
 Latest visual/interaction product merge: `d7fa60720457f00b4e1766f9443d0648fb6c225b`  
 Latest P2-strict interaction/accessibility run: `32624800840`  
-Latest real-backend Settings product head: `d3d30a59a71c587464bfdb7e94a1469efb761dba`  
-Latest real-backend Settings run: `32628206857`
+Latest hardened real-backend Settings product head: `8b56c883206a8077b3e9bf900ef9564551c93a13`  
+Latest hardened real-backend Settings run: `32633291555`
 
 Final audited values:
 
@@ -18,8 +18,10 @@ Final audited values:
 - fixture QA unhandled API requests: `0`
 - Settings real-backend console errors: `0`
 - Settings real-backend page errors: `0`
-- Settings invalid bulk atomicity: PASS
-- Settings restart persistence: PASS
+- Settings invalid bulk direct-SQLite atomicity: PASS
+- Settings invalid bulk intermediate restart: PASS
+- Settings final restart persistence: PASS
+- Settings backend log drain: PASS
 
 ## Evidence chain
 
@@ -66,26 +68,31 @@ Final audited values:
 
 Final artifact result: `issues=[]`.
 
-### Settings real-backend mutation / restart
+### Settings real-backend hardened mutation / validation / restart
 
-- final run: `32628206857`
-- validated product head: `d3d30a59a71c587464bfdb7e94a1469efb761dba`
-- artifact: `settings-real-backend-smoke` / id `9490331010`
-- artifact digest: `sha256:074ee2048a21fa809cb07b82b7b36ba813461e8e02d96a172c4178da08436ac2`
-- production default + classic frontend builds embedded in a real RenewAPI Go binary
-- fresh isolated SQLite database with production migrations
+- final run: `32633291555` (run #2)
+- validated product head: `8b56c883206a8077b3e9bf900ef9564551c93a13`
+- artifact: `settings-real-backend-hardened` / id `9491668465`
+- artifact digest: `sha256:a7f925ed004f102a63db904545c96cb3fbf792555f7d2452401b07c783db2839`
+- production default frontend tests/typecheck/build plus classic production build
+- real RenewAPI Go binary and production migrations on a fresh isolated SQLite database
 - no pre-seeded `theme.frontend` value
 - real `/api/setup` root creation and `/api/user/login` session
 - real `RootAuth` contract including `New-Api-User`
 - real `/system-settings` -> `/api/option/` reads
-- real single-option `RetryTimes` mutation `0 -> 2 -> 0`
-- real bulk save success
-- invalid bulk server-URL validation with no partial persistence and local draft preservation
-- clean process stop/restart with saved values still present in API and UI
+- single-option `RetryTimes` mutation `0 -> 2 -> 0` synchronized across controlled UI state, authenticated API and direct SQLite reads
+- invalid bulk server-URL validation with all three local draft fields preserved
+- invalid bulk baseline verified in API and direct SQLite before any later successful overwrite
+- intermediate clean process restart after the rejected bulk, with the complete baseline still present in API and UI
+- valid bulk save verified through API and direct SQLite
+- final clean process restart with saved values still present in API, SQLite and UI
+- three backend logs drained through child close and ending in `server exited`
 - browser console errors: `0`
 - browser page errors: `0`
 
-The smoke also exposed and fixed a product-default mismatch: the authoritative `ThemeSettings.Frontend` still defaulted to `classic`, which overrode lower-level attempts to make Aurora the default. It now defaults to `default`; a regression test confirms fresh-default synchronization and a second test confirms an explicitly persisted `classic` override remains supported.
+The earlier Settings run `32628206857` is retained as historical evidence but is superseded by the hardened run because the newer gate proves failed-bulk database atomicity before a later valid save can mask partial persistence.
+
+The real-backend sequence also exposed and fixed two product issues: the authoritative `ThemeSettings.Frontend` still defaulted to `classic`, and a stale Settings success toast could coexist with a later validation error. Fresh installs now naturally select the redesigned frontend while explicit classic overrides remain supported; Settings mutations share a stable toast id so the latest result replaces the prior Settings result.
 
 ## Latest defects found and resolved
 
@@ -95,7 +102,8 @@ The smoke also exposed and fixed a product-default mismatch: the authoritative `
 4. **System Settings foundation inputs** — Gateway URL, System name and New-user quota are programmatically labelled.
 5. **Decorative Recharts keyboard stops** — redundant dashboard charts are removed from Tab order/accessibility tree while textual metrics remain available.
 6. **Notification glass readability** — the notification surface is more opaque locally without abandoning the Aurora glass language.
-7. **Fresh-install frontend mismatch** — authoritative theme configuration now defaults new installations to the redesigned frontend while preserving explicit classic overrides.
+7. **Fresh-install frontend mismatch** — authoritative theme configuration defaults new installations to the redesigned frontend while preserving explicit classic overrides.
+8. **Contradictory Settings mutation feedback** — the previous success toast no longer remains beside a later validation error; single/bulk Settings mutations use one stable toast id.
 
 ## Manual screenshot review
 
@@ -107,14 +115,15 @@ The final responsive screenshots were reviewed after the automated gate:
 - Light/Dark Notification popover: contained; strengthened foreground/background separation
 - Light/Dark desktop Quick Tools and Config Drawer: no clipping, shell collision or dock obstruction
 
-The final real-backend Settings artifact was also reviewed manually:
+The final hardened real-backend Settings artifact was also reviewed manually:
 
-- validation-error state retains the unsaved local draft and visibly surfaces the backend URL validation error
-- successful-save state renders the committed foundation values
-- post-restart state cleanly renders `RenewAPI QA Browser`, the persisted gateway URL and quota after a new process and new login session
-- backend logs confirm the default `/static/js/...` application, real option API traffic and the restart read path
+- validation-error state retains all three unsaved local draft fields and shows only the red backend URL validation error, with no stale success toast
+- after-invalid-restart state restores the full baseline from persistent storage
+- successful-save state renders the committed foundation values and success feedback
+- after-success-restart state cleanly renders `RenewAPI QA Browser`, the persisted gateway URL and quota after a new process and new login session
+- backend logs are fully drained and each final shutdown ends in `server exited`
 
-No new actionable P0/P1/P2 was found in the audited screenshots.
+No remaining actionable P0/P1/P2 was found in the audited screenshots.
 
 ## Accepted limitations / remaining work
 

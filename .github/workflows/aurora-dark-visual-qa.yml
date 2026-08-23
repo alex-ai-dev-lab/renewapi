@@ -1,0 +1,131 @@
+name: Aurora dark visual QA
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aurora-dark-visual-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Restore immutable Aurora reference fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref_sha='3d91c3fd22fbfae284d48563d5a09ac046a81cd2'
+          repo='alex-ai-dev-lab/renewapi'
+          : > /tmp/aurora-ref.b64
+          for part in 00 01 02 03 04 05; do
+            curl -fsSL "https://raw.githubusercontent.com/${repo}/${ref_sha}/.github/qa-assets/aurora-ref.part${part}" >> /tmp/aurora-ref.b64
+          done
+          base64 -d /tmp/aurora-ref.b64 > /tmp/aurora-ref.zip
+          echo '4c5cffa10dba209d995eb5e3b84ea49e102d2f2ce04b581e356d49d207dce103  /tmp/aurora-ref.zip' | sha256sum -c -
+          rm -rf /tmp/aurora-reference
+          mkdir -p /tmp/aurora-reference
+          unzip -q /tmp/aurora-ref.zip -d /tmp/aurora-reference
+
+      - name: Install application dependencies
+        working-directory: web/default
+        run: bun install --frozen-lockfile
+
+      - name: Verify application build
+        working-directory: web/default
+        run: |
+          bun run typecheck
+          bun run build
+
+      - name: Install Playwright for QA only
+        working-directory: web/default
+        run: |
+          bun add --no-save playwright@1.55.0
+          bunx playwright install --with-deps chromium
+
+      - name: Start reference and implementation servers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4180 --bind 127.0.0.1 --directory /tmp/aurora-reference >/tmp/aurora-dark-ref-server.log 2>&1 &
+          cd web/default
+          bun run preview -- --host 127.0.0.1 --port 4173 >/tmp/aurora-dark-app.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4173 >/dev/null && curl -fsS http://127.0.0.1:4180/02-aurora-bento/index.html >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/aurora-dark-app.log || true
+          cat /tmp/aurora-dark-ref-server.log || true
+          exit 1
+
+      - name: Restore and adapt proven seven-page capture harness
+        working-directory: web/default
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref_sha='3d91c3fd22fbfae284d48563d5a09ac046a81cd2'
+          base="https://raw.githubusercontent.com/alex-ai-dev-lab/renewapi/${ref_sha}/.github"
+          curl -fsSL "${base}/aurora-final-visual-qa.mjs" -o .aurora-light-harness.mjs
+          curl -fsSL "${base}/aurora-final-source-capture.mjs" -o .aurora-source-capture.mjs
+          sed \
+            -e "s/colorScheme:'light'/colorScheme:'dark'/" \
+            -e "s/localStorage.setItem('theme','light')/localStorage.setItem('theme','dark')/" \
+            .aurora-light-harness.mjs > .aurora-dark-visual-qa.mjs
+          grep -q "colorScheme:'dark'" .aurora-dark-visual-qa.mjs
+          grep -q "localStorage.setItem('theme','dark')" .aurora-dark-visual-qa.mjs
+
+      - name: Capture Dark implementation and Light structural source
+        working-directory: web/default
+        env:
+          QA_OUT: ../../qa-artifacts
+        run: |
+          bun ./.aurora-dark-visual-qa.mjs
+          bun ./.aurora-source-capture.mjs
+
+      - name: Enforce clean browser runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f qa-artifacts/console-errors.txt
+          test -f qa-artifacts/unhandled.txt
+          if [ -s qa-artifacts/console-errors.txt ]; then
+            echo 'Browser console errors detected:' >&2
+            cat qa-artifacts/console-errors.txt >&2
+            exit 1
+          fi
+          if [ -s qa-artifacts/unhandled.txt ]; then
+            echo 'Unhandled QA API requests detected:' >&2
+            cat qa-artifacts/unhandled.txt >&2
+            exit 1
+          fi
+          printf '%s\n' \
+            'viewport=1440x1000' \
+            'deviceScaleFactor=1' \
+            'locale=zh-CN' \
+            'timezone=Asia/Taipei' \
+            'implementationTheme=dark' \
+            'sourceTheme=light (structural reference only)' \
+            'consoleErrors=0' \
+            'unhandledApiRequests=0' > qa-artifacts/qa-summary.txt
+
+      - name: Upload Dark visual QA artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurora-dark-visual-qa
+          path: qa-artifacts
+          if-no-files-found: error

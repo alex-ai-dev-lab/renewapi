@@ -32,7 +32,6 @@ import {
 } from '@tanstack/react-table'
 import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
@@ -123,7 +122,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     ],
   })
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: [
       'logs',
       logCategory,
@@ -146,8 +145,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       })
 
       if (!result?.success) {
-        toast.error(result?.message || t('Failed to load logs'))
-        return DEFAULT_LOGS_DATA
+        throw new Error(result?.message || t('Failed to load logs'))
       }
       return result.data || DEFAULT_LOGS_DATA
     },
@@ -197,6 +195,8 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       columns={columns as ColumnDef<Record<string, unknown>>[]}
       isLoading={isLoadingData}
       isFetching={isFetching}
+      isError={isError}
+      errorDescription={error instanceof Error ? error.message : undefined}
       emptyTitle={t('No Logs Found')}
       emptyDescription={t(
         'No usage logs available. Logs will appear here once API calls are made.'

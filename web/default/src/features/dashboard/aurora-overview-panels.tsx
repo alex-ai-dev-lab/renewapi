@@ -79,7 +79,7 @@ export function RequestVolumePanel(props: {
           <div className='mt-2 text-[34px] leading-none font-extrabold tracking-[-0.03em] tabular-nums'>
             {props.stats.total_requests.toLocaleString()}
           </div>
-          <div className='mt-2 text-[11px] font-semibold text-[#3E8E5A]'>
+          <div className='mt-2 text-[11px] font-semibold text-[#2F7748]'>
             {t('aurora.dashboard.requests.currentRate', {
               defaultValue: isChinese
                 ? '当前 {{rate}} 请求/分钟'

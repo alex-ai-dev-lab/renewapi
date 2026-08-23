@@ -235,9 +235,9 @@ export function ModelsStats(props: {
       {props.isLoading ? (
         <div
           className='glass-tile grid gap-4 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-3'
-          aria-label={registryHeadline}
           aria-busy='true'
         >
+          <span className='sr-only'>{registryHeadline}</span>
           {Array.from({ length: 3 }).map((_, index) => (
             <div key={index} className='glass-tile min-h-[174px] space-y-4 p-5'>
               <div className='flex items-center justify-between gap-3'>

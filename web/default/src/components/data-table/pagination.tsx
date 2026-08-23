@@ -74,7 +74,10 @@ export function DataTablePagination<TData>({
               table.setPageSize(Number(value))
             }}
           >
-            <SelectTrigger className='h-7 w-[60px] sm:w-[66px]'>
+            <SelectTrigger
+              className='h-7 w-[60px] sm:w-[66px]'
+              aria-label={t('每页行数')}
+            >
               <SelectValue placeholder={table.getState().pagination.pageSize} />
             </SelectTrigger>
             <SelectContent side='top' alignItemWithTrigger={false}>

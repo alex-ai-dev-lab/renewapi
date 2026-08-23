@@ -45,7 +45,7 @@ jobs:
           bun run build
 
       - name: Verify authoritative frontend default
-        run: go test -count=1 -run TestThemeDefaultsToRedesignedFrontend ./setting/system_setting
+        run: go test -count=1 ./setting/system_setting
 
       - name: Build real RenewAPI binary
         run: go build -o "$RUNNER_TEMP/renewapi-settings-e2e" .

@@ -43,9 +43,17 @@ jobs:
         working-directory: web/default
         run: bun install --frozen-lockfile
 
-      - name: Verify application build
+      - name: Verify changed frontend quality
         working-directory: web/default
         run: |
+          bunx prettier --check src/styles/aurora-dark-reference.css src/components/layout/components/authenticated-layout.tsx
+          bunx eslint src/components/layout/components/authenticated-layout.tsx
+          bun run copyright:check -- src/components/layout/components/authenticated-layout.tsx
+
+      - name: Verify application tests and build
+        working-directory: web/default
+        run: |
+          bun test
           bun run typecheck
           bun run build
 

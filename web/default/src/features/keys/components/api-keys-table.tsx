@@ -30,9 +30,9 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
+import { useDebounce } from '@/hooks'
 import { Database } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useDebounce } from '@/hooks'
 import { shouldRetryQuery, unwrapApiResponse } from '@/lib/api-errors'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'

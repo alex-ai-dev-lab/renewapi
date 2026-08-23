@@ -47,7 +47,10 @@ export function unwrapApiResponse<T>(data: T): T {
   return data
 }
 
-export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
+export function shouldRetryQuery(
+  failureCount: number,
+  error: unknown
+): boolean {
   if (error instanceof ApiBusinessError) return false
   return failureCount < 2
 }

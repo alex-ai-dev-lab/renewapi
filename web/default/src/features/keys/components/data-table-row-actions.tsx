@@ -146,7 +146,15 @@ export function DataTableRowActions<TData>({
         window.location.href = resolvedUrl
       }
     },
-    [resolveRealKey, apiKey, serverAddress, setCurrentRow, setOpen, setResolvedKey, t]
+    [
+      resolveRealKey,
+      apiKey,
+      serverAddress,
+      setCurrentRow,
+      setOpen,
+      setResolvedKey,
+      t,
+    ]
   )
 
   const handleToggleStatus = async (

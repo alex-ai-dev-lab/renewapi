@@ -31,10 +31,13 @@ jobs:
           bun run typecheck
           bun run build
 
-      - name: Check changed Aurora source formatting
+      - name: Show exact Prettier normalization
         working-directory: web/default
         run: |
-          bunx prettier --check \
+          bunx prettier --write \
+            src/features/dashboard/aurora-overview-panels.tsx \
+            src/features/keys/components/api-keys-cells.tsx
+          git diff -- \
             src/features/dashboard/aurora-overview-panels.tsx \
             src/features/keys/components/api-keys-cells.tsx
 

@@ -70,7 +70,7 @@ html:not(.dark) .text-aurora {
 }
 
 [class~='text-[#7C5CBF]'] {
-  color: var(--info) !important;
+  color: var(--primary) !important;
 }
 
 [class~='text-[#2F7748]'] {

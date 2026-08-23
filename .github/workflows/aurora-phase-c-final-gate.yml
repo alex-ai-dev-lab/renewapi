@@ -31,7 +31,7 @@ jobs:
           bun run typecheck
           bun run build
 
-      - name: Verify changed product formatting
+      - name: Show exact changed product formatting diff
         working-directory: web/default
         run: |
           files=(
@@ -57,7 +57,9 @@ jobs:
             src/lib/api-errors.ts
             src/lib/api-errors.test.ts
           )
-          bunx prettier --check "${files[@]}"
+          bunx prettier --write "${files[@]}"
+          git diff -- "${files[@]}"
+          exit 1
 
       - name: Install Playwright for QA only
         working-directory: web/default

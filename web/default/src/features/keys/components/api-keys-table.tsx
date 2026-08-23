@@ -30,9 +30,10 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { useDebounce } from '@/hooks'
 import { Database } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useDebounce } from '@/hooks'
+import { unwrapApiResponse } from '@/lib/api-errors'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
@@ -56,7 +57,6 @@ import {
   API_KEY_STATUS,
   API_KEY_STATUS_OPTIONS,
   API_KEY_STATUSES,
-  ERROR_MESSAGES,
 } from '../constants'
 import { type ApiKey } from '../types'
 import { ApiKeyCell } from './api-keys-cells'
@@ -237,7 +237,6 @@ export function ApiKeysTable() {
   const tokenFilter = tokenFilterFromUrl
   const shouldSearch = Boolean(globalFilter?.trim() || tokenFilter.trim())
 
-  // shouldSearch is derived from keyed filters; t localizes the fallback error.
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
   const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: [
@@ -249,28 +248,19 @@ export function ApiKeysTable() {
       refreshTrigger,
     ],
     queryFn: async () => {
-      const result = shouldSearch
-        ? await searchApiKeys({
-            keyword: globalFilter,
-            token: tokenFilter,
-            p: pagination.pageIndex + 1,
-            size: pagination.pageSize,
-          })
-        : await getApiKeys({
-            p: pagination.pageIndex + 1,
-            size: pagination.pageSize,
-          })
-
-      if (!result.success) {
-        throw new Error(
-          result.message ||
-            t(
-              shouldSearch
-                ? ERROR_MESSAGES.SEARCH_FAILED
-                : ERROR_MESSAGES.LOAD_FAILED
-            )
-        )
-      }
+      const result = unwrapApiResponse(
+        shouldSearch
+          ? await searchApiKeys({
+              keyword: globalFilter,
+              token: tokenFilter,
+              p: pagination.pageIndex + 1,
+              size: pagination.pageSize,
+            })
+          : await getApiKeys({
+              p: pagination.pageIndex + 1,
+              size: pagination.pageSize,
+            })
+      )
 
       return {
         items: result.data?.items || [],

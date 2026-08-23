@@ -328,7 +328,10 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           )}
 
           {hasAntiPoisonRisk && (
-            <DropdownMenuItem onClick={handleClearRisk} disabled={isClearingRisk}>
+            <DropdownMenuItem
+              onClick={handleClearRisk}
+              disabled={isClearingRisk}
+            >
               {t('Clear Anti-poison Risk')}
               <DropdownMenuShortcut>
                 {isClearingRisk ? (

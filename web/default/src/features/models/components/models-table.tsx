@@ -228,7 +228,8 @@ export function ModelsTable() {
     })),
   ]
 
-  const showManagementSurface = managementOpen || isError
+  const showEmptyState = !isLoading && !isError && models.length === 0
+  const showManagementSurface = managementOpen || isError || showEmptyState
 
   return (
     <div className='space-y-3 sm:space-y-4'>
@@ -241,7 +242,7 @@ export function ModelsTable() {
 
       {showManagementSurface ? (
         <div className='space-y-3'>
-          {managementOpen && !isError ? (
+          {(managementOpen || showEmptyState) && !isError ? (
             <div className='flex flex-wrap items-center justify-end gap-2 px-1'>
               <Link
                 to='/models/$section'

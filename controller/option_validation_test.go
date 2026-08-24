@@ -1,10 +1,14 @@
 package controller
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/gin-gonic/gin"
 )
 
 func TestValidateOptionValuesUsesEffectiveBulkCredentials(t *testing.T) {
@@ -109,6 +113,60 @@ func TestValidateOptionValuesRejectsInvalidChannelAffinityRule(t *testing.T) {
 		"channel_affinity_setting.rules": mustMarshalChannelAffinityRules(t, []operation_setting.ChannelAffinityRule{valid}),
 	}); err != nil {
 		t.Fatalf("valid Channel Affinity rule rejected: %v", err)
+	}
+}
+
+func TestGetOptionsMasksAntiPoisonAuditSecretAndReportsConfiguredState(t *testing.T) {
+	common.OptionMapRWMutex.Lock()
+	oldOptionMap := common.OptionMap
+	common.OptionMap = map[string]string{
+		antiPoisonAuditEnabledKey: "true",
+		antiPoisonAuditSecretKey:  "wave2-test-secret",
+	}
+	common.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		common.OptionMap = oldOptionMap
+		common.OptionMapRWMutex.Unlock()
+	})
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	GetOptions(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("GET options status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+
+	var response struct {
+		Success bool `json:"success"`
+		Data    []struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode options response: %v", err)
+	}
+	if !response.Success {
+		t.Fatal("GET options should succeed")
+	}
+
+	configured := false
+	for _, option := range response.Data {
+		if option.Key == antiPoisonAuditSecretKey {
+			t.Fatal("secret option must never be returned to the client")
+		}
+		if option.Value == "wave2-test-secret" {
+			t.Fatal("secret value must never be returned to the client")
+		}
+		if option.Key == "anti_poison_setting.signed_header_audit_secret_configured" {
+			configured = option.Value == "true"
+		}
+	}
+	if !configured {
+		t.Fatal("configured-state option should report true when a secret exists")
 	}
 }
 

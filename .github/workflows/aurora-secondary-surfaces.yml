@@ -125,6 +125,28 @@ jobs:
           GLOBAL_API_RATE_LIMIT: '2000'
         run: bun .aurora-secondary-surfaces.mjs
 
+      - name: Verify Secondary evidence redaction
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence='qa-artifacts/aurora-secondary-surfaces'
+          if [[ ! -d "$evidence" ]]; then
+            exit 0
+          fi
+          leaks="$(
+            find "$evidence" -type f \( -name '*.json' -o -name '*.txt' -o -name '*.log' \) -print0 \
+              | xargs -0 -r grep -l -F \
+                  -e 'QaRoot123!' \
+                  -e 'aurora-secondary-surfaces-2026-08-24' \
+              || true
+          )"
+          if [[ -n "$leaks" ]]; then
+            rm -rf "$evidence"
+            printf '%s\n' 'Secondary evidence contained a QA credential and was removed before upload.'
+            exit 1
+          fi
+
       - name: Show Secondary Surfaces summary
         if: always()
         run: |

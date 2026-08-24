@@ -86,6 +86,7 @@ jobs:
         run: |
           bun add --no-save playwright@1.55.0
           bunx playwright install --with-deps chromium
+          cp ../../.github/settings-advanced-phase-e-wave2.mjs .settings-advanced-phase-e-wave2.mjs
 
       - name: Run Advanced Settings real-backend Wave 2
         working-directory: web/default
@@ -94,7 +95,7 @@ jobs:
           QA_DB: ${{ runner.temp }}/renewapi-settings-phase-e-wave2.db
           QA_OUT: ../../qa-artifacts/settings-advanced-phase-e-wave2
           QA_PORT: '4173'
-        run: bun ../../.github/settings-advanced-phase-e-wave2.mjs
+        run: bun .settings-advanced-phase-e-wave2.mjs
 
       - name: Show Wave 2 summary
         if: always()

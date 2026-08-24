@@ -8,13 +8,19 @@ on:
       - '.github/settings-advanced-phase-e-wave2.mjs'
       - '.github/workflows/settings-advanced-phase-e-wave2.yml'
       - 'controller/option.go'
+      - 'controller/option_validation.go'
+      - 'controller/option_validation_test.go'
       - 'controller/request_guard.go'
       - 'controller/request_guard_test.go'
-      - 'controller/option_validation_test.go'
       - 'model/log.go'
       - 'model/log_index_test.go'
       - 'model/option.go'
       - 'model/option_rollback_test.go'
+      - 'service/requestguard/**'
+      - 'setting/operation_setting/request_guard_setting.go'
+      - 'setting/ratio_setting/**'
+      - 'web/default/src/features/system-settings/hooks/use-settings-form.ts'
+      - 'web/default/src/features/system-settings/hooks/use-update-option.ts'
       - 'web/default/src/features/system-settings/maintenance/log-settings-section.tsx'
       - 'web/default/src/features/system-settings/models/**'
       - 'web/default/src/features/system-settings/security/anti-poison-guard-section.tsx'
@@ -44,6 +50,12 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
+
+      - name: Verify Wave 2 backend regressions
+        run: >-
+          go test -count=1
+          -run 'TestUpdateRequestGuardConfigClearsRemovedEndpointSecret|TestUpdateRequestGuardConfigRejectsInvalidPayloadWithoutMutation|TestGetOptionsMasksAntiPoisonAuditSecretAndReportsConfiguredState|TestDeleteOldLogRespectsCutoffAndPreservesNewerRows|TestUpdateOptionsBulkRollbackRestoresDatabaseAndOptionMap'
+          ./controller ./model
 
       - name: Verify default frontend
         working-directory: web/default

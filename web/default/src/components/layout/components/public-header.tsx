@@ -388,7 +388,7 @@ export function PublicHeader(props: PublicHeaderProps) {
           'bg-background/98 fixed inset-0 z-40 backdrop-blur-2xl transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] sm:pointer-events-none sm:hidden',
           mobileOpen
             ? 'pointer-events-auto opacity-100'
-            : 'pointer-events-none opacity-0'
+            : 'pointer-events-none invisible opacity-0'
         )}
       >
         <div className='flex h-full flex-col justify-between px-8 pt-20 pb-10'>

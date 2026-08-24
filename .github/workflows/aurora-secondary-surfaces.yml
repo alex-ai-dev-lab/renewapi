@@ -1,0 +1,103 @@
+name: Aurora Secondary Surfaces QA
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'web/default/src/**'
+      - '.github/aurora-secondary-surfaces.mjs'
+      - '.github/workflows/aurora-secondary-surfaces.yml'
+      - 'controller/**'
+      - 'model/**'
+      - 'router/**'
+      - 'common/**'
+      - 'setting/**'
+      - 'main.go'
+      - 'go.mod'
+      - 'go.sum'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aurora-secondary-surfaces-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secondary-surfaces:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Verify default frontend
+        working-directory: web/default
+        run: |
+          bun install --frozen-lockfile
+          bun test
+          bun run typecheck
+          bun run build
+
+      - name: Build real RenewAPI binary
+        run: go build -o "$RUNNER_TEMP/renewapi-secondary-surfaces" .
+
+      - name: Bootstrap fresh SQLite with production migrations
+        env:
+          SQLITE_PATH: ${{ runner.temp }}/renewapi-secondary-surfaces.db
+          SESSION_SECRET: aurora-secondary-surfaces-migration-2026-08-24
+          GIN_MODE: release
+          DEBUG: 'false'
+          MEMORY_CACHE_ENABLED: 'false'
+          OFFICIAL_PRICE_SYNC_ENABLED: 'false'
+          UPDATE_TASK: 'false'
+          BATCH_UPDATE_ENABLED: 'false'
+          NODE_TYPE: slave
+          TZ: Asia/Taipei
+        run: |
+          "$RUNNER_TEMP/renewapi-secondary-surfaces" migrate --up
+          "$RUNNER_TEMP/renewapi-secondary-surfaces" migrate --check
+
+      - name: Install browser QA dependencies
+        working-directory: web/default
+        run: |
+          bun add --no-save playwright@1.55.0 axe-core@4.10.2
+          bunx playwright install --with-deps chromium
+
+      - name: Stage Secondary Surfaces harness
+        working-directory: web/default
+        run: cp ../../.github/aurora-secondary-surfaces.mjs .aurora-secondary-surfaces.mjs
+
+      - name: Run Secondary Surfaces real-browser gate
+        working-directory: web/default
+        env:
+          QA_BINARY: ${{ runner.temp }}/renewapi-secondary-surfaces
+          QA_DB: ${{ runner.temp }}/renewapi-secondary-surfaces.db
+          QA_OUT: ../../qa-artifacts/aurora-secondary-surfaces
+          QA_PORT: '4173'
+        run: bun .aurora-secondary-surfaces.mjs
+
+      - name: Show Secondary Surfaces summary
+        if: always()
+        run: |
+          cat qa-artifacts/aurora-secondary-surfaces/summary.txt || true
+          cat qa-artifacts/aurora-secondary-surfaces/failure.json || true
+          cat qa-artifacts/aurora-secondary-surfaces/failures.json || true
+
+      - name: Upload Secondary Surfaces evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurora-secondary-surfaces
+          path: qa-artifacts/aurora-secondary-surfaces
+          if-no-files-found: error

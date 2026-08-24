@@ -78,8 +78,8 @@ jobs:
           fi
           bun run build
 
-      - name: Test web rate-limit scope
-        run: go test ./router -run '^TestIsWebStaticAssetPath$'
+      - name: Run router regression tests
+        run: go test ./router
 
       - name: Build real RenewAPI binary
         run: go build -o "$RUNNER_TEMP/renewapi-secondary-surfaces" .

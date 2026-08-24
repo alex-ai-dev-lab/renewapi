@@ -35,7 +35,7 @@ type PublicLayoutProps = {
 
 export function PublicLayout(props: PublicLayoutProps) {
   return (
-    <div className='bg-background/70 text-foreground relative min-h-svh overflow-x-clip dark:bg-background'>
+    <div className='bg-background/70 text-foreground relative min-h-svh overflow-x-clip'>
       <a
         href='#main-content'
         className='bg-foreground text-background fixed top-3 left-3 z-[200] -translate-y-16 px-4 py-2 font-mono text-xs tracking-[0.08em] uppercase transition-transform focus:translate-y-0'

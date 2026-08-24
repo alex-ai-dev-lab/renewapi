@@ -1,6 +1,6 @@
 # Aurora Bento v2 进度与验收总表
 
-> 最后更新：2026-08-23  
+> 最后更新：2026-08-24  
 > 仓库：`alex-ai-dev-lab/renewapi`  
 > 原稿：`renewapi-design-02-aurora-bento-v2`  
 > Desktop Light：`9f90bd234d1533dc4f4efb916cc826d5626d4737`  
@@ -10,29 +10,30 @@
 > Settings hardened validated product head：`8b56c883206a8077b3e9bf900ef9564551c93a13`  
 > Phase C merge：`57c4145fdb66c4cb912c5dcd9fb587713282e59c`  
 > Phase D final validated product head：`054378370c727b36e613c8c54cd7c85b4f9955b9`  
-> Phase D final validated PR merge tree：`f68be6c909dfe38ff0d15e46f6d811f86ceed996`
+> Phase D final validated PR merge tree：`f68be6c909dfe38ff0d15e46f6d811f86ceed996`  
+> Phase E Wave 2 validated product head：`f5fa30573b11096aca69007e30bb2787fa2d4449`
 
 ## 1. 当前结论
 
-**Aurora Bento v2 的核心视觉、跨设备响应式基线、核心业务深层状态、Settings foundation 真实后端 mutation，以及核心/深状态范围的自动化无障碍与对比度 hardening 已经完成。**
+**Aurora Bento v2 的核心视觉、跨设备响应式基线、核心业务深层状态、Settings foundation 与 Advanced Settings 真实后端 mutation/destructive/secret/persistence 覆盖，以及核心/深状态范围的自动化无障碍与对比度 hardening 已经完成。**
 
 - Desktop Light：✅ 完成
 - Desktop Dark：✅ 完成
 - Tablet / Mobile Phase B：✅ 完成当前设计源可验证范围
 - Interaction / State Fidelity：✅ 核心全局交互 + 核心业务 deep states 完成
 - Settings foundation real-backend mutation：✅ 完成
+- Advanced Settings expanded backend coverage：✅ 完成
 - Accessibility automation + core/deep-state contrast hardening：✅ 完成
 - Real desktop screen reader smoke：⏳ 环境依赖，待补
 - Literal browser UI 200% zoom：⏳ 环境依赖，待补
-- Advanced Settings expanded backend coverage：⏳ 待补
 - Secondary Surfaces：⏳ 待做
 - Release / deployment smoke：⏳ 待做
 
 当前可以表述为：
 
-> **Desktop Light / Dark + 1024 / 768 / 375 核心页面、核心业务 loading/empty/error/destructive/bulk/filter/pagination/model-management 深状态、Settings foundation 真实后端 mutation/validation/SQLite/restart，以及核心/深状态 WCAG/ARIA/contrast 自动化 hardening 已通过。**
+> **Desktop Light / Dark + 1024 / 768 / 375 核心页面、核心业务 loading/empty/error/destructive/bulk/filter/pagination/model-management 深状态、Settings foundation + Advanced Settings 真实后端 mutation/validation/destructive/secret/SQLite/restart，以及核心/深状态 WCAG/ARIA/contrast 自动化 hardening 已通过。**
 
-不能把当前状态表述为“全产品 DoD 已全部完成”，因为真实桌面辅助技术、浏览器 UI 真 200% zoom、Advanced Settings 扩展后端覆盖、Secondary Surfaces 与部署 smoke 尚未清零。
+不能把当前状态表述为“全产品 DoD 已全部完成”，因为真实桌面辅助技术、浏览器 UI 真 200% zoom、Secondary Surfaces 与部署 smoke 尚未清零。
 
 ## 2. 核心页面状态
 
@@ -44,7 +45,7 @@
 | Usage Logs | ✅ | ✅ | ✅ | ✅ loading/empty/error/page-2/filter semantics |
 | Models | ✅ | ✅ | ✅ | ✅ management/edit/destructive/bulk、未过滤 registry total |
 | Users | ✅ | ✅ | ✅ | ✅ loading/empty/error、quota progress name |
-| System Settings | ✅ | ✅ | ✅ | ✅ foundation labels + real-backend mutation/restart |
+| System Settings | ✅ | ✅ | ✅ | ✅ foundation + advanced real-backend mutation/destructive/restart |
 
 ## 3. 主要验收证据
 
@@ -58,6 +59,8 @@
 | Settings real-backend hardened final | `32633291555` | ✅ fresh SQLite + real root auth + UI/API/SQLite mutation + restart |
 | Phase C deep-state strict final | `32641303689` | ✅ deep-state matrix + Models `42 registered / 1 filtered`; P0/P1/P2/P3=0 |
 | Phase D accessibility final proof | `32645510077` | ✅ axe violations=0；P0/P1/P2=0；14/14 high-DPI no overflow；28 ARIA snapshots |
+| Phase E Advanced Settings Wave 1 | `32649601628` | ✅ Worker / Rate Limit / Check-in / SSRF real-backend matrix |
+| Phase E Advanced Settings Wave 2 | `32681901244` | ✅ Request Guard / Pricing / Logs / Anti-Poison + restart PASS |
 
 关键 artifact：
 
@@ -65,6 +68,8 @@
 - Settings hardened：id `9491668465` / digest `sha256:a7f925ed004f102a63db904545c96cb3fbf792555f7d2452401b07c783db2839`
 - Phase C final：id `9493701166` / digest `sha256:b76715327e3762ea1505bcbe14e7f0892a366c50ef176628c4ce79b7e3cc326b`
 - Phase D final proof：`aurora-accessibility-phase-d-final-proof` / id `9494793377` / digest `sha256:c29272a0b22e45a6452934cfe95c21dfd8531173fb3bc3a6334c6d0e84d19be0`
+- Phase E Wave 1：`settings-advanced-phase-e-wave1` / id `9495852590` / digest `sha256:c9442910699ae2115fbf2e31578b4c0a2fbf6b8ee64e8c8a65734148751a3d69`
+- Phase E Wave 2：`settings-advanced-phase-e-wave2` / id `9504447296` / digest `sha256:2c9c91046c309d849a2c3b44fb0ea13ca6aa726e2154879c25b9f5aafa021588`
 
 详细报告：
 
@@ -74,6 +79,7 @@
 - `docs/aurora-settings-real-backend-qa.md`
 - `docs/aurora-accessibility-phase-d-plan.md`
 - `docs/aurora-accessibility-phase-d-qa.md`
+- `docs/aurora-advanced-settings-phase-e-plan.md`
 
 ## 4. Phase A — Dark Mode
 
@@ -111,7 +117,7 @@
 
 ## 6. Phase C — Interaction / State Fidelity
 
-**状态：✅ 核心业务 deep states 完成；Advanced Settings expanded backend coverage 仍待补**
+**状态：✅ 核心业务 deep states + Advanced Settings expanded backend coverage 完成**
 
 已验证：
 
@@ -144,9 +150,18 @@ Settings foundation real-backend 已验证：
 - [x] validation error 与旧 success toast 不再同时显示
 - [x] fresh install 默认服务 redesigned frontend；persisted `classic` 仍支持显式 override
 
-仍待：
+Advanced Settings real-backend 已验证：
 
-- [ ] Advanced Settings sections 的逐项 mutation / destructive state 扩展覆盖
+- [x] Worker Proxy URL/key/toggle + normalization + API/SQLite/restart
+- [x] Rate Limiting invalid JSON no-mutation + valid bulk persistence + restart
+- [x] Check-in Rewards cross-field validation + valid bulk persistence + restart
+- [x] SSRF string-array contract + single bulk persistence + restart
+- [x] Request Guard create/edit/delete + destructive Cancel/Confirm + secret cleanup + restart
+- [x] Model/group pricing invalid JSON no-mutation + single bulk persistence + API/SQLite/restart
+- [x] Log deletion seeded-row Cancel/Confirm + strict cutoff semantics + restart
+- [x] Anti-Poison signed-audit secret masking + configured-state + unrelated-save preservation + rotation + restart
+- [x] Wave 2 evidence secret-redaction gate
+- [x] Wave 2 console/page errors = `0`
 
 ## 7. Phase D — Accessibility
 
@@ -208,6 +223,10 @@ Settings foundation real-backend 已验证：
 16. avatar fallback 单字符在旧半透明 palette 上可能低至约 3.43:1。
 17. 原稿 Light Aurora action gradient 承载白色小字时端点对比不足。
 18. 旧固定 accent RGB 在 Light/Dark 之间存在跨主题对比度失败。
+19. SSRF Advanced Settings 顺序写入导致多字段持久化非原子，且 `allowed_ports` 前端类型与后端 string-array contract 不一致。
+20. Request Guard endpoint 删除缺少 destructive confirmation；已改为 Cancel/Confirm 的 draft-only 删除并要求显式 Save。
+21. Model/Group Pricing 多字段保存顺序写入；已统一为单次 bulk mutation。
+22. Anti-Poison configured secret 需要保持“不回显、无关保存不覆盖”的独立语义；已加后端 masking 与真实后端回归。
 
 ## 9. 工程质量门
 
@@ -233,17 +252,30 @@ Settings hardened final 另通过：
 - [x] invalid bulk direct SQLite atomicity + intermediate restart
 - [x] final restart persistence
 
-Phase C final `32641303689`：`53 pass / 0 fail / 104 expect()` + TypeScript/build/Prettier + deep-state matrix。  
-Phase D final `32644742739`：同一产品工程门 + axe/ARIA/high-DPI/contrast matrix 全绿。
+Phase E Wave 2 `32681901244` 另通过：
 
-一次性 QA workflow / patch 在最终合并前删除；artifact/run id 与 durable docs 保留为可追溯证据。
+- [x] targeted Request Guard / secret masking / log cutoff / bulk rollback Go regressions
+- [x] default frontend `53 pass / 0 fail / 104 expect()`
+- [x] TypeScript + default production build
+- [x] classic production build
+- [x] real RenewAPI binary + fresh SQLite + production migrations
+- [x] real root setup/login + browser-driven Advanced Settings flows
+- [x] authenticated API + direct SQLite synchronization
+- [x] destructive Cancel/Confirm semantics
+- [x] secret redaction before artifact upload
+- [x] restart persistence
+- [x] console/page errors `0`
+
+Phase C final `32641303689`：`53 pass / 0 fail / 104 expect()` + TypeScript/build/Prettier + deep-state matrix。  
+Phase D final `32645510077`：同一产品工程门 + axe/ARIA/high-DPI/contrast matrix 全绿。
+
+旧的一次性 QA workflow / patch 在对应阶段合并前已删除；Phase E Wave 2 的 `.github/settings-advanced-phase-e-wave2.mjs` 与 `.github/workflows/settings-advanced-phase-e-wave2.yml` 作为 durable regression infrastructure 保留。
 
 ## 10. 下一步执行顺序
 
-1. **Advanced Settings expanded backend coverage**：逐项 mutation / destructive state / persistence / validation / restart 扩展。
-2. **Secondary Surfaces 品牌统一**：登录、错误页、个人设置、钱包及其他非核心管理面。
-3. **真实辅助技术补口**：有合适桌面环境时执行 VoiceOver/NVDA/JAWS smoke 与 literal browser UI 200% zoom。
-4. **正式 release / deployment smoke**：实际部署环境巡检。
+1. **Secondary Surfaces 品牌统一**：登录、错误页、个人设置、钱包及其他非核心管理面，并补非核心 contrast sweep。
+2. **真实辅助技术补口**：有合适桌面环境时执行 VoiceOver/NVDA/JAWS smoke 与 literal browser UI 200% zoom。
+3. **正式 release / deployment smoke**：实际部署环境巡检。
 
 ## 11. 完成定义
 
@@ -254,11 +286,11 @@ Phase D final `32644742739`：同一产品工程门 + axe/ARIA/high-DPI/contrast
 - [x] 核心全局交互
 - [x] 核心业务 deep states
 - [x] Settings foundation real-backend mutation
+- [x] Advanced Settings expanded mutation / destructive / secret / persistence coverage
 - [x] 核心/深状态 automated accessibility + manual contrast hardening
 
 以下清零后才能宣称 Aurora Bento v2 全产品 DoD：
 
-- [ ] Advanced Settings expanded mutation / destructive coverage
 - [ ] real screen reader / literal browser UI 200% zoom
 - [ ] Secondary Surfaces brand unification / non-core contrast sweep
 - [ ] deployment smoke

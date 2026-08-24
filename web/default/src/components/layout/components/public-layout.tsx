@@ -56,11 +56,17 @@ export function PublicLayout(props: PublicLayoutProps) {
       )}
 
       {props.showMainContainer !== false ? (
-        <main id='main-content' className='container px-4 py-6 pt-20 md:px-4'>
+        <main
+          id='main-content'
+          tabIndex={-1}
+          className='container px-4 py-6 pt-20 outline-none md:px-4'
+        >
           {props.children}
         </main>
       ) : (
-        props.children
+        <div id='main-content' tabIndex={-1} className='outline-none'>
+          {props.children}
+        </div>
       )}
     </div>
   )

@@ -103,7 +103,7 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
       <div className='p-3 sm:p-5'>
         <div className='flex items-center gap-3 text-left sm:gap-4'>
           <Avatar className='ring-background h-12 w-12 rounded-xl text-sm ring-2 sm:h-16 sm:w-16 sm:text-lg sm:ring-4'>
-            <AvatarFallback className='bg-primary/10 text-primary rounded-xl'>
+            <AvatarFallback className='bg-primary/10 text-foreground rounded-xl'>
               {initials}
             </AvatarFallback>
           </Avatar>
@@ -143,7 +143,7 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
           {stats.map((item) => (
             <div key={item.label} className='min-w-0 px-3 py-3 sm:px-5 sm:py-4'>
               <div className='flex items-center gap-2'>
-                <item.icon className='text-muted-foreground/60 size-3.5 shrink-0' />
+                <item.icon className='text-muted-foreground size-3.5 shrink-0' />
                 <div className='text-muted-foreground truncate text-xs font-medium tracking-wider uppercase'>
                   {item.label}
                 </div>
@@ -152,7 +152,7 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
               <div className='text-foreground mt-1.5 truncate font-mono text-lg font-bold tracking-tight tabular-nums sm:mt-2 sm:text-2xl'>
                 {item.value}
               </div>
-              <div className='text-muted-foreground/60 mt-1 hidden text-xs md:block'>
+              <div className='text-muted-foreground mt-1 hidden text-xs md:block'>
                 {item.description}
               </div>
             </div>

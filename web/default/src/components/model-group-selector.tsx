@@ -88,6 +88,7 @@ const ModelTriggerButton = React.forwardRef<
     role='combobox'
     size='sm'
     disabled={isDisabled}
+    aria-label={currentLabel}
     className={cn(
       'flex h-8 items-center gap-2 border px-3 font-medium',
       'justify-center p-0 sm:w-auto sm:justify-start sm:px-3',
@@ -124,6 +125,7 @@ const GroupTriggerButton = React.forwardRef<
     role='combobox'
     size='sm'
     disabled={isDisabled}
+    aria-label={currentLabel}
     className={cn(
       'flex h-8 items-center gap-2 border px-3 font-medium',
       'justify-center p-0 sm:w-auto sm:justify-start sm:px-3',

@@ -127,7 +127,10 @@ export function LanguagePreferencesCard(props: LanguagePreferencesCardProps) {
             onValueChange={handleLanguageChange}
             disabled={saving}
           >
-            <SelectTrigger className='w-full sm:w-48'>
+            <SelectTrigger
+              className='w-full sm:w-48'
+              aria-label={t('Interface Language')}
+            >
               <SelectValue placeholder={t('Select language')} />
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>

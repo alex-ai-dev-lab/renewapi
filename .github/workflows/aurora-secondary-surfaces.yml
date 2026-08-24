@@ -78,6 +78,9 @@ jobs:
           fi
           bun run build
 
+      - name: Test web rate-limit scope
+        run: go test ./router -run '^TestIsWebStaticAssetPath$'
+
       - name: Build real RenewAPI binary
         run: go build -o "$RUNNER_TEMP/renewapi-secondary-surfaces" .
 
@@ -114,6 +117,10 @@ jobs:
           QA_DB: ${{ runner.temp }}/renewapi-secondary-surfaces.db
           QA_OUT: ../../qa-artifacts/aurora-secondary-surfaces
           QA_PORT: '4173'
+          # The matrix intentionally performs 72 rapid document navigations from
+          # one loopback IP. Keep the production limiter enabled while raising
+          # only this QA process's document budget above the synthetic burst.
+          GLOBAL_WEB_RATE_LIMIT: '600'
         run: bun .aurora-secondary-surfaces.mjs
 
       - name: Show Secondary Surfaces summary

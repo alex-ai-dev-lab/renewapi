@@ -117,10 +117,12 @@ jobs:
           QA_DB: ${{ runner.temp }}/renewapi-secondary-surfaces.db
           QA_OUT: ../../qa-artifacts/aurora-secondary-surfaces
           QA_PORT: '4173'
-          # The matrix intentionally performs 72 rapid document navigations from
-          # one loopback IP. Keep the production limiter enabled while raising
-          # only this QA process's document budget above the synthetic burst.
+          # The 72-case matrix deliberately concentrates document and API traffic
+          # onto one loopback IP. Keep both production limiters enabled, but give
+          # this isolated QA process budgets above the synthetic burst so a
+          # limiter smoke remains active without contaminating the UI audit.
           GLOBAL_WEB_RATE_LIMIT: '600'
+          GLOBAL_API_RATE_LIMIT: '2000'
         run: bun .aurora-secondary-surfaces.mjs
 
       - name: Show Secondary Surfaces summary

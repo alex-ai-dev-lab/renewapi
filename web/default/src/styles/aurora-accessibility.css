@@ -18,20 +18,17 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 /*
- * Keep the supplied light Aurora palette for decorative surfaces and the logo,
- * but use darker same-hue stops anywhere the gradient itself carries text.
- * Each action stop below clears 4.5:1 against white, so small white labels
- * remain AA. Aurora heading text is 34px+ and every stop clears the 3:1 large
- * text threshold even over the darkest supplied light-mode ambient pastel.
+ * Production Aurora action/text gradients stay on the blue -> cyan brand axis.
+ * Action endpoints clear 4.5:1 against white, so small labels remain WCAG AA.
  */
 html:not(.dark) {
   --aurora-action-from: #3f66d8;
-  --aurora-action-to: #7046d8;
+  --aurora-action-to: #0e7490;
   --aurora-action-hover-from: #365abf;
-  --aurora-action-hover-to: #6339c5;
+  --aurora-action-hover-to: #0c667e;
   --aurora-text-from: #3f66d8;
-  --aurora-text-mid: #8a4ddb;
-  --aurora-text-to: #c1457f;
+  --aurora-text-mid: #0369a1;
+  --aurora-text-to: #0e7490;
 }
 
 html:not(.dark) [data-slot='button'].bg-primary,
@@ -61,9 +58,8 @@ html:not(.dark) .text-aurora {
 }
 
 /*
- * Legacy reference accents were fixed RGB values. Map them to semantic tokens
- * so their contrast remains valid in both Light and Dark without flattening
- * the Aurora surfaces that surround them.
+ * Legacy fixed accents map to semantic tokens so their contrast remains valid
+ * in both Light and Dark without changing their status meaning.
  */
 [class~='text-[#B4655F]'] {
   color: var(--muted-foreground) !important;

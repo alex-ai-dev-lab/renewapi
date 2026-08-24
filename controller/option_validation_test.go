@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -146,7 +145,7 @@ func TestGetOptionsMasksAntiPoisonAuditSecretAndReportsConfiguredState(t *testin
 			Value string `json:"value"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+	if err := common.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode options response: %v", err)
 	}
 	if !response.Success {

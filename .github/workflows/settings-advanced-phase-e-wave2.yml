@@ -123,6 +123,7 @@ jobs:
           bunx playwright install --with-deps chromium
           cp ../../.github/settings-advanced-phase-e-wave2.mjs .settings-advanced-phase-e-wave2.mjs
           sed -i "s/getByLabel('Model')/getByLabel('Model', { exact: true })/g" .settings-advanced-phase-e-wave2.mjs
+          sed -i "s/getByLabel('Group ratios')/getByLabel('Group ratios', { exact: true })/g" .settings-advanced-phase-e-wave2.mjs
 
       - name: Run Advanced Settings real-backend Wave 2
         working-directory: web/default

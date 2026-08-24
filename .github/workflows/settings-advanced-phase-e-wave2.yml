@@ -30,6 +30,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: settings-advanced-phase-e-wave2-${{ github.ref }}
@@ -41,6 +42,23 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+
+      - name: Publish Wave 2 pending status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload="$(printf '{\"state\":\"pending\",\"target_url\":\"%s/%s/actions/runs/%s\",\"description\":\"Wave 2 run %s started\",\"context\":\"settings-advanced-phase-e-wave2\"}' \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_RUN_ID")"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            -H 'Content-Type: application/json' \
+            -d "$payload" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" >/dev/null
 
       - uses: actions/setup-go@v5
         with:
@@ -141,3 +159,27 @@ jobs:
           name: settings-advanced-phase-e-wave2
           path: qa-artifacts/settings-advanced-phase-e-wave2
           if-no-files-found: error
+
+      - name: Publish Wave 2 final status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$JOB_STATUS" in
+            success) state='success' ;;
+            cancelled) state='error' ;;
+            *) state='failure' ;;
+          esac
+          payload="$(printf '{\"state\":\"%s\",\"target_url\":\"%s/%s/actions/runs/%s\",\"description\":\"Wave 2 run %s: %s\",\"context\":\"settings-advanced-phase-e-wave2\"}' \
+            "$state" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_RUN_ID" "$state")"
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            -H 'Content-Type: application/json' \
+            -d "$payload" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" >/dev/null

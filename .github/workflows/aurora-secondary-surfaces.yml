@@ -47,6 +47,11 @@ jobs:
               target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             })
 
+      - name: Prepare QA artifact directory
+        run: |
+          mkdir -p qa-artifacts/aurora-secondary-surfaces
+          printf 'sha=%s\nrun_id=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > qa-artifacts/aurora-secondary-surfaces/run.txt
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -62,6 +67,15 @@ jobs:
           bun install --frozen-lockfile
           bun test
           bun run typecheck
+          bun run build
+
+      - name: Build classic frontend
+        working-directory: web/classic
+        run: |
+          if ! bun install --frozen-lockfile; then
+            bun pm cache rm
+            bun install --frozen-lockfile
+          fi
           bun run build
 
       - name: Build real RenewAPI binary

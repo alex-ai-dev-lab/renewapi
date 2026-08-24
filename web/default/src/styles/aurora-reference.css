@@ -18,17 +18,14 @@ For commercial licensing, please contact support@quantumnous.com
 */
 /*
  * Browser-rendered fidelity overrides for the supplied Aurora Bento v2
- * reference. These values intentionally follow the reference art direction
- * instead of deriving the light-mode brand treatment from the current theme
- * accent. Dark mode remains governed by the existing Aurora/theme layers.
+ * reference. Production brand treatment stays on the blue -> cyan axis;
+ * geometry and glass density continue to follow the accepted reference.
  */
 html:not(.dark) {
   --aurora-from: #4f7cff;
-  --aurora-violet: #8a5bff;
-  --aurora-mid: #b16bff;
-  --aurora-pink: #ff7ab8;
-  --aurora-to: #8a5bff;
-  --aurora-glow: rgba(96, 110, 255, 0.35);
+  --aurora-mid: #38bdf8;
+  --aurora-to: #22b8cf;
+  --aurora-glow: rgba(50, 150, 220, 0.3);
   --aurora-line: rgba(31, 36, 48, 0.08);
   --aurora-glass: rgba(255, 255, 255, 0.62);
   --aurora-glass-strong: rgba(255, 255, 255, 0.8);
@@ -37,7 +34,7 @@ html:not(.dark) {
 html:not(.dark) body {
   background:
     radial-gradient(900px 500px at 8% -10%, #dbeafe 0%, transparent 60%),
-    radial-gradient(800px 480px at 92% 4%, #fce7f3 0%, transparent 55%),
+    radial-gradient(800px 480px at 92% 4%, #cffafe 0%, transparent 55%),
     radial-gradient(900px 620px at 55% 110%, #d1fae5 0%, transparent 60%),
     radial-gradient(600px 400px at 30% 55%, #fef3c7 0%, transparent 55%),
     #f6f7fb;
@@ -58,23 +55,23 @@ html:not(.dark) [data-slot='button'].bg-primary,
 html:not(.dark) [data-slot='badge'].bg-primary {
   border-color: transparent;
   border-radius: 999px;
-  background-image: linear-gradient(135deg, #4f7cff, #8a5bff);
-  box-shadow: 0 8px 20px rgba(96, 110, 255, 0.35);
+  background-image: linear-gradient(135deg, #4f7cff, #22b8cf);
+  box-shadow: 0 8px 20px rgba(50, 150, 220, 0.3);
 }
 
 html:not(.dark) [data-slot='button'].bg-primary:hover {
-  background-image: linear-gradient(135deg, #456fe8, #7b50ea);
-  box-shadow: 0 10px 24px rgba(96, 110, 255, 0.42);
+  background-image: linear-gradient(135deg, #456fe8, #1593aa);
+  box-shadow: 0 10px 24px rgba(50, 150, 220, 0.38);
 }
 
 html:not(.dark) .text-aurora {
-  background-image: linear-gradient(100deg, #4f7cff, #b16bff 55%, #ff7ab8);
+  background-image: linear-gradient(100deg, #4f7cff, #38bdf8 55%, #22b8cf);
 }
 
 html:not(.dark) [data-slot='card'].aurora-reference-surface-1,
 html:not(.dark) .aurora-reference-surface-1 {
   background:
-    linear-gradient(135deg, rgba(79, 124, 255, 0.14), rgba(138, 91, 255, 0.1)),
+    linear-gradient(135deg, rgba(79, 124, 255, 0.14), rgba(34, 184, 207, 0.1)),
     var(--aurora-glass) !important;
 }
 
@@ -83,7 +80,7 @@ html:not(.dark) .aurora-reference-surface-2 {
   background:
     linear-gradient(
       135deg,
-      rgba(255, 122, 184, 0.14),
+      rgba(56, 189, 248, 0.13),
       rgba(255, 196, 110, 0.1)
     ),
     var(--aurora-glass) !important;
@@ -97,7 +94,7 @@ html:not(.dark) .aurora-reference-surface-3 {
 }
 
 html:not(.dark) .aurora-reference-progress {
-  background-image: linear-gradient(90deg, #4f7cff, #b16bff);
+  background-image: linear-gradient(90deg, #4f7cff, #22b8cf);
 }
 
 @media (min-width: 1024px) {
@@ -157,7 +154,7 @@ html:not(.dark) main [data-slot='table-cell'] {
 }
 
 html:not(.dark) .aurora-settings-switch[data-checked] {
-  background-image: linear-gradient(135deg, #4f7cff, #8a5bff);
+  background-image: linear-gradient(135deg, #4f7cff, #22b8cf);
 }
 
 .aurora-settings-switch [data-slot='switch-thumb'] {

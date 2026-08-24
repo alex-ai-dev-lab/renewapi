@@ -71,6 +71,11 @@ function sanitize(value) {
   return String(value).replace(/[^A-Za-z0-9_.-]+/g, '-')
 }
 
+function normalizePathname(value) {
+  if (value === '/') return '/'
+  return value.replace(/\/+$/, '') || '/'
+}
+
 async function readJson(response) {
   const text = await response.text()
   try {
@@ -346,6 +351,17 @@ async function auditPage(context, testCase, theme, viewportName, authRequired) {
     await waitForSurface(page)
 
     const currentURL = page.url()
+    const currentPathname = normalizePathname(new URL(currentURL).pathname)
+    const expectedPathname = normalizePathname(route)
+    if (currentPathname !== expectedPathname) {
+      failures.push({
+        label,
+        type: 'unexpected-route',
+        expectedPathname,
+        currentPathname,
+        currentURL,
+      })
+    }
     if (authRequired && currentURL.includes('/sign-in')) {
       failures.push({ label, type: 'auth-redirect', currentURL })
     }

@@ -122,6 +122,7 @@ jobs:
           bun add --no-save playwright@1.55.0
           bunx playwright install --with-deps chromium
           cp ../../.github/settings-advanced-phase-e-wave2.mjs .settings-advanced-phase-e-wave2.mjs
+          sed -i "s/getByLabel('Model')/getByLabel('Model', { exact: true })/g" .settings-advanced-phase-e-wave2.mjs
 
       - name: Run Advanced Settings real-backend Wave 2
         working-directory: web/default

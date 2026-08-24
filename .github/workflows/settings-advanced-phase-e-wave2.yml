@@ -109,6 +109,25 @@ jobs:
           QA_PORT: '4173'
         run: bun .settings-advanced-phase-e-wave2.mjs
 
+      - name: Verify Wave 2 evidence redaction
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence='qa-artifacts/settings-advanced-phase-e-wave2'
+          if [[ ! -d "$evidence" ]]; then
+            exit 0
+          fi
+          if grep -R -q -F \
+            -e 'wave2-request-guard-secret' \
+            -e 'wave2-audit-secret-initial' \
+            -e 'wave2-audit-secret-rotated' \
+            "$evidence"; then
+            rm -rf "$evidence"
+            printf '%s\n' 'Wave 2 evidence contained a QA secret and was removed before upload.'
+            exit 1
+          fi
+
       - name: Show Wave 2 summary
         if: always()
         run: |

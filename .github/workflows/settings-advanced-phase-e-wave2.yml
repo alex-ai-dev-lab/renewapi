@@ -54,7 +54,7 @@ jobs:
       - name: Verify Wave 2 backend regressions
         run: >-
           go test -count=1
-          -run 'TestUpdateRequestGuardConfigClearsRemovedEndpointSecret|TestUpdateRequestGuardConfigRejectsInvalidPayloadWithoutMutation|TestGetOptionsMasksAntiPoisonAuditSecretAndReportsConfiguredState|TestDeleteOldLogRespectsCutoffAndPreservesNewerRows|TestUpdateOptionsBulkRollbackRestoresDatabaseAndOptionMap'
+          -run 'TestUpdateRequestGuardConfigClearsRemovedEndpointSecret|TestUpdateRequestGuardConfigRejectsInvalidPayloadWithoutMutation|TestGetOptionsMasksAntiPoisonAuditSecretAndReportsConfiguredState|TestDeleteOldLogRespectsCutoffAndPreservesNewerRows|TestUpdateOptionsBulkRollbackRemovesRuntimeKeyMissingFromSnapshot'
           ./controller ./model
 
       - name: Verify default frontend

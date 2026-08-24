@@ -2,7 +2,6 @@ package controller
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -110,9 +109,19 @@ func installRequestGuardControllerState(
 	oldOptionMap := common.OptionMap
 	common.OptionMap = make(map[string]string)
 	common.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		model.DB = oldDB
+		operation_setting.ApplyRequestGuardSetting(oldSetting)
+		common.OptionMapRWMutex.Lock()
+		common.OptionMap = oldOptionMap
+		common.OptionMapRWMutex.Unlock()
+	})
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	require.NoError(t, db.AutoMigrate(&model.Option{}))
 	model.DB = db
 	operation_setting.ApplyRequestGuardSetting(current)
@@ -130,14 +139,6 @@ func installRequestGuardControllerState(
 	}
 	common.OptionMapRWMutex.Unlock()
 	require.NoError(t, db.Create(&options).Error)
-
-	t.Cleanup(func() {
-		model.DB = oldDB
-		operation_setting.ApplyRequestGuardSetting(oldSetting)
-		common.OptionMapRWMutex.Lock()
-		common.OptionMap = oldOptionMap
-		common.OptionMapRWMutex.Unlock()
-	})
 	return baseline
 }
 
@@ -159,7 +160,7 @@ func requestGuardUpdatePayload(setting operation_setting.RequestGuardSetting) re
 
 func performRequestGuardConfigUpdate(t *testing.T, payload requestGuardConfigUpdate) *httptest.ResponseRecorder {
 	t.Helper()
-	encoded, err := json.Marshal(payload)
+	encoded, err := common.Marshal(payload)
 	require.NoError(t, err)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -186,7 +187,7 @@ func TestUpdateRequestGuardConfigClearsRemovedEndpointSecret(t *testing.T) {
 	var configOption model.Option
 	require.NoError(t, model.DB.First(&configOption, "key = ?", "request_guard_setting").Error)
 	var stored operation_setting.RequestGuardSetting
-	require.NoError(t, json.Unmarshal([]byte(configOption.Value), &stored))
+	require.NoError(t, common.Unmarshal([]byte(configOption.Value), &stored))
 	require.Len(t, stored.Endpoints, 1)
 	require.Equal(t, "secondary", stored.Endpoints[0].ID)
 

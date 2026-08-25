@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowUpFromLine,
   DollarSign,
@@ -58,16 +59,10 @@ type ChannelsPrimaryButtonsProps = {
 
 export function ChannelsPrimaryButtons(props: ChannelsPrimaryButtonsProps) {
   const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
   const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
-  const {
-    setOpen,
-    setCurrentRow,
-    enableTagMode,
-    setEnableTagMode,
-    idSort,
-    setIdSort,
-    upstream,
-  } = useChannels()
+  const { enableTagMode, setEnableTagMode, idSort, setIdSort, upstream } =
+    useChannels()
   const queryClient = useQueryClient()
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const variant = props.variant ?? 'all'
@@ -118,8 +113,7 @@ export function ChannelsPrimaryButtons(props: ChannelsPrimaryButtonsProps) {
         {showCreate ? (
           <Button
             onClick={() => {
-              setCurrentRow(null)
-              setOpen('create-channel')
+              void navigate({ to: '/channels/new' })
             }}
             size='sm'
           >

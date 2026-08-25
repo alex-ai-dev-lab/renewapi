@@ -16,25 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { describe, expect, test } from 'bun:test'
-import { getChannelEditConfigVersion } from '../../lib/channel-form-initialization'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { useAuthStore } from '@/stores/auth-store'
+import { ROLE } from '@/lib/roles'
 
-describe('ChannelMutateDrawer edit config version contract', () => {
-  test('passes the frozen edit version to the mutation hook', () => {
-    expect(
-      getChannelEditConfigVersion({
-        isEditing: true,
-        frozenConfigVersion: 109,
-      })
-    ).toBe(109)
-  })
-
-  test('does not pass a version for create mode', () => {
-    expect(
-      getChannelEditConfigVersion({
-        isEditing: false,
-        frozenConfigVersion: 109,
-      })
-    ).toBeUndefined()
-  })
+export const Route = createFileRoute(
+  '/_authenticated/channels/$channelId/edit'
+)({
+  beforeLoad: () => {
+    const { auth } = useAuthStore.getState()
+    if (!auth.user || auth.user.role < ROLE.ADMIN)
+      throw redirect({ to: '/403' })
+  },
 })

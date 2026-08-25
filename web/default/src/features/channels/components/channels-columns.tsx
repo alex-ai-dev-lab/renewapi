@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 /* eslint-disable react-refresh/only-export-components */
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
   AlertTriangle,
@@ -151,7 +152,7 @@ function renderLimitedItems(
  */
 function OpenPanelButton({ channel }: { channel: Channel }) {
   const { t } = useTranslation()
-  const { setCurrentRow, setOpen } = useChannels()
+  const navigate = useNavigate()
 
   return (
     <TooltipProvider>
@@ -164,8 +165,10 @@ function OpenPanelButton({ channel }: { channel: Channel }) {
               aria-label={t('Open panel')}
               onClick={(e: React.MouseEvent) => {
                 e.stopPropagation()
-                setCurrentRow(channel)
-                setOpen('update-channel')
+                void navigate({
+                  to: '/channels/$channelId/edit',
+                  params: { channelId: String(channel.id) },
+                })
               }}
             />
           }
@@ -266,11 +269,14 @@ function PriorityCell({ channel }: { channel: Channel }) {
           open={confirmOpen}
           onOpenChange={setConfirmOpen}
           title={t('Confirm Batch Update')}
-          desc={t(`将把标签 "${tk('tag')}" 下 ${tk('count')} 个渠道的优先级更新为 ${tk('value')}，是否继续？`, {
-            tag,
-            count: channelCount,
-            value: pendingValue,
-          })}
+          desc={t(
+            `将把标签 "${tk('tag')}" 下 ${tk('count')} 个渠道的优先级更新为 ${tk('value')}，是否继续？`,
+            {
+              tag,
+              count: channelCount,
+              value: pendingValue,
+            }
+          )}
           confirmText={t('更新')}
           handleConfirm={() => {
             if (pendingValue !== null) {
@@ -325,11 +331,14 @@ function WeightCell({ channel }: { channel: Channel }) {
           open={confirmOpen}
           onOpenChange={setConfirmOpen}
           title={t('Confirm Batch Update')}
-          desc={t(`将把标签 "${tk('tag')}" 下 ${tk('count')} 个渠道的权重更新为 ${tk('value')}，是否继续？`, {
-            tag,
-            count: channelCount,
-            value: pendingValue,
-          })}
+          desc={t(
+            `将把标签 "${tk('tag')}" 下 ${tk('count')} 个渠道的权重更新为 ${tk('value')}，是否继续？`,
+            {
+              tag,
+              count: channelCount,
+              value: pendingValue,
+            }
+          )}
           confirmText={t('更新')}
           handleConfirm={() => {
             if (pendingValue !== null) {
@@ -591,7 +600,9 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
                 )}
               </Button>
               <div className='flex items-center gap-1.5'>
-                <span className='font-semibold'>{t('标签')}：{tag}</span>
+                <span className='font-semibold'>
+                  {t('标签')}：{tag}
+                </span>
                 <StatusBadge
                   label={t(`${tk('count')} 个渠道`, { count: childrenCount })}
                   variant='blue'
@@ -627,7 +638,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
                     <Tooltip>
                       <TooltipTrigger
                         render={
-                          <AlertTriangle className='h-3.5 w-3.5 flex-shrink-0 text-warning' />
+                          <AlertTriangle className='text-warning h-3.5 w-3.5 flex-shrink-0' />
                         }
                       ></TooltipTrigger>
                       <TooltipContent side='top'>
@@ -643,7 +654,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
                     <Tooltip>
                       <TooltipTrigger
                         render={
-                          <AlertTriangle className='h-3.5 w-3.5 flex-shrink-0 text-destructive' />
+                          <AlertTriangle className='text-destructive h-3.5 w-3.5 flex-shrink-0' />
                         }
                       ></TooltipTrigger>
                       <TooltipContent side='top' className='max-w-xs'>

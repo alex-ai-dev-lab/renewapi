@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { type Row } from '@tanstack/react-table'
 import {
   MoreHorizontal,
@@ -73,6 +74,7 @@ interface DataTableRowActionsProps {
 
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const channel = row.original
   const { setOpen, setCurrentRow, upstream } = useChannels()
   const queryClient = useQueryClient()
@@ -98,8 +100,10 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   })()
 
   const handleEdit = () => {
-    setCurrentRow(channel)
-    setOpen('update-channel')
+    void navigate({
+      to: '/channels/$channelId/edit',
+      params: { channelId: String(channel.id) },
+    })
   }
 
   const handleTest = () => {

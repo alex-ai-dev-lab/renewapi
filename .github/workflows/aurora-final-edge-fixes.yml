@@ -1,0 +1,244 @@
+name: Aurora Final Edge Fixes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/aurora-final-edge-fixes.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Apply exact fixes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}')
+              p.write_text(text.replace(old, new, 1))
+
+          # Empty log sets must produce numeric zeroes, not NULL -> int64 scan failures.
+          replace_once(
+              'model/stats.go',
+              '\t\t\tSUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS success_requests,\n\t\t\tSUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS failed_requests,',
+              '\t\t\tCOALESCE(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END), 0) AS success_requests,\n\t\t\tCOALESCE(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END), 0) AS failed_requests,',
+          )
+
+          empty_test = '''func TestGetOverviewStatsHandlesEmptyLogSet(t *testing.T) {
+          \ttruncateTables(t)
+
+          \tstats, err := GetOverviewStats(time.Now().Add(-time.Hour))
+          \trequire.NoError(t, err)
+          \trequire.Zero(t, stats.TotalRequests)
+          \trequire.Zero(t, stats.SuccessRequests)
+          \trequire.Zero(t, stats.FailedRequests)
+          \trequire.Zero(t, stats.SuccessRate)
+          \trequire.Zero(t, stats.ErrorRate)
+          \trequire.Zero(t, stats.TotalCost)
+          \trequire.Zero(t, stats.TotalPromptTokens)
+          \trequire.Zero(t, stats.TotalOutputTokens)
+          \trequire.Zero(t, stats.AvgFirstTokenTime)
+          \trequire.Zero(t, stats.AvgUseTime)
+          \trequire.Zero(t, stats.ActiveChannels)
+          \trequire.Zero(t, stats.ActiveUsers)
+          }
+
+          '''
+          replace_once(
+              'model/stats_test.go',
+              'func TestStatsQueryErrorsArePropagated(t *testing.T) {',
+              empty_test + 'func TestStatsQueryErrorsArePropagated(t *testing.T) {',
+          )
+
+          # The page editor is intentionally independent from the channels list provider.
+          # Keep list/dialog compatibility with an optional context accessor.
+          replace_once(
+              'web/default/src/features/channels/components/channels-provider.tsx',
+              '''export function useChannels() {
+            const context = useContext(ChannelsContext)
+            if (!context) {''',
+              '''export function useChannelsOptional() {
+            return useContext(ChannelsContext)
+          }
+
+          export function useChannels() {
+            const context = useChannelsOptional()
+            if (!context) {''',
+          )
+
+          dialog = 'web/default/src/features/channels/components/dialogs/fetch-models-dialog.tsx'
+          replace_once(
+              dialog,
+              "import { useChannels } from '../channels-provider'",
+              "import type { Channel } from '../../types'\nimport { useChannelsOptional } from '../channels-provider'",
+          )
+          replace_once(
+              dialog,
+              '''  existingModelsOverride?: string[]
+            channelName?: string | null
+          }''',
+              '''  existingModelsOverride?: string[]
+            channelName?: string | null
+            activeChannelOverride?: Channel | null
+          }''',
+          )
+          replace_once(
+              dialog,
+              '''  existingModelsOverride,
+            channelName,
+          }: FetchModelsDialogProps) {
+            const { t } = useTranslation()
+            const { currentRow } = useChannels()
+            const activeChannel = customFetcher ? null : currentRow''',
+              '''  existingModelsOverride,
+            channelName,
+            activeChannelOverride,
+          }: FetchModelsDialogProps) {
+            const { t } = useTranslation()
+            const channelsContext = useChannelsOptional()
+            const activeChannel = customFetcher
+              ? null
+              : (activeChannelOverride ?? channelsContext?.currentRow ?? null)''',
+          )
+
+          replace_once(
+              'web/default/src/features/channels/components/editor/channel-editor.tsx',
+              '''        customFetcher={!isEditing ? createModeFetcher : undefined}
+                  channelName={!isEditing ? currentName?.trim() : undefined}''',
+              '''        customFetcher={!isEditing ? createModeFetcher : undefined}
+                  activeChannelOverride={isEditing ? currentRow : null}
+                  channelName={!isEditing ? currentName?.trim() : undefined}''',
+          )
+
+          qa = '.github/aurora-secondary-surfaces.mjs'
+          # overflow-x:auto computes overflow-y:auto in browsers. Only fail on a
+          # real vertical overflow, an explicit scroll gutter, or height capping.
+          replace_once(
+              qa,
+              '''          tableScrollMetrics.scrollHeight > tableScrollMetrics.clientHeight + 1 ||
+                    tableScrollMetrics.overflowY === 'auto' ||
+                    tableScrollMetrics.overflowY === 'scroll' ||''',
+              '''          tableScrollMetrics.scrollHeight > tableScrollMetrics.clientHeight + 1 ||
+                    tableScrollMetrics.overflowY === 'scroll' ||''',
+          )
+
+          # Preserve runtime evidence when route identity cannot mount.
+          replace_once(
+              qa,
+              '''  } catch (error) {
+              failures.push({
+                label,
+                type: 'audit-exception',
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+              })
+            } finally {''',
+              '''  } catch (error) {
+              const currentURL = page.url()
+              const bodyText = await page
+                .locator('body')
+                .innerText()
+                .catch(() => '')
+              const caseConsoleErrors = consoleErrors.slice(beforeConsole)
+              const casePageErrors = pageErrors.slice(beforePageErrors)
+              const screenshotPath = path.join(
+                outDir,
+                'screenshots',
+                `${sanitize(label)}-exception.png`
+              )
+              await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {})
+              failures.push({
+                label,
+                type: 'audit-exception',
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+                currentURL,
+                bodyText: bodyText.slice(0, 2000),
+                consoleErrors: caseConsoleErrors,
+                pageErrors: casePageErrors,
+                screenshotPath,
+              })
+            } finally {''',
+          )
+          PY
+
+          gofmt -w model/stats.go model/stats_test.go
+
+      - name: Verify default frontend
+        working-directory: web/default
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          bunx prettier --write \
+            src/features/channels/components/channels-provider.tsx \
+            src/features/channels/components/dialogs/fetch-models-dialog.tsx \
+            src/features/channels/components/editor/channel-editor.tsx \
+            ../../.github/aurora-secondary-surfaces.mjs
+          bunx eslint \
+            src/features/channels/components/channels-provider.tsx \
+            src/features/channels/components/dialogs/fetch-models-dialog.tsx \
+            src/features/channels/components/editor/channel-editor.tsx
+          bun test
+          bun run typecheck
+          bun run build
+
+      - name: Verify stats regression
+        run: |
+          set -euo pipefail
+          go test ./model
+
+      - name: Verify structural contracts
+        run: |
+          set -euo pipefail
+          grep -Fq 'COALESCE(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END), 0) AS success_requests' model/stats.go
+          grep -Fq 'func TestGetOverviewStatsHandlesEmptyLogSet' model/stats_test.go
+          grep -Fq 'export function useChannelsOptional()' web/default/src/features/channels/components/channels-provider.tsx
+          grep -Fq 'activeChannelOverride={isEditing ? currentRow : null}' web/default/src/features/channels/components/editor/channel-editor.tsx
+          grep -Fq 'const channelsContext = useChannelsOptional()' web/default/src/features/channels/components/dialogs/fetch-models-dialog.tsx
+          if grep -Fq "tableScrollMetrics.overflowY === 'auto'" .github/aurora-secondary-surfaces.mjs; then
+            echo 'computed overflow-y:auto must not be treated as real vertical scrolling' >&2
+            exit 1
+          fi
+          grep -Fq 'bodyText: bodyText.slice(0, 2000)' .github/aurora-secondary-surfaces.mjs
+          git diff --check
+
+      - name: Commit verified fixes and remove workflow
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/aurora-final-edge-fixes.yml
+          git add \
+            model/stats.go \
+            model/stats_test.go \
+            web/default/src/features/channels/components/channels-provider.tsx \
+            web/default/src/features/channels/components/dialogs/fetch-models-dialog.tsx \
+            web/default/src/features/channels/components/editor/channel-editor.tsx \
+            .github/aurora-secondary-surfaces.mjs
+          git diff --cached --stat
+          git commit -m 'fix(ui): close Aurora runtime QA edge cases'
+          git push origin HEAD:main

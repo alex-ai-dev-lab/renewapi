@@ -31,7 +31,20 @@ jobs:
           bun-version: 1.3.14
 
       - name: Generate real Channel Editor workspace
-        run: python3 .github/scripts/aurora-v21-channel-editor.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/scripts/aurora-v21-channel-editor.py')
+          text = path.read_text()
+          old = 'r"\\n          <SheetFooter className=\\{sideDrawerFooterClassName\\(\\)\\}>[\\s\\S]*?</SheetFooter>\\n"'
+          new = 'r"\\s*<SheetFooter\\b[\\s\\S]*?</SheetFooter>\\s*"'
+          if old not in text:
+              raise SystemExit('footer matcher patch target not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          python3 .github/scripts/aurora-v21-channel-editor.py
 
       - name: Install frontend dependencies
         working-directory: web/default

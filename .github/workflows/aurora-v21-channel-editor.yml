@@ -29,6 +29,10 @@ jobs:
         with:
           bun-version: 1.3.14
 
+      - name: Normalize legacy drawer close handler
+        shell: bash
+        run: python3 -c 'from pathlib import Path; p=Path("web/default/src/features/channels/components/drawers/channel-mutate-drawer.tsx"); s=p.read_text(); old="  // Handle drawer close\n  const handleOpenChange = useCallback(\n    (v: boolean) => {\n      onOpenChange(v)\n      if (!v) {\n        initializedFormTargetRef.current = null\n        setEditingConfigVersion(undefined)\n        form.reset(CHANNEL_FORM_DEFAULT_VALUES)\n        setAdvancedSettingsOpen(false)\n        resetCodexCredential()\n      }\n    },\n    [onOpenChange, form, resetCodexCredential]\n  )\n\n"; new="  const handleOpenChange = useCallback(\n    (nextOpen: boolean) => {\n      onOpenChange(nextOpen)\n      if (!nextOpen) {\n        form.reset(CHANNEL_FORM_DEFAULT_VALUES)\n        initializedFormTargetRef.current = null\n        resetCodexCredential()\n        resetDoubaoApiUnlock()\n      }\n    },\n    [onOpenChange, form, resetCodexCredential, resetDoubaoApiUnlock]\n  )\n\n"; assert s.count(old) == 1, s.count(old); p.write_text(s.replace(old, new, 1))'
+
       - name: Migrate channel editor
         run: python3 .github/scripts/aurora-v21-channel-editor.py
 
@@ -96,9 +100,7 @@ jobs:
           mapfile -t reported < <(printf '%s\n' "$output" | sed -n 's/^- //p')
           unexpected=()
           for file in "${reported[@]}"; do
-            if [[ "$file" != 'src/styles/aurora-accessibility.css' ]]; then
-              unexpected+=("$file")
-            fi
+            if [[ "$file" != 'src/styles/aurora-accessibility.css' ]]; then unexpected+=("$file"); fi
           done
           if ((${#reported[@]} == 1 && ${#unexpected[@]} == 0)); then
             echo 'Allowing known pre-existing copyright debt only.'

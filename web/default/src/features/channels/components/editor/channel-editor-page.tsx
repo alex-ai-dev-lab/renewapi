@@ -33,6 +33,8 @@ type ChannelEditorPageProps =
   | { mode: 'create'; channelId?: never }
   | { mode: 'edit'; channelId: string }
 
+// This page is reached through lazy TanStack routes so the large editor bundle
+// stays out of the main Channels list until an administrator opens the workspace.
 export function ChannelEditorPage(props: ChannelEditorPageProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()

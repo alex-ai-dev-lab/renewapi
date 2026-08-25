@@ -133,6 +133,11 @@ jobs:
               ? null
               : (activeChannelOverride ?? channelsContext?.currentRow ?? null)''',
           )
+          replace_once(
+              dialog,
+              '  const handleFetchModels = async () => {',
+              '  async function handleFetchModels() {',
+          )
 
           replace_once(
               'web/default/src/features/channels/components/editor/channel-editor.tsx',
@@ -228,6 +233,7 @@ jobs:
           grep -Fq 'export function useChannelsOptional()' web/default/src/features/channels/components/channels-provider.tsx
           grep -Fq 'activeChannelOverride={isEditing ? currentRow : null}' web/default/src/features/channels/components/editor/channel-editor.tsx
           grep -Fq 'const channelsContext = useChannelsOptional()' web/default/src/features/channels/components/dialogs/fetch-models-dialog.tsx
+          grep -Fq 'async function handleFetchModels()' web/default/src/features/channels/components/dialogs/fetch-models-dialog.tsx
           if grep -Fq "tableScrollMetrics.overflowY === 'auto'" .github/aurora-secondary-surfaces.mjs; then
             echo 'computed overflow-y:auto must not be treated as real vertical scrolling' >&2
             exit 1

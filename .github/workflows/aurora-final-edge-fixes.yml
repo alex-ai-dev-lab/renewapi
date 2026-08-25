@@ -41,8 +41,17 @@ jobs:
                   raise SystemExit(f'{path}: expected exactly one match, found {count}')
               p.write_text(text.replace(old, new, 1))
 
-          # Empty log sets must produce numeric zeroes, not NULL -> int64 scan failures.
-          replace_once(
+          def replace_first(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'{path}: expected match was not found')
+              p.write_text(text.replace(old, new, 1))
+
+          # GetOverviewStatsWithContext is the first aggregate query in stats.go.
+          # Scope the replacement to its first matching success/failure pair; the
+          # same aggregate shape is intentionally reused by other grouped queries.
+          replace_first(
               'model/stats.go',
               '\t\t\tSUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS success_requests,\n\t\t\tSUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS failed_requests,',
               '\t\t\tCOALESCE(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END), 0) AS success_requests,\n\t\t\tCOALESCE(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END), 0) AS failed_requests,',

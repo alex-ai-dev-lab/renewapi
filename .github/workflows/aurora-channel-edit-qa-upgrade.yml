@@ -1,0 +1,199 @@
+name: Aurora Channel Edit QA Upgrade
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/aurora-channel-edit-qa-upgrade.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Add real channel edit coverage to Secondary Surfaces QA
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/aurora-secondary-surfaces.mjs')
+          text = path.read_text()
+
+          def replace_once(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one match, found {count}: {old[:100]!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              'let serverSequence = 0\n',
+              'let serverSequence = 0\nlet seededChannelId = null\n',
+          )
+
+          seed_function = r'''async function seedChannelForEdit(browser) {
+            const context = await browser.newContext({ baseURL })
+            try {
+              await loginContext(context)
+              const seedName = `Aurora QA Edit Channel ${Date.now()}`
+              const createResponse = await context.request.post(`${baseURL}/api/channel`, {
+                data: {
+                  mode: 'single',
+                  channel: {
+                    name: seedName,
+                    type: 1,
+                    key: 'sk-aurora-qa-edit',
+                    models: 'gpt-4o-mini',
+                    group: 'default',
+                    status: 1,
+                    auto_ban: 1,
+                    priority: 0,
+                    weight: 0,
+                    remark: 'Aurora Secondary Surfaces QA edit seed',
+                    setting: '{}',
+                    settings: '{}',
+                  },
+                },
+              })
+              const createBody = await readJson(createResponse)
+              if (!createResponse.ok() || createBody?.success !== true) {
+                throw new Error(`Failed to seed edit channel: ${JSON.stringify(createBody)}`)
+              }
+
+              const listResponse = await context.request.get(
+                `${baseURL}/api/channel?p=1&page_size=100`
+              )
+              const listBody = await readJson(listResponse)
+              const seeded = listBody?.data?.items?.find((item) => item?.name === seedName)
+              if (!listResponse.ok() || listBody?.success !== true || !seeded?.id) {
+                throw new Error(`Seeded channel was not found: ${JSON.stringify(listBody)}`)
+              }
+              observations.push({ type: 'seed-channel', channelId: seeded.id })
+              return seeded.id
+            } finally {
+              await context.close()
+            }
+          }
+
+          '''
+          replace_once(
+              'function attachDiagnostics(page, label) {\n',
+              seed_function + 'function attachDiagnostics(page, label) {\n',
+          )
+
+          replace_once(
+              "    if (id === 'channel-create') {\n",
+              "    if (id === 'channel-create' || id === 'channel-edit') {\n",
+          )
+
+          replace_once(
+              "      if (sheetCount > 0) {\n        failures.push({ label, type: 'channel-editor-rendered-as-sheet' })\n      }\n    }\n",
+              "      if (sheetCount > 0) {\n        failures.push({ label, type: 'channel-editor-rendered-as-sheet' })\n      }\n      if (id === 'channel-edit' && seededChannelId) {\n        const summaryText = await page\n          .locator('[data-ui=\"channel-editor-summary\"]')\n          .innerText()\n          .catch(() => '')\n        if (!summaryText.includes(`#${seededChannelId}`)) {\n          failures.push({\n            label,\n            type: 'channel-editor-detail-not-loaded',\n            seededChannelId,\n            summaryText,\n          })\n        }\n      }\n    }\n",
+          )
+
+          replace_once(
+              "    await setupRoot(browser)\n\n    for (const theme of themes) {\n",
+              "    await setupRoot(browser)\n    seededChannelId = await seedChannelForEdit(browser)\n    authenticatedCases.push([\n      'channel-edit',\n      `/channels/${seededChannelId}/edit`,\n    ])\n\n    for (const theme of themes) {\n",
+          )
+
+          path.write_text(text)
+          PY
+          node --check .github/aurora-secondary-surfaces.mjs
+          grep -Fq "'channel-edit'" .github/aurora-secondary-surfaces.mjs
+          grep -Fq 'seedChannelForEdit' .github/aurora-secondary-surfaces.mjs
+
+      - name: Verify default frontend
+        working-directory: web/default
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          bun test
+          bun run typecheck
+          bun run build
+
+      - name: Build classic frontend
+        working-directory: web/classic
+        run: |
+          set -euo pipefail
+          if ! bun install --frozen-lockfile; then
+            bun pm cache rm
+            bun install --frozen-lockfile
+          fi
+          bun run build
+
+      - name: Verify Go router and build real RenewAPI
+        run: |
+          set -euo pipefail
+          go test ./router
+          go build -o "$RUNNER_TEMP/renewapi-channel-edit-qa" .
+
+      - name: Bootstrap fresh SQLite
+        env:
+          SQLITE_PATH: ${{ runner.temp }}/renewapi-channel-edit-qa.db
+          SESSION_SECRET: aurora-channel-edit-qa-migration-2026-08-25
+          GIN_MODE: release
+          DEBUG: 'false'
+          MEMORY_CACHE_ENABLED: 'false'
+          OFFICIAL_PRICE_SYNC_ENABLED: 'false'
+          UPDATE_TASK: 'false'
+          BATCH_UPDATE_ENABLED: 'false'
+          NODE_TYPE: slave
+          TZ: Asia/Taipei
+        run: |
+          "$RUNNER_TEMP/renewapi-channel-edit-qa" migrate --up
+          "$RUNNER_TEMP/renewapi-channel-edit-qa" migrate --check
+
+      - name: Install browser QA dependencies
+        working-directory: web/default
+        run: |
+          bun add --no-save playwright@1.55.0 axe-core@4.10.2
+          bunx playwright install --with-deps chromium
+          cp ../../.github/aurora-secondary-surfaces.mjs .aurora-secondary-surfaces.mjs
+
+      - name: Run upgraded real-browser gate
+        working-directory: web/default
+        env:
+          QA_BINARY: ${{ runner.temp }}/renewapi-channel-edit-qa
+          QA_DB: ${{ runner.temp }}/renewapi-channel-edit-qa.db
+          QA_OUT: ../../qa-artifacts/aurora-channel-edit-upgrade
+          QA_PORT: '4173'
+          GLOBAL_WEB_RATE_LIMIT: '600'
+          GLOBAL_API_RATE_LIMIT: '2000'
+        run: bun .aurora-secondary-surfaces.mjs
+
+      - name: Show upgraded QA summary
+        if: always()
+        run: |
+          cat qa-artifacts/aurora-channel-edit-upgrade/summary.txt || true
+          cat qa-artifacts/aurora-channel-edit-upgrade/failure.json || true
+          cat qa-artifacts/aurora-channel-edit-upgrade/failures.json || true
+
+      - name: Commit verified permanent QA coverage and remove upgrader
+        if: success()
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/aurora-channel-edit-qa-upgrade.yml
+          git add .github/aurora-secondary-surfaces.mjs
+          git diff --cached --check
+          git commit -m 'test(ui): cover channel edit workspace in browser QA'
+          git push origin HEAD:main

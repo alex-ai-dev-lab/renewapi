@@ -45,6 +45,72 @@ jobs:
           path.write_text(text.replace(old, new, 1))
           PY
           python3 .github/scripts/aurora-v21-channel-editor.py
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str, label: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 match, got {count}')
+              p.write_text(text.replace(old, new, 1))
+
+          # Widen the inferred literal state to the complete section-id union.
+          replace_once(
+              'web/default/src/features/channels/components/editor/channel-editor.tsx',
+              """  const [activeSection, setActiveSection] = useState(\n    CHANNEL_EDITOR_NAV_ITEMS[0].id\n  )""",
+              """  const [activeSection, setActiveSection] = useState<\n    (typeof CHANNEL_EDITOR_NAV_ITEMS)[number]['id']\n  >(CHANNEL_EDITOR_NAV_ITEMS[0].id)""",
+              'section nav state type',
+          )
+
+          # The inline channel-row shortcut is now an editor-page shortcut, not a Drawer shortcut.
+          replace_once(
+              'web/default/src/features/channels/components/channels-columns.tsx',
+              "import { useQueryClient } from '@tanstack/react-query'\n",
+              "import { useQueryClient } from '@tanstack/react-query'\nimport { useNavigate } from '@tanstack/react-router'\n",
+              'columns navigate import',
+          )
+          replace_once(
+              'web/default/src/features/channels/components/channels-columns.tsx',
+              """function OpenPanelButton({ channel }: { channel: Channel }) {\n  const { t } = useTranslation()\n  const { setCurrentRow, setOpen } = useChannels()""",
+              """function OpenPanelButton({ channel }: { channel: Channel }) {\n  const { t } = useTranslation()\n  const navigate = useNavigate()""",
+              'columns editor shortcut hook',
+          )
+          replace_once(
+              'web/default/src/features/channels/components/channels-columns.tsx',
+              """                setCurrentRow(channel)\n                setOpen('update-channel')""",
+              """                void navigate({\n                  to: '/channels/$channelId/edit',\n                  params: { channelId: String(channel.id) },\n                })""",
+              'columns editor shortcut navigation',
+          )
+
+          # Copy remains a short Dialog, but the copied record opens in the full editor page.
+          replace_once(
+              'web/default/src/features/channels/components/dialogs/copy-channel-dialog.tsx',
+              "import { useQueryClient } from '@tanstack/react-query'\n",
+              "import { useQueryClient } from '@tanstack/react-query'\nimport { useNavigate } from '@tanstack/react-router'\n",
+              'copy navigate import',
+          )
+          replace_once(
+              'web/default/src/features/channels/components/dialogs/copy-channel-dialog.tsx',
+              """  const { t } = useTranslation()\n  const { currentRow, setCurrentRow, setOpen } = useChannels()\n  const queryClient = useQueryClient()""",
+              """  const { t } = useTranslation()\n  const { currentRow } = useChannels()\n  const queryClient = useQueryClient()\n  const navigate = useNavigate()""",
+              'copy navigate hook',
+          )
+          replace_once(
+              'web/default/src/features/channels/components/dialogs/copy-channel-dialog.tsx',
+              """      setCurrentRow(copiedChannel.data)\n      setOpen('update-channel')""",
+              """      void navigate({\n        to: '/channels/$channelId/edit',\n        params: { channelId: String(copiedChannel.data.id) },\n      })""",
+              'copy editor navigation',
+          )
+
+          replace_once(
+              'web/default/src/features/channels/components/channels-dialogs.tsx',
+              '  const { open, setOpen, currentRow, upstream } = useChannels()\n',
+              '  const { open, setOpen, upstream } = useChannels()\n',
+              'remove unused dialogs currentRow',
+          )
+          PY
 
       - name: Install frontend dependencies
         working-directory: web/default
@@ -152,11 +218,12 @@ jobs:
           test ! -f web/default/src/features/channels/components/drawers/channel-mutate-drawer.test.tsx
           ! grep -q "from '@/components/ui/sheet'" "$editor"
           ! grep -q 'SheetContent\|SheetFooter\|SheetHeader\|SheetClose' "$editor"
-          ! grep -q "'create-channel'\|'update-channel'" web/default/src/features/channels/components/channels-provider.tsx
+          ! grep -R -q "'update-channel'" web/default/src/features/channels/components
+          ! grep -R -q "'create-channel'" web/default/src/features/channels/components
           grep -q 'currentRow' web/default/src/features/channels/components/channels-provider.tsx
           ! grep -q 'ChannelMutateDrawer' web/default/src/features/channels/components/channels-dialogs.tsx
           grep -Fq "to: '/channels/new'" web/default/src/features/channels/components/channels-primary-buttons.tsx
-          grep -Fq "to: '/channels/\$channelId/edit'" web/default/src/features/channels/components/data-table-row-actions.tsx
+          grep -R -Fq "to: '/channels/\$channelId/edit'" web/default/src/features/channels/components
           grep -q 'useBlocker' "$editor"
           grep -q "data-ui='channel-editor-page'" "$editor"
           grep -q "id='channel-advanced'" "$editor"

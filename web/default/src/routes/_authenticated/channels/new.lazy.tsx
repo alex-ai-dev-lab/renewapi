@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { createLazyFileRoute } from '@tanstack/react-router'
 import { ChannelEditorPage } from '@/features/channels/components/editor/channel-editor-page'
 
-// Secondary Surfaces QA opens this authenticated route in a real browser.
+// Secondary Surfaces QA opens this authenticated route in a real browser, including empty-state and accessibility edge cases.
 export const Route = createLazyFileRoute('/_authenticated/channels/new')({
   component: ChannelCreatePage,
 })

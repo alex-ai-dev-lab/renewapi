@@ -52,9 +52,11 @@ jobs:
           seed_function = r'''async function seedChannelForEdit(browser) {
             const context = await browser.newContext({ baseURL })
             try {
-              await loginContext(context)
+              const rootUser = await loginContext(context)
+              const authHeaders = { 'New-Api-User': String(rootUser.id) }
               const seedName = `Aurora QA Edit Channel ${Date.now()}`
               const createResponse = await context.request.post(`${baseURL}/api/channel`, {
+                headers: authHeaders,
                 data: {
                   mode: 'single',
                   channel: {
@@ -79,7 +81,8 @@ jobs:
               }
 
               const listResponse = await context.request.get(
-                `${baseURL}/api/channel?p=1&page_size=100`
+                `${baseURL}/api/channel?p=1&page_size=100`,
+                { headers: authHeaders }
               )
               const listBody = await readJson(listResponse)
               const seeded = listBody?.data?.items?.find((item) => item?.name === seedName)

@@ -25,7 +25,10 @@ export function NotFoundError() {
   const navigate = useNavigate()
   const { history } = useRouter()
   return (
-    <div className='flex min-h-svh items-center justify-center px-4 py-8'>
+    <div
+      data-page-state='not-found'
+      className='flex min-h-svh items-center justify-center px-4 py-8'
+    >
       <div className='glass-tile flex w-full max-w-xl flex-col items-center justify-center gap-2 px-6 py-10 text-center sm:px-10'>
         <h1 className='text-aurora text-[7rem] leading-tight font-bold'>404</h1>
         <span className='font-medium'>{t('Oops! Page Not Found!')}</span>

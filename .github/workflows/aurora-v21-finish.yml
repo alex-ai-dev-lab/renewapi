@@ -56,7 +56,6 @@ jobs:
                   raise SystemExit(f'{label}: expected 1 match, got {count}')
               p.write_text(text.replace(old, new, 1))
 
-          # Widen the inferred literal state to the complete section-id union.
           replace_once(
               'web/default/src/features/channels/components/editor/channel-editor.tsx',
               """  const [activeSection, setActiveSection] = useState(\n    CHANNEL_EDITOR_NAV_ITEMS[0].id\n  )""",
@@ -64,7 +63,6 @@ jobs:
               'section nav state type',
           )
 
-          # The inline channel-row shortcut is now an editor-page shortcut, not a Drawer shortcut.
           replace_once(
               'web/default/src/features/channels/components/channels-columns.tsx',
               "import { useQueryClient } from '@tanstack/react-query'\n",
@@ -84,7 +82,6 @@ jobs:
               'columns editor shortcut navigation',
           )
 
-          # Copy remains a short Dialog, but the copied record opens in the full editor page.
           replace_once(
               'web/default/src/features/channels/components/dialogs/copy-channel-dialog.tsx',
               "import { useQueryClient } from '@tanstack/react-query'\n",
@@ -109,6 +106,13 @@ jobs:
               '  const { open, setOpen, currentRow, upstream } = useChannels()\n',
               '  const { open, setOpen, upstream } = useChannels()\n',
               'remove unused dialogs currentRow',
+          )
+
+          replace_once(
+              'web/default/src/features/channels/components/editor/channel-editor-page.tsx',
+              "import type { ReactNode } from 'react'\nimport { useCallback } from 'react'\n",
+              "import { type ReactNode, useCallback } from 'react'\n",
+              'combine react imports',
           )
           PY
 

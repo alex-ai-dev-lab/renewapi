@@ -24,6 +24,8 @@ export function NotFoundError() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { history } = useRouter()
+  // Keep a stable state marker so browser QA can distinguish a valid route
+  // from the SPA's not-found fallback even when both return the app shell.
   return (
     <div
       data-page-state='not-found'

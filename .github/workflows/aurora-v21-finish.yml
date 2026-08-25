@@ -54,7 +54,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -d '' files < <(git ls-files -m -o --exclude-standard -z -- web/default)
+          mapfile -d '' files < <(
+            git diff --name-only --diff-filter=ACM -z -- web/default
+            git ls-files --others --exclude-standard -z -- web/default
+          )
           if ((${#files[@]})); then
             cd web/default
             rel=()
@@ -78,7 +81,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -d '' files < <(git ls-files -m -o --exclude-standard -z -- 'web/default/src/**/*.ts' 'web/default/src/**/*.tsx')
+          mapfile -d '' files < <(
+            git diff --name-only --diff-filter=ACM -z -- 'web/default/src/**/*.ts' 'web/default/src/**/*.tsx'
+            git ls-files --others --exclude-standard -z -- 'web/default/src/**/*.ts' 'web/default/src/**/*.tsx'
+          )
           if ((${#files[@]})); then
             cd web/default
             rel=()
@@ -93,7 +99,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -d '' files < <(git ls-files -m -o --exclude-standard -z -- web/default)
+          mapfile -d '' files < <(
+            git diff --name-only --diff-filter=ACM -z -- web/default
+            git ls-files --others --exclude-standard -z -- web/default
+          )
           if ((${#files[@]})); then
             cd web/default
             rel=()

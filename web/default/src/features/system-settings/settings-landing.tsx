@@ -23,11 +23,14 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { SectionPageLayout } from '@/components/layout'
+import { SettingsCategoryCard } from './components/settings-category-card'
+import { SettingsSearch } from './components/settings-search'
 import { getOptionValue, useSystemOptions } from './hooks/use-system-options'
 import {
   useUpdateOption,
   useUpdateOptionsBulk,
 } from './hooks/use-update-option'
+import { SETTINGS_CATEGORIES } from './settings-catalog'
 
 type LandingOptions = {
   RetryTimes: number
@@ -91,6 +94,11 @@ export function SettingsLanding() {
     Number.isFinite(parsedNewUserQuota) &&
     parsedNewUserQuota >= 0
   const controlsDisabled = isLoading || updateOption.isPending
+
+  const totalSections = SETTINGS_CATEGORIES.reduce(
+    (sum, category) => sum + category.getItems(t).length,
+    0
+  )
 
   const editDraft = (patch: Partial<FoundationDraft>) => {
     setDraftOverride((current) => ({
@@ -274,147 +282,197 @@ export function SettingsLanding() {
       <SectionPageLayout.Description>
         {t('aurora.settings.hero.description', {
           defaultValue: isChinese
-            ? '运行时策略 · 中继护栏 · 安全'
-            : 'Runtime policy · relay guardrails · security',
+            ? '运行时策略 · 模型与路由 · 身份 · 计费 · 安全 · 运维'
+            : 'Runtime policy · models & routing · identity · billing · security · operations',
         })}
       </SectionPageLayout.Description>
       <SectionPageLayout.Content>
-        <div className='grid grid-cols-12 gap-4'>
-          <SettingsTogglePanel
-            className='aurora-reference-surface-1 col-span-12 lg:col-span-6'
-            title={t('aurora.settings.routing.title', {
-              defaultValue: isChinese ? '路由与重试' : 'Routing & retries',
-            })}
-            detailHref='/system-settings/operations/behavior'
-            detailLabel={t('aurora.settings.detail', {
-              defaultValue: isChinese ? '详细配置' : 'Advanced',
-            })}
-            items={operations}
-            disabled={controlsDisabled}
-          />
-          <SettingsTogglePanel
-            className='aurora-reference-surface-2 col-span-12 lg:col-span-6'
-            title={t('aurora.settings.guard.title', {
-              defaultValue: isChinese ? '反投毒防护' : 'Anti-poison guard',
-            })}
-            detailHref='/system-settings/security/anti-poison-guard'
-            detailLabel={t('aurora.settings.detail', {
-              defaultValue: isChinese ? '详细配置' : 'Advanced',
-            })}
-            items={security}
-            disabled={controlsDisabled}
-          />
+        <div className='flex flex-col gap-6'>
+          <SettingsSearch />
 
-          <Card className='aurora-reference-surface-3 border-border/60 col-span-12 overflow-hidden py-0'>
-            <div className='flex items-center justify-between gap-3 px-5 pt-5 pb-2'>
-              <h2 className='text-[15px] font-extrabold tracking-[-0.01em]'>
-                {t('aurora.settings.foundation.title', {
-                  defaultValue: isChinese ? '网关基础' : 'Gateway foundation',
+          <div>
+            <div className='mb-3 flex items-center gap-3'>
+              <h2 className='text-muted-foreground text-[11px] font-bold tracking-[0.14em] uppercase'>
+                {t('aurora.settings.quickControls', {
+                  defaultValue: isChinese ? '常用控制' : 'Quick controls',
                 })}
               </h2>
-              <a
-                href='/system-settings/site/system-info'
-                className='text-muted-foreground hover:text-foreground text-[11px] font-semibold transition-colors'
-              >
-                {t('aurora.settings.allSettings', {
-                  defaultValue: isChinese ? '完整设置 →' : 'All settings →',
-                })}
-              </a>
+              <div className='bg-border/60 h-px flex-1' />
             </div>
 
-            <FoundationRow
-              title={t('aurora.settings.serverAddress.title', {
-                defaultValue: isChinese ? '网关基础地址' : 'Gateway base URL',
-              })}
-              description={t('aurora.settings.serverAddress.description', {
-                defaultValue: isChinese
-                  ? '对外暴露的 API Base URL'
-                  : 'Public API base URL exposed by the gateway',
-              })}
-            >
-              <Input
-                value={draft.serverAddress}
-                onChange={(event) =>
-                  editDraft({ serverAddress: event.target.value })
-                }
-                aria-label={t('aurora.settings.serverAddress.title', {
-                  defaultValue: isChinese ? '网关基础地址' : 'Gateway base URL',
+            <div className='grid grid-cols-12 gap-4'>
+              <SettingsTogglePanel
+                className='aurora-reference-surface-1 col-span-12 lg:col-span-6'
+                title={t('aurora.settings.routing.title', {
+                  defaultValue: isChinese ? '路由与重试' : 'Routing & retries',
                 })}
-                placeholder='https://api.example.com'
-                className='h-10 w-full rounded-xl bg-white/55 lg:w-[240px]'
-              />
-            </FoundationRow>
-            <FoundationRow
-              title={t('aurora.settings.systemName.title', {
-                defaultValue: isChinese ? '系统名称' : 'System name',
-              })}
-              description={t('aurora.settings.systemName.description', {
-                defaultValue: isChinese
-                  ? '控制台与公开页面显示的产品名称'
-                  : 'Product name shown across console and public pages',
-              })}
-            >
-              <Input
-                value={draft.systemName}
-                onChange={(event) =>
-                  editDraft({ systemName: event.target.value })
-                }
-                aria-label={t('aurora.settings.systemName.title', {
-                  defaultValue: isChinese ? '系统名称' : 'System name',
+                detailHref='/system-settings/operations/behavior'
+                detailLabel={t('aurora.settings.detail', {
+                  defaultValue: isChinese ? '详细配置' : 'Advanced',
                 })}
-                className='h-10 w-full rounded-xl bg-white/55 lg:w-[240px]'
+                items={operations}
+                disabled={controlsDisabled}
               />
-            </FoundationRow>
-            <FoundationRow
-              title={t('aurora.settings.newUserQuota.title', {
-                defaultValue: isChinese ? '新用户初始额度' : 'New-user quota',
-              })}
-              description={t('aurora.settings.newUserQuota.description', {
-                defaultValue: isChinese
-                  ? '新注册账户获得的初始额度'
-                  : 'Initial quota granted to new accounts',
-              })}
-            >
-              <Input
-                type='number'
-                min={0}
-                value={draft.newUserQuota}
-                onChange={(event) =>
-                  editDraft({ newUserQuota: event.target.value })
-                }
-                aria-label={t('aurora.settings.newUserQuota.title', {
-                  defaultValue: isChinese ? '新用户初始额度' : 'New-user quota',
+              <SettingsTogglePanel
+                className='aurora-reference-surface-2 col-span-12 lg:col-span-6'
+                title={t('aurora.settings.guard.title', {
+                  defaultValue: isChinese ? '反投毒防护' : 'Anti-poison guard',
                 })}
-                className='h-10 w-full rounded-xl bg-white/55 lg:w-[240px]'
+                detailHref='/system-settings/security/anti-poison-guard'
+                detailLabel={t('aurora.settings.detail', {
+                  defaultValue: isChinese ? '详细配置' : 'Advanced',
+                })}
+                items={security}
+                disabled={controlsDisabled}
               />
-            </FoundationRow>
 
-            <div className='border-border/50 flex items-center justify-end gap-2 border-t px-5 py-4'>
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={resetDraft}
-                disabled={!hasDraftChanges || updateOptions.isPending}
-                className='rounded-full bg-white/45'
-              >
-                {t('aurora.settings.discard', {
-                  defaultValue: isChinese ? '放弃更改' : 'Discard',
-                })}
-              </Button>
-              <Button
-                size='sm'
-                onClick={saveDraft}
-                disabled={
-                  !hasDraftChanges || !draftValid || updateOptions.isPending
-                }
-                className='rounded-full'
-              >
-                {t('aurora.settings.saveAll', {
-                  defaultValue: isChinese ? '保存全部' : 'Save all',
-                })}
-              </Button>
+              <Card className='aurora-reference-surface-3 border-border/60 col-span-12 overflow-hidden py-0'>
+                <div className='flex items-center justify-between gap-3 px-5 pt-5 pb-2'>
+                  <h2 className='text-[15px] font-extrabold tracking-[-0.01em]'>
+                    {t('aurora.settings.foundation.title', {
+                      defaultValue: isChinese
+                        ? '网关基础'
+                        : 'Gateway foundation',
+                    })}
+                  </h2>
+                  <a
+                    href='#all-settings'
+                    className='text-muted-foreground hover:text-foreground text-[11px] font-semibold transition-colors'
+                  >
+                    {t('aurora.settings.allSettings', {
+                      defaultValue: isChinese ? '完整设置 →' : 'All settings →',
+                    })}
+                  </a>
+                </div>
+
+                <FoundationRow
+                  title={t('aurora.settings.serverAddress.title', {
+                    defaultValue: isChinese
+                      ? '网关基础地址'
+                      : 'Gateway base URL',
+                  })}
+                  description={t('aurora.settings.serverAddress.description', {
+                    defaultValue: isChinese
+                      ? '对外暴露的 API Base URL'
+                      : 'Public API base URL exposed by the gateway',
+                  })}
+                >
+                  <Input
+                    value={draft.serverAddress}
+                    onChange={(event) =>
+                      editDraft({ serverAddress: event.target.value })
+                    }
+                    aria-label={t('aurora.settings.serverAddress.title', {
+                      defaultValue: isChinese
+                        ? '网关基础地址'
+                        : 'Gateway base URL',
+                    })}
+                    placeholder='https://api.example.com'
+                    className='h-10 w-full rounded-xl bg-white/55 lg:w-[240px]'
+                  />
+                </FoundationRow>
+                <FoundationRow
+                  title={t('aurora.settings.systemName.title', {
+                    defaultValue: isChinese ? '系统名称' : 'System name',
+                  })}
+                  description={t('aurora.settings.systemName.description', {
+                    defaultValue: isChinese
+                      ? '控制台与公开页面显示的产品名称'
+                      : 'Product name shown across console and public pages',
+                  })}
+                >
+                  <Input
+                    value={draft.systemName}
+                    onChange={(event) =>
+                      editDraft({ systemName: event.target.value })
+                    }
+                    aria-label={t('aurora.settings.systemName.title', {
+                      defaultValue: isChinese ? '系统名称' : 'System name',
+                    })}
+                    className='h-10 w-full rounded-xl bg-white/55 lg:w-[240px]'
+                  />
+                </FoundationRow>
+                <FoundationRow
+                  title={t('aurora.settings.newUserQuota.title', {
+                    defaultValue: isChinese
+                      ? '新用户初始额度'
+                      : 'New-user quota',
+                  })}
+                  description={t('aurora.settings.newUserQuota.description', {
+                    defaultValue: isChinese
+                      ? '新注册账户获得的初始额度'
+                      : 'Initial quota granted to new accounts',
+                  })}
+                >
+                  <Input
+                    type='number'
+                    min={0}
+                    value={draft.newUserQuota}
+                    onChange={(event) =>
+                      editDraft({ newUserQuota: event.target.value })
+                    }
+                    aria-label={t('aurora.settings.newUserQuota.title', {
+                      defaultValue: isChinese
+                        ? '新用户初始额度'
+                        : 'New-user quota',
+                    })}
+                    className='h-10 w-full rounded-xl bg-white/55 lg:w-[240px]'
+                  />
+                </FoundationRow>
+
+                <div className='border-border/50 flex items-center justify-end gap-2 border-t px-5 py-4'>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    onClick={resetDraft}
+                    disabled={!hasDraftChanges || updateOptions.isPending}
+                    className='rounded-full bg-white/45'
+                  >
+                    {t('aurora.settings.discard', {
+                      defaultValue: isChinese ? '放弃更改' : 'Discard',
+                    })}
+                  </Button>
+                  <Button
+                    size='sm'
+                    onClick={saveDraft}
+                    disabled={
+                      !hasDraftChanges || !draftValid || updateOptions.isPending
+                    }
+                    className='rounded-full'
+                  >
+                    {t('aurora.settings.saveAll', {
+                      defaultValue: isChinese ? '保存全部' : 'Save all',
+                    })}
+                  </Button>
+                </div>
+              </Card>
             </div>
-          </Card>
+          </div>
+
+          <div id='all-settings' className='scroll-mt-24'>
+            <div className='mb-3 flex items-center gap-3'>
+              <h2 className='text-muted-foreground text-[11px] font-bold tracking-[0.14em] uppercase'>
+                {t('aurora.settings.allSettingsTitle', {
+                  defaultValue: isChinese ? '全部设置' : 'All settings',
+                })}
+              </h2>
+              <div className='bg-border/60 h-px flex-1' />
+              <span className='text-muted-foreground text-[11px] font-semibold tabular-nums'>
+                {t('aurora.settings.sectionCount', {
+                  defaultValue: isChinese
+                    ? '{{count}} 项'
+                    : '{{count}} sections',
+                  count: totalSections,
+                })}
+              </span>
+            </div>
+
+            <div className='grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3'>
+              {SETTINGS_CATEGORIES.map((category) => (
+                <SettingsCategoryCard key={category.id} category={category} />
+              ))}
+            </div>
+          </div>
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>
@@ -465,11 +523,12 @@ function SettingsTogglePanel(props: {
               </div>
             </div>
             <Switch
+              size='lg'
               checked={item.checked}
               onCheckedChange={item.onCheckedChange}
               disabled={props.disabled}
               aria-label={item.title}
-              className='aurora-settings-switch'
+              className='aurora-settings-switch shrink-0 self-center'
             />
           </div>
         ))}

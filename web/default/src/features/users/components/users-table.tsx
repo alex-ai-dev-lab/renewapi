@@ -208,6 +208,7 @@ export function UsersTable() {
       <UsersStats users={users} />
 
       <DataTablePage
+        verticalScroll={{ mode: 'page' }}
         table={table}
         columns={columns}
         isLoading={isLoading}

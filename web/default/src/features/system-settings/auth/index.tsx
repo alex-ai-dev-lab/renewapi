@@ -72,6 +72,7 @@ export function AuthSettings() {
   return (
     <SettingsPage
       routePath='/_authenticated/system-settings/auth/$section'
+      categoryId='auth'
       defaultSettings={defaultAuthSettings}
       defaultSection={AUTH_DEFAULT_SECTION}
       getSectionContent={getAuthSectionContent}

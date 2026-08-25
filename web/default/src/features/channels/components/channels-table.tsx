@@ -390,6 +390,7 @@ export function ChannelsTable() {
       <ChannelsStats channels={channels} />
 
       <DataTablePage
+        verticalScroll={{ mode: 'page' }}
         table={table}
         columns={columns}
         isLoading={isLoading}

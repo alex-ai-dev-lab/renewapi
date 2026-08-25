@@ -25,6 +25,7 @@ const SITE_SECTIONS = [
   {
     id: 'system-info',
     titleKey: 'System Information',
+    keywords: ['系统信息', '站点信息', '网关地址', 'server address'],
     build: (settings: SiteSettings) => (
       <SystemInfoSection
         defaultValues={{
@@ -48,6 +49,7 @@ const SITE_SECTIONS = [
   {
     id: 'notice',
     titleKey: 'System Notice',
+    keywords: ['公告', '通知', 'notice'],
     build: (settings: SiteSettings) => (
       <NoticeSection defaultValue={settings.Notice ?? ''} />
     ),
@@ -66,5 +68,6 @@ const siteRegistry = createSectionRegistry<SiteSectionId, SiteSettings>({
 export const SITE_SECTION_IDS = siteRegistry.sectionIds
 export const SITE_DEFAULT_SECTION = siteRegistry.defaultSection
 export const getSiteSectionNavItems = siteRegistry.getSectionNavItems
+export const getSiteSectionCatalogItems = siteRegistry.getSectionCatalogItems
 export const getSiteSectionContent = siteRegistry.getSectionContent
 export const getSiteSectionMeta = siteRegistry.getSectionMeta

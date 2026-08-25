@@ -25,7 +25,31 @@ import type { TFunction } from 'i18next'
 export type SectionDefinition<TSettings, TExtraArgs extends unknown[] = []> = {
   id: string
   titleKey: string
+  /**
+   * Optional description key, surfaced by the Settings Catalog / Search.
+   */
+  descriptionKey?: string
+  /**
+   * Optional search aliases that cannot be derived from the title, id or
+   * category, e.g. `['smtp', 'mail', '邮件']`. Keep these minimal — the
+   * localized title, id and category title are already searchable.
+   */
+  keywords?: readonly string[]
   build: (settings: TSettings, ...extraArgs: TExtraArgs) => ReactNode
+}
+
+/**
+ * Flat, resolved section metadata used by the Settings Catalog, Settings
+ * Search and the QA route inventory. Derived from the section registry so
+ * there is never a second source of truth for section id/title/url.
+ */
+export type SectionCatalogItem = {
+  id: string
+  title: string
+  titleKey: string
+  description?: string
+  keywords: readonly string[]
+  url: string
 }
 
 /**
@@ -60,16 +84,33 @@ export function createSectionRegistry<
     ...SectionId[],
   ]
 
+  const buildSectionUrl = (id: string) =>
+    urlStyle === 'path' ? `${basePath}/${id}` : `${basePath}?section=${id}`
+
   /**
    * Get navigation items for sidebar
    */
   function getSectionNavItems(t: TFunction) {
     return sections.map((section) => ({
       title: t(section.titleKey),
-      url:
-        urlStyle === 'path'
-          ? `${basePath}/${section.id}`
-          : `${basePath}?section=${section.id}`,
+      url: buildSectionUrl(section.id),
+    }))
+  }
+
+  /**
+   * Get catalog items for the Settings Catalog / Settings Search / QA
+   * inventory. Same `sections` source as the nav items and detail content.
+   */
+  function getSectionCatalogItems(t: TFunction): SectionCatalogItem[] {
+    return sections.map((section) => ({
+      id: section.id,
+      title: t(section.titleKey),
+      titleKey: section.titleKey,
+      description: section.descriptionKey
+        ? t(section.descriptionKey)
+        : undefined,
+      keywords: section.keywords ?? [],
+      url: buildSectionUrl(section.id),
     }))
   }
 
@@ -93,7 +134,9 @@ export function createSectionRegistry<
   return {
     sectionIds,
     defaultSection,
+    basePath,
     getSectionNavItems,
+    getSectionCatalogItems,
     getSectionContent,
     getSectionMeta,
   }

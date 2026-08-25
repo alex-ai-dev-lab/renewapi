@@ -160,6 +160,7 @@ export function RedemptionsTable() {
       <RedemptionsStats redemptions={redemptions} />
 
       <DataTablePage
+        verticalScroll={{ mode: 'page' }}
         table={table}
         columns={columns}
         isLoading={isLoading}

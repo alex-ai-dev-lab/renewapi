@@ -16,9 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { DEFAULT_THEME_CUSTOMIZATION } from '@/lib/theme-customization'
 import { SettingsPage } from '../components/settings-page'
 import type { ContentSettings, SystemOption } from '../types'
-import { DEFAULT_THEME_CUSTOMIZATION } from '@/lib/theme-customization'
 import {
   CONTENT_DEFAULT_SECTION,
   getContentSectionContent,
@@ -34,7 +34,8 @@ const defaultContentSettings: ContentSettings = {
   'theme.custom_accent_enabled': false,
   'theme.custom_accent_color': DEFAULT_THEME_CUSTOMIZATION.customAccentColor,
   'theme.custom_palette_enabled': false,
-  'theme.custom_background_color': DEFAULT_THEME_CUSTOMIZATION.customBackgroundColor,
+  'theme.custom_background_color':
+    DEFAULT_THEME_CUSTOMIZATION.customBackgroundColor,
   'theme.custom_surface_color': DEFAULT_THEME_CUSTOMIZATION.customSurfaceColor,
   'theme.custom_sidebar_color': DEFAULT_THEME_CUSTOMIZATION.customSidebarColor,
   'theme.custom_chart_color': DEFAULT_THEME_CUSTOMIZATION.customChartColor,
@@ -107,6 +108,7 @@ export function ContentSettings() {
   return (
     <SettingsPage
       routePath='/_authenticated/system-settings/content/$section'
+      categoryId='content'
       defaultSettings={defaultContentSettings}
       defaultSection={CONTENT_DEFAULT_SECTION}
       getSectionContent={getContentSectionContent}

@@ -52,6 +52,21 @@ export type DataTablePageToolbarProps<TData> = Omit<
   'table'
 >
 
+/**
+ * Vertical scroll contract for the desktop table.
+ *
+ * - `page` (default): the table grows with its rows and the page owns vertical
+ *   scrolling. No max-height, no inner vertical scrollbar; the table still
+ *   scrolls horizontally when columns overflow.
+ * - `contained`: opts into an inner vertical scroll context capped at
+ *   `maxHeight`. Reserved for tables inside Dialogs/Drawers or fixed-height
+ *   dashboard widgets. Pair with `tableHeaderClassName` (e.g.
+ *   `'sticky top-0 z-10 bg-muted/30'`) when a sticky header is desired.
+ */
+export type DataTableVerticalScroll =
+  | { mode: 'page' }
+  | { mode: 'contained'; maxHeight: string }
+
 export type DataTablePageProps<TData> = {
   /**
    * TanStack Table instance returned from `useReactTable`.
@@ -209,6 +224,14 @@ export type DataTablePageProps<TData> = {
   className?: string
 
   /**
+   * Vertical scroll behavior for the desktop table. Defaults to
+   * `{ mode: 'page' }` — the page scrolls, the table never gets an inner
+   * vertical scrollbar. Use `{ mode: 'contained', maxHeight }` only inside
+   * overlays (Dialog/Drawer) or fixed-height embedded widgets.
+   */
+  verticalScroll?: DataTableVerticalScroll
+
+  /**
    * Desktop table container className (the bordered scroll wrapper).
    */
   tableClassName?: string
@@ -230,6 +253,7 @@ export function DataTablePage<TData>(props: DataTablePageProps<TData>) {
   const isMobile = useMediaQuery('(max-width: 640px)')
   const showMobile = isMobile && !props.hideMobile
   const hasError = props.isError === true
+  const scrollMode = props.verticalScroll?.mode ?? 'page'
 
   // Pagination defaults to inline (rendered inside the table card on desktop)
   // so it stays anchored to the table bottom instead of floating in the page
@@ -260,7 +284,11 @@ export function DataTablePage<TData>(props: DataTablePageProps<TData>) {
 
   return (
     <>
-      <div className={cn('max-w-full min-w-0 space-y-3', props.className)}>
+      <div
+        data-ui='data-table-page'
+        data-scroll-mode={scrollMode}
+        className={cn('max-w-full min-w-0 space-y-3', props.className)}
+      >
         {toolbarNode}
         {errorNode}
         {mobileNode}
@@ -341,16 +369,32 @@ function renderDesktop<TData>(
   const isFetchingOnly = props.isFetching && !props.isLoading
   const showInlinePagination = options?.showPagination === true
   const visibleLeafColumns = props.table.getVisibleLeafColumns()
+  const containedMaxHeight =
+    props.verticalScroll?.mode === 'contained'
+      ? props.verticalScroll.maxHeight
+      : undefined
 
   return (
     <div
+      data-ui='data-table-card'
       className={cn(
         'border-border bg-card shadow-[0_1px_0_0_theme(colors.border)] max-w-full min-w-0 overflow-hidden rounded-lg border transition-opacity duration-150',
         isFetchingOnly && 'pointer-events-none opacity-60',
         props.tableClassName
       )}
     >
-      <div className='max-w-full overflow-x-auto'>
+      <div
+        data-ui='data-table-scroll'
+        className={cn(
+          'max-w-full overflow-x-auto',
+          containedMaxHeight != null && 'overflow-y-auto'
+        )}
+        style={
+          containedMaxHeight != null
+            ? { maxHeight: containedMaxHeight }
+            : undefined
+        }
+      >
         <Table>
           {props.applyHeaderSize && (
             <colgroup>

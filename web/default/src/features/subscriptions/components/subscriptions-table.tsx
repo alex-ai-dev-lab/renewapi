@@ -91,6 +91,7 @@ export function SubscriptionsTable() {
 
   return (
     <DataTablePage
+      verticalScroll={{ mode: 'page' }}
       table={table}
       columns={columns}
       isLoading={isLoading}

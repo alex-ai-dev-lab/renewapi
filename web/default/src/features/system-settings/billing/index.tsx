@@ -111,6 +111,7 @@ export function BillingSettings() {
   return (
     <SettingsPage
       routePath='/_authenticated/system-settings/billing/$section'
+      categoryId='billing'
       defaultSettings={defaultBillingSettings}
       defaultSection={BILLING_DEFAULT_SECTION}
       getSectionContent={getBillingSectionContent}

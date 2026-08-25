@@ -75,6 +75,7 @@ export function ModelSettings() {
   return (
     <SettingsPage
       routePath='/_authenticated/system-settings/models/$section'
+      categoryId='models'
       defaultSettings={defaultModelSettings}
       defaultSection={MODELS_DEFAULT_SECTION}
       getSectionContent={getModelsSectionContent}

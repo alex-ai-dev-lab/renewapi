@@ -270,6 +270,7 @@ export function ModelsTable() {
           </div>
 
           <DataTablePage
+            verticalScroll={{ mode: 'page' }}
             table={table}
             columns={columns}
             isLoading={isLoading}

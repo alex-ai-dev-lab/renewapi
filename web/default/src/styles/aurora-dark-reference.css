@@ -197,7 +197,7 @@ html.dark .aurora-pulse-dot {
   }
 }
 
-html.dark main .border-border.bg-card.rounded-lg.border.p-2\.5 {
+html.dark main [data-ui='data-table-toolbar'] {
   border: 0;
   border-radius: 0;
   background: transparent !important;
@@ -205,9 +205,7 @@ html.dark main .border-border.bg-card.rounded-lg.border.p-2\.5 {
   padding: 0 0 8px;
 }
 
-html.dark
-  main
-  .border-border.bg-card.max-w-full.min-w-0.overflow-hidden.rounded-lg.border {
+html.dark main [data-ui='data-table-card'] {
   border-color: var(--aurora-line);
   border-radius: 22px;
   background: var(--aurora-glass) !important;
@@ -308,22 +306,8 @@ html.dark main article.glass-tile .border-t {
   padding-top: 8px;
 }
 
-@media (min-width: 1024px) {
-  html.dark
-    main
-    .border-border.bg-card.max-w-full.min-w-0.overflow-hidden.rounded-lg.border
-    > .max-w-full.overflow-x-auto {
-    max-height: 250px;
-    overflow-y: auto;
-    scrollbar-gutter: stable;
-  }
-
-  html.dark
-    main
-    .border-border.bg-card.max-w-full.min-w-0.overflow-hidden.rounded-lg.border
-    [data-slot='table-header'] {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-  }
-}
+/*
+ * Page-scroll contract: list tables grow naturally and the page owns vertical
+ * scrolling, so there is no global max-height / inner scrollbar here.
+ * The shared contained-mode sticky header rule lives in aurora-reference.css.
+ */

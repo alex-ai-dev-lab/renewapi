@@ -230,6 +230,7 @@ export function DeploymentsTable() {
   return (
     <>
       <DataTablePage
+        verticalScroll={{ mode: 'page' }}
         table={table}
         columns={columns}
         isLoading={isLoading}

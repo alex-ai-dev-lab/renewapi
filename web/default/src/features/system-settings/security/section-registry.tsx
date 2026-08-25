@@ -36,6 +36,7 @@ const SECURITY_SECTIONS = [
   {
     id: 'rate-limit',
     titleKey: 'Rate Limiting',
+    keywords: ['限流', '速率限制', 'rate limit'],
     build: (settings: SecuritySettings) => (
       <RateLimitSection
         defaultValues={{
@@ -53,6 +54,7 @@ const SECURITY_SECTIONS = [
   {
     id: 'sensitive-words',
     titleKey: 'Sensitive Words',
+    keywords: ['敏感词', '词库', '违禁词'],
     build: (settings: SecuritySettings) => (
       <SensitiveWordsSection
         defaultValues={{
@@ -66,6 +68,7 @@ const SECURITY_SECTIONS = [
   {
     id: 'ssrf',
     titleKey: 'SSRF Protection',
+    keywords: ['内网', '内网穿透', 'fetch', '代理请求'],
     build: (settings: SecuritySettings) => (
       <SSRFSection
         defaultValues={{
@@ -90,6 +93,7 @@ const SECURITY_SECTIONS = [
   {
     id: 'anti-poison-guard',
     titleKey: 'Anti-Poison Guard',
+    keywords: ['反投毒', '防投毒', '响应校验', 'anti poison'],
     build: (settings: SecuritySettings) => (
       <AntiPoisonGuardSection
         defaultValues={{
@@ -131,16 +135,19 @@ const SECURITY_SECTIONS = [
   {
     id: 'request-guard',
     titleKey: 'Request Guard',
+    keywords: ['请求守卫', '请求防护', 'guard'],
     build: () => <RequestGuardSection />,
   },
   {
     id: 'client-identity',
     titleKey: 'Client Identity',
+    keywords: ['客户端标识', '客户端身份', 'client'],
     build: () => <ClientIdentitySettingsCard />,
   },
   {
     id: 'user-agents',
     titleKey: 'User-Agent Management',
+    keywords: ['ua', 'user agent', '代理标识'],
     build: () => <UserAgentSettingsSection />,
   },
 ] as const
@@ -160,5 +167,7 @@ const securityRegistry = createSectionRegistry<
 export const SECURITY_SECTION_IDS = securityRegistry.sectionIds
 export const SECURITY_DEFAULT_SECTION = securityRegistry.defaultSection
 export const getSecuritySectionNavItems = securityRegistry.getSectionNavItems
+export const getSecuritySectionCatalogItems =
+  securityRegistry.getSectionCatalogItems
 export const getSecuritySectionContent = securityRegistry.getSectionContent
 export const getSecuritySectionMeta = securityRegistry.getSectionMeta

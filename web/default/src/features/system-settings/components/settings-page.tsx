@@ -29,8 +29,13 @@ import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout'
 import { useSystemOptions, getOptionValue } from '../hooks/use-system-options'
 import { useSystemSettingsTranslation } from '../lib/i18n'
+import {
+  SETTINGS_CATEGORIES,
+  type SettingsCategoryId,
+} from '../settings-catalog'
 import type { SystemOption } from '../types'
 import { SettingsPageProvider } from './settings-page-context'
+import { SettingsSectionNav } from './settings-section-nav'
 
 type SettingsPageProps<
   TSettings extends Record<string, string | number | boolean | unknown[]>,
@@ -38,6 +43,12 @@ type SettingsPageProps<
   TExtraArgs extends unknown[] = [],
 > = {
   routePath: string
+  /**
+   * Settings category this page belongs to. When provided, the detail page
+   * renders a category section rail (desktop) / selector (mobile) derived
+   * from the same registry metadata as the settings catalog and search.
+   */
+  categoryId?: SettingsCategoryId
   defaultSettings: TSettings
   defaultSection: TSectionId
   getSectionContent: (
@@ -58,6 +69,8 @@ type SettingsPageProps<
 
 type SettingsPageFrameProps = {
   title: ReactNode
+  /** Optional category rail rendered left of the content on desktop. */
+  nav?: ReactNode
   children: ReactNode
 }
 
@@ -99,9 +112,18 @@ function SettingsPageFrame(props: SettingsPageFrameProps) {
           />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <div className='mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-5'>
-            {props.children}
-          </div>
+          {props.nav ? (
+            <div className='mx-auto flex w-full max-w-6xl flex-col gap-4 sm:gap-5 lg:flex-row lg:items-start'>
+              {props.nav}
+              <div className='flex w-full min-w-0 flex-1 flex-col gap-4 sm:gap-5'>
+                {props.children}
+              </div>
+            </div>
+          ) : (
+            <div className='mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-5'>
+              {props.children}
+            </div>
+          )}
         </SectionPageLayout.Content>
       </SectionPageLayout>
     </SettingsPageProvider>
@@ -120,6 +142,7 @@ export function SettingsPage<
   extraArgs,
   loadingMessage = 'Loading settings...',
   resolveSettings,
+  categoryId,
 }: SettingsPageProps<TSettings, TSectionId, TExtraArgs>) {
   const { t, ts } = useSystemSettingsTranslation()
   const { data, error, isError, isLoading, refetch } = useSystemOptions()
@@ -129,6 +152,19 @@ export function SettingsPage<
     search?.section ??
     defaultSection) as TSectionId
   const sectionMeta = getSectionMeta(activeSection)
+
+  const category = categoryId
+    ? SETTINGS_CATEGORIES.find((item) => item.id === categoryId)
+    : undefined
+  const sectionNav = category ? (
+    <SettingsSectionNav
+      categoryTitle={t(category.titleKey, {
+        defaultValue: category.titleEn,
+      })}
+      items={category.getItems(t)}
+      activeUrl={`${category.basePath}/${activeSection}`}
+    />
+  ) : undefined
 
   const settings = useMemo(() => {
     const baseSettings = getOptionValue(
@@ -142,7 +178,7 @@ export function SettingsPage<
 
   if (isLoading) {
     return (
-      <SettingsPageFrame title={t(sectionMeta.titleKey)}>
+      <SettingsPageFrame title={t(sectionMeta.titleKey)} nav={sectionNav}>
         <div className='border-border/60 bg-card/55 text-muted-foreground flex min-h-40 items-center justify-center rounded-[calc(var(--radius)*1.125)] border text-sm'>
           {ts('settings.common.loading', {
             defaultValue: loadingMessage,
@@ -154,7 +190,7 @@ export function SettingsPage<
 
   if (isError) {
     return (
-      <SettingsPageFrame title={t(sectionMeta.titleKey)}>
+      <SettingsPageFrame title={t(sectionMeta.titleKey)} nav={sectionNav}>
         <ErrorState
           title={ts('settings.common.loadErrorTitle', {
             defaultValue: 'Unable to load settings',
@@ -178,7 +214,7 @@ export function SettingsPage<
   )
 
   return (
-    <SettingsPageFrame title={t(sectionMeta.titleKey)}>
+    <SettingsPageFrame title={t(sectionMeta.titleKey)} nav={sectionNav}>
       {sectionContent}
     </SettingsPageFrame>
   )

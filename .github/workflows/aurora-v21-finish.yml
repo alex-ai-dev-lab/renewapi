@@ -1,0 +1,273 @@
+name: Aurora v2.1 Finish
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/aurora-v21-finish.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aurora-v21-finish
+  cancel-in-progress: false
+
+jobs:
+  finish:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      REPO: alex-ai-dev-lab/renewapi
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Rebuild and apply reviewed A/B/D overlay
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          : > /tmp/aurora-overlay.b64
+          shas=(
+            4739558a7d9fbe213020beff726a36ad83b8b388
+            aadac8eae8fd03ab8e7783eb6de2123396d12eb4
+            0288c3dbf22308c1e669223912196f8f2451079d
+            274841365de81e8d52b63db06420473b932df8b2
+            84fec16f1247422d4275563b6460f57f9e7b6a5a
+            5ec1776e4eb5db2309f9684d310105ba0ec3dea5
+            b72e40948b9a631839300e484ebc29259ddd7e41
+            2d110c4459767ef677fa45a2aea12105185b369e
+            eb2b1b6916b48af32972965f7d527430fbfe2c94
+            0ce4aa1fd17fd6738f51bf450f8c864a58d37d0c
+            04b3d103be070208652d814c64297a60c76f11dd
+            f38fb7d479b38216186ec3649546ea5d5e7c577a
+            1708a203fba2f72fa3f6600f24cc980a669167e7
+          )
+          for sha in "${shas[@]}"; do
+            echo "fetching $sha"
+            gh api "repos/$REPO/git/blobs/$sha" --jq '.content' | base64 -d >> /tmp/aurora-overlay.b64
+          done
+          base64 -d /tmp/aurora-overlay.b64 > /tmp/aurora-overlay.zip
+          unzip -t /tmp/aurora-overlay.zip
+          rm -rf /tmp/aurora-overlay
+          mkdir -p /tmp/aurora-overlay
+          unzip -q /tmp/aurora-overlay.zip -d /tmp/aurora-overlay
+          cp -a /tmp/aurora-overlay/renewapi/. .
+
+      - name: Apply Channel Editor workspace migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/phase-c.py <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('.')
+          def read(rel): return (root/rel).read_text()
+          def write(rel,s):
+              p=root/rel; p.parent.mkdir(parents=True,exist_ok=True); p.write_text(s)
+          def replace_once(s,old,new,label):
+              n=s.count(old)
+              if n!=1: raise SystemExit(f'{label}: expected 1 match, got {n}')
+              return s.replace(old,new,1)
+
+          p='web/default/src/features/channels/components/channels-primary-buttons.tsx'
+          s=read(p)
+          if "from '@tanstack/react-router'" not in s:
+              a="import { useQueryClient } from '@tanstack/react-query'\n"
+              s=replace_once(s,a,a+"import { useNavigate } from '@tanstack/react-router'\n",'primary router import')
+          s=replace_once(s,"  const { t, i18n } = useTranslation()\n","  const { t, i18n } = useTranslation()\n  const navigate = useNavigate()\n",'primary navigate')
+          s=s.replace("    setOpen,\n    setCurrentRow,\n","")
+          s=replace_once(s,"""            onClick={() => {\n              setCurrentRow(null)\n              setOpen('create-channel')\n            }}""","""            onClick={() => {\n              void navigate({ to: '/channels/new' })\n            }}""",'primary create click')
+          write(p,s)
+
+          p='web/default/src/features/channels/components/data-table-row-actions.tsx'
+          s=read(p)
+          if "from '@tanstack/react-router'" not in s:
+              a="import { useQueryClient } from '@tanstack/react-query'\n"
+              s=replace_once(s,a,a+"import { useNavigate } from '@tanstack/react-router'\n",'row router import')
+          s=replace_once(s,"  const { t } = useTranslation()\n","  const { t } = useTranslation()\n  const navigate = useNavigate()\n",'row navigate')
+          s=replace_once(s,"""  const handleEdit = () => {\n    setCurrentRow(channel)\n    setOpen('update-channel')\n  }""","""  const handleEdit = () => {\n    void navigate({\n      to: '/channels/$channelId/edit',\n      params: { channelId: String(channel.id) },\n    })\n  }""",'row edit')
+          write(p,s)
+
+          p='web/default/src/features/channels/components/channels-provider.tsx'
+          s=read(p)
+          for line in ["  | 'create-channel'\n","  | 'update-channel'\n"]:
+              if line not in s: raise SystemExit(f'provider missing {line!r}')
+              s=s.replace(line,'',1)
+          write(p,s)
+
+          p='web/default/src/features/channels/components/channels-dialogs.tsx'
+          s=read(p).replace("import { ChannelMutateDrawer } from './drawers/channel-mutate-drawer'\n",'')
+          s,n=re.subn(r"\n\s*\{\/\* Channel Create\/Update Drawer \*\/\}\n\s*<ChannelMutateDrawer[\s\S]*?\/>\n",'\n',s,count=1)
+          if n!=1: raise SystemExit(f'dialog drawer block matches {n}')
+          write(p,s)
+
+          write('web/default/src/features/channels/components/editor/channel-editor-route.tsx', '''/*
+          Copyright (C) 2023-2026 QuantumNous
+
+          This program is free software: you can redistribute it and/or modify
+          it under the terms of the GNU Affero General Public License as
+          published by the Free Software Foundation, either version 3 of the
+          License, or (at your option) any later version.
+
+          This program is distributed in the hope that it will be useful,
+          but WITHOUT ANY WARRANTY; without even the implied warranty of
+          MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+          GNU Affero General Public License for more details.
+
+          You should have received a copy of the GNU Affero General Public License
+          along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+          For commercial licensing, please contact support@quantumnous.com
+          */
+          import { useLayoutEffect } from 'react'
+          import { useQuery } from '@tanstack/react-query'
+          import { useNavigate } from '@tanstack/react-router'
+          import { ArrowLeft } from 'lucide-react'
+          import { useTranslation } from 'react-i18next'
+          import { Button } from '@/components/ui/button'
+          import { ErrorState } from '@/components/error-state'
+          import { SectionPageLayout } from '@/components/layout'
+          import { getChannel } from '../../api'
+          import { channelsQueryKeys } from '../../lib'
+          import { ChannelsProvider } from '../channels-provider'
+          import { ChannelMutateDrawer } from '../drawers/channel-mutate-drawer'
+
+          type ChannelEditorRouteProps =
+            | { mode: 'create'; channelId?: never }
+            | { mode: 'edit'; channelId: string }
+
+          function WorkspaceClass() {
+            useLayoutEffect(() => {
+              document.documentElement.classList.add('channel-editor-workspace')
+              return () => document.documentElement.classList.remove('channel-editor-workspace')
+            }, [])
+            return null
+          }
+
+          export function ChannelEditorRoute(props: ChannelEditorRouteProps) {
+            const { t } = useTranslation()
+            const navigate = useNavigate()
+            const parsedId = props.mode === 'edit' ? Number(props.channelId) : null
+            const validId = parsedId != null && Number.isInteger(parsedId) && parsedId > 0
+            const channelQuery = useQuery({
+              queryKey: channelsQueryKeys.detail(validId ? parsedId : null),
+              queryFn: () => getChannel(parsedId as number),
+              enabled: props.mode === 'edit' && validId,
+              staleTime: 30_000,
+            })
+            const closeWorkspace = () => void navigate({ to: '/channels' })
+
+            if (props.mode === 'edit' && !validId) {
+              return <SectionPageLayout><SectionPageLayout.Title>{t('Edit Channel')}</SectionPageLayout.Title><SectionPageLayout.Content><ErrorState title={t('Invalid channel ID')} description={t('The requested channel ID is invalid.')} onRetry={closeWorkspace} /></SectionPageLayout.Content></SectionPageLayout>
+            }
+            if (props.mode === 'edit' && channelQuery.isLoading) {
+              return <SectionPageLayout><SectionPageLayout.Title>{t('Edit Channel')}</SectionPageLayout.Title><SectionPageLayout.Content><div className='glass-tile flex min-h-48 items-center justify-center text-sm text-muted-foreground'>{t('Loading...')}</div></SectionPageLayout.Content></SectionPageLayout>
+            }
+            if (props.mode === 'edit' && (channelQuery.isError || !channelQuery.data?.success || !channelQuery.data?.data)) {
+              return <SectionPageLayout><SectionPageLayout.Title>{t('Edit Channel')}</SectionPageLayout.Title><SectionPageLayout.Actions><Button variant='outline' size='sm' onClick={closeWorkspace}><ArrowLeft className='size-4' />{t('Back')}</Button></SectionPageLayout.Actions><SectionPageLayout.Content><ErrorState title={t('Unable to load channel')} description={t('The channel could not be loaded. It may have been removed.')} onRetry={() => void channelQuery.refetch()} /></SectionPageLayout.Content></SectionPageLayout>
+            }
+            return <><WorkspaceClass /><ChannelsProvider><ChannelMutateDrawer open onOpenChange={(nextOpen) => { if (!nextOpen) closeWorkspace() }} currentRow={props.mode === 'edit' ? channelQuery.data?.data : null} /></ChannelsProvider></>
+          }
+          ''')
+
+          guard='''/*
+          Copyright (C) 2023-2026 QuantumNous
+          This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+          */
+          import { createFileRoute, redirect } from '@tanstack/react-router'
+          import { useAuthStore } from '@/stores/auth-store'
+          import { ROLE } from '@/lib/roles'
+          export const Route = createFileRoute('__ROUTE__')({ beforeLoad: () => { const { auth } = useAuthStore.getState(); if (!auth.user || auth.user.role < ROLE.ADMIN) throw redirect({ to: '/403' }) } })
+          '''
+          write('web/default/src/routes/_authenticated/channels/new.tsx',guard.replace('__ROUTE__','/_authenticated/channels/new'))
+          write('web/default/src/routes/_authenticated/channels/$channelId/edit.tsx',guard.replace('__ROUTE__','/_authenticated/channels/$channelId/edit'))
+          write('web/default/src/routes/_authenticated/channels/new.lazy.tsx', '''/* Copyright (C) 2023-2026 QuantumNous */
+          import { createLazyFileRoute } from '@tanstack/react-router'
+          import { ChannelEditorRoute } from '@/features/channels/components/editor/channel-editor-route'
+          export const Route = createLazyFileRoute('/_authenticated/channels/new')({ component: () => <ChannelEditorRoute mode='create' /> })
+          ''')
+          write('web/default/src/routes/_authenticated/channels/$channelId/edit.lazy.tsx', '''/* Copyright (C) 2023-2026 QuantumNous */
+          import { createLazyFileRoute } from '@tanstack/react-router'
+          import { ChannelEditorRoute } from '@/features/channels/components/editor/channel-editor-route'
+          export const Route = createLazyFileRoute('/_authenticated/channels/$channelId/edit')({ component: ChannelEditorPage })
+          function ChannelEditorPage() { const { channelId } = Route.useParams(); return <ChannelEditorRoute mode='edit' channelId={channelId} /> }
+          ''')
+
+          workspace_css='''
+
+          /* Channel editor workspace route */
+          .channel-editor-workspace [data-slot='sheet-overlay'] { display: none !important; }
+          .channel-editor-workspace [data-slot='sheet-content'] {
+            top: 68px !important; right: max(16px, calc((100vw - 1240px) / 2)) !important;
+            bottom: 104px !important; left: max(16px, calc((100vw - 1240px) / 2)) !important;
+            width: auto !important; max-width: none !important; height: auto !important;
+            transform: none !important; border: 0 !important; border-radius: 22px !important;
+            box-shadow: none !important; animation: none !important;
+          }
+          html:not(.dark).channel-editor-workspace [data-slot='sheet-content'] { background: rgba(255,255,255,.72) !important; backdrop-filter: blur(20px) saturate(1.35); -webkit-backdrop-filter: blur(20px) saturate(1.35); }
+          html.dark.channel-editor-workspace [data-slot='sheet-content'] { background: var(--aurora-glass) !important; backdrop-filter: blur(22px) saturate(1.35); -webkit-backdrop-filter: blur(22px) saturate(1.35); }
+          @media (max-width: 767px) { .channel-editor-workspace [data-slot='sheet-content'] { top: 56px !important; right: 8px !important; bottom: 92px !important; left: 8px !important; border-radius: 18px !important; } }
+          '''
+          for p in ['web/default/src/styles/aurora-reference.css','web/default/src/styles/aurora-dark-reference.css']:
+              s=read(p)
+              if '/* Channel editor workspace route */' not in s: write(p,s+workspace_css)
+          PY
+          python3 /tmp/phase-c.py
+
+      - name: Install dependencies
+        working-directory: web/default
+        run: bun install --frozen-lockfile
+
+      - name: Format and generate route tree
+        working-directory: web/default
+        run: |
+          bun run format
+          bun run build
+
+      - name: Verify frontend
+        working-directory: web/default
+        run: |
+          bun run typecheck
+          bun test
+          bun run lint
+          bun run format:check
+          bun run copyright:check
+          bun run build:check
+          bun run knip
+
+      - name: Verify migration invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f web/default/src/features/system-settings/settings-catalog.test.ts
+          test -f 'web/default/src/routes/_authenticated/channels/new.lazy.tsx'
+          test -f 'web/default/src/routes/_authenticated/channels/$channelId/edit.lazy.tsx'
+          ! grep -R -n "max-height: 250px" web/default/src/styles/aurora-reference.css web/default/src/styles/aurora-dark-reference.css
+          ! grep -q "'create-channel'" web/default/src/features/channels/components/channels-provider.tsx
+          ! grep -q "'update-channel'" web/default/src/features/channels/components/channels-provider.tsx
+          grep -q 'currentRow' web/default/src/features/channels/components/channels-provider.tsx
+          grep -q "/channels/\$channelId/edit" web/default/src/features/channels/components/data-table-row-actions.tsx
+          grep -q "/channels/new" web/default/src/features/channels/components/channels-primary-buttons.tsx
+          ! grep -q 'ChannelMutateDrawer' web/default/src/features/channels/components/channels-dialogs.tsx
+
+      - name: Commit verified implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/aurora-v21-apply.yml .github/workflows/aurora-v21-finish.yml
+          rm -rf .github/aurora-v21-payload
+          git add -A
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat(ui): finish aurora v2.1 admin workflows'
+          git push origin HEAD:main

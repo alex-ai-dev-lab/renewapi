@@ -22,10 +22,10 @@ import { UpstreamErrorRulesSection } from '../security/upstream-error-rules-sect
 import type { ModelSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ClaudeSettingsCard } from './claude-settings-card'
-import { HeaderRulesSettingsCard } from './header-rules-settings-card'
 import { GeminiSettingsCard } from './gemini-settings-card'
 import { GlobalSettingsCard } from './global-settings-card'
 import { GrokSettingsCard } from './grok-settings-card'
+import { HeaderRulesSettingsCard } from './header-rules-settings-card'
 import { ModelOperationsOverview } from './model-operations-overview'
 
 function formatJsonForEditor(value: string, fallback: string) {
@@ -42,11 +42,13 @@ const MODELS_SECTIONS = [
   {
     id: 'overview',
     titleKey: 'Model Operations',
+    keywords: ['模型运营', '模型总览', '模型管理'],
     build: () => <ModelOperationsOverview />,
   },
   {
     id: 'global',
     titleKey: 'Global Model Configuration',
+    keywords: ['全局模型', '透传', 'pass through', '思考黑名单'],
     build: (settings: ModelSettings) => (
       <GlobalSettingsCard
         defaultValues={{
@@ -131,16 +133,19 @@ const MODELS_SECTIONS = [
   {
     id: 'header-rules',
     titleKey: 'Header Rules',
+    keywords: ['请求头规则', 'header', '头部规则'],
     build: () => <HeaderRulesSettingsCard />,
   },
   {
     id: 'upstream-error-rules',
     titleKey: 'Upstream Error Rules',
+    keywords: ['上游错误', '错误规则', '错误码处理'],
     build: () => <UpstreamErrorRulesSection />,
   },
   {
     id: 'channel-affinity',
     titleKey: 'Channel Affinity',
+    keywords: ['渠道亲和', '亲和性', 'affinity', '渠道粘性'],
     build: (settings: ModelSettings) => (
       <ChannelAffinitySection
         defaultValues={{
@@ -161,6 +166,7 @@ const MODELS_SECTIONS = [
   {
     id: 'model-deployment',
     titleKey: 'Model Deployment',
+    keywords: ['模型部署', 'ionet', '部署'],
     build: (settings: ModelSettings) => (
       <IoNetDeploymentSettingsSection
         defaultValues={{
@@ -184,5 +190,7 @@ const modelsRegistry = createSectionRegistry<ModelSectionId, ModelSettings>({
 export const MODELS_SECTION_IDS = modelsRegistry.sectionIds
 export const MODELS_DEFAULT_SECTION = modelsRegistry.defaultSection
 export const getModelsSectionNavItems = modelsRegistry.getSectionNavItems
+export const getModelsSectionCatalogItems =
+  modelsRegistry.getSectionCatalogItems
 export const getModelsSectionContent = modelsRegistry.getSectionContent
 export const getModelsSectionMeta = modelsRegistry.getSectionMeta

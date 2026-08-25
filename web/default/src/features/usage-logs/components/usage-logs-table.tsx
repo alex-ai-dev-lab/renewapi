@@ -202,6 +202,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   return (
     <DataTablePage
       className='max-w-full min-w-0'
+      verticalScroll={{ mode: 'page' }}
       table={table}
       columns={columns as ColumnDef<Record<string, unknown>>[]}
       isLoading={isLoadingData}

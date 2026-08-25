@@ -312,6 +312,7 @@ export function ApiKeysTable() {
       <ApiKeysStats apiKeys={apiKeys} />
 
       <DataTablePage
+        verticalScroll={{ mode: 'page' }}
         table={table}
         columns={columns}
         isLoading={isLoading}

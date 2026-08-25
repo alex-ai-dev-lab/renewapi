@@ -211,7 +211,7 @@ jobs:
       - name: Verify Channel Editor migration invariants
         shell: bash
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           editor='web/default/src/features/channels/components/editor/channel-editor.tsx'
           test -f "$editor"
           test -f web/default/src/features/channels/components/editor/channel-editor-page.tsx
@@ -231,8 +231,10 @@ jobs:
           grep -q 'useBlocker' "$editor"
           grep -q "data-ui='channel-editor-page'" "$editor"
           grep -q "id='channel-advanced'" "$editor"
-          grep -q "createLazyFileRoute('/_authenticated/channels/new')" web/default/src/routes/_authenticated/channels/new.lazy.tsx
-          grep -q "createLazyFileRoute('/_authenticated/channels/\$channelId/edit')" 'web/default/src/routes/_authenticated/channels/$channelId/edit.lazy.tsx'
+          grep -q 'createLazyFileRoute' web/default/src/routes/_authenticated/channels/new.lazy.tsx
+          grep -Fq '/_authenticated/channels/new' web/default/src/routes/_authenticated/channels/new.lazy.tsx
+          grep -q 'createLazyFileRoute' 'web/default/src/routes/_authenticated/channels/$channelId/edit.lazy.tsx'
+          grep -Fq '/_authenticated/channels/$channelId/edit' 'web/default/src/routes/_authenticated/channels/$channelId/edit.lazy.tsx'
 
       - name: Dead-code diagnostic for new Channel Editor runtime
         working-directory: web/default

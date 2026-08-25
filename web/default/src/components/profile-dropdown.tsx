@@ -56,7 +56,13 @@ export function ProfileDropdown() {
     <>
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger
-          render={<Button variant='ghost' className='relative size-6 p-0' />}
+          render={
+            <Button
+              variant='ghost'
+              className='relative size-6 p-0'
+              aria-label={t('Open profile menu')}
+            />
+          }
         >
           <Avatar className='size-6'>
             <AvatarFallback
@@ -111,12 +117,7 @@ export function ProfileDropdown() {
 
           {isSuperAdmin && (
             <DropdownMenuItem
-              onClick={() =>
-                navigate({
-                  to: '/system-settings/operations/$section',
-                  params: { section: 'overview' },
-                })
-              }
+              onClick={() => navigate({ to: '/system-settings' })}
             >
               <Settings className='size-4' />
               {t('System Settings')}

@@ -66,6 +66,25 @@ func TestGetModelStatsIncludesAverageFirstToken(t *testing.T) {
 	require.InDelta(t, 200, got.AvgFirstToken, 0.001)
 }
 
+func TestGetOverviewStatsHandlesEmptyLogSet(t *testing.T) {
+	truncateTables(t)
+
+	stats, err := GetOverviewStats(time.Now().Add(-time.Hour))
+	require.NoError(t, err)
+	require.Zero(t, stats.TotalRequests)
+	require.Zero(t, stats.SuccessRequests)
+	require.Zero(t, stats.FailedRequests)
+	require.Zero(t, stats.SuccessRate)
+	require.Zero(t, stats.ErrorRate)
+	require.Zero(t, stats.TotalCost)
+	require.Zero(t, stats.TotalPromptTokens)
+	require.Zero(t, stats.TotalOutputTokens)
+	require.Zero(t, stats.AvgFirstTokenTime)
+	require.Zero(t, stats.AvgUseTime)
+	require.Zero(t, stats.ActiveChannels)
+	require.Zero(t, stats.ActiveUsers)
+}
+
 func TestStatsQueryErrorsArePropagated(t *testing.T) {
 	oldDB := DB
 	oldLogDB := LOG_DB

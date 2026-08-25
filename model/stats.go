@@ -136,8 +136,8 @@ func GetOverviewStatsWithContext(ctx context.Context, startTime time.Time) (*Ove
 	query := `
 		SELECT
 			COUNT(*) AS total_requests,
-			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS success_requests,
-			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS failed_requests,
+			COALESCE(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END), 0) AS success_requests,
+			COALESCE(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END), 0) AS failed_requests,
 			AVG(` + frtExprFor(queryDB.logDB) + `) AS avg_first_token,
 			AVG(use_time) AS avg_use_time,
 			COALESCE(SUM(quota), 0) AS total_quota,

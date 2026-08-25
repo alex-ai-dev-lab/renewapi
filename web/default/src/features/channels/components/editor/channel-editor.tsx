@@ -5081,6 +5081,7 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
         redirectModels={redirectModelList}
         redirectSourceModels={redirectModelKeyList}
         customFetcher={!isEditing ? createModeFetcher : undefined}
+        activeChannelOverride={isEditing ? currentRow : null}
         channelName={!isEditing ? currentName?.trim() : undefined}
         existingModelsOverride={
           !isEditing

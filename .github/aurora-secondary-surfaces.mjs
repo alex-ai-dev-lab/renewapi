@@ -439,7 +439,6 @@ async function auditPage(context, testCase, theme, viewportName, authRequired) {
         }))
         if (
           tableScrollMetrics.scrollHeight > tableScrollMetrics.clientHeight + 1 ||
-          tableScrollMetrics.overflowY === 'auto' ||
           tableScrollMetrics.overflowY === 'scroll' ||
           tableScrollMetrics.maxHeight !== 'none'
         ) {
@@ -515,11 +514,29 @@ async function auditPage(context, testCase, theme, viewportName, authRequired) {
       pageErrors: casePageErrors.length,
     })
   } catch (error) {
+    const currentURL = page.url()
+    const bodyText = await page
+      .locator('body')
+      .innerText()
+      .catch(() => '')
+    const caseConsoleErrors = consoleErrors.slice(beforeConsole)
+    const casePageErrors = pageErrors.slice(beforePageErrors)
+    const screenshotPath = path.join(
+      outDir,
+      'screenshots',
+      `${sanitize(label)}-exception.png`
+    )
+    await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {})
     failures.push({
       label,
       type: 'audit-exception',
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
+      currentURL,
+      bodyText: bodyText.slice(0, 2000),
+      consoleErrors: caseConsoleErrors,
+      pageErrors: casePageErrors,
+      screenshotPath,
     })
   } finally {
     await page.close()

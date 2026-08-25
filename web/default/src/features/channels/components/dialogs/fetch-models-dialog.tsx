@@ -51,7 +51,8 @@ import {
   normalizeModelName,
   parseModelsString,
 } from '../../lib'
-import { useChannels } from '../channels-provider'
+import type { Channel } from '../../types'
+import { useChannelsOptional } from '../channels-provider'
 
 function normalizeModelNameList(models: readonly string[]): string[] {
   return Array.from(
@@ -68,6 +69,7 @@ type FetchModelsDialogProps = {
   customFetcher?: () => Promise<string[]>
   existingModelsOverride?: string[]
   channelName?: string | null
+  activeChannelOverride?: Channel | null
 }
 
 export function FetchModelsDialog({
@@ -79,10 +81,13 @@ export function FetchModelsDialog({
   customFetcher,
   existingModelsOverride,
   channelName,
+  activeChannelOverride,
 }: FetchModelsDialogProps) {
   const { t } = useTranslation()
-  const { currentRow } = useChannels()
-  const activeChannel = customFetcher ? null : currentRow
+  const channelsContext = useChannelsOptional()
+  const activeChannel = customFetcher
+    ? null
+    : (activeChannelOverride ?? channelsContext?.currentRow ?? null)
   const queryClient = useQueryClient()
   const [isFetching, setIsFetching] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -135,7 +140,7 @@ export function FetchModelsDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, activeChannel?.id, customFetcher])
 
-  const handleFetchModels = async () => {
+  async function handleFetchModels() {
     if (!activeChannel && !customFetcher) return
 
     setIsFetching(true)
@@ -349,7 +354,7 @@ export function FetchModelsDialog({
                   {redirectOnlySet.has(normalizeModelName(model)) && (
                     <Tooltip>
                       <TooltipTrigger
-                        render={<Info className='h-3.5 w-3.5 text-warning' />}
+                        render={<Info className='text-warning h-3.5 w-3.5' />}
                       ></TooltipTrigger>
                       <TooltipContent>
                         {t('From model redirect, not yet added to models list')}

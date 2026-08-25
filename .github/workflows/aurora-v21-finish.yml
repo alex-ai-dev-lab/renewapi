@@ -2,20 +2,23 @@ name: Aurora v2.1 Channel Editor Migration
 
 on:
   push:
-    branches: [main]
-    paths: ['.github/workflows/aurora-v21-finish.yml']
+    branches:
+      - main
+    paths:
+      - '.github/workflows/aurora-v21-finish.yml'
+      - '.github/scripts/aurora-v21-channel-editor.py'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: aurora-v21-channel-editor
+  group: aurora-v21-channel-editor-migration
   cancel-in-progress: false
 
 jobs:
   migrate:
-    if: github.actor != 'github-actions[bot]'
+    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -27,696 +30,24 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Migrate channel editor to a real page workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > /tmp/migrate-channel-editor.py <<'PY'
-          from pathlib import Path
-          import re
-          import shutil
-
-          root = Path('.')
-          old_rel = 'web/default/src/features/channels/components/drawers/channel-mutate-drawer.tsx'
-          new_rel = 'web/default/src/features/channels/components/editor/channel-editor.tsx'
-
-          def read(rel: str) -> str:
-              return (root / rel).read_text()
-
-          def write(rel: str, content: str) -> None:
-              path = root / rel
-              path.parent.mkdir(parents=True, exist_ok=True)
-              path.write_text(content)
-
-          def replace_once(text: str, old: str, new: str, label: str) -> str:
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{label}: expected exactly 1 match, got {count}')
-              return text.replace(old, new, 1)
-
-          def regex_once(text: str, pattern: str, replacement: str, label: str) -> str:
-              next_text, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
-              if count != 1:
-                  raise SystemExit(f'{label}: expected exactly 1 match, got {count}')
-              return next_text
-
-          source = read(old_rel)
-
-          # Copy the proven business form into a neutral editor module, then remove
-          # only the Drawer/Sheet presentation layer. All mutations, validation,
-          # security verification, mappings, Codex credential flows and dialogs stay.
-          editor = source
-          editor = regex_once(
-              editor,
-              r"import \{\n  Sheet,\n  SheetClose,\n  SheetContent,\n  SheetDescription,\n  SheetFooter,\n  SheetHeader,\n  SheetTitle,\n\} from '@/components/ui/sheet'\n",
-              '',
-              'remove sheet imports',
-          )
-          editor = replace_once(
-              editor,
-              "import { useQueryClient } from '@tanstack/react-query'\n",
-              "import { useQueryClient } from '@tanstack/react-query'\nimport { useBlocker } from '@tanstack/react-router'\n",
-              'add navigation blocker import',
-          )
-          editor = regex_once(
-              editor,
-              r"import \{\n  sideDrawerContentClassName,\n  sideDrawerFooterClassName,\n  sideDrawerFormClassName,\n  sideDrawerHeaderClassName,\n  sideDrawerSectionClassName,\n  sideDrawerSwitchItemClassName,\n\} from '@/components/drawer-layout'\n",
-              "import {\n  sideDrawerSectionClassName,\n  sideDrawerSwitchItemClassName,\n} from '@/components/drawer-layout'\n",
-              'trim drawer layout imports',
-          )
-          editor = replace_once(
-              editor,
-              "import { MultiSelect } from '@/components/multi-select'\n",
-              "import { ConfirmDialog } from '@/components/confirm-dialog'\nimport { MultiSelect } from '@/components/multi-select'\n",
-              'add confirm dialog import',
-          )
-          editor = editor.replace("import { useChannels } from '../channels-provider'\n", '')
-          editor = replace_once(editor, "} from './sections'\n", "} from '../drawers/sections'\n", 'section import path')
-
-          editor = regex_once(
-              editor,
-              r"type ChannelMutateDrawerProps = \{\n  open: boolean\n  onOpenChange: \(open: boolean\) => void\n  currentRow\?: Channel \| null\n\}",
-              "type ChannelEditorProps = {\n  currentRow?: Channel | null\n  onClose: () => void\n}",
-              'editor props',
-          )
-
-          editor = regex_once(
-              editor,
-              r"export function ChannelMutateDrawer\(\{\n  open,\n  onOpenChange,\n  currentRow,\n\}: ChannelMutateDrawerProps\) \{",
-              "export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {",
-              'editor function signature',
-          )
-          editor = editor.replace("  const { setOpen } = useChannels()\n", '')
-
-          editor = regex_once(
-              editor,
-              r"  useEffect\(\(\) => \{\n    if \(!open\) \{\n      setChannelKey\(null\)\n      setIsChannelKeyLoading\(false\)\n    \} else if \(channelId\) \{\n      setChannelKey\(null\)\n    \}\n  \}, \[open, channelId\]\)",
-              "  useEffect(() => {\n    setChannelKey(null)\n    setIsChannelKeyLoading(false)\n  }, [channelId])",
-              'channel key reset effect',
-          )
-          editor = regex_once(
-              editor,
-              r"  useEffect\(\(\) => \{\n    if \(!open\) \{\n      resetDoubaoApiUnlock\(\)\n    \}\n  \}, \[open, resetDoubaoApiUnlock\]\)",
-              "  useEffect(() => () => resetDoubaoApiUnlock(), [resetDoubaoApiUnlock])",
-              'doubao reset effect',
-          )
-
-          editor = replace_once(
-              editor,
-              """  useEffect(() => {\n    if (!open) {\n      initializedFormTargetRef.current = null\n      setEditingConfigVersion(undefined)\n      return\n    }\n\n    const desiredTarget = isEditing ? channelId : 'create'\n""",
-              """  useEffect(() => {\n    const desiredTarget = isEditing ? channelId : 'create'\n""",
-              'remove closed drawer initialization branch',
-          )
-          editor = replace_once(
-              editor,
-              """    const target = getChannelFormInitializationTarget({\n      open,\n      isEditing,\n""",
-              """    const target = getChannelFormInitializationTarget({\n      open: true,\n      isEditing,\n""",
-              'force mounted editor initialization',
-          )
-          editor = replace_once(
-              editor,
-              "  }, [open, isEditing, channelId, channelData, form, initializeEditForm])",
-              "  }, [isEditing, channelId, channelData, form, initializeEditForm])",
-              'initialization dependencies',
-          )
-
-          editor = regex_once(
-              editor,
-              r"  const handleSuccess = useCallback\(\(\) => \{\n    queryClient.invalidateQueries\(\{ queryKey: channelsQueryKeys.lists\(\) \}\)\n    if \(channelId\) \{\n      queryClient.invalidateQueries\(\{\n        queryKey: channelsQueryKeys.detail\(channelId\),\n      \}\)\n    \}\n    onOpenChange\(false\)\n    setOpen\(null\)\n  \}, \[channelId, queryClient, onOpenChange, setOpen\]\)",
-              """  const handleSuccess = useCallback(() => {\n    queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })\n    if (channelId) {\n      queryClient.invalidateQueries({\n        queryKey: channelsQueryKeys.detail(channelId),\n      })\n    }\n    form.reset(form.getValues())\n    if (!isEditing) onClose()\n  }, [channelId, queryClient, form, isEditing, onClose])""",
-              'success behavior',
-          )
-
-          editor = replace_once(
-              editor,
-              "  const isSubmitting = channelMutation.isPending\n",
-              """  const isSubmitting = channelMutation.isPending\n  const isDirty = form.formState.isDirty\n  const blocker = useBlocker({\n    shouldBlockFn: () => isDirty && !isSubmitting,\n    enableBeforeUnload: () => isDirty && !isSubmitting,\n    withResolver: true,\n  })\n""",
-              'dirty navigation blocker',
-          )
-
-          editor = regex_once(
-              editor,
-              r"  // Handle drawer close\n  const handleOpenChange = useCallback\(\n    \(v: boolean\) => \{\n      onOpenChange\(v\)\n      if \(!v\) \{\n        initializedFormTargetRef.current = null\n        setEditingConfigVersion\(undefined\)\n        form.reset\(CHANNEL_FORM_DEFAULT_VALUES\)\n        setAdvancedSettingsOpen\(false\)\n        resetCodexCredential\(\)\n      \}\n    \},\n    \[onOpenChange, form, resetCodexCredential\]\n  \)",
-              """  const handleCancel = useCallback(() => {\n    onClose()\n  }, [onClose])""",
-              'replace drawer close handler',
-          )
-
-          # Cmd/Ctrl+S uses the exact same validated submission path as the Save button.
-          marker = """  const handleAdvancedSettingsOpenChange = useCallback((nextOpen: boolean) => {\n"""
-          shortcut = """  useEffect(() => {\n    const handleShortcut = (event: KeyboardEvent) => {\n      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {\n        event.preventDefault()\n        if (!isSubmitting) void form.handleSubmit(onSubmit)()\n      }\n    }\n    window.addEventListener('keydown', handleShortcut)\n    return () => window.removeEventListener('keydown', handleShortcut)\n  }, [form, isSubmitting, onSubmit])\n\n"""
-          editor = replace_once(editor, marker, shortcut + marker, 'save shortcut')
-
-          nav_code = r'''
-          const CHANNEL_EDITOR_NAV_ITEMS = [
-            { id: 'channel-basic', label: 'Basic Information' },
-            { id: 'channel-api-access', label: 'API Access' },
-            { id: 'channel-auth', label: 'Credentials & Authentication' },
-            { id: 'channel-models', label: 'Models & Groups' },
-            { id: 'channel-endpoints', label: 'Model Endpoints' },
-            { id: 'channel-advanced', label: 'Advanced Settings' },
-          ] as const
-
-          function ChannelEditorSectionNav() {
-            const { t } = useTranslation()
-            const [activeSection, setActiveSection] = useState(
-              CHANNEL_EDITOR_NAV_ITEMS[0].id
-            )
-
-            useEffect(() => {
-              const elements = CHANNEL_EDITOR_NAV_ITEMS.map((item) =>
-                document.getElementById(item.id)
-              ).filter((element): element is HTMLElement => Boolean(element))
-              if (elements.length === 0) return
-
-              const observer = new IntersectionObserver(
-                (entries) => {
-                  const visible = entries
-                    .filter((entry) => entry.isIntersecting)
-                    .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
-                  if (visible?.target.id) {
-                    setActiveSection(
-                      visible.target.id as (typeof CHANNEL_EDITOR_NAV_ITEMS)[number]['id']
-                    )
-                  }
-                },
-                { rootMargin: '-18% 0px -62% 0px', threshold: [0, 0.1, 0.35] }
-              )
-              elements.forEach((element) => observer.observe(element))
-              return () => observer.disconnect()
-            }, [])
-
-            const scrollToSection = (id: string) => {
-              document.getElementById(id)?.scrollIntoView({
-                behavior: 'smooth',
-                block: 'start',
-              })
-            }
-
-            return (
-              <>
-                <aside className='hidden lg:block'>
-                  <nav
-                    aria-label={t('Channel configuration sections')}
-                    className='glass-tile sticky top-24 space-y-1 p-3'
-                  >
-                    <div className='text-muted-foreground px-2 pb-2 text-[11px] font-semibold tracking-[0.14em] uppercase'>
-                      {t('Configuration')}
-                    </div>
-                    {CHANNEL_EDITOR_NAV_ITEMS.map((item) => (
-                      <button
-                        key={item.id}
-                        type='button'
-                        aria-current={activeSection === item.id ? 'location' : undefined}
-                        onClick={() => scrollToSection(item.id)}
-                        className={
-                          activeSection === item.id
-                            ? 'bg-primary/10 text-primary flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-medium'
-                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition-colors'
-                        }
-                      >
-                        {t(item.label)}
-                      </button>
-                    ))}
-                  </nav>
-                </aside>
-
-                <div className='sticky top-16 z-20 lg:hidden'>
-                  <div className='glass-tile p-2'>
-                    <Select
-                      value={activeSection}
-                      onValueChange={(value) => {
-                        if (value) {
-                          setActiveSection(
-                            value as (typeof CHANNEL_EDITOR_NAV_ITEMS)[number]['id']
-                          )
-                          scrollToSection(value)
-                        }
-                      }}
-                    >
-                      <SelectTrigger aria-label={t('Channel configuration section')}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent alignItemWithTrigger={false}>
-                        <SelectGroup>
-                          {CHANNEL_EDITOR_NAV_ITEMS.map((item) => (
-                            <SelectItem key={item.id} value={item.id}>
-                              {t(item.label)}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </>
-            )
-          }
-
-          '''
-          editor = replace_once(
-              editor,
-              'export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {',
-              nav_code + 'export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {',
-              'insert section navigation',
-          )
-
-          return_marker = "  return (\n    <>\n      <Sheet open={open} onOpenChange={handleOpenChange}>"
-          return_pos = editor.rfind(return_marker)
-          if return_pos < 0:
-              raise SystemExit('page shell: Sheet return marker not found')
-          content_marker = "        <SheetContent className={sideDrawerContentClassName('sm:max-w-3xl')}>"
-          content_pos = editor.find(content_marker, return_pos)
-          if content_pos < 0:
-              raise SystemExit('page shell: SheetContent marker not found')
-          inner_start = content_pos + len(content_marker)
-          closing_marker = "\n        </SheetContent>\n      </Sheet>\n\n      {paramOverrideEditorOpen && ("
-          closing_pos = editor.find(closing_marker, inner_start)
-          if closing_pos < 0:
-              raise SystemExit('page shell: closing Sheet marker not found')
-          inner = editor[inner_start:closing_pos]
-          suffix = editor[closing_pos + len("\n        </SheetContent>\n      </Sheet>\n\n"):]
-
-          inner = regex_once(
-              inner,
-              r"\n          <SheetHeader className=\{sideDrawerHeaderClassName\(\)\}>[\s\S]*?</SheetHeader>\n",
-              r'''
-          <div
-            data-ui='channel-editor-summary'
-            className='glass-tile flex flex-col gap-2 p-5 sm:p-6'
-          >
-            <div className='flex items-center gap-3'>
-              <span className='bg-muted flex size-10 shrink-0 items-center justify-center rounded-xl'>
-                {getLobeIcon(`${getChannelTypeIcon(currentType)}.Color`, 24)}
-              </span>
-              <div className='min-w-0'>
-                <h2 className='truncate text-lg font-bold tracking-tight'>
-                  {isEditing ? t('Edit Channel') : t('Create Channel')}
-                </h2>
-                <p className='text-muted-foreground text-sm'>
-                  {t(currentTypeLabel)}
-                  {channelId ? ` · #${channelId}` : ''}
-                </p>
-              </div>
-            </div>
-            <p className='text-muted-foreground text-sm'>
-              {isEditing
-                ? t("Update channel configuration and click save when you're done.")
-                : t('Add a new channel by providing the necessary information.')}
-            </p>
-          </div>
-''',
-              'replace Sheet header',
-          )
-          inner = replace_once(
-              inner,
-              "              className={sideDrawerFormClassName('gap-5')}",
-              "              className='flex flex-col gap-5'",
-              'page form class',
-          )
-          inner = regex_once(
-              inner,
-              r"\n          <SheetFooter className=\{sideDrawerFooterClassName\(\)\}>[\s\S]*?</SheetFooter>\n",
-              r'''
-          <div
-            data-ui='channel-editor-actions'
-            className='border-border/60 bg-background/85 sticky bottom-24 z-20 mt-2 flex flex-wrap items-center justify-end gap-2 rounded-2xl border p-3 shadow-lg backdrop-blur-xl sm:bottom-28'
-          >
-            <Button
-              type='button'
-              variant='outline'
-              disabled={isSubmitting}
-              onClick={handleCancel}
-            >
-              {t('Cancel')}
-            </Button>
-            <Button
-              form='channel-form'
-              type='submit'
-              disabled={
-                isSubmitting ||
-                isChannelDetailLoading ||
-                isChannelDetailUnavailable
-              }
-            >
-              {isSubmitting && (
-                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-              )}
-              {isEditing ? t('Update Channel') : t('Save changes')}
-            </Button>
-          </div>
-''',
-              'replace Sheet footer',
-          )
-
-          wrappers = [
-              ('<ChannelBasicSection>', 'channel-basic'),
-              ('<ChannelApiAccessSection>', 'channel-api-access'),
-              ('<ChannelAuthSection>', 'channel-auth'),
-              ('<ChannelModelsSection>', 'channel-models'),
-          ]
-          for opening, section_id in wrappers:
-              closing = opening.replace('<', '</')
-              inner = replace_once(
-                  inner,
-                  opening,
-                  f"<div id='{section_id}' className='scroll-mt-28'>\n                    {opening}",
-                  f'wrap {section_id} opening',
-              )
-              inner = replace_once(
-                  inner,
-                  closing,
-                  f"{closing}\n                  </div>",
-                  f'wrap {section_id} closing',
-              )
-
-          inner = regex_once(
-              inner,
-              r"(\n                  <ChannelModelEndpointsSection\n                    channelId=\{channelId \?\? undefined\}\n                    models=\{currentModels\}\n                  />)",
-              r"\n                  <div id='channel-endpoints' className='scroll-mt-28'>\1\n                  </div>",
-              'wrap model endpoints',
-          )
-          inner = replace_once(
-              inner,
-              '                  <ChannelAdvancedSection\n',
-              "                  <div id='channel-advanced' className='scroll-mt-28'>\n                    <ChannelAdvancedSection\n",
-              'wrap advanced opening',
-          )
-          inner = replace_once(
-              inner,
-              '                  </ChannelAdvancedSection>',
-              '                    </ChannelAdvancedSection>\n                  </div>',
-              'wrap advanced closing',
-          )
-
-          new_return = """  return (\n    <>\n      <div\n        data-ui='channel-editor-page'\n        className='grid min-w-0 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]'\n      >\n        <ChannelEditorSectionNav />\n        <div className='min-w-0 space-y-5'>""" + inner + """\n        </div>\n      </div>\n\n""" + suffix
-          editor = editor[:return_pos] + new_return
-
-          # Integrated unsaved-changes UI. The blocker also covers browser unload.
-          confirm_marker = """      <StatusCodeRiskDialog\n        open={statusCodeRiskOpen}\n"""
-          confirm_ui = """      <ConfirmDialog\n        open={blocker.status === 'blocked'}\n        onOpenChange={(nextOpen) => {\n          if (!nextOpen && blocker.status === 'blocked') blocker.reset()\n        }}\n        title={t('Discard unsaved changes?')}\n        desc={t('You have unsaved channel changes. Leaving now will discard them.')}\n        confirmText={t('Discard changes')}\n        destructive\n        handleConfirm={() => {\n          if (blocker.status === 'blocked') blocker.proceed()\n        }}\n      />\n\n"""
-          editor = replace_once(editor, confirm_marker, confirm_ui + confirm_marker, 'insert unsaved confirm')
-
-          if 'Sheet' in editor or 'sideDrawerContentClassName' in editor or 'sideDrawerFormClassName' in editor:
-              raise SystemExit('page editor still contains Sheet or Drawer shell presentation symbols')
-          if 'useChannels' in editor or 'setOpen(null)' in editor:
-              raise SystemExit('page editor still depends on channel dialog provider')
-
-          write(new_rel, editor)
-
-          # Preserve the existing config-version regression test under the neutral editor path.
-          test_source = read('web/default/src/features/channels/components/drawers/channel-mutate-drawer.test.tsx')
-          test_source = test_source.replace(
-              "describe('ChannelMutateDrawer edit config version contract'",
-              "describe('ChannelEditor edit config version contract'",
-          )
-          write(
-              'web/default/src/features/channels/components/editor/channel-editor.test.tsx',
-              test_source,
-          )
-
-          # A thin route-level shell resolves a real edit Channel object, owns the
-          # authenticated page chrome, and lets the shared editor retain all proven logic.
-          write('web/default/src/features/channels/components/editor/channel-editor-page.tsx', r'''/*
-          Copyright (C) 2023-2026 QuantumNous
-
-          This program is free software: you can redistribute it and/or modify
-          it under the terms of the GNU Affero General Public License as
-          published by the Free Software Foundation, either version 3 of the
-          License, or (at your option) any later version.
-
-          This program is distributed in the hope that it will be useful,
-          but WITHOUT ANY WARRANTY; without even the implied warranty of
-          MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-          GNU Affero General Public License for more details.
-
-          You should have received a copy of the GNU Affero General Public License
-          along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-          For commercial licensing, please contact support@quantumnous.com
-          */
-          import { useCallback } from 'react'
-          import { useQuery } from '@tanstack/react-query'
-          import { useNavigate } from '@tanstack/react-router'
-          import { ArrowLeft } from 'lucide-react'
-          import { useTranslation } from 'react-i18next'
-          import { Button } from '@/components/ui/button'
-          import { Skeleton } from '@/components/ui/skeleton'
-          import { ErrorState } from '@/components/error-state'
-          import { SectionPageLayout } from '@/components/layout'
-          import { getChannel } from '../../api'
-          import { channelsQueryKeys } from '../../lib'
-          import { ChannelEditor } from './channel-editor'
-
-          type ChannelEditorPageProps =
-            | { mode: 'create'; channelId?: never }
-            | { mode: 'edit'; channelId: string }
-
-          export function ChannelEditorPage(props: ChannelEditorPageProps) {
-            const { t, i18n } = useTranslation()
-            const navigate = useNavigate()
-            const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
-            const parsedId = props.mode === 'edit' ? Number(props.channelId) : null
-            const validId =
-              parsedId !== null && Number.isInteger(parsedId) && parsedId > 0
-
-            const channelQuery = useQuery({
-              queryKey: channelsQueryKeys.detail(validId ? parsedId : 0),
-              queryFn: ({ signal }) => getChannel(parsedId as number, { signal }),
-              enabled: props.mode === 'edit' && validId,
-            })
-
-            const goBack = useCallback(() => {
-              void navigate({ to: '/channels' })
-            }, [navigate])
-
-            const title =
-              props.mode === 'edit'
-                ? t('Edit Channel')
-                : t('Create Channel')
-
-            let content: React.ReactNode
-            if (props.mode === 'edit' && !validId) {
-              content = (
-                <ErrorState
-                  title={t('Invalid channel ID')}
-                  description={t('The requested channel ID is invalid.')}
-                  action={
-                    <Button variant='outline' size='sm' onClick={goBack}>
-                      <ArrowLeft className='size-4' />
-                      {t('Back to Channels')}
-                    </Button>
-                  }
-                />
-              )
-            } else if (props.mode === 'edit' && channelQuery.isLoading) {
-              content = (
-                <div className='space-y-4'>
-                  <Skeleton className='h-28 w-full rounded-2xl' />
-                  <Skeleton className='h-96 w-full rounded-2xl' />
-                </div>
-              )
-            } else if (
-              props.mode === 'edit' &&
-              (channelQuery.isError ||
-                channelQuery.data?.success === false ||
-                !channelQuery.data?.data)
-            ) {
-              content = (
-                <ErrorState
-                  title={t('Unable to load channel')}
-                  description={
-                    channelQuery.data?.message ||
-                    t('The channel could not be loaded. It may have been removed.')
-                  }
-                  onRetry={() => void channelQuery.refetch()}
-                  action={
-                    <Button variant='outline' size='sm' onClick={goBack}>
-                      <ArrowLeft className='size-4' />
-                      {t('Back to Channels')}
-                    </Button>
-                  }
-                />
-              )
-            } else {
-              content = (
-                <ChannelEditor
-                  currentRow={
-                    props.mode === 'edit' ? channelQuery.data?.data : null
-                  }
-                  onClose={goBack}
-                />
-              )
-            }
-
-            return (
-              <SectionPageLayout>
-                <SectionPageLayout.Title>
-                  {title}{' '}
-                  <span className='text-aurora'>
-                    {t('workspace', {
-                      defaultValue: isChinese ? '工作区' : 'workspace',
-                    })}
-                  </span>
-                </SectionPageLayout.Title>
-                <SectionPageLayout.Description>
-                  {props.mode === 'edit'
-                    ? t('Configure provider access, models, routing, security, and advanced channel behavior in one workspace.')
-                    : t('Create a channel with provider access, models, routing, and advanced controls in one workspace.')}
-                </SectionPageLayout.Description>
-                <SectionPageLayout.Actions>
-                  <Button variant='outline' size='sm' onClick={goBack}>
-                    <ArrowLeft className='size-4' />
-                    {t('Back to Channels')}
-                  </Button>
-                </SectionPageLayout.Actions>
-                <SectionPageLayout.Content>{content}</SectionPageLayout.Content>
-              </SectionPageLayout>
-            )
-          }
-          ''')
-
-          route_header = r'''/*
-          Copyright (C) 2023-2026 QuantumNous
-
-          This program is free software: you can redistribute it and/or modify
-          it under the terms of the GNU Affero General Public License as
-          published by the Free Software Foundation, either version 3 of the
-          License, or (at your option) any later version.
-
-          This program is distributed in the hope that it will be useful,
-          but WITHOUT ANY WARRANTY; without even the implied warranty of
-          MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-          GNU Affero General Public License for more details.
-
-          You should have received a copy of the GNU Affero General Public License
-          along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-          For commercial licensing, please contact support@quantumnous.com
-          */
-          '''
-          guard_body = r'''import { createFileRoute, redirect } from '@tanstack/react-router'
-          import { useAuthStore } from '@/stores/auth-store'
-          import { ROLE } from '@/lib/roles'
-
-          export const Route = createFileRoute('__ROUTE__')({
-            beforeLoad: () => {
-              const { auth } = useAuthStore.getState()
-              if (!auth.user || auth.user.role < ROLE.ADMIN) {
-                throw redirect({ to: '/403' })
-              }
-            },
-          })
-          '''
-          write(
-              'web/default/src/routes/_authenticated/channels/new.tsx',
-              route_header + guard_body.replace('__ROUTE__', '/_authenticated/channels/new'),
-          )
-          write(
-              'web/default/src/routes/_authenticated/channels/$channelId/edit.tsx',
-              route_header + guard_body.replace('__ROUTE__', '/_authenticated/channels/$channelId/edit'),
-          )
-          write(
-              'web/default/src/routes/_authenticated/channels/new.lazy.tsx',
-              route_header + r'''import { createLazyFileRoute } from '@tanstack/react-router'
-          import { ChannelEditorPage } from '@/features/channels/components/editor/channel-editor-page'
-
-          export const Route = createLazyFileRoute('/_authenticated/channels/new')({
-            component: ChannelCreatePage,
-          })
-
-          function ChannelCreatePage() {
-            return <ChannelEditorPage mode='create' />
-          }
-          ''',
-          )
-          write(
-              'web/default/src/routes/_authenticated/channels/$channelId/edit.lazy.tsx',
-              route_header + r'''import { createLazyFileRoute } from '@tanstack/react-router'
-          import { ChannelEditorPage } from '@/features/channels/components/editor/channel-editor-page'
-
-          export const Route = createLazyFileRoute(
-            '/_authenticated/channels/$channelId/edit'
-          )({ component: ChannelEditPage })
-
-          function ChannelEditPage() {
-            const { channelId } = Route.useParams()
-            return <ChannelEditorPage mode='edit' channelId={channelId} />
-          }
-          ''',
-          )
-
-          # Create/Edit now navigate to routes. Short actions stay in the existing provider dialogs.
-          p = 'web/default/src/features/channels/components/channels-primary-buttons.tsx'
-          text = read(p)
-          text = replace_once(
-              text,
-              "import { useQueryClient } from '@tanstack/react-query'\n",
-              "import { useQueryClient } from '@tanstack/react-query'\nimport { useNavigate } from '@tanstack/react-router'\n",
-              'primary route import',
-          )
-          text = replace_once(text, "  const { t, i18n } = useTranslation()\n", "  const { t, i18n } = useTranslation()\n  const navigate = useNavigate()\n", 'primary navigate hook')
-          text = replace_once(text, "    setOpen,\n    setCurrentRow,\n", '', 'remove primary drawer setters')
-          text = replace_once(
-              text,
-              """            onClick={() => {\n              setCurrentRow(null)\n              setOpen('create-channel')\n            }}""",
-              """            onClick={() => {\n              void navigate({ to: '/channels/new' })\n            }}""",
-              'create navigation',
-          )
-          write(p, text)
-
-          p = 'web/default/src/features/channels/components/data-table-row-actions.tsx'
-          text = read(p)
-          text = replace_once(
-              text,
-              "import { useQueryClient } from '@tanstack/react-query'\n",
-              "import { useQueryClient } from '@tanstack/react-query'\nimport { useNavigate } from '@tanstack/react-router'\n",
-              'row route import',
-          )
-          text = replace_once(text, "  const { t } = useTranslation()\n", "  const { t } = useTranslation()\n  const navigate = useNavigate()\n", 'row navigate hook')
-          text = replace_once(
-              text,
-              """  const handleEdit = () => {\n    setCurrentRow(channel)\n    setOpen('update-channel')\n  }""",
-              """  const handleEdit = () => {\n    void navigate({\n      to: '/channels/$channelId/edit',\n      params: { channelId: String(channel.id) },\n    })\n  }""",
-              'edit navigation',
-          )
-          write(p, text)
-
-          p = 'web/default/src/features/channels/components/channels-provider.tsx'
-          text = read(p)
-          text = replace_once(text, "  | 'create-channel'\n", '', 'remove create dialog type')
-          text = replace_once(text, "  | 'update-channel'\n", '', 'remove update dialog type')
-          write(p, text)
-
-          p = 'web/default/src/features/channels/components/channels-dialogs.tsx'
-          text = read(p)
-          text = replace_once(text, "import { ChannelMutateDrawer } from './drawers/channel-mutate-drawer'\n", '', 'remove drawer import')
-          text = regex_once(
-              text,
-              r"\n      \{\/\* Channel Create\/Update Drawer \*\/\}\n      <ChannelMutateDrawer[\s\S]*?\n      />\n",
-              '\n',
-              'remove drawer render',
-          )
-          write(p, text)
-
-          # Retire the old create/update Drawer only after the page source was produced.
-          (root / old_rel).unlink()
-          (root / 'web/default/src/features/channels/components/drawers/channel-mutate-drawer.test.tsx').unlink()
-          PY
-          python3 /tmp/migrate-channel-editor.py
+      - name: Generate real Channel Editor workspace
+        run: python3 .github/scripts/aurora-v21-channel-editor.py
 
       - name: Install frontend dependencies
         working-directory: web/default
         run: bun install --frozen-lockfile
 
-      - name: Format migrated files
+      - name: Format changed frontend files
         shell: bash
         run: |
           set -euo pipefail
           mapfile -d '' files < <(git ls-files -m -o --exclude-standard -z -- web/default)
-          cd web/default
-          rel=()
-          for file in "${files[@]}"; do rel+=("${file#web/default/}"); done
-          if ((${#rel[@]})); then bun x prettier --write "${rel[@]}"; fi
+          if ((${#files[@]})); then
+            cd web/default
+            rel=()
+            for file in "${files[@]}"; do rel+=("${file#web/default/}"); done
+            bun x prettier --write "${rel[@]}"
+          fi
 
       - name: Generate TanStack route tree
         working-directory: web/default
@@ -730,31 +61,35 @@ jobs:
         working-directory: web/default
         run: bun test
 
-      - name: Lint migrated files
+      - name: Lint changed TypeScript
         shell: bash
         run: |
           set -euo pipefail
           mapfile -d '' files < <(git ls-files -m -o --exclude-standard -z -- 'web/default/src/**/*.ts' 'web/default/src/**/*.tsx')
-          cd web/default
-          rel=()
-          for file in "${files[@]}"; do
-            [[ "$file" == 'web/default/src/routeTree.gen.ts' ]] && continue
-            rel+=("${file#web/default/}")
-          done
-          if ((${#rel[@]})); then bun x eslint --no-warn-ignored "${rel[@]}"; fi
+          if ((${#files[@]})); then
+            cd web/default
+            rel=()
+            for file in "${files[@]}"; do
+              [[ "$file" == 'web/default/src/routeTree.gen.ts' ]] && continue
+              rel+=("${file#web/default/}")
+            done
+            if ((${#rel[@]})); then bun x eslint --no-warn-ignored "${rel[@]}"; fi
+          fi
 
-      - name: Format migrated files check
+      - name: Check formatting of changed frontend files
         shell: bash
         run: |
           set -euo pipefail
           mapfile -d '' files < <(git ls-files -m -o --exclude-standard -z -- web/default)
-          cd web/default
-          rel=()
-          for file in "${files[@]}"; do
-            [[ "$file" == 'web/default/src/routeTree.gen.ts' ]] && continue
-            rel+=("${file#web/default/}")
-          done
-          if ((${#rel[@]})); then bun x prettier --check "${rel[@]}"; fi
+          if ((${#files[@]})); then
+            cd web/default
+            rel=()
+            for file in "${files[@]}"; do
+              [[ "$file" == 'web/default/src/routeTree.gen.ts' ]] && continue
+              rel+=("${file#web/default/}")
+            done
+            if ((${#rel[@]})); then bun x prettier --check "${rel[@]}"; fi
+          fi
 
       - name: Copyright check with known baseline exception
         working-directory: web/default
@@ -792,6 +127,7 @@ jobs:
           test -f web/default/src/routes/_authenticated/channels/new.lazy.tsx
           test -f 'web/default/src/routes/_authenticated/channels/$channelId/edit.lazy.tsx'
           test ! -f web/default/src/features/channels/components/drawers/channel-mutate-drawer.tsx
+          test ! -f web/default/src/features/channels/components/drawers/channel-mutate-drawer.test.tsx
           ! grep -q "from '@/components/ui/sheet'" "$editor"
           ! grep -q 'SheetContent\|SheetFooter\|SheetHeader\|SheetClose' "$editor"
           ! grep -q "'create-channel'\|'update-channel'" web/default/src/features/channels/components/channels-provider.tsx
@@ -802,8 +138,10 @@ jobs:
           grep -q 'useBlocker' "$editor"
           grep -q "data-ui='channel-editor-page'" "$editor"
           grep -q "id='channel-advanced'" "$editor"
+          grep -q "createLazyFileRoute('/_authenticated/channels/new')" web/default/src/routes/_authenticated/channels/new.lazy.tsx
+          grep -q "createLazyFileRoute('/_authenticated/channels/\$channelId/edit')" 'web/default/src/routes/_authenticated/channels/$channelId/edit.lazy.tsx'
 
-      - name: Dead-code diagnostic for new editor runtime
+      - name: Dead-code diagnostic for new Channel Editor runtime
         working-directory: web/default
         shell: bash
         run: |
@@ -824,7 +162,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -f .github/scripts/aurora-v21-channel-editor.py
           rm -f .github/workflows/aurora-v21-finish.yml
+          rm -f .github/workflows/aurora-v21-channel-editor.yml
           git add -A
           git diff --cached --check
           git config user.name 'github-actions[bot]'

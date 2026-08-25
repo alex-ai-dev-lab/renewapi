@@ -30,7 +30,7 @@ const publicCases = [
   ['about', '/about'],
   ['pricing', '/pricing'],
   ['privacy-policy', '/privacy-policy'],
-  ['terms-of-service', '/terms-of-service'],
+  ['user-agreement', '/user-agreement'],
   ['rankings', '/rankings'],
   ['error-401', '/401'],
   ['error-403', '/403'],
@@ -45,6 +45,10 @@ const authenticatedCases = [
   ['subscriptions', '/subscriptions'],
   ['playground', '/playground'],
   ['redemption-codes', '/redemption-codes'],
+  ['channels', '/channels'],
+  ['usage-logs', '/usage-logs/common'],
+  ['system-settings', '/system-settings'],
+  ['channel-create', '/channels/new'],
 ]
 
 const themes = ['light', 'dark']
@@ -306,6 +310,9 @@ function attachDiagnostics(page, label) {
 
 async function waitForSurface(page) {
   await page.locator('body').waitFor({ state: 'visible', timeout: 20000 })
+  await page
+    .locator('[data-qa-route-id]')
+    .waitFor({ state: 'attached', timeout: 20000 })
   await sleep(900)
   await page.evaluate(() => document.fonts?.ready)
 }
@@ -374,6 +381,77 @@ async function auditPage(context, testCase, theme, viewportName, authRequired) {
       })
     }
 
+    const routeIdentity = await page
+      .locator('[data-qa-route-id]')
+      .first()
+      .getAttribute('data-qa-route-id')
+    if (!routeIdentity) {
+      failures.push({ label, type: 'missing-route-identity', currentURL })
+    }
+
+    const notFoundCount = await page
+      .locator('[data-page-state="not-found"]')
+      .count()
+    if (id !== 'error-404' && notFoundCount > 0) {
+      failures.push({
+        label,
+        type: 'unexpected-not-found-state',
+        routeIdentity,
+        currentURL,
+      })
+    }
+
+    if (id === 'channel-create') {
+      const editorPageCount = await page
+        .locator('[data-ui="channel-editor-page"]')
+        .count()
+      if (editorPageCount === 0) {
+        failures.push({
+          label,
+          type: 'channel-editor-page-missing',
+          routeIdentity,
+          currentURL,
+        })
+      }
+      const sheetCount = await page.locator('[data-slot="sheet-content"]').count()
+      if (sheetCount > 0) {
+        failures.push({ label, type: 'channel-editor-rendered-as-sheet' })
+      }
+    }
+
+    if (
+      viewportName === 'desktop' &&
+      (id === 'channels' || id === 'usage-logs')
+    ) {
+      const pageModeCount = await page
+        .locator('[data-ui="data-table-page"][data-scroll-mode="page"]')
+        .count()
+      if (pageModeCount === 0) {
+        failures.push({ label, type: 'data-table-page-scroll-contract-missing' })
+      }
+      const tableScroll = page.locator('[data-ui="data-table-scroll"]').first()
+      if ((await tableScroll.count()) > 0) {
+        const tableScrollMetrics = await tableScroll.evaluate((element) => ({
+          clientHeight: element.clientHeight,
+          scrollHeight: element.scrollHeight,
+          overflowY: getComputedStyle(element).overflowY,
+          maxHeight: getComputedStyle(element).maxHeight,
+        }))
+        if (
+          tableScrollMetrics.scrollHeight > tableScrollMetrics.clientHeight + 1 ||
+          tableScrollMetrics.overflowY === 'auto' ||
+          tableScrollMetrics.overflowY === 'scroll' ||
+          tableScrollMetrics.maxHeight !== 'none'
+        ) {
+          failures.push({
+            label,
+            type: 'unexpected-data-table-vertical-scroll',
+            tableScrollMetrics,
+          })
+        }
+      }
+    }
+
     const overflow = await page.evaluate(() => {
       const root = document.documentElement
       const body = document.body
@@ -429,6 +507,8 @@ async function auditPage(context, testCase, theme, viewportName, authRequired) {
       theme,
       viewport: viewportName,
       authRequired,
+      routeIdentity,
+      notFoundCount,
       overflow,
       axeViolations: violations.length,
       consoleErrors: caseConsoleErrors.length,

@@ -328,6 +328,7 @@ function ComboboxChip({
           render={<Button variant='ghost' size='icon-xs' />}
           className='-ml-1 opacity-50 hover:opacity-100'
           data-slot='combobox-chip-remove'
+          aria-label='Remove item'
         >
           <HugeiconsIcon
             icon={Cancel01Icon}

@@ -153,11 +153,14 @@ export function useChannelStats(
   return useQuery({
     queryKey: ['channel-stats', timeRange],
     queryFn: async ({ signal }) => {
-      const res = await api.get<{ success: boolean; data: ChannelStat[] }>(
-        `/api/stats/channels?time_range=${timeRange}`,
-        { signal, timeoutClass: 'background' }
-      )
-      return res.data.data
+      const res = await api.get<{
+        success: boolean
+        data: ChannelStat[] | null
+      }>(`/api/stats/channels?time_range=${timeRange}`, {
+        signal,
+        timeoutClass: 'background',
+      })
+      return res.data.data ?? []
     },
     refetchInterval: autoRefresh ? refreshIntervalMs : false,
   })
@@ -171,11 +174,11 @@ export function useModelStats(
   return useQuery({
     queryKey: ['model-stats', timeRange],
     queryFn: async ({ signal }) => {
-      const res = await api.get<{ success: boolean; data: ModelStat[] }>(
+      const res = await api.get<{ success: boolean; data: ModelStat[] | null }>(
         `/api/stats/models?time_range=${timeRange}`,
         { signal, timeoutClass: 'background' }
       )
-      return res.data.data
+      return res.data.data ?? []
     },
     refetchInterval: autoRefresh ? refreshIntervalMs : false,
   })
@@ -191,11 +194,14 @@ export function useModelTrendStats(
     queryKey: ['model-trend-stats', timeRange, modelName],
     enabled: Boolean(modelName),
     queryFn: async ({ signal }) => {
-      const res = await api.get<{ success: boolean; data: TrendPoint[] }>(
+      const res = await api.get<{
+        success: boolean
+        data: TrendPoint[] | null
+      }>(
         `/api/stats/model-trend?time_range=${timeRange}&model_name=${encodeURIComponent(modelName ?? '')}`,
         { signal, timeoutClass: 'background' }
       )
-      return res.data.data
+      return res.data.data ?? []
     },
     refetchInterval: autoRefresh && modelName ? refreshIntervalMs : false,
   })
@@ -209,11 +215,11 @@ export function useUserStats(
   return useQuery({
     queryKey: ['user-stats', timeRange],
     queryFn: async ({ signal }) => {
-      const res = await api.get<{ success: boolean; data: UserStat[] }>(
+      const res = await api.get<{ success: boolean; data: UserStat[] | null }>(
         `/api/stats/users?time_range=${timeRange}`,
         { signal, timeoutClass: 'background' }
       )
-      return res.data.data
+      return res.data.data ?? []
     },
     refetchInterval: autoRefresh ? refreshIntervalMs : false,
   })
@@ -229,11 +235,14 @@ export function useUserTrendStats(
     queryKey: ['user-trend-stats', timeRange, userId],
     enabled: Boolean(userId && userId > 0),
     queryFn: async ({ signal }) => {
-      const res = await api.get<{ success: boolean; data: TrendPoint[] }>(
-        `/api/stats/user-trend?time_range=${timeRange}&user_id=${userId}`,
-        { signal, timeoutClass: 'background' }
-      )
-      return res.data.data
+      const res = await api.get<{
+        success: boolean
+        data: TrendPoint[] | null
+      }>(`/api/stats/user-trend?time_range=${timeRange}&user_id=${userId}`, {
+        signal,
+        timeoutClass: 'background',
+      })
+      return res.data.data ?? []
     },
     refetchInterval: autoRefresh && userId ? refreshIntervalMs : false,
   })
@@ -249,11 +258,14 @@ export function useChannelUserStats(
     queryKey: ['channel-user-stats', timeRange, channelId],
     enabled: Boolean(channelId && channelId > 0),
     queryFn: async ({ signal }) => {
-      const res = await api.get<{ success: boolean; data: ChannelUserStat[] }>(
+      const res = await api.get<{
+        success: boolean
+        data: ChannelUserStat[] | null
+      }>(
         `/api/stats/channel-users?time_range=${timeRange}&channel_id=${channelId}`,
         { signal, timeoutClass: 'background' }
       )
-      return res.data.data
+      return res.data.data ?? []
     },
     refetchInterval: autoRefresh && channelId ? refreshIntervalMs : false,
   })
@@ -269,11 +281,14 @@ export function useChannelTrendStats(
     queryKey: ['channel-trend-stats', timeRange, channelId],
     enabled: Boolean(channelId && channelId > 0),
     queryFn: async ({ signal }) => {
-      const res = await api.get<{ success: boolean; data: TrendPoint[] }>(
+      const res = await api.get<{
+        success: boolean
+        data: TrendPoint[] | null
+      }>(
         `/api/stats/channel-trend?time_range=${timeRange}&channel_id=${channelId}`,
         { signal, timeoutClass: 'background' }
       )
-      return res.data.data
+      return res.data.data ?? []
     },
     refetchInterval: autoRefresh && channelId ? refreshIntervalMs : false,
   })

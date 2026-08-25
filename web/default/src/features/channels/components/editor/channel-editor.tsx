@@ -358,7 +358,7 @@ function ChannelEditorSectionNav({ onAdvancedOpen }: ChannelEditorNavProps) {
               onClick={() => selectSection(item.id)}
               className={
                 activeSection === item.id
-                  ? 'bg-primary/10 text-primary flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-medium'
+                  ? 'bg-primary/10 text-foreground flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-medium'
                   : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition-colors'
               }
             >

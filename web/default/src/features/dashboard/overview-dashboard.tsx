@@ -17,16 +17,34 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect } from 'react'
-import { getRouteApi, useNavigate } from '@tanstack/react-router'
-import { Activity, CircleCheck, Timer, Users } from 'lucide-react'
+import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
+import {
+  Activity,
+  CircleCheck,
+  CircleDollarSign,
+  Gauge,
+  Timer,
+  Users,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useAuthStore } from '@/stores/auth-store'
+import { formatQuota } from '@/lib/format'
+import { ROLE } from '@/lib/roles'
+import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/empty-state'
+import { ErrorState } from '@/components/error-state'
 import { RequestVolumePanel, SpendPanel } from './aurora-overview-panels'
 import { AutoRefreshToggle } from './auto-refresh-toggle'
 import { ChannelStatsTable } from './channel-stats-table'
 import { KPICard } from './kpi-card'
-import { useOverviewStats, type TimeRange } from './stats-api'
+import { ModelDistributionChart } from './model-distribution-chart'
+import {
+  useOverviewStats,
+  useSelfOverviewStats,
+  type TimeRange,
+} from './stats-api'
 import { TimeRangeSelector } from './time-range-selector'
+import { TrendChart } from './trend-chart'
 import { useDashboardControls } from './use-dashboard-controls'
 
 const route = getRouteApi('/_authenticated/dashboard/$section')
@@ -36,6 +54,8 @@ export function OverviewDashboard() {
   const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
   const search = route.useSearch()
   const navigate = useNavigate()
+  const userRole = useAuthStore((state) => state.auth.user?.role)
+  const isAdmin = Boolean(userRole && userRole >= ROLE.ADMIN)
   const {
     timeRange,
     autoRefresh,
@@ -63,16 +83,30 @@ export function OverviewDashboard() {
     }
   }, [search.time_range, setTimeRange, timeRange])
 
-  const {
-    data: stats,
-    isLoading,
-    isFetching,
-    error,
-    refetch,
-    dataUpdatedAt,
-  } = useOverviewStats(timeRange, autoRefresh, refreshInterval)
+  const adminQuery = useOverviewStats(
+    timeRange,
+    autoRefresh,
+    refreshInterval,
+    isAdmin
+  )
+  const selfQuery = useSelfOverviewStats(
+    timeRange,
+    autoRefresh,
+    refreshInterval,
+    !isAdmin
+  )
+  const isLoading = isAdmin ? adminQuery.isLoading : selfQuery.isLoading
+  const isFetching = isAdmin ? adminQuery.isFetching : selfQuery.isFetching
+  const error = isAdmin ? adminQuery.error : selfQuery.error
+  const dataUpdatedAt = isAdmin
+    ? adminQuery.dataUpdatedAt
+    : selfQuery.dataUpdatedAt
+  const hasData = isAdmin ? Boolean(adminQuery.data) : Boolean(selfQuery.data)
+  const handleRefresh = () => {
+    void (isAdmin ? adminQuery.refetch() : selfQuery.refetch())
+  }
 
-  if (isLoading && !stats) {
+  if (isLoading && !hasData) {
     return (
       <div className='grid grid-cols-12 gap-4'>
         <div className='bg-card/55 col-span-12 h-[310px] animate-pulse rounded-[22px] border lg:col-span-8' />
@@ -83,17 +117,22 @@ export function OverviewDashboard() {
 
   if (error) {
     return (
-      <Alert variant='destructive'>
-        <AlertDescription>
-          {t('Failed to load statistics. Please try again later.')}
-        </AlertDescription>
-      </Alert>
+      <ErrorState
+        title={t('Failed to load statistics')}
+        description={t('Please try again later.')}
+        onRetry={handleRefresh}
+      />
     )
   }
 
-  if (!stats) return null
+  const stats = adminQuery.data
+  const selfStats = selfQuery.data
+  if (isAdmin && !stats) return null
+  if (!isAdmin && !selfStats) return null
 
-  const totalTokens = stats.total_prompt_tokens + stats.total_output_tokens
+  const totalTokens = stats
+    ? stats.total_prompt_tokens + stats.total_output_tokens
+    : 0
   const controls = (
     <div className='flex flex-wrap items-center justify-end gap-1.5'>
       <AutoRefreshToggle
@@ -101,7 +140,7 @@ export function OverviewDashboard() {
         onChange={setAutoRefresh}
         intervalMs={refreshInterval}
         onIntervalChange={setRefreshInterval}
-        onRefresh={refetch}
+        onRefresh={handleRefresh}
         isRefreshing={isFetching}
         lastUpdatedAt={dataUpdatedAt}
         className='gap-1.5 [&>label]:sr-only [&>span:last-child]:hidden'
@@ -109,6 +148,91 @@ export function OverviewDashboard() {
       <TimeRangeSelector value={timeRange} onChange={changeTimeRange} />
     </div>
   )
+
+  if (!isAdmin && selfStats) {
+    const hasUsage =
+      selfStats.total_requests > 0 ||
+      selfStats.total_tokens > 0 ||
+      selfStats.range_usage > 0
+
+    return (
+      <div className='grid grid-cols-12 gap-4'>
+        <div className='col-span-12 flex justify-end'>{controls}</div>
+        <KPICard
+          title={t('Credit remaining')}
+          value={formatQuota(selfStats.remaining_quota)}
+          subtitle={t('Available balance for future requests')}
+          icon={Gauge}
+          className='col-span-12 sm:col-span-6 lg:col-span-3'
+        />
+        <KPICard
+          title={t('Usage')}
+          value={formatQuota(selfStats.range_usage)}
+          subtitle={t('Usage in the selected period')}
+          icon={CircleDollarSign}
+          className='col-span-12 sm:col-span-6 lg:col-span-3'
+        />
+        <KPICard
+          title={t('Requests')}
+          value={selfStats.total_requests.toLocaleString()}
+          subtitle={t('Requests in the selected period')}
+          icon={Activity}
+          className='col-span-12 sm:col-span-6 lg:col-span-3'
+        />
+        <KPICard
+          title={t('Tokens')}
+          value={Intl.NumberFormat('en-US', {
+            notation: 'compact',
+            maximumFractionDigits: 1,
+          }).format(selfStats.total_tokens)}
+          subtitle={t('Tokens in the selected period')}
+          icon={CircleCheck}
+          className='col-span-12 sm:col-span-6 lg:col-span-3'
+        />
+
+        {!hasUsage ? (
+          <div className='col-span-12'>
+            <EmptyState
+              bordered
+              title={t('No usage yet')}
+              description={t(
+                'Create an API key, copy the integration details, and send your first request to populate this dashboard.'
+              )}
+              action={
+                <div className='flex flex-col items-center gap-3'>
+                  <ol className='text-muted-foreground list-inside list-decimal space-y-1 text-left text-sm'>
+                    <li>{t('Create an API key')}</li>
+                    <li>{t('Copy the API endpoint and key')}</li>
+                    <li>{t('Send your first request')}</li>
+                  </ol>
+                  <Button render={<Link to='/keys' />}>
+                    {t('Create API Key')}
+                  </Button>
+                </div>
+              }
+            />
+          </div>
+        ) : (
+          <>
+            <div className='col-span-12 xl:col-span-8'>
+              <TrendChart
+                data={selfStats.trend}
+                usageOnly
+                title={t('Usage trend')}
+                description={t('Request and token volume over time.')}
+                storageKey='dashboard:self-trend'
+              />
+            </div>
+            <div className='col-span-12 xl:col-span-4'>
+              <ModelDistributionChart data={selfStats.top_models} />
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  if (!stats) return null
 
   return (
     <div className='grid grid-cols-12 gap-4'>

@@ -122,6 +122,14 @@ For commercial licensing, please contact support@quantumnous.com
     'DejaVu Sans Mono', monospace;
   --radius: 1rem;
   --app-header-height: 3rem;
+  --overlay-backdrop: rgb(0 0 0 / 45%);
+  --z-sticky-header: 200;
+  --z-floating: 400;
+  --z-overlay-backdrop: 500;
+  --z-dialog: 510;
+  --z-drawer: 520;
+  --z-toast: 600;
+  --z-tooltip: 800;
   /* Static build-channel fallback consumed when JS hasn't booted yet. */
   --app-rev: '2k6e8r7p';
   /* Currently active body font. The font axis swaps this between
@@ -178,6 +186,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 .dark {
   /* OpenAI-like dark mode: nearly black chrome, readable raised surfaces. */
+  --overlay-backdrop: rgb(0 0 0 / 60%);
   --background: oklch(0.185 0 0);
   --foreground: oklch(0.965 0 0);
   --card: oklch(0.235 0 0);
@@ -221,4 +230,20 @@ For commercial licensing, please contact support@quantumnous.com
   --sidebar-ring: oklch(0.68 0 0);
   --skeleton-base: oklch(0.285 0 0);
   --skeleton-highlight: oklch(0.39 0 0);
+}
+
+[data-slot='dialog-overlay'] {
+  z-index: var(--z-overlay-backdrop);
+  background: var(--overlay-backdrop);
+  backdrop-filter: blur(2px);
+}
+
+[data-slot='dialog-content'] {
+  z-index: var(--z-dialog);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-slot='dialog-overlay'] {
+    backdrop-filter: none;
+  }
 }

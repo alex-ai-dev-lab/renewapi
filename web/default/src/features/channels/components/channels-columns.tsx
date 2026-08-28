@@ -715,6 +715,8 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
         )
       },
       minSize: 200,
+      size: 240,
+      maxSize: 280,
     },
 
     // Type column

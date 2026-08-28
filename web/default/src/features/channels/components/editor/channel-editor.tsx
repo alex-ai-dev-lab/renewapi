@@ -29,6 +29,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
 import { useBlocker } from '@tanstack/react-router'
 import {
+  ArrowLeft,
   ArrowRight,
   HelpCircle,
   Loader2,
@@ -85,10 +86,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import {
-  sideDrawerSectionClassName,
-  sideDrawerSwitchItemClassName,
-} from '@/components/drawer-layout'
+import { sideDrawerSectionClassName } from '@/components/drawer-layout'
 import { JsonEditor } from '@/components/json-editor'
 import { MultiSelect } from '@/components/multi-select'
 import {
@@ -1292,31 +1290,66 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
         <div className='min-w-0 space-y-5'>
           <div
             data-ui='channel-editor-summary'
-            className='glass-tile flex flex-col gap-2 p-5 sm:p-6'
+            className='glass-tile sticky top-[calc(var(--app-header-height)+0.5rem)] z-[var(--z-sticky-header)] flex min-w-0 items-center gap-2 p-3 sm:gap-3 sm:p-4'
           >
-            <div className='flex items-center gap-3'>
-              <span className='bg-muted flex size-10 shrink-0 items-center justify-center rounded-xl'>
-                {getLobeIcon(`${getChannelTypeIcon(currentType)}.Color`, 24)}
-              </span>
-              <div className='min-w-0'>
-                <h2 className='truncate text-lg font-bold tracking-tight'>
-                  {isEditing ? t('Edit Channel') : t('Create Channel')}
-                </h2>
-                <p className='text-muted-foreground text-sm'>
-                  {t(currentTypeLabel)}
-                  {channelId ? ` · #${channelId}` : ''}
-                </p>
-              </div>
+            <Button
+              type='button'
+              variant='ghost'
+              size='sm'
+              className='shrink-0 px-2 sm:px-3'
+              disabled={isSubmitting}
+              onClick={handleCancel}
+            >
+              <ArrowLeft className='size-4' />
+              <span className='hidden sm:inline'>{t('Back to Channels')}</span>
+            </Button>
+            <span className='bg-muted hidden size-9 shrink-0 items-center justify-center rounded-xl sm:flex'>
+              {getLobeIcon(`${getChannelTypeIcon(currentType)}.Color`, 22)}
+            </span>
+            <div className='min-w-0 flex-1'>
+              <h2 className='truncate text-sm font-bold tracking-tight sm:text-base'>
+                {currentName?.trim() ||
+                  (isEditing ? t('Edit Channel') : t('Create Channel'))}
+              </h2>
+              <p className='text-muted-foreground truncate text-xs'>
+                {channelId ? `#${channelId} · ` : ''}
+                {t(currentTypeLabel)}
+              </p>
             </div>
-            <p className='text-muted-foreground text-sm'>
-              {isEditing
-                ? t(
-                    "Update channel configuration and click save when you're done."
-                  )
-                : t(
-                    'Add a new channel by providing the necessary information.'
-                  )}
-            </p>
+            <div className='ml-auto flex shrink-0 items-center gap-2'>
+              <label className='flex items-center gap-2 text-xs'>
+                <span className='text-muted-foreground hidden sm:inline'>
+                  {t('Enabled')}
+                </span>
+                <Switch
+                  checked={form.watch('status') === 1}
+                  onCheckedChange={(checked) =>
+                    form.setValue('status', checked ? 1 : 2, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                  disabled={isSubmitting || isChannelDetailUnavailable}
+                  aria-label={t('Enabled')}
+                />
+              </label>
+              <Button
+                form='channel-form'
+                type='submit'
+                size='sm'
+                disabled={
+                  isSubmitting ||
+                  isChannelDetailLoading ||
+                  isChannelDetailUnavailable
+                }
+              >
+                {isSubmitting && <Loader2 className='size-4 animate-spin' />}
+                <span className='hidden sm:inline'>
+                  {isEditing ? t('Update Channel') : t('Save changes')}
+                </span>
+                <span className='sm:hidden'>{t('Save')}</span>
+              </Button>
+            </div>
           </div>
 
           <Form {...form}>
@@ -1395,29 +1428,6 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
                           )}
                         />
                       </div>
-
-                      <FormField
-                        control={form.control}
-                        name='status'
-                        render={({ field }) => (
-                          <FormItem className={sideDrawerSwitchItemClassName()}>
-                            <div className='flex flex-col gap-0.5'>
-                              <FormLabel>{t('Enabled')}</FormLabel>
-                              <FormDescription className='text-xs'>
-                                {t('Enable or disable this channel')}
-                              </FormDescription>
-                            </div>
-                            <FormControl>
-                              <Switch
-                                checked={field.value === 1}
-                                onCheckedChange={(checked) =>
-                                  field.onChange(checked ? 1 : 2)
-                                }
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
 
                       {currentType === 1 && (
                         <FormField
@@ -5027,33 +5037,6 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
               )}
             </form>
           </Form>
-          <div
-            data-ui='channel-editor-actions'
-            className='border-border/60 bg-background/85 sticky bottom-24 z-20 mt-2 flex flex-wrap items-center justify-end gap-2 rounded-2xl border p-3 shadow-lg backdrop-blur-xl sm:bottom-28'
-          >
-            <Button
-              type='button'
-              variant='outline'
-              disabled={isSubmitting}
-              onClick={handleCancel}
-            >
-              {t('Cancel')}
-            </Button>
-            <Button
-              form='channel-form'
-              type='submit'
-              disabled={
-                isSubmitting ||
-                isChannelDetailLoading ||
-                isChannelDetailUnavailable
-              }
-            >
-              {isSubmitting && (
-                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-              )}
-              {isEditing ? t('Update Channel') : t('Save changes')}
-            </Button>
-          </div>
         </div>
       </div>
 

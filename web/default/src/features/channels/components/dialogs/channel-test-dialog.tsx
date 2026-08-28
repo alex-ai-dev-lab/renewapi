@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   type ColumnDef,
   type RowSelectionState,
@@ -26,8 +27,15 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, Copy, Info, Loader2, Settings, ShieldCheck } from 'lucide-react'
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  Info,
+  Loader2,
+  Settings,
+  ShieldCheck,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
@@ -244,11 +252,11 @@ function getTestTableColumnClass(columnId: string) {
     case 'select':
       return 'w-10 min-w-10'
     case 'model':
-      return 'w-auto whitespace-nowrap'
+      return 'w-56 min-w-56 max-w-56 whitespace-nowrap'
     case 'status':
-      return 'w-[22rem] min-w-[22rem] max-w-[22rem] whitespace-normal'
+      return 'w-72 min-w-72 max-w-72 whitespace-normal'
     case 'actions':
-      return 'bg-popover sticky right-0 z-20 w-24 min-w-24 border-l shadow-[-8px_0_8px_-8px_rgb(0_0_0_/_0.2)] whitespace-nowrap sm:w-28 sm:min-w-28'
+      return 'bg-card sticky right-0 z-20 w-24 min-w-24 border-l shadow-[-8px_0_8px_-8px_rgb(0_0_0_/_0.2)] whitespace-nowrap sm:w-28 sm:min-w-28'
     default:
       return undefined
   }
@@ -289,12 +297,12 @@ function buildTestResultFromResponse(
 function hasTestDetails(result: TestResult) {
   return Boolean(
     result.request ||
-      result.response ||
-      result.error ||
-      result.httpStatus ||
-      result.endpointType ||
-      typeof result.firstByteTime === 'number' ||
-      typeof result.totalTime === 'number'
+    result.response ||
+    result.error ||
+    result.httpStatus ||
+    result.endpointType ||
+    typeof result.firstByteTime === 'number' ||
+    typeof result.totalTime === 'number'
   )
 }
 
@@ -504,7 +512,9 @@ export function ChannelTestDialog({
         if (failedCount > 0) {
           toast.error(
             t(
-              'Batch test completed: SS_VAR succeeded, FF_VAR failed'.replace('SS_VAR', '{' + '{success}' + '}').replace('FF_VAR', '{' + '{failed}' + '}'),
+              'Batch test completed: SS_VAR succeeded, FF_VAR failed'
+                .replace('SS_VAR', '{' + '{success}' + '}')
+                .replace('FF_VAR', '{' + '{failed}' + '}'),
               {
                 success: successCount,
                 failed: failedCount,
@@ -513,9 +523,15 @@ export function ChannelTestDialog({
           )
         } else {
           toast.success(
-            t('Batch test completed: CC_VAR succeeded'.replace('CC_VAR', '{' + '{count}' + '}'), {
-              count: successCount,
-            })
+            t(
+              'Batch test completed: CC_VAR succeeded'.replace(
+                'CC_VAR',
+                '{' + '{count}' + '}'
+              ),
+              {
+                count: successCount,
+              }
+            )
           )
         }
       } finally {
@@ -567,9 +583,12 @@ export function ChannelTestDialog({
           <Checkbox
             checked={row.getIsSelected()}
             onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label={t('Select model MM_VAR'.replace('MM_VAR', '{' + '{model}' + '}'), {
-              model: row.original.model,
-            })}
+            aria-label={t(
+              'Select model MM_VAR'.replace('MM_VAR', '{' + '{model}' + '}'),
+              {
+                model: row.original.model,
+              }
+            )}
           />
         ),
         enableSorting: false,
@@ -719,8 +738,8 @@ export function ChannelTestDialog({
               </div>
             )}
 
-            <div className='grid gap-4 md:grid-cols-2'>
-              <div className='grid gap-2'>
+            <div className='bg-muted/20 flex min-w-0 flex-col gap-4 rounded-lg border p-3 md:flex-row md:items-start'>
+              <div className='grid min-w-0 gap-2 md:flex-1'>
                 <Label htmlFor='endpoint-type'>{t('Endpoint Type')}</Label>
                 <Select
                   items={[
@@ -754,7 +773,7 @@ export function ChannelTestDialog({
                   )}
                 </p>
               </div>
-              <div className='grid gap-2'>
+              <div className='grid min-w-0 gap-2 md:w-48 md:shrink-0'>
                 <Label htmlFor='stream-toggle'>{t('Stream Mode')}</Label>
                 <div className='flex items-center gap-2'>
                   <Switch
@@ -773,7 +792,7 @@ export function ChannelTestDialog({
               </div>
             </div>
 
-            <div className='space-y-3 max-sm:has-[div[role="toolbar"]]:pb-16'>
+            <div className='min-w-0 space-y-3 max-sm:has-[div[role="toolbar"]]:pb-16'>
               <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
                 <div>
                   <p className='text-sm font-medium'>{t('Channel models')}</p>
@@ -791,7 +810,7 @@ export function ChannelTestDialog({
 
               <div className='space-y-3'>
                 <div
-                  className='overflow-hidden rounded-md border'
+                  className='min-w-0 overflow-hidden rounded-md border'
                   role='region'
                   aria-label={t('Channel models')}
                 >
@@ -799,8 +818,8 @@ export function ChannelTestDialog({
                     <Table className='w-max min-w-full table-auto'>
                       <colgroup>
                         <col className='w-10 min-w-10' />
-                        <col className='w-auto' />
-                        <col className='w-[22rem]' />
+                        <col className='w-56' />
+                        <col className='w-72' />
                         <col className='w-24 sm:w-28' />
                       </colgroup>
                       <TableHeader>
@@ -966,24 +985,10 @@ function TestStatusCell({
     )
   }
 
-  return (
-    <FailureStatusContent
-      result={result}
-      model={model}
-      onOpenDetails={onOpenDetails}
-    />
-  )
+  return <FailureStatusContent result={result} />
 }
 
-function FailureStatusContent({
-  result,
-  model,
-  onOpenDetails,
-}: {
-  result: TestResult
-  model: string
-  onOpenDetails: (details: FailureDetailsState) => void
-}) {
+function FailureStatusContent({ result }: { result: TestResult }) {
   const { t } = useTranslation()
   const errorText = result.error?.trim()
   const isModelPriceError = result.errorCode === MODEL_PRICE_ERROR_CODE
@@ -1017,24 +1022,15 @@ function FailureStatusContent({
             {t('Go to Settings')}
           </Button>
         )}
-        {(details || hasTestDetails(result)) && (
-          <Button
-            variant='ghost'
-            size='sm'
-            className='h-7 w-fit px-2 text-xs'
-            aria-haspopup='dialog'
-            onClick={() =>
-              onOpenDetails({
-                model,
-                summary,
-                details: details ?? result.response ?? result.error ?? '',
-                result,
-              })
-            }
-          >
-            <Info className='mr-1 h-3 w-3 shrink-0' />
-            {t('Details')}
-          </Button>
+        {(details || result.error) && (
+          <details className='border-border/70 bg-muted/30 w-full rounded-md border px-2 py-1.5'>
+            <summary className='cursor-pointer font-medium select-none'>
+              {t('Details')}
+            </summary>
+            <pre className='text-muted-foreground mt-2 max-h-40 overflow-auto font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap'>
+              {details ?? result.error}
+            </pre>
+          </details>
         )}
       </div>
     </div>
@@ -1165,7 +1161,7 @@ function FailureDetailsSheet({
                 onClick={() => copyToClipboard(details.details)}
               >
                 {copiedText === details.details ? (
-                  <Check className='mr-2 h-4 w-4 text-success' />
+                  <Check className='text-success mr-2 h-4 w-4' />
                 ) : (
                   <Copy className='mr-2 h-4 w-4' />
                 )}
@@ -1194,7 +1190,9 @@ function TestModelsBulkActions({
 
   const buttonLabel =
     selectedModels.length > 0
-      ? t('Test CC_VAR selected'.replace('CC_VAR', '{' + '{count}' + '}'), { count: selectedModels.length })
+      ? t('Test CC_VAR selected'.replace('CC_VAR', '{' + '{count}' + '}'), {
+          count: selectedModels.length,
+        })
       : t('Test selected models')
 
   return (

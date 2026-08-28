@@ -88,7 +88,7 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
             <Button
               variant='ghost'
               size='sm'
-              className='text-muted-foreground h-7 font-mono text-xs'
+              className='text-muted-foreground h-7 max-w-[190px] truncate px-2 font-mono text-xs'
               aria-label={t('Full API Key')}
             />
           }
@@ -158,9 +158,7 @@ export function ModelLimitsCell({ apiKey }: { apiKey: ApiKey }) {
   const { t } = useTranslation()
 
   if (!apiKey.model_limits_enabled || !apiKey.model_limits) {
-    return (
-      <StatusBadge label={t('Unlimited')} variant='neutral' copyable={false} />
-    )
+    return <span className='text-muted-foreground text-xs'>-</span>
   }
 
   const models = apiKey.model_limits.split(',').filter(Boolean)
@@ -192,13 +190,7 @@ export function IpRestrictionsCell({ apiKey }: { apiKey: ApiKey }) {
   const allowIps = apiKey.allow_ips?.trim()
 
   if (!allowIps) {
-    return (
-      <StatusBadge
-        label={t('No restriction')}
-        variant='neutral'
-        copyable={false}
-      />
-    )
+    return <span className='text-muted-foreground text-xs'>-</span>
   }
 
   const ips = allowIps

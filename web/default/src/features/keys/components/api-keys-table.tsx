@@ -22,6 +22,7 @@ import { getRouteApi } from '@tanstack/react-router'
 import {
   type SortingState,
   type VisibilityState,
+  type ColumnPinningState,
   getCoreRowModel,
   getFacetedRowModel,
   getFacetedUniqueValues,
@@ -194,6 +195,10 @@ export function ApiKeysTable() {
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({
+    left: ['select', 'name'],
+    right: ['actions'],
+  })
 
   const {
     globalFilter,
@@ -279,6 +284,7 @@ export function ApiKeysTable() {
     state: {
       sorting,
       columnVisibility,
+      columnPinning,
       rowSelection,
       columnFilters,
       globalFilter,
@@ -288,6 +294,7 @@ export function ApiKeysTable() {
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnPinningChange: setColumnPinning,
     globalFilterFn: () => true,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -313,6 +320,7 @@ export function ApiKeysTable() {
 
       <DataTablePage
         verticalScroll={{ mode: 'page' }}
+        applyHeaderSize
         table={table}
         columns={columns}
         isLoading={isLoading}

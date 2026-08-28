@@ -26,6 +26,7 @@ import {
   type OnChangeFn,
   type SortingState,
   type VisibilityState,
+  type ColumnPinningState,
   type ExpandedState,
   type Row,
 } from '@tanstack/react-table'
@@ -91,6 +92,10 @@ export function ChannelsTable() {
     test_time: false,
   })
   const [rowSelection, setRowSelection] = useState({})
+  const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({
+    left: ['select', 'name'],
+    right: ['actions'],
+  })
   const [expanded, setExpanded] = useState<ExpandedState>({})
 
   // URL state management
@@ -301,6 +306,7 @@ export function ChannelsTable() {
       sorting,
       columnFilters,
       columnVisibility,
+      columnPinning,
       rowSelection,
       pagination,
       expanded,
@@ -311,6 +317,7 @@ export function ChannelsTable() {
     onSortingChange: handleSortingChange,
     onColumnFiltersChange,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnPinningChange: setColumnPinning,
     onPaginationChange,
     onExpandedChange: setExpanded,
     onGlobalFilterChange,
@@ -391,6 +398,7 @@ export function ChannelsTable() {
 
       <DataTablePage
         verticalScroll={{ mode: 'page' }}
+        applyHeaderSize
         table={table}
         columns={columns}
         isLoading={isLoading}

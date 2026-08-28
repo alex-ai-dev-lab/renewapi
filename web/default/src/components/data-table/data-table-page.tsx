@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import * as React from 'react'
 import {
   flexRender,
+  type Column,
   type ColumnDef,
   type Row,
   type Table as TanstackTable,
@@ -358,6 +359,29 @@ function renderMobile<TData>(
   )
 }
 
+function getPinnedColumnStyle<TData>(
+  column: Column<TData, unknown>
+): React.CSSProperties | undefined {
+  const pinned = column.getIsPinned()
+  if (!pinned) return undefined
+
+  return {
+    position: 'sticky',
+    left: pinned === 'left' ? `${column.getStart('left')}px` : undefined,
+    right: pinned === 'right' ? `${column.getAfter('right')}px` : undefined,
+    zIndex: 2,
+  }
+}
+
+function getPinnedColumnClass<TData>(column: Column<TData, unknown>) {
+  const pinned = column.getIsPinned()
+  return cn(
+    pinned && 'bg-card',
+    pinned === 'left' && 'shadow-[1px_0_0_0_var(--border)]',
+    pinned === 'right' && 'shadow-[-1px_0_0_0_var(--border)]'
+  )
+}
+
 function renderDesktop<TData>(
   props: DataTablePageProps<TData>,
   showMobile: boolean,
@@ -422,12 +446,15 @@ function renderDesktop<TData>(
                   <TableHead
                     key={header.id}
                     colSpan={header.colSpan}
-                    style={
-                      props.applyHeaderSize &&
+                    data-pinned={header.column.getIsPinned() || undefined}
+                    className={getPinnedColumnClass(header.column)}
+                    style={{
+                      ...(props.applyHeaderSize &&
                       header.column.columnDef.size != null
                         ? { width: header.getSize() }
-                        : undefined
-                    }
+                        : {}),
+                      ...getPinnedColumnStyle(header.column),
+                    }}
                   >
                     {header.isPlaceholder
                       ? null
@@ -496,7 +523,12 @@ function DefaultRow<TData>({
       className={className}
     >
       {row.getVisibleCells().map((cell) => (
-        <TableCell key={cell.id}>
+        <TableCell
+          key={cell.id}
+          data-pinned={cell.column.getIsPinned() || undefined}
+          className={getPinnedColumnClass(cell.column)}
+          style={getPinnedColumnStyle(cell.column)}
+        >
           {flexRender(cell.column.columnDef.cell, cell.getContext())}
         </TableCell>
       ))}

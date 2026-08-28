@@ -18,7 +18,6 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
 import { type Row } from '@tanstack/react-table'
 import {
   MoreHorizontal,
@@ -37,6 +36,7 @@ import {
   Loader2,
   ShieldCheck,
   Activity,
+  ExternalLink,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -74,8 +74,8 @@ interface DataTableRowActionsProps {
 
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const channel = row.original
+  const editHref = `/channels/${channel.id}/edit`
   const { setOpen, setCurrentRow, upstream } = useChannels()
   const queryClient = useQueryClient()
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -98,13 +98,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
       return false
     }
   })()
-
-  const handleEdit = () => {
-    void navigate({
-      to: '/channels/$channelId/edit',
-      params: { channelId: String(channel.id) },
-    })
-  }
 
   const handleTest = () => {
     setCurrentRow(channel)
@@ -243,10 +236,20 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           <span className='sr-only'>{t('Open menu')}</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end' className='w-48'>
-          <DropdownMenuItem onClick={handleEdit}>
+          <DropdownMenuItem render={<a href={editHref} />}>
             {t('Edit')}
             <DropdownMenuShortcut>
               <Pencil size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            render={
+              <a href={editHref} target='_blank' rel='noopener noreferrer' />
+            }
+          >
+            {t('Open in new tab')}
+            <DropdownMenuShortcut>
+              <ExternalLink size={16} />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 

@@ -34,15 +34,15 @@ type BillingSession struct {
 	ledgerMode       string
 	pendingTaskID    int64
 	trusted          bool // 是否命中信任额度旁路
-	fundingSettled   bool // funding.Settle 已成功，资金来源已提交
+	fundingSettled   bool // 资金来源与令牌的最终结算已提交
 	settled          bool // Settle 全部完成（资金 + 令牌）
 	refunded         bool // Refund 已调用
 	mu               sync.Mutex
 }
 
 // Settle 根据实际消耗额度进行结算。
-// 资金来源和令牌额度分两步提交：若资金来源已提交但令牌调整失败，
-// 会标记 fundingSettled 防止 Refund 对已提交的资金来源执行退款。
+// enforce 模式由 billing ledger 在单事务内调整余额；shadow/off 模式也必须
+// 原子提交资金来源与令牌 delta，避免成功响应后只提交一侧余额。
 func (s *BillingSession) Settle(actualQuota int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -71,33 +71,27 @@ func (s *BillingSession) Settle(actualQuota int) error {
 		s.settled = true
 		return nil
 	}
-	// 1) 调整资金来源（仅在尚未提交时执行，防止重复调用）
-	if !s.fundingSettled {
-		if err := s.funding.Settle(delta); err != nil {
-			return err
-		}
-		s.fundingSettled = true
+
+	subscriptionID := 0
+	if funding, ok := s.funding.(*SubscriptionFunding); ok {
+		subscriptionID = funding.subscriptionId
 	}
-	// 2) 调整令牌额度
-	var tokenErr error
-	if !s.relayInfo.IsPlayground {
-		if delta > 0 {
-			tokenErr = model.DecreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta)
-		} else {
-			tokenErr = model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, -delta)
-		}
-		if tokenErr != nil {
-			// 资金来源已提交，令牌调整失败只能记录日志；标记 settled 防止 Refund 误退资金
-			common.SysLog(fmt.Sprintf("error adjusting token quota after funding settled (userId=%d, tokenId=%d, delta=%d): %s",
-				s.relayInfo.UserId, s.relayInfo.TokenId, delta, tokenErr.Error()))
-		}
+	if err := model.SettleLegacyBillingBalances(model.LegacyBillingSettlement{
+		FundingSource:  s.funding.Source(),
+		UserID:         s.relayInfo.UserId,
+		SubscriptionID: subscriptionID,
+		TokenID:        s.relayInfo.TokenId,
+		Delta:          int64(delta),
+		Playground:     s.relayInfo.IsPlayground,
+	}); err != nil {
+		return err
 	}
-	// 3) 更新 relayInfo 上的订阅 PostDelta（用于日志）
+	s.fundingSettled = true
 	if s.funding.Source() == BillingSourceSubscription {
 		s.relayInfo.SubscriptionPostDelta += int64(delta)
 	}
 	s.settled = true
-	return tokenErr
+	return nil
 }
 
 // Refund 退还所有预扣费，幂等安全，异步执行。

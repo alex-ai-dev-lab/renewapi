@@ -185,6 +185,9 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if err != nil {
 		return nil, err
 	}
+	if request.N != nil && *request.N > 0 {
+		geminiRequest.GenerationConfig.CandidateCount = request.N
+	}
 
 	return geminiRequest, nil
 }

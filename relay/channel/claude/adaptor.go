@@ -98,7 +98,8 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if err := validateOpenAIRequestForClaude(request); err != nil {
 		return nil, err
 	}
-	return RequestOpenAI2ClaudeMessage(c, *request)
+	preparedRequest := prepareOpenAIRequestForClaudeOpus47(request)
+	return RequestOpenAI2ClaudeMessage(c, *preparedRequest)
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {

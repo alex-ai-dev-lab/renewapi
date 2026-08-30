@@ -64,6 +64,19 @@ func TestClaudeStreamHandlerRejectsMissingMessageDelta(t *testing.T) {
 	require.NotContains(t, recorder.Body.String(), "data: [DONE]")
 }
 
+func TestRawClaudeStreamRejectsMissingMessageDeltaWithoutRetry(t *testing.T) {
+	c, recorder, resp, info := newClaudeStreamTestContext(incompleteClaudeStreamBody())
+	info.RelayFormat = types.RelayFormatClaude
+
+	usage, relayErr := claudeStreamHandlerWithCompletionGuard(c, resp, info)
+	require.Nil(t, usage)
+	require.NotNil(t, relayErr)
+	require.Equal(t, http.StatusBadGateway, relayErr.StatusCode)
+	require.True(t, types.IsSkipRetryError(relayErr))
+	require.True(t, c.Writer.Written())
+	require.Contains(t, recorder.Body.String(), "partial")
+}
+
 func TestClaudeAggregateStreamRejectsMissingMessageDeltaBeforeReplay(t *testing.T) {
 	c, recorder, resp, info := newClaudeStreamTestContext(incompleteClaudeStreamBody())
 

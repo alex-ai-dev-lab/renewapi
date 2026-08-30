@@ -173,6 +173,20 @@ func CompleteChatStream(c *gin.Context, info *relaycommon.RelayInfo, usage *dto.
 	if finishReason != "" {
 		emitter.FinishReason = finishReason
 	}
+
+	eventType := "response.completed"
+	status := "completed"
+	incompleteReason := ""
+	if emitter.FinishReason == constant.FinishReasonLength {
+		eventType = "response.incomplete"
+		status = "incomplete"
+		incompleteReason = "max_output_tokens"
+	} else if emitter.FinishReason == constant.FinishReasonContentFilter {
+		eventType = "response.incomplete"
+		status = "incomplete"
+		incompleteReason = "content_filter"
+	}
+
 	if err := emitter.start(c); err != nil {
 		return err
 	}
@@ -184,7 +198,7 @@ func CompleteChatStream(c *gin.Context, info *relaycommon.RelayInfo, usage *dto.
 		if err := emitter.send(c, "response.content_part.done", map[string]any{"item_id": emitter.MessageID, "output_index": 0, "content_index": 0, "part": map[string]any{"type": "output_text", "text": text, "annotations": []any{}}}); err != nil {
 			return err
 		}
-		if err := emitter.send(c, "response.output_item.done", map[string]any{"output_index": 0, "item": emitter.messageItem("completed")}); err != nil {
+		if err := emitter.send(c, "response.output_item.done", map[string]any{"output_index": 0, "item": emitter.messageItem(status)}); err != nil {
 			return err
 		}
 	}
@@ -197,7 +211,7 @@ func CompleteChatStream(c *gin.Context, info *relaycommon.RelayInfo, usage *dto.
 		if err := emitter.send(c, "response.function_call_arguments.done", map[string]any{"item_id": state.ItemID, "output_index": emitter.toolOutputIndex(index), "arguments": arguments}); err != nil {
 			return err
 		}
-		if err := emitter.send(c, "response.output_item.done", map[string]any{"output_index": emitter.toolOutputIndex(index), "item": emitter.toolItem(state, "completed")}); err != nil {
+		if err := emitter.send(c, "response.output_item.done", map[string]any{"output_index": emitter.toolOutputIndex(index), "item": emitter.toolItem(state, status)}); err != nil {
 			return err
 		}
 	}
@@ -205,19 +219,10 @@ func CompleteChatStream(c *gin.Context, info *relaycommon.RelayInfo, usage *dto.
 	if err != nil {
 		return err
 	}
-	eventType := "response.completed"
-	status := "completed"
-	if emitter.FinishReason == constant.FinishReasonLength {
-		eventType = "response.incomplete"
-		status = "incomplete"
-	} else if emitter.FinishReason == constant.FinishReasonContentFilter {
-		eventType = "response.failed"
-		status = "failed"
-	}
 	statusRaw, _ := common.Marshal(status)
 	response.Status = statusRaw
-	if status == "incomplete" {
-		response.IncompleteDetails = &dto.IncompleteDetails{Reasoning: "max_output_tokens"}
+	if incompleteReason != "" {
+		response.IncompleteDetails = &dto.IncompleteDetails{Reasoning: incompleteReason}
 	}
 	if err := emitter.send(c, eventType, map[string]any{"response": response}); err != nil {
 		return err

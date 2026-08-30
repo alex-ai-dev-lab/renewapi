@@ -253,7 +253,7 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 			return NativeGeminiEmbeddingHandler(c, resp, info)
 		}
 		if info.IsStream {
-			return GeminiTextGenerationStreamHandler(c, info, resp)
+			return GeminiTextGenerationStreamHandlerWithCompletionGuard(c, info, resp)
 		} else {
 			return GeminiTextGenerationHandler(c, info, resp)
 		}
@@ -271,7 +271,7 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 	}
 
 	if info.IsStream {
-		return GeminiChatStreamHandler(c, info, resp)
+		return GeminiChatStreamHandlerWithCompletionGuard(c, info, resp)
 	} else {
 		return GeminiChatHandler(c, info, resp)
 	}

@@ -81,6 +81,9 @@ func (t *geminiStreamCompletionTracker) Summary() string {
 
 func geminiStreamOutcomeError(info *relaycommon.RelayInfo, tracker *geminiStreamCompletionTracker, promptBlockReason string, callbackStopped bool) *types.NewAPIError {
 	if promptBlockReason != "" {
+		if info != nil && info.RelayFormat == types.RelayFormatGemini {
+			return nil
+		}
 		return types.NewOpenAIError(
 			errors.New("request blocked by Gemini API: "+promptBlockReason),
 			types.ErrorCodePromptBlocked,

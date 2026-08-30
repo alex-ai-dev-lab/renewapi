@@ -4,9 +4,13 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/bytedance/gopkg/util/gopool"
 	"golang.org/x/sync/errgroup"
 )
+
+const goPoolDrainPollInterval = 5 * time.Millisecond
 
 type backgroundWorkers struct {
 	cancel  context.CancelFunc
@@ -33,6 +37,27 @@ func (w *backgroundWorkers) Go(name string, run func(context.Context)) {
 	})
 }
 
+func waitForGoPoolIdle(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if gopool.WorkerCount() == 0 {
+		return nil
+	}
+	ticker := time.NewTicker(goPoolDrainPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if gopool.WorkerCount() == 0 {
+				return nil
+			}
+		}
+	}
+}
+
 func (w *backgroundWorkers) Stop(ctx context.Context) error {
 	w.cancel()
 	w.once.Do(func() {
@@ -43,7 +68,13 @@ func (w *backgroundWorkers) Stop(ctx context.Context) error {
 	})
 	select {
 	case <-w.done:
-		return w.waitErr
+		if w.waitErr != nil {
+			return w.waitErr
+		}
+		if err := waitForGoPoolIdle(ctx); err != nil {
+			return fmt.Errorf("drain pooled work: %w", err)
+		}
+		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}

@@ -353,8 +353,9 @@ func aggregateResponsesStreamToResponse(c *gin.Context, info *relaycommon.RelayI
 		return nil, nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
 	}
 	if finalResp == nil {
-		finalResp = buildFallbackResponsesResponse(c, info, outputText.String(), functionCallSeq, functionCallMap)
-	} else if len(finalResp.Output) == 0 && (outputText.Len() > 0 || len(functionCallMap) > 0) {
+		return nil, nil, types.NewOpenAIError(fmt.Errorf("responses stream missing response.completed"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+	}
+	if len(finalResp.Output) == 0 && (outputText.Len() > 0 || len(functionCallMap) > 0) {
 		finalResp.Output = buildFallbackResponsesResponse(c, info, outputText.String(), functionCallSeq, functionCallMap).Output
 	}
 	if info != nil {

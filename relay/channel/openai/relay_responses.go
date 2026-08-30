@@ -338,7 +338,7 @@ func aggregateResponsesStreamToResponse(c *gin.Context, info *relaycommon.RelayI
 				functionCallSeq = append(functionCallSeq, callID)
 			}
 			functionCallMap[callID] = item
-		case "response.completed":
+		case "response.completed", "response.incomplete":
 			finalResp = streamResp.Response
 		case "response.error", "response.failed":
 			if streamResp.Response != nil {
@@ -353,7 +353,7 @@ func aggregateResponsesStreamToResponse(c *gin.Context, info *relaycommon.RelayI
 		return nil, nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
 	}
 	if finalResp == nil {
-		return nil, nil, types.NewOpenAIError(fmt.Errorf("responses stream missing response.completed"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+		return nil, nil, types.NewOpenAIError(fmt.Errorf("responses stream missing terminal event"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 	}
 	if len(finalResp.Output) == 0 && (outputText.Len() > 0 || len(functionCallMap) > 0) {
 		finalResp.Output = buildFallbackResponsesResponse(c, info, outputText.String(), functionCallSeq, functionCallMap).Output
@@ -585,7 +585,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 						}
 					}
 				}
-			case "response.completed":
+			case "response.completed", "response.incomplete":
 				if streamResponse.Response != nil {
 					for _, out := range streamResponse.Response.Output {
 						if out.Type == "function_call" && strings.TrimSpace(out.Name) != "" {
@@ -649,7 +649,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			}
 		}
 		switch streamResponse.Type {
-		case "response.completed":
+		case "response.completed", "response.incomplete":
 			if streamResponse.Response != nil {
 				if streamResponse.Response.Usage != nil {
 					if streamResponse.Response.Usage.InputTokens != 0 {

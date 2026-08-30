@@ -111,4 +111,54 @@ func TestResponsesStreamEmitterMapsLengthToIncompleteReason(t *testing.T) {
 	require.Contains(t, body, `"status":"incomplete"`)
 	require.Contains(t, body, `"incomplete_details":{"reason":"max_output_tokens"}`)
 	require.NotContains(t, body, `"incomplete_details":{"reasoning":`)
+	requireOutputItemStatus(t, body, "incomplete")
+}
+
+func TestResponsesStreamEmitterMapsContentFilterToIncompleteReason(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest("POST", "/v1/responses", nil)
+	c.Set(common.RequestIdKey, "content-filter-bridge-test")
+	info := &relaycommon.RelayInfo{RelayFormat: types.RelayFormatOpenAIResponses, OriginModelName: "test-model"}
+
+	chunk := &dto.ChatCompletionsStreamResponse{
+		Id:      "chatcmpl-content-filter",
+		Created: 123,
+		Model:   "test-model",
+		Choices: []dto.ChatCompletionsStreamResponseChoice{{Index: 0, Delta: dto.ChatCompletionsStreamResponseChoiceDelta{Role: "assistant"}}},
+	}
+	chunk.Choices[0].Delta.SetContentString("filtered")
+	require.NoError(t, EmitChatChunk(c, info, chunk))
+	require.NoError(t, CompleteChatStream(c, info, &dto.Usage{PromptTokens: 1, CompletionTokens: 2, TotalTokens: 3}, "content_filter"))
+
+	body := recorder.Body.String()
+	require.Contains(t, body, "event: response.incomplete")
+	require.NotContains(t, body, "event: response.failed")
+	require.Contains(t, body, `"status":"incomplete"`)
+	require.Contains(t, body, `"incomplete_details":{"reason":"content_filter"}`)
+	requireOutputItemStatus(t, body, "incomplete")
+}
+
+func requireOutputItemStatus(t *testing.T, body string, expected string) {
+	t.Helper()
+	for _, frame := range strings.Split(body, "\n\n") {
+		if !strings.Contains(frame, "event: response.output_item.done") {
+			continue
+		}
+		for _, line := range strings.Split(frame, "\n") {
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			var payload struct {
+				Item struct {
+					Status string `json:"status"`
+				} `json:"item"`
+			}
+			require.NoError(t, common.UnmarshalJsonStr(strings.TrimPrefix(line, "data: "), &payload))
+			require.Equal(t, expected, payload.Item.Status)
+			return
+		}
+	}
+	t.Fatal("response.output_item.done event not found")
 }

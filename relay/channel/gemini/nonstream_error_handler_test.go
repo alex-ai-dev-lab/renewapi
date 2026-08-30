@@ -101,3 +101,42 @@ func TestGeminiAdaptorNonstreamStillWritesSuccessfulResponse(t *testing.T) {
 	require.Contains(t, w.Body.String(), `"content":"hello"`)
 	require.Contains(t, w.Body.String(), `"finish_reason":"stop"`)
 }
+
+func TestGeminiAdaptorNonstreamKeepsFinishReasonPerCandidate(t *testing.T) {
+	c, w, info := geminiNonstreamTestContext(t)
+	finishReason := "STOP"
+	resp := geminiNonstreamHTTPResponse(t, dto.GeminiChatResponse{
+		Candidates: []dto.GeminiChatCandidate{
+			{
+				Index:        0,
+				FinishReason: &finishReason,
+				Content: dto.GeminiChatContent{
+					Role: "model",
+					Parts: []dto.GeminiPart{{
+						FunctionCall: &dto.FunctionCall{
+							FunctionName: "lookup",
+							Arguments:    map[string]interface{}{},
+						},
+					}},
+				},
+			},
+			{
+				Index:        1,
+				FinishReason: &finishReason,
+				Content: dto.GeminiChatContent{
+					Role:  "model",
+					Parts: []dto.GeminiPart{{Text: "plain answer"}},
+				},
+			},
+		},
+	})
+
+	_, apiErr := (&Adaptor{}).DoResponse(c, resp, info)
+
+	require.Nil(t, apiErr)
+	var converted dto.OpenAITextResponse
+	require.NoError(t, common.Unmarshal(w.Body.Bytes(), &converted))
+	require.Len(t, converted.Choices, 2)
+	require.Equal(t, "tool_calls", converted.Choices[0].FinishReason)
+	require.Equal(t, "stop", converted.Choices[1].FinishReason)
+}

@@ -87,3 +87,28 @@ func TestResponsesStreamEmitterRestoresNamespaceInLifecycleAndTerminal(t *testin
 	require.Equal(t, 3, strings.Count(body, `"namespace":"team"`), "added, done, and terminal output must all restore namespace")
 	require.NotContains(t, body, `"name":"team__send"`)
 }
+
+func TestResponsesStreamEmitterMapsLengthToIncompleteReason(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest("POST", "/v1/responses", nil)
+	c.Set(common.RequestIdKey, "incomplete-bridge-test")
+	info := &relaycommon.RelayInfo{RelayFormat: types.RelayFormatOpenAIResponses, OriginModelName: "test-model"}
+
+	chunk := &dto.ChatCompletionsStreamResponse{
+		Id:      "chatcmpl-incomplete",
+		Created: 123,
+		Model:   "test-model",
+		Choices: []dto.ChatCompletionsStreamResponseChoice{{Index: 0, Delta: dto.ChatCompletionsStreamResponseChoiceDelta{Role: "assistant"}}},
+	}
+	chunk.Choices[0].Delta.SetContentString("partial")
+	require.NoError(t, EmitChatChunk(c, info, chunk))
+	require.NoError(t, CompleteChatStream(c, info, &dto.Usage{PromptTokens: 1, CompletionTokens: 2, TotalTokens: 3}, "length"))
+
+	body := recorder.Body.String()
+	require.Contains(t, body, "event: response.incomplete")
+	require.Contains(t, body, `"status":"incomplete"`)
+	require.Contains(t, body, `"incomplete_details":{"reason":"max_output_tokens"}`)
+	require.NotContains(t, body, `"reasoning"`)
+}

@@ -28,15 +28,9 @@ func newGeminiStreamCompletionTracker(info *relaycommon.RelayInfo) *geminiStream
 
 func expectedGeminiStreamCandidateCount(info *relaycommon.RelayInfo) int {
 	if info != nil {
-		switch req := info.Request.(type) {
-		case *dto.GeminiChatRequest:
-			if req != nil && req.GenerationConfig.CandidateCount != nil && *req.GenerationConfig.CandidateCount > 0 {
-				return *req.GenerationConfig.CandidateCount
-			}
-		case dto.GeminiChatRequest:
-			if req.GenerationConfig.CandidateCount != nil && *req.GenerationConfig.CandidateCount > 0 {
-				return *req.GenerationConfig.CandidateCount
-			}
+		if req, ok := info.Request.(*dto.GeminiChatRequest); ok && req != nil &&
+			req.GenerationConfig.CandidateCount != nil && *req.GenerationConfig.CandidateCount > 0 {
+			return *req.GenerationConfig.CandidateCount
 		}
 	}
 	return 1

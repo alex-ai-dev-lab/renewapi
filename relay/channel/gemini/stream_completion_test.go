@@ -48,7 +48,7 @@ func TestGeminiStreamCompletionGuardRejectsPartialEOF(t *testing.T) {
 	c, info := geminiStreamTestContext(t, nil)
 	resp := geminiStreamResponse(t, dto.GeminiChatResponse{
 		Candidates: []dto.GeminiChatCandidate{{
-			Index: 0,
+			Index:   0,
 			Content: dto.GeminiChatContent{Role: "model", Parts: []dto.GeminiPart{{Text: "partial"}}},
 		}},
 	})
@@ -153,7 +153,7 @@ func TestGeminiAdaptorChatStreamUsesCompletionGuard(t *testing.T) {
 	info.IsStream = true
 	resp := geminiStreamResponse(t, dto.GeminiChatResponse{
 		Candidates: []dto.GeminiChatCandidate{{
-			Index: 0,
+			Index:   0,
 			Content: dto.GeminiChatContent{Role: "model", Parts: []dto.GeminiPart{{Text: "partial"}}},
 		}},
 	})
@@ -172,7 +172,7 @@ func TestGeminiAdaptorNativeStreamUsesCompletionGuard(t *testing.T) {
 	info.RequestURLPath = "/v1beta/models/gemini-3-flash-preview:streamGenerateContent"
 	resp := geminiStreamResponse(t, dto.GeminiChatResponse{
 		Candidates: []dto.GeminiChatCandidate{{
-			Index: 0,
+			Index:   0,
 			Content: dto.GeminiChatContent{Role: "model", Parts: []dto.GeminiPart{{Text: "partial"}}},
 		}},
 	})

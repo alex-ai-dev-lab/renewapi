@@ -27,7 +27,9 @@ func geminiStreamHandlerWithCompletionGuard(
 		tracker.Observe(geminiResponse)
 		if len(geminiResponse.Candidates) == 0 && geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
 			promptBlockReason = *geminiResponse.PromptFeedback.BlockReason
-			return false
+			if info == nil || info.RelayFormat != types.RelayFormatGemini {
+				return false
+			}
 		}
 		ok := callback(data, geminiResponse)
 		if !ok {

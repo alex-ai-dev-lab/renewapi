@@ -276,7 +276,7 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 	if info.IsStream {
 		return GeminiChatStreamHandlerWithCompletionGuard(c, info, resp)
 	} else {
-		return GeminiChatHandler(c, info, resp)
+		return GeminiChatHandlerWithErrorReturn(c, info, resp)
 	}
 
 }

@@ -3,7 +3,9 @@ package claude
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/types"
 )
@@ -39,6 +41,18 @@ func validateOpenAIRequestForClaude(request *dto.GeneralOpenAIRequest) error {
 			if _, ok := stop.(string); !ok {
 				return invalidClaudeOpenAIRequest("stop[%d] must be a string", i)
 			}
+		}
+	}
+
+	if strings.HasPrefix(request.Model, "claude-opus-4-7") && len(request.Reasoning) > 0 {
+		var reasoning struct {
+			MaxTokens int `json:"max_tokens"`
+		}
+		if err := common.Unmarshal(request.Reasoning, &reasoning); err != nil {
+			return err
+		}
+		if reasoning.MaxTokens > 0 {
+			return invalidClaudeOpenAIRequest("claude-opus-4-7 does not support reasoning.max_tokens; use reasoning_effort instead")
 		}
 	}
 	return nil

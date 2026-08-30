@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -76,7 +77,15 @@ func PostSetup(c *gin.Context) {
 
 	// If root doesn't exist, validate and create admin account
 	if !rootExists {
-		// Validate username length: max 12 characters to align with model.User validation
+		req.Username = strings.TrimSpace(req.Username)
+		if req.Username == "" {
+			c.JSON(200, gin.H{
+				"success": false,
+				"message": "用户名不能为空",
+			})
+			return
+		}
+		// Validate username length: max 12 characters to align with the setup UI contract.
 		if len(req.Username) > 12 {
 			c.JSON(200, gin.H{
 				"success": false,
@@ -104,9 +113,10 @@ func PostSetup(c *gin.Context) {
 		// Create root user
 		hashedPassword, err := common.Password2Hash(req.Password)
 		if err != nil {
+			common.SysLog("failed to hash setup root password: " + err.Error())
 			c.JSON(200, gin.H{
 				"success": false,
-				"message": "系统错误: " + err.Error(),
+				"message": "系统错误",
 			})
 			return
 		}
@@ -121,9 +131,10 @@ func PostSetup(c *gin.Context) {
 		}
 		err = model.DB.Create(&rootUser).Error
 		if err != nil {
+			common.SysLog("failed to create setup root user: " + err.Error())
 			c.JSON(200, gin.H{
 				"success": false,
-				"message": "创建管理员账号失败: " + err.Error(),
+				"message": "创建管理员账号失败",
 			})
 			return
 		}
@@ -136,24 +147,23 @@ func PostSetup(c *gin.Context) {
 	// Save operation modes to database for persistence
 	err = model.UpdateOption("SelfUseModeEnabled", boolToString(req.SelfUseModeEnabled))
 	if err != nil {
+		common.SysLog("failed to save SelfUseModeEnabled during setup: " + err.Error())
 		c.JSON(200, gin.H{
 			"success": false,
-			"message": "保存自用模式设置失败: " + err.Error(),
+			"message": "保存自用模式设置失败",
 		})
 		return
 	}
 
 	err = model.UpdateOption("DemoSiteEnabled", boolToString(req.DemoSiteEnabled))
 	if err != nil {
+		common.SysLog("failed to save DemoSiteEnabled during setup: " + err.Error())
 		c.JSON(200, gin.H{
 			"success": false,
-			"message": "保存演示站点模式设置失败: " + err.Error(),
+			"message": "保存演示站点模式设置失败",
 		})
 		return
 	}
-
-	// Update setup status
-	constant.Setup = true
 
 	setup := model.Setup{
 		Version:       common.Version,
@@ -161,12 +171,16 @@ func PostSetup(c *gin.Context) {
 	}
 	err = model.DB.Create(&setup).Error
 	if err != nil {
+		common.SysLog("failed to persist setup completion: " + err.Error())
 		c.JSON(200, gin.H{
 			"success": false,
-			"message": "系统初始化失败: " + err.Error(),
+			"message": "系统初始化失败",
 		})
 		return
 	}
+
+	// Only publish the in-process setup state after the durable setup row exists.
+	constant.Setup = true
 
 	c.JSON(200, gin.H{
 		"success": true,

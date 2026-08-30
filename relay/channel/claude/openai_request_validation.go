@@ -19,6 +19,12 @@ func invalidClaudeOpenAIRequest(format string, args ...any) error {
 	)
 }
 
+func claudeModelRejectsAssistantPrefill(model string) bool {
+	return strings.HasPrefix(model, "claude-opus-4-6") ||
+		strings.HasPrefix(model, "claude-sonnet-4-6") ||
+		strings.HasPrefix(model, "claude-opus-4-7")
+}
+
 func validateOpenAIRequestForClaude(request *dto.GeneralOpenAIRequest) error {
 	if request == nil {
 		return invalidClaudeOpenAIRequest("request is nil")
@@ -42,6 +48,10 @@ func validateOpenAIRequestForClaude(request *dto.GeneralOpenAIRequest) error {
 				return invalidClaudeOpenAIRequest("stop[%d] must be a string", i)
 			}
 		}
+	}
+
+	if claudeModelRejectsAssistantPrefill(request.Model) && len(request.Messages) > 0 && request.Messages[len(request.Messages)-1].Role == "assistant" {
+		return invalidClaudeOpenAIRequest("%s does not support assistant message prefill; the conversation must end with a user message", request.Model)
 	}
 
 	if strings.HasPrefix(request.Model, "claude-opus-4-7") && len(request.Reasoning) > 0 {

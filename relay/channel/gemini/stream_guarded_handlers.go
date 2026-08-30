@@ -22,9 +22,16 @@ func geminiStreamHandlerWithCompletionGuard(
 	tracker := newGeminiStreamCompletionTracker(info)
 	promptBlockReason := ""
 	callbackStopped := false
+	var generationErr *types.NewAPIError
 
 	usage, err := geminiStreamHandler(c, info, resp, func(data string, geminiResponse *dto.GeminiChatResponse) bool {
 		tracker.Observe(geminiResponse)
+		if info == nil || info.RelayFormat != types.RelayFormatGemini {
+			if finishErr := geminiCompatibilityFinishReasonError(geminiResponse); finishErr != nil {
+				generationErr = finishErr
+				return false
+			}
+		}
 		if len(geminiResponse.Candidates) == 0 && geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
 			promptBlockReason = *geminiResponse.PromptFeedback.BlockReason
 			if info == nil || info.RelayFormat != types.RelayFormatGemini {
@@ -39,6 +46,9 @@ func geminiStreamHandlerWithCompletionGuard(
 	})
 	if err != nil {
 		return usage, err
+	}
+	if generationErr != nil {
+		return usage, generationErr
 	}
 	if streamErr := geminiStreamOutcomeError(info, tracker, promptBlockReason, callbackStopped); streamErr != nil {
 		return usage, streamErr

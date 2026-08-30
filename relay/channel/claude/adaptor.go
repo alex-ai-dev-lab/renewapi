@@ -95,6 +95,9 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
+	if err := validateOpenAIRequestForClaude(request); err != nil {
+		return nil, err
+	}
 	return RequestOpenAI2ClaudeMessage(c, *request)
 }
 

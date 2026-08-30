@@ -91,15 +91,15 @@ func ClaudeData(c *gin.Context, resp dto.ClaudeResponse) error {
 		return nil
 	}
 	jsonData, err := common.Marshal(resp)
-	if err != nil {
-		common.SysError("error marshalling stream response: " + err.Error())
-		return nil
-	}
 	mutex := getStreamWriteMutex(c)
 	mutex.Lock()
 	defer mutex.Unlock()
-	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
-	c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonData)})
+	if err != nil {
+		common.SysError("error marshalling stream response: " + err.Error())
+	} else {
+		c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
+		c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonData)})
+	}
 	_ = FlushWriter(c)
 	return nil
 }

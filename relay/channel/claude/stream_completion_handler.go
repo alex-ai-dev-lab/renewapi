@@ -58,6 +58,7 @@ func claudeStreamHandlerWithCompletionGuard(c *gin.Context, resp *http.Response,
 			}
 			for _, pending := range pendingClaudeData {
 				err = handleClaudeStreamResponseDataWithPreflight(c, info, claudeInfo, pending.data, preflightBuffer)
+				markClaudeStreamCommitted(c, info)
 				if err != nil {
 					sr.Stop(err)
 					return
@@ -67,6 +68,7 @@ func claudeStreamHandlerWithCompletionGuard(c *gin.Context, resp *http.Response,
 			data = cleanData
 		}
 		err = handleClaudeStreamResponseDataWithPreflight(c, info, claudeInfo, data, preflightBuffer)
+		markClaudeStreamCommitted(c, info)
 		if err != nil {
 			sr.Stop(err)
 		}
@@ -89,7 +91,9 @@ func claudeStreamHandlerWithCompletionGuard(c *gin.Context, resp *http.Response,
 		}
 		antipoison.RecordOpaqueResult(c, result)
 		for _, chunk := range chunks {
-			if handleErr := HandleStreamResponseData(c, info, claudeInfo, chunk); handleErr != nil {
+			handleErr := HandleStreamResponseData(c, info, claudeInfo, chunk)
+			markClaudeStreamCommitted(c, info)
+			if handleErr != nil {
 				return nil, handleErr
 			}
 		}
@@ -99,6 +103,7 @@ func claudeStreamHandlerWithCompletionGuard(c *gin.Context, resp *http.Response,
 	}
 
 	HandleStreamFinalResponse(c, info, claudeInfo)
+	markClaudeStreamCommitted(c, info)
 	return claudeInfo.Usage, nil
 }
 
@@ -160,5 +165,6 @@ func claudeAggregateStreamThenReplayWithCompletionGuard(c *gin.Context, resp *ht
 	} else {
 		replayClaudeStream(c, finalResp, claudeInfo)
 	}
+	markClaudeStreamCommitted(c, info)
 	return claudeInfo.Usage, nil
 }

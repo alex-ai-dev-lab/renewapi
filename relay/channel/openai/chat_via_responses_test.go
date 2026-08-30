@@ -62,3 +62,31 @@ func TestOaiResponsesToChatStreamDoesNotDuplicateTerminalToolCall(t *testing.T) 
 	require.Equal(t, map[int]bool{0: true}, indexes)
 	require.Equal(t, `{"q":"x"}`, arguments.String())
 }
+
+func TestOaiResponsesToChatStreamRejectsMissingCompletedAfterPartialOutput(t *testing.T) {
+	body := strings.Join([]string{
+		`data: {"type":"response.created","response":{"model":"gpt-test","created_at":1}}`,
+		`data: {"type":"response.output_text.delta","delta":"partial"}`,
+		``,
+	}, "\n")
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	c.Set(common.RequestIdKey, "missing-completed-test")
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+	info := &relaycommon.RelayInfo{
+		ChannelMeta:        &relaycommon.ChannelMeta{UpstreamModelName: "gpt-test"},
+		IsStream:           true,
+		RelayFormat:        types.RelayFormatOpenAI,
+		ShouldIncludeUsage: true,
+		DisablePing:        true,
+	}
+
+	usage, relayErr := OaiResponsesToChatStreamHandler(c, info, resp)
+	require.Nil(t, usage)
+	require.NotNil(t, relayErr)
+	require.Contains(t, relayErr.Error(), "responses stream missing response.completed")
+	require.Contains(t, recorder.Body.String(), "partial")
+	require.NotContains(t, recorder.Body.String(), `"finish_reason":"stop"`)
+	require.NotContains(t, recorder.Body.String(), "data: [DONE]")
+}

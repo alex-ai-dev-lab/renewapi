@@ -159,13 +159,14 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	model := info.UpstreamModelName
 
 	var (
-		usage       = &dto.Usage{}
-		outputText  strings.Builder
-		usageText   strings.Builder
-		sentStart   bool
-		sentStop    bool
-		sawToolCall bool
-		streamErr   *types.NewAPIError
+		usage        = &dto.Usage{}
+		outputText   strings.Builder
+		usageText    strings.Builder
+		sentStart    bool
+		sentStop     bool
+		sawCompleted bool
+		sawToolCall  bool
+		streamErr    *types.NewAPIError
 	)
 	var responseProof *antipoison.ProofStreamValidator
 	if info.AntiPoisonResponseProofNonce != "" && antipoison.ResponseProofEnabled(info) {
@@ -676,6 +677,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				}
 				sentStop = true
 			}
+			sawCompleted = true
 
 		case "response.error", "response.failed":
 			if streamResp.Response != nil {
@@ -695,6 +697,12 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 	if streamErr != nil {
 		return nil, streamErr
+	}
+	if !sawCompleted {
+		if outcomeErr := responsesStreamOutcomeError(info); outcomeErr != nil {
+			return nil, outcomeErr
+		}
+		return nil, types.NewOpenAIError(fmt.Errorf("responses stream missing response.completed"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 	}
 	if responseProof != nil {
 		if proofErr := responseProof.Finalize(); proofErr != nil {

@@ -270,12 +270,19 @@ func NewError(err error, errorCode ErrorCode, ops ...NewAPIErrorOptions) *NewAPI
 		}
 		return newErr
 	}
+	statusCode := http.StatusInternalServerError
+	skipRetry := false
+	if errorCode == ErrorCodeSensitiveWordsDetected {
+		statusCode = http.StatusBadRequest
+		skipRetry = true
+	}
 	e := &NewAPIError{
 		Err:        err,
 		RelayError: nil,
 		errorType:  ErrorTypeNewAPIError,
-		StatusCode: http.StatusInternalServerError,
+		StatusCode: statusCode,
 		errorCode:  errorCode,
+		skipRetry:  skipRetry,
 	}
 	for _, op := range ops {
 		op(e)

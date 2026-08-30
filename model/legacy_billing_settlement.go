@@ -20,10 +20,10 @@ type LegacyBillingSettlement struct {
 }
 
 // SettleLegacyBillingBalances applies the funding and token deltas in one DB
-// transaction. Post-usage token settlement must record the complete actual
-// usage even when it exceeds the token's remaining quota; limited tokens are
-// exhausted at zero instead of leaving stale positive quota that could be used
-// again after the already-delivered response.
+// transaction. Post-usage settlement must record the already-consumed usage
+// even when it exceeds the remaining finite quota. Limited funding/token
+// balances are exhausted instead of leaving stale positive quota that could be
+// used again after the response has already been delivered.
 func SettleLegacyBillingBalances(input LegacyBillingSettlement) error {
 	if input.Delta == 0 {
 		return nil
@@ -37,10 +37,10 @@ func SettleLegacyBillingBalances(input LegacyBillingSettlement) error {
 
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		if input.FundingSource == "subscription" {
-			if err := adjustSubscriptionQuotaTx(tx, input.SubscriptionID, input.Delta); err != nil {
+			if err := adjustSettledSubscriptionQuotaTx(tx, input.SubscriptionID, input.Delta); err != nil {
 				return err
 			}
-		} else if err := adjustWalletQuotaTx(tx, input.UserID, input.Delta); err != nil {
+		} else if err := adjustSettledWalletQuotaTx(tx, input.UserID, input.Delta); err != nil {
 			return err
 		}
 
@@ -54,6 +54,38 @@ func SettleLegacyBillingBalances(input LegacyBillingSettlement) error {
 	}
 	InvalidateBillingBalanceCaches(input.UserID, input.TokenID)
 	return nil
+}
+
+func adjustSettledWalletQuotaTx(tx *gorm.DB, userID int, delta int64) error {
+	var user User
+	if err := lockForUpdate(tx).Select("id", "quota").Where("id = ?", userID).First(&user).Error; err != nil {
+		return err
+	}
+	if delta > 0 {
+		return tx.Model(&User{}).Where("id = ?", userID).Update(
+			"quota",
+			gorm.Expr("CASE WHEN quota >= ? THEN quota - ? ELSE 0 END", delta, delta),
+		).Error
+	}
+	return tx.Model(&User{}).Where("id = ?", userID).Update("quota", gorm.Expr("quota + ?", -delta)).Error
+}
+
+func adjustSettledSubscriptionQuotaTx(tx *gorm.DB, subscriptionID int, delta int64) error {
+	if subscriptionID <= 0 {
+		return errors.New("subscription id is missing")
+	}
+	var sub UserSubscription
+	if err := lockForUpdate(tx).First(&sub, subscriptionID).Error; err != nil {
+		return err
+	}
+	next := sub.AmountUsed + delta
+	if next < 0 {
+		return errors.New("subscription post-usage refund invariant failed")
+	}
+	if delta > 0 && sub.AmountTotal > 0 && next > sub.AmountTotal {
+		next = sub.AmountTotal
+	}
+	return tx.Model(&UserSubscription{}).Where("id = ?", subscriptionID).Update("amount_used", next).Error
 }
 
 func adjustSettledTokenQuotaTx(tx *gorm.DB, tokenID int, delta int64) error {

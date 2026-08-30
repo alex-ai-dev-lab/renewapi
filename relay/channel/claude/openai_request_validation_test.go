@@ -49,6 +49,37 @@ func TestConvertOpenAIRequestRejectsNonStringStopEntry(t *testing.T) {
 	requireClaudeInvalidRequest(t, err, "stop[1] must be a string")
 }
 
+func TestConvertOpenAIRequestRejectsAssistantPrefillOnClaude46AndLater(t *testing.T) {
+	models := []string{
+		"claude-opus-4-6",
+		"claude-sonnet-4-6",
+		"claude-opus-4-7-high",
+	}
+	for _, model := range models {
+		t.Run(model, func(t *testing.T) {
+			req := &dto.GeneralOpenAIRequest{
+				Model:    model,
+				Messages: []dto.Message{{Role: "assistant", Content: "prefill"}},
+			}
+
+			converted, err := (&Adaptor{}).ConvertOpenAIRequest(nil, nil, req)
+			require.Nil(t, converted)
+			requireClaudeInvalidRequest(t, err, model+" does not support assistant message prefill; the conversation must end with a user message")
+		})
+	}
+}
+
+func TestConvertOpenAIRequestAllowsAssistantPrefillOnClaude45(t *testing.T) {
+	req := &dto.GeneralOpenAIRequest{
+		Model:    "claude-opus-4-5-20251101",
+		Messages: []dto.Message{{Role: "assistant", Content: "prefill"}},
+	}
+
+	converted, err := (&Adaptor{}).ConvertOpenAIRequest(nil, nil, req)
+	require.NoError(t, err)
+	require.NotNil(t, converted)
+}
+
 func TestConvertOpenAIRequestRejectsOpus47ManualReasoningBudget(t *testing.T) {
 	req := &dto.GeneralOpenAIRequest{
 		Model:     "claude-opus-4-7",

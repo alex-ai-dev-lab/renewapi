@@ -26,10 +26,13 @@ func ChatResponseToResponses(resp *dto.OpenAITextResponse) (*dto.OpenAIResponses
 	if len(resp.Choices) > 0 {
 		finishReason = resp.Choices[0].FinishReason
 	}
+	incompleteReason := ""
 	if finishReason == constant.FinishReasonLength {
 		status = "incomplete"
+		incompleteReason = "max_output_tokens"
 	} else if finishReason == constant.FinishReasonContentFilter {
-		status = "failed"
+		status = "incomplete"
+		incompleteReason = "content_filter"
 	}
 	statusRaw, _ := common.Marshal(status)
 
@@ -79,7 +82,7 @@ func ChatResponseToResponses(resp *dto.OpenAITextResponse) (*dto.OpenAIResponses
 		Usage:     usage,
 	}
 	if status == "incomplete" {
-		result.IncompleteDetails = &dto.IncompleteDetails{Reasoning: finishReason}
+		result.IncompleteDetails = &dto.IncompleteDetails{Reasoning: incompleteReason}
 	}
 	return result, nil
 }

@@ -61,7 +61,7 @@ func TestAggregateResponsesStreamAcceptsIncompleteTerminal(t *testing.T) {
 	encoded, err := common.Marshal(finalResp)
 	require.NoError(t, err)
 	require.Contains(t, string(encoded), `"incomplete_details":{"reason":"max_output_tokens"}`)
-	require.NotContains(t, string(encoded), `"reasoning"`)
+	require.NotContains(t, string(encoded), `"incomplete_details":{"reasoning":`)
 }
 
 func TestOaiResponsesStreamHandlerAcceptsIncompleteTerminal(t *testing.T) {

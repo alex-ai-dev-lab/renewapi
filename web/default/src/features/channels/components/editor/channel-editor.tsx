@@ -1297,6 +1297,7 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
               variant='ghost'
               size='sm'
               className='shrink-0 px-2 sm:px-3'
+              aria-label={t('Back to Channels')}
               disabled={isSubmitting}
               onClick={handleCancel}
             >

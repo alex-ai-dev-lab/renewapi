@@ -41,6 +41,16 @@ func incompleteClaudeStreamBody() string {
 	}, "\n")
 }
 
+func claudeStreamWithProviderErrorBody() string {
+	return strings.Join([]string{
+		`data: {"type":"message_start","message":{"id":"msg_test","type":"message","role":"assistant","model":"claude-test","content":[],"usage":{"input_tokens":1,"output_tokens":0}}}`,
+		`data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+		`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial"}}`,
+		`data: {"type":"error","error":{"type":"overloaded_error","message":"upstream overloaded"}}`,
+		``,
+	}, "\n")
+}
+
 func completeClaudeStreamWithoutMessageStopBody() string {
 	return strings.Join([]string{
 		`data: {"type":"message_start","message":{"id":"msg_test","type":"message","role":"assistant","model":"claude-test","content":[],"usage":{"input_tokens":1,"output_tokens":0}}}`,
@@ -60,6 +70,7 @@ func TestClaudeStreamHandlerRejectsMissingMessageDelta(t *testing.T) {
 	require.Equal(t, http.StatusBadGateway, relayErr.StatusCode)
 	require.Contains(t, relayErr.Error(), "missing message_delta")
 	require.True(t, types.IsSkipRetryError(relayErr))
+	require.True(t, info.ClientResponseCommitted())
 	require.Contains(t, recorder.Body.String(), "partial")
 	require.NotContains(t, recorder.Body.String(), "data: [DONE]")
 }
@@ -74,7 +85,21 @@ func TestRawClaudeStreamRejectsMissingMessageDeltaWithoutRetry(t *testing.T) {
 	require.Equal(t, http.StatusBadGateway, relayErr.StatusCode)
 	require.True(t, types.IsSkipRetryError(relayErr))
 	require.True(t, c.Writer.Written())
+	require.True(t, info.ClientResponseCommitted())
 	require.Contains(t, recorder.Body.String(), "partial")
+}
+
+func TestRawClaudeProviderErrorAfterPartialOutputMarksCommitted(t *testing.T) {
+	c, recorder, resp, info := newClaudeStreamTestContext(claudeStreamWithProviderErrorBody())
+	info.RelayFormat = types.RelayFormatClaude
+
+	usage, relayErr := claudeStreamHandlerWithCompletionGuard(c, resp, info)
+	require.Nil(t, usage)
+	require.NotNil(t, relayErr)
+	require.True(t, c.Writer.Written())
+	require.True(t, info.ClientResponseCommitted())
+	require.Contains(t, recorder.Body.String(), "partial")
+	require.NotContains(t, recorder.Body.String(), "upstream overloaded")
 }
 
 func TestClaudeAggregateStreamRejectsMissingMessageDeltaBeforeReplay(t *testing.T) {

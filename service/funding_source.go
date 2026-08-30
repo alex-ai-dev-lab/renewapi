@@ -59,7 +59,7 @@ func (w *WalletFunding) Refund() error {
 		return nil
 	}
 	// IncreaseUserQuota 是 quota += N 的非幂等操作，不能重试，否则会多退额度。
-	// 订阅的 RefundSubscriptionPreConsume 有 requestId 幂等保护所以可以重试。
+	// 订阅退款有 requestId 幂等保护所以可以重试。
 	return model.IncreaseUserQuota(w.userId, w.consumed, false)
 }
 
@@ -113,7 +113,7 @@ func (s *SubscriptionFunding) Refund() error {
 		return nil
 	}
 	return refundWithRetry(func() error {
-		return model.RefundSubscriptionPreConsume(s.requestId)
+		return model.RefundSubscriptionPreConsumeReservation(s.requestId)
 	})
 }
 

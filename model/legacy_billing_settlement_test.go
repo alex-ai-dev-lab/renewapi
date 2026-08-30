@@ -7,8 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSettleLegacyBillingBalancesExhaustsLimitedTokenAfterOverage(t *testing.T) {
+func TestSettleLegacyBillingBalancesExhaustsFiniteWalletAndTokenAfterOverage(t *testing.T) {
 	fixture := setupBillingLedgerTest(t)
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", fixture.user.Id).Update("quota", 50).Error)
 	require.NoError(t, DB.Model(&Token{}).Where("id = ?", fixture.token.Id).Updates(map[string]any{
 		"remain_quota": 50,
 		"used_quota":   100,
@@ -26,7 +27,7 @@ func TestSettleLegacyBillingBalancesExhaustsLimitedTokenAfterOverage(t *testing.
 	var token Token
 	require.NoError(t, DB.First(&user, fixture.user.Id).Error)
 	require.NoError(t, DB.First(&token, fixture.token.Id).Error)
-	require.Equal(t, 900, user.Quota)
+	require.Zero(t, user.Quota)
 	require.Zero(t, token.RemainQuota)
 	require.Equal(t, 200, token.UsedQuota)
 }
@@ -71,13 +72,13 @@ func TestSettleLegacyBillingBalancesRefundsFundingAndTokenTogether(t *testing.T)
 	require.Equal(t, 60, token.UsedQuota)
 }
 
-func TestSettleLegacyBillingBalancesSubscriptionAndTokenAreAtomic(t *testing.T) {
+func TestSettleLegacyBillingBalancesExhaustsFiniteSubscriptionAndTokenAfterOverage(t *testing.T) {
 	fixture := setupBillingLedgerTest(t)
 	now := time.Now().Unix()
 	sub := UserSubscription{
 		UserId:      fixture.user.Id,
 		PlanId:      1,
-		AmountTotal: 1000,
+		AmountTotal: 150,
 		AmountUsed:  100,
 		StartTime:   now - 60,
 		EndTime:     now + 3600,
@@ -102,7 +103,7 @@ func TestSettleLegacyBillingBalancesSubscriptionAndTokenAreAtomic(t *testing.T) 
 	var token Token
 	require.NoError(t, DB.First(&gotSub, sub.Id).Error)
 	require.NoError(t, DB.First(&token, fixture.token.Id).Error)
-	require.EqualValues(t, 175, gotSub.AmountUsed)
+	require.EqualValues(t, 150, gotSub.AmountUsed)
 	require.Zero(t, token.RemainQuota)
 	require.Equal(t, 175, token.UsedQuota)
 }

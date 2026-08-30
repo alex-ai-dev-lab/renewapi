@@ -116,6 +116,7 @@ func TestOaiResponsesToChatStreamAcceptsIncompleteTerminal(t *testing.T) {
 	require.NotNil(t, usage)
 	require.Equal(t, 3, usage.TotalTokens)
 	require.Contains(t, recorder.Body.String(), "partial")
-	require.Contains(t, recorder.Body.String(), `"finish_reason":"stop"`)
+	require.Contains(t, recorder.Body.String(), `"finish_reason":"length"`)
+	require.NotContains(t, recorder.Body.String(), `"finish_reason":"stop"`)
 	require.Contains(t, recorder.Body.String(), "data: [DONE]")
 }

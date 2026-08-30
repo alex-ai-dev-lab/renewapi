@@ -1,9 +1,15 @@
 package claude
 
-import "github.com/QuantumNous/new-api/dto"
+import (
+	"strings"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
+)
 
 func prepareOpenAIRequestForClaude(request *dto.GeneralOpenAIRequest) *dto.GeneralOpenAIRequest {
-	prepared := prepareOpenAIRequestForClaudeOpus47(request)
+	prepared := prepareOpenAIReasoningEffortForClaude(request)
+	prepared = prepareOpenAIRequestForClaudeOpus47(prepared)
 	if prepared == nil {
 		return nil
 	}
@@ -28,6 +34,28 @@ func prepareOpenAIRequestForClaude(request *dto.GeneralOpenAIRequest) *dto.Gener
 		}
 	}
 	return &copyRequest
+}
+
+func prepareOpenAIReasoningEffortForClaude(request *dto.GeneralOpenAIRequest) *dto.GeneralOpenAIRequest {
+	if request == nil || strings.TrimSpace(request.ReasoningEffort) != "" || len(request.Reasoning) == 0 {
+		return request
+	}
+
+	var reasoning struct {
+		Effort string `json:"effort"`
+	}
+	if err := common.Unmarshal(request.Reasoning, &reasoning); err != nil {
+		return request
+	}
+	effort := strings.ToLower(strings.TrimSpace(reasoning.Effort))
+	switch effort {
+	case "low", "medium", "high":
+		prepared := *request
+		prepared.ReasoningEffort = effort
+		return &prepared
+	default:
+		return request
+	}
 }
 
 func prepareOpenAIToolsForClaude(request *dto.GeneralOpenAIRequest) *dto.GeneralOpenAIRequest {

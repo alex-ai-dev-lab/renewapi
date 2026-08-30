@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -46,4 +47,32 @@ func TestConvertOpenAIRequestRejectsNonStringStopEntry(t *testing.T) {
 	converted, err := (&Adaptor{}).ConvertOpenAIRequest(nil, nil, req)
 	require.Nil(t, converted)
 	requireClaudeInvalidRequest(t, err, "stop[1] must be a string")
+}
+
+func TestConvertOpenAIRequestRejectsOpus47ManualReasoningBudget(t *testing.T) {
+	req := &dto.GeneralOpenAIRequest{
+		Model:     "claude-opus-4-7",
+		Reasoning: json.RawMessage(`{"enabled":true,"max_tokens":4096}`),
+	}
+
+	converted, err := (&Adaptor{}).ConvertOpenAIRequest(nil, nil, req)
+	require.Nil(t, converted)
+	requireClaudeInvalidRequest(t, err, "claude-opus-4-7 does not support reasoning.max_tokens; use reasoning_effort instead")
+}
+
+func TestConvertOpenAIRequestAllowsOpus46ManualReasoningBudget(t *testing.T) {
+	req := &dto.GeneralOpenAIRequest{
+		Model:     "claude-opus-4-6",
+		Reasoning: json.RawMessage(`{"enabled":true,"max_tokens":4096}`),
+		Messages:  []dto.Message{{Role: "user", Content: "hello"}},
+	}
+
+	converted, err := (&Adaptor{}).ConvertOpenAIRequest(nil, nil, req)
+	require.NoError(t, err)
+	claudeRequest, ok := converted.(*dto.ClaudeRequest)
+	require.True(t, ok)
+	require.NotNil(t, claudeRequest.Thinking)
+	require.Equal(t, "enabled", claudeRequest.Thinking.Type)
+	require.NotNil(t, claudeRequest.Thinking.BudgetTokens)
+	require.Equal(t, 4096, *claudeRequest.Thinking.BudgetTokens)
 }

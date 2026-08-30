@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -16,7 +17,33 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const streamStatusContextKey = "relay_stream_status"
+const (
+	streamStatusContextKey     = "relay_stream_status"
+	streamWriteMutexContextKey = "relay_stream_write_mutex"
+)
+
+var streamWriteMutexInit sync.Mutex
+
+func getStreamWriteMutex(c *gin.Context) *sync.Mutex {
+	if c == nil {
+		return nil
+	}
+	if value, ok := c.Get(streamWriteMutexContextKey); ok {
+		if mutex, ok := value.(*sync.Mutex); ok && mutex != nil {
+			return mutex
+		}
+	}
+	streamWriteMutexInit.Lock()
+	defer streamWriteMutexInit.Unlock()
+	if value, ok := c.Get(streamWriteMutexContextKey); ok {
+		if mutex, ok := value.(*sync.Mutex); ok && mutex != nil {
+			return mutex
+		}
+	}
+	mutex := &sync.Mutex{}
+	c.Set(streamWriteMutexContextKey, mutex)
+	return mutex
+}
 
 func FlushWriter(c *gin.Context) (err error) {
 	defer func() {
@@ -66,10 +93,13 @@ func ClaudeData(c *gin.Context, resp dto.ClaudeResponse) error {
 	jsonData, err := common.Marshal(resp)
 	if err != nil {
 		common.SysError("error marshalling stream response: " + err.Error())
-	} else {
-		c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
-		c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonData)})
+		return nil
 	}
+	mutex := getStreamWriteMutex(c)
+	mutex.Lock()
+	defer mutex.Unlock()
+	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
+	c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonData)})
 	_ = FlushWriter(c)
 	return nil
 }
@@ -78,6 +108,9 @@ func ClaudeChunkData(c *gin.Context, resp dto.ClaudeResponse, data string) {
 	if requestContextDone(c) {
 		return
 	}
+	mutex := getStreamWriteMutex(c)
+	mutex.Lock()
+	defer mutex.Unlock()
 	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
 	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("data: %s\n", data)})
 	_ = FlushWriter(c)
@@ -107,6 +140,9 @@ func StringData(c *gin.Context, str string) error {
 }
 
 func writeBusinessStreamData(c *gin.Context, payload string) error {
+	mutex := getStreamWriteMutex(c)
+	mutex.Lock()
+	defer mutex.Unlock()
 	written, err := c.Writer.Write([]byte(payload))
 	if written > 0 {
 		markBusinessStreamCommitted(c)
@@ -148,6 +184,9 @@ func PingData(c *gin.Context) error {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
 
+	mutex := getStreamWriteMutex(c)
+	mutex.Lock()
+	defer mutex.Unlock()
 	if _, err := c.Writer.Write([]byte(": PING\n\n")); err != nil {
 		return fmt.Errorf("write ping data failed: %w", err)
 	}

@@ -21,9 +21,9 @@ type LegacyBillingSettlement struct {
 
 // SettleLegacyBillingBalances applies the funding and token deltas in one DB
 // transaction. Post-usage settlement must record the already-consumed usage
-// even when it exceeds the remaining finite quota. Limited funding/token
-// balances are exhausted instead of leaving stale positive quota that could be
-// used again after the response has already been delivered.
+// even when it exceeds the remaining finite quota. Wallet/token balances are
+// exhausted at zero; subscription usage records the full overage so concurrent
+// reservation refunds cannot make already-consumed quota available again.
 func SettleLegacyBillingBalances(input LegacyBillingSettlement) error {
 	if input.Delta == 0 {
 		return nil
@@ -81,9 +81,6 @@ func adjustSettledSubscriptionQuotaTx(tx *gorm.DB, subscriptionID int, delta int
 	next := sub.AmountUsed + delta
 	if next < 0 {
 		return errors.New("subscription post-usage refund invariant failed")
-	}
-	if delta > 0 && sub.AmountTotal > 0 && next > sub.AmountTotal {
-		next = sub.AmountTotal
 	}
 	return tx.Model(&UserSubscription{}).Where("id = ?", subscriptionID).Update("amount_used", next).Error
 }

@@ -62,6 +62,7 @@ func GeminiChatStreamHandlerWithCompletionGuard(c *gin.Context, info *relaycommo
 	id := helper.GetResponseID(c)
 	createAt := common.GetTimestamp()
 	finishReason := constant.FinishReasonStop
+	expectedCandidates := expectedGeminiStreamCandidateCount(info)
 	toolCallIndexByChoice := make(map[int]map[string]int)
 	nextToolCallIndexByChoice := make(map[int]int)
 
@@ -105,7 +106,19 @@ func GeminiChatStreamHandlerWithCompletionGuard(c *gin.Context, info *relaycommo
 		logger.LogDebug(c, "info.SendResponseCount = %d", info.SendResponseCount)
 		if info.SendResponseCount == 0 {
 			emptyResponse := helper.GenerateStartEmptyResponse(id, createAt, info.UpstreamModelName, nil)
-			if response.IsToolCall() {
+			if expectedCandidates > 1 {
+				emptyResponse.Choices = make([]dto.ChatCompletionsStreamResponseChoice, expectedCandidates)
+				for choiceIndex := 0; choiceIndex < expectedCandidates; choiceIndex++ {
+					emptyResponse.Choices[choiceIndex] = dto.ChatCompletionsStreamResponseChoice{
+						Index: choiceIndex,
+						Delta: dto.ChatCompletionsStreamResponseChoiceDelta{
+							Role:    "assistant",
+							Content: common.GetPointer(""),
+						},
+					}
+				}
+			}
+			if response.IsToolCall() && expectedCandidates == 1 {
 				if len(emptyResponse.Choices) > 0 && len(response.Choices) > 0 {
 					toolCalls := response.Choices[0].Delta.ToolCalls
 					copiedToolCalls := make([]dto.ToolCallResponse, len(toolCalls))
@@ -132,7 +145,7 @@ func GeminiChatStreamHandlerWithCompletionGuard(c *gin.Context, info *relaycommo
 		if err := handleStream(c, info, response); err != nil {
 			logger.LogError(c, err.Error())
 		}
-		if isStop && info.RelayFormat != types.RelayFormatClaude {
+		if isStop && info.RelayFormat != types.RelayFormatClaude && expectedCandidates == 1 {
 			_ = handleStream(c, info, helper.GenerateStopResponse(id, createAt, info.UpstreamModelName, finishReason))
 		}
 		return true

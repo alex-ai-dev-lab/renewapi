@@ -57,6 +57,11 @@ func claudeStreamHandlerWithCompletionGuard(c *gin.Context, resp *http.Response,
 				return
 			}
 			for _, pending := range pendingClaudeData {
+				if pauseErr := claudePauseTurnStreamError(pending.data, info); pauseErr != nil {
+					err = pauseErr
+					sr.Stop(pauseErr)
+					return
+				}
 				err = handleClaudeStreamResponseDataWithPreflight(c, info, claudeInfo, pending.data, preflightBuffer)
 				markClaudeStreamCommitted(c, info)
 				if err != nil {
@@ -66,6 +71,11 @@ func claudeStreamHandlerWithCompletionGuard(c *gin.Context, resp *http.Response,
 			}
 			pendingClaudeData = nil
 			data = cleanData
+		}
+		if pauseErr := claudePauseTurnStreamError(data, info); pauseErr != nil {
+			err = pauseErr
+			sr.Stop(pauseErr)
+			return
 		}
 		err = handleClaudeStreamResponseDataWithPreflight(c, info, claudeInfo, data, preflightBuffer)
 		markClaudeStreamCommitted(c, info)
@@ -91,6 +101,9 @@ func claudeStreamHandlerWithCompletionGuard(c *gin.Context, resp *http.Response,
 		}
 		antipoison.RecordOpaqueResult(c, result)
 		for _, chunk := range chunks {
+			if pauseErr := claudePauseTurnStreamError(chunk, info); pauseErr != nil {
+				return nil, pauseErr
+			}
 			handleErr := HandleStreamResponseData(c, info, claudeInfo, chunk)
 			markClaudeStreamCommitted(c, info)
 			if handleErr != nil {
@@ -126,6 +139,11 @@ func claudeAggregateStreamThenReplayWithCompletionGuard(c *gin.Context, resp *ht
 		if claudeError := claudeResponse.GetClaudeError(); claudeError != nil && claudeError.Type != "" {
 			finalErr = types.WithClaudeError(*claudeError, http.StatusInternalServerError)
 			sr.Stop(finalErr)
+			return
+		}
+		if pauseErr := claudePauseTurnError(info, claudeResponseStopReason(&claudeResponse)); pauseErr != nil {
+			finalErr = pauseErr
+			sr.Stop(pauseErr)
 			return
 		}
 		if claudeResponse.StopReason != "" {

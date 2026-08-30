@@ -125,7 +125,7 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 	if info.IsStream {
 		return claudeStreamHandlerWithCompletionGuard(c, resp, info)
 	} else {
-		return ClaudeHandler(c, resp, info)
+		return claudeHandlerWithPauseTurnGuard(c, resp, info)
 	}
 }
 

@@ -37,6 +37,37 @@ func TestClaudeAdaptorOpus47ReasoningEffortUsesAdaptiveThinking(t *testing.T) {
 	require.Equal(t, "high", request.ReasoningEffort)
 }
 
+func TestClaudeAdaptorOpus47OmitsUnsupportedSamplingParams(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	temperature := 0.4
+	topP := 0.8
+	topK := 20
+
+	request := &dto.GeneralOpenAIRequest{
+		Model:       "claude-opus-4-7",
+		Temperature: &temperature,
+		TopP:        &topP,
+		TopK:        &topK,
+		Messages: []dto.Message{
+			{Role: "user", Content: "hello"},
+		},
+	}
+
+	converted, err := (&Adaptor{}).ConvertOpenAIRequest(c, nil, request)
+	require.NoError(t, err)
+	claudeRequest, ok := converted.(*dto.ClaudeRequest)
+	require.True(t, ok)
+	require.Nil(t, claudeRequest.Temperature)
+	require.Nil(t, claudeRequest.TopP)
+	require.Nil(t, claudeRequest.TopK)
+
+	// Request conversion must not mutate caller-owned sampling parameters.
+	require.NotNil(t, request.Temperature)
+	require.NotNil(t, request.TopP)
+	require.NotNil(t, request.TopK)
+}
+
 func TestClaudeAdaptorOpus46ReasoningEffortKeepsManualThinking(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)

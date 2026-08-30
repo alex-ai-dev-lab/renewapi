@@ -72,7 +72,7 @@ func TestSettleLegacyBillingBalancesRefundsFundingAndTokenTogether(t *testing.T)
 	require.Equal(t, 60, token.UsedQuota)
 }
 
-func TestSettleLegacyBillingBalancesExhaustsFiniteSubscriptionAndTokenAfterOverage(t *testing.T) {
+func TestSettleLegacyBillingBalancesRecordsSubscriptionOverageAndExhaustsToken(t *testing.T) {
 	fixture := setupBillingLedgerTest(t)
 	now := time.Now().Unix()
 	sub := UserSubscription{
@@ -103,7 +103,7 @@ func TestSettleLegacyBillingBalancesExhaustsFiniteSubscriptionAndTokenAfterOvera
 	var token Token
 	require.NoError(t, DB.First(&gotSub, sub.Id).Error)
 	require.NoError(t, DB.First(&token, fixture.token.Id).Error)
-	require.EqualValues(t, 150, gotSub.AmountUsed)
+	require.EqualValues(t, 175, gotSub.AmountUsed)
 	require.Zero(t, token.RemainQuota)
 	require.Equal(t, 175, token.UsedQuota)
 }

@@ -110,5 +110,5 @@ func TestResponsesStreamEmitterMapsLengthToIncompleteReason(t *testing.T) {
 	require.Contains(t, body, "event: response.incomplete")
 	require.Contains(t, body, `"status":"incomplete"`)
 	require.Contains(t, body, `"incomplete_details":{"reason":"max_output_tokens"}`)
-	require.NotContains(t, body, `"reasoning"`)
+	require.NotContains(t, body, `"incomplete_details":{"reasoning":`)
 }

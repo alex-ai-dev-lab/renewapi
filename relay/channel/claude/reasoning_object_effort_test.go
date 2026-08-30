@@ -59,3 +59,17 @@ func TestClaudeAdaptorExplicitReasoningEffortTakesPrecedence(t *testing.T) {
 	require.NotNil(t, claudeRequest.Thinking.BudgetTokens)
 	require.Equal(t, 1280, *claudeRequest.Thinking.BudgetTokens)
 }
+
+func TestClaudeAdaptorDoesNotEnableExplicitlyDisabledReasoningObject(t *testing.T) {
+	request := &dto.GeneralOpenAIRequest{
+		Model:     "claude-opus-4-6",
+		Reasoning: json.RawMessage(`{"enabled":false,"effort":"high"}`),
+		Messages:  []dto.Message{{Role: "user", Content: "hello"}},
+	}
+
+	converted, err := (&Adaptor{}).ConvertOpenAIRequest(nil, nil, request)
+	require.NoError(t, err)
+	claudeRequest, ok := converted.(*dto.ClaudeRequest)
+	require.True(t, ok)
+	require.Nil(t, claudeRequest.Thinking)
+}

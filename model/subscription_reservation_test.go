@@ -82,3 +82,27 @@ func TestAdjustSubscriptionPreConsumeCapacityFailureIsAtomic(t *testing.T) {
 	require.EqualValues(t, 100, sub.AmountUsed)
 	require.EqualValues(t, 100, record.PreConsumed)
 }
+
+func TestAdjustSubscriptionPreConsumeRollbackCanReduceExistingOverage(t *testing.T) {
+	sub, record := createSubscriptionReservationFixture(t, 200, 300, 100)
+
+	require.NoError(t, AdjustSubscriptionPreConsume(record.RequestId, sub.Id, -50))
+
+	sub, record = loadSubscriptionReservation(t, sub.Id, record.RequestId)
+	require.EqualValues(t, 250, sub.AmountUsed)
+	require.EqualValues(t, 50, record.PreConsumed)
+}
+
+func TestRefundSubscriptionPreConsumeReservationPreservesOtherRequestOverage(t *testing.T) {
+	sub, record := createSubscriptionReservationFixture(t, 200, 250, 100)
+
+	require.NoError(t, RefundSubscriptionPreConsumeReservation(record.RequestId))
+	sub, record = loadSubscriptionReservation(t, sub.Id, record.RequestId)
+	require.EqualValues(t, 150, sub.AmountUsed)
+	require.Equal(t, "refunded", record.Status)
+
+	// The request-id status makes retries safe and does not subtract twice.
+	require.NoError(t, RefundSubscriptionPreConsumeReservation(record.RequestId))
+	sub, _ = loadSubscriptionReservation(t, sub.Id, record.RequestId)
+	require.EqualValues(t, 150, sub.AmountUsed)
+}

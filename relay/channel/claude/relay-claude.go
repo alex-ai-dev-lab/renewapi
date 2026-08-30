@@ -328,7 +328,6 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 								Type: "text",
 								Text: common.GetPointer[string]("..."),
 							},
-						},
 					}
 					claudeMessages = append(claudeMessages, claudeMessage)
 				}
@@ -1503,6 +1502,7 @@ func mapToolChoice(toolChoice any, parallelToolCalls *bool) *dto.ClaudeToolChoic
 				}
 			}
 		}
+	}
 
 	// 处理 parallel_tool_calls
 	if parallelToolCalls != nil {

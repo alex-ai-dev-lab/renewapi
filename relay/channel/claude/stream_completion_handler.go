@@ -94,7 +94,7 @@ func claudeStreamHandlerWithCompletionGuard(c *gin.Context, resp *http.Response,
 			}
 		}
 	}
-	if completionErr := claudeStreamCompletionError(info, claudeInfo); completionErr != nil {
+	if completionErr := claudeStreamCompletionError(c, info, claudeInfo); completionErr != nil {
 		return nil, completionErr
 	}
 
@@ -134,7 +134,7 @@ func claudeAggregateStreamThenReplayWithCompletionGuard(c *gin.Context, resp *ht
 	if finalErr != nil {
 		return nil, finalErr
 	}
-	if completionErr := claudeStreamCompletionError(info, claudeInfo); completionErr != nil {
+	if completionErr := claudeStreamCompletionError(c, info, claudeInfo); completionErr != nil {
 		return nil, completionErr
 	}
 	finalResp := buildClaudeAggregatedResponse(claudeInfo)

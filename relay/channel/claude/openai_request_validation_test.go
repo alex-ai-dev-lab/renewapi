@@ -1,11 +1,23 @@
 package claude
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/stretchr/testify/require"
 )
+
+func requireClaudeInvalidRequest(t *testing.T, err error, message string) {
+	t.Helper()
+	require.Error(t, err)
+	require.Equal(t, message, err.Error())
+	apiErr, ok := err.(*types.NewAPIError)
+	require.True(t, ok)
+	require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+	require.True(t, types.IsSkipRetryError(apiErr))
+}
 
 func TestConvertOpenAIRequestRejectsNonStringToolSchemaType(t *testing.T) {
 	req := &dto.GeneralOpenAIRequest{
@@ -23,7 +35,7 @@ func TestConvertOpenAIRequestRejectsNonStringToolSchemaType(t *testing.T) {
 
 	converted, err := (&Adaptor{}).ConvertOpenAIRequest(nil, nil, req)
 	require.Nil(t, converted)
-	require.EqualError(t, err, `tool "lookup" parameters.type must be a string`)
+	requireClaudeInvalidRequest(t, err, `tool "lookup" parameters.type must be a string`)
 }
 
 func TestConvertOpenAIRequestRejectsNonStringStopEntry(t *testing.T) {
@@ -33,5 +45,5 @@ func TestConvertOpenAIRequestRejectsNonStringStopEntry(t *testing.T) {
 
 	converted, err := (&Adaptor{}).ConvertOpenAIRequest(nil, nil, req)
 	require.Nil(t, converted)
-	require.EqualError(t, err, "stop[1] must be a string")
+	requireClaudeInvalidRequest(t, err, "stop[1] must be a string")
 }

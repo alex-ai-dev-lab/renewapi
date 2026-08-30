@@ -978,7 +978,7 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 	} else if info.RelayFormat == types.RelayFormatOpenAIResponses {
 		if err := responsebridge.CompleteChatStream(c, info, claudeInfo.Usage, stopReasonClaude2OpenAI(claudeInfo.StopReason)); err != nil {
 			common.SysLog("send final Responses event failed: " + err.Error())
-			}
+		}
 	}
 }
 

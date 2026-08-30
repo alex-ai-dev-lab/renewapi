@@ -42,9 +42,13 @@ func prepareOpenAIReasoningEffortForClaude(request *dto.GeneralOpenAIRequest) *d
 	}
 
 	var reasoning struct {
-		Effort string `json:"effort"`
+		Enabled *bool  `json:"enabled"`
+		Effort  string `json:"effort"`
 	}
 	if err := common.Unmarshal(request.Reasoning, &reasoning); err != nil {
+		return request
+	}
+	if reasoning.Enabled != nil && !*reasoning.Enabled {
 		return request
 	}
 	effort := strings.ToLower(strings.TrimSpace(reasoning.Effort))

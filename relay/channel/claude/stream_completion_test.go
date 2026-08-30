@@ -54,7 +54,7 @@ func completeClaudeStreamWithoutMessageStopBody() string {
 func TestClaudeStreamHandlerRejectsMissingMessageDelta(t *testing.T) {
 	c, recorder, resp, info := newClaudeStreamTestContext(incompleteClaudeStreamBody())
 
-	usage, relayErr := ClaudeStreamHandler(c, resp, info)
+	usage, relayErr := claudeStreamHandlerWithCompletionGuard(c, resp, info)
 	require.Nil(t, usage)
 	require.NotNil(t, relayErr)
 	require.Equal(t, http.StatusBadGateway, relayErr.StatusCode)
@@ -67,7 +67,7 @@ func TestClaudeStreamHandlerRejectsMissingMessageDelta(t *testing.T) {
 func TestClaudeAggregateStreamRejectsMissingMessageDeltaBeforeReplay(t *testing.T) {
 	c, recorder, resp, info := newClaudeStreamTestContext(incompleteClaudeStreamBody())
 
-	usage, relayErr := claudeAggregateStreamThenReplay(c, resp, info)
+	usage, relayErr := claudeAggregateStreamThenReplayWithCompletionGuard(c, resp, info)
 	require.Nil(t, usage)
 	require.NotNil(t, relayErr)
 	require.Equal(t, http.StatusBadGateway, relayErr.StatusCode)
@@ -79,7 +79,7 @@ func TestClaudeAggregateStreamRejectsMissingMessageDeltaBeforeReplay(t *testing.
 func TestClaudeStreamHandlerAcceptsMessageDeltaWithoutMessageStop(t *testing.T) {
 	c, recorder, resp, info := newClaudeStreamTestContext(completeClaudeStreamWithoutMessageStopBody())
 
-	usage, relayErr := ClaudeStreamHandler(c, resp, info)
+	usage, relayErr := claudeStreamHandlerWithCompletionGuard(c, resp, info)
 	require.Nil(t, relayErr)
 	require.NotNil(t, usage)
 	require.Equal(t, 3, usage.TotalTokens)

@@ -30,7 +30,8 @@ func geminiCandidateOpenAIFinishReason(candidate dto.GeminiChatCandidate) string
 		return constant.FinishReasonStop
 	case "MAX_TOKENS":
 		return constant.FinishReasonLength
-	case "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "OTHER":
+	case "SAFETY", "RECITATION", "LANGUAGE", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII",
+		"IMAGE_SAFETY", "IMAGE_PROHIBITED_CONTENT", "IMAGE_RECITATION", "ESCALATION", "OTHER":
 		return constant.FinishReasonContentFilter
 	default:
 		return constant.FinishReasonContentFilter
@@ -66,9 +67,8 @@ func GeminiChatHandlerWithErrorReturn(c *gin.Context, info *relaycommon.RelayInf
 	if err := common.Unmarshal(responseBody, &geminiResponse); err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
+	usage := buildUsageFromGeminiMetadata(geminiResponse.UsageMetadata, info.GetEstimatePromptTokens())
 	if len(geminiResponse.Candidates) == 0 {
-		usage := buildUsageFromGeminiMetadata(geminiResponse.UsageMetadata, info.GetEstimatePromptTokens())
-
 		var newAPIError *types.NewAPIError
 		if geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
 			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "gemini_block_reason="+*geminiResponse.PromptFeedback.BlockReason)
@@ -88,11 +88,13 @@ func GeminiChatHandlerWithErrorReturn(c *gin.Context, info *relaycommon.RelayInf
 		service.ResetStatusCode(newAPIError, c.GetString("status_code_mapping"))
 		return &usage, newAPIError
 	}
+	if finishErr := geminiCompatibilityFinishReasonError(&geminiResponse); finishErr != nil {
+		return &usage, finishErr
+	}
 
 	fullTextResponse := responseGeminiChat2OpenAI(c, &geminiResponse)
 	normalizeGeminiChoiceFinishReasons(&geminiResponse, fullTextResponse)
 	fullTextResponse.Model = info.UpstreamModelName
-	usage := buildUsageFromGeminiMetadata(geminiResponse.UsageMetadata, info.GetEstimatePromptTokens())
 	fullTextResponse.Usage = usage
 
 	switch info.RelayFormat {

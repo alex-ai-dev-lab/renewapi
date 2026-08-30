@@ -29,7 +29,7 @@ type BillingSession struct {
 	funding          FundingSource
 	preConsumedQuota int // 实际预扣额度（信任用户可能为 0）
 	tokenConsumed    int // 令牌额度实际扣减量
-	extraReserved    int // 发送前补充预扣的额度（订阅退款时需要单独回滚）
+	extraReserved    int // 发送前补充预扣的额度（用于同步兼容字段）
 	ledgerID         uint64
 	ledgerMode       string
 	pendingTaskID    int64
@@ -121,8 +121,6 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	tokenKey := s.relayInfo.TokenKey
 	isPlayground := s.relayInfo.IsPlayground
 	tokenConsumed := s.tokenConsumed
-	extraReserved := s.extraReserved
-	subscriptionId := s.relayInfo.SubscriptionId
 	funding := s.funding
 	if s.ledgerID != 0 {
 		_, err := model.RefundBillingLedger(s.ledgerID, "request failed before settlement")
@@ -136,14 +134,10 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	}
 
 	gopool.Go(func() {
-		// 1) 退还资金来源
+		// 1) 退还资金来源。订阅资金源的 request-id 预扣记录包含 fallback 的额外预扣，
+		// 因此 RefundSubscriptionPreConsume 会一次性、幂等地退还完整 reservation。
 		if err := funding.Refund(); err != nil {
 			common.SysLog("error refunding billing source: " + err.Error())
-		}
-		if extraReserved > 0 && funding.Source() == BillingSourceSubscription && subscriptionId > 0 {
-			if err := model.PostConsumeUserSubscriptionDelta(subscriptionId, -int64(extraReserved)); err != nil {
-				common.SysLog("error refunding subscription extra reserved quota: " + err.Error())
-			}
 		}
 		// 2) 退还令牌额度
 		if tokenConsumed > 0 && !isPlayground {
@@ -449,7 +443,7 @@ func (s *BillingSession) reserveFunding(delta int) error {
 		funding.consumed += delta
 		return nil
 	case *SubscriptionFunding:
-		if err := model.PostConsumeUserSubscriptionDelta(funding.subscriptionId, int64(delta)); err != nil {
+		if err := model.AdjustSubscriptionPreConsume(funding.requestId, funding.subscriptionId, int64(delta)); err != nil {
 			return types.NewErrorWithStatusCode(
 				fmt.Errorf("订阅额度不足或未配置订阅: %s", err.Error()),
 				types.ErrorCodeInsufficientUserQuota,
@@ -473,7 +467,7 @@ func (s *BillingSession) rollbackFundingReserve(delta int) {
 			funding.consumed -= delta
 		}
 	case *SubscriptionFunding:
-		if err := model.PostConsumeUserSubscriptionDelta(funding.subscriptionId, -int64(delta)); err != nil {
+		if err := model.AdjustSubscriptionPreConsume(funding.requestId, funding.subscriptionId, -int64(delta)); err != nil {
 			common.SysLog("error rolling back subscription funding reserve: " + err.Error())
 		}
 	}

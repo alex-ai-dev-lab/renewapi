@@ -12,19 +12,20 @@ func prepareOpenAIRequestForClaudeOpus47(request *dto.GeneralOpenAIRequest) *dto
 		return request
 	}
 
+	prepared := *request
+	prepared.Temperature = nil
+	prepared.TopP = nil
+	prepared.TopK = nil
+
 	switch request.ReasoningEffort {
 	case "low", "medium", "high":
-	default:
-		return request
+		baseModel := request.Model
+		if parsedBaseModel, _, ok := reasoning.TrimEffortSuffix(baseModel); ok {
+			baseModel = parsedBaseModel
+		}
+		prepared.Model = baseModel + "-" + request.ReasoningEffort
+		prepared.ReasoningEffort = ""
 	}
 
-	baseModel := request.Model
-	if parsedBaseModel, _, ok := reasoning.TrimEffortSuffix(baseModel); ok {
-		baseModel = parsedBaseModel
-	}
-
-	prepared := *request
-	prepared.Model = baseModel + "-" + request.ReasoningEffort
-	prepared.ReasoningEffort = ""
 	return &prepared
 }

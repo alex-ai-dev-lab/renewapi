@@ -56,6 +56,11 @@ Completed:
   concurrent refund, settle-vs-refund, subscription extra reserve/refund,
   missing-row `RowsAffected`, legacy-ledger migration compatibility, and
   shadow async-task preparation/acknowledgement through the durable ledger.
+- 修复 stale reservation 回收：在行锁内使用 `updated_at` 和 ledger `version`
+  做 fence，避免旧快照退款已完成或已刷新额度的 reservation；写入新的
+  acknowledgement 对象时保留 prepared async task 的计费上下文。
+- 新增 activity refresh、completed settlement race、未变化 stale refund、重复
+  stale delivery 和 fresh async-task acknowledgement 对象的回归测试。
 - Focused model/service tests, focused race tests, all Go tests, `go vet`, and
   `go build` pass locally.
 - Created the master task and this release-unit task.
@@ -124,6 +129,18 @@ go test -count=1 ./...
 go vet ./...
 go build ./...
 ```
+
+最新实现检查点 — 2026-09-19：
+
+- Branch：`agent/06-billing`
+- 源码 commit：`f3a457d3d7c0c20e2834819a8b76c22e761557ce`
+- `go test -count=1 ./model ./service`：PASS
+- `go test -race -count=1 ./model ./service`：PASS
+- `go test -count=1 ./...`：PASS
+- `go vet ./...`：PASS
+- `go build ./...`：PASS
+- `git diff --check`：PASS
+- MySQL/PostgreSQL 和进程级 crash/restart：`BLOCKED_RUNTIME` / `NOT RUN`
 
 ## Risks / blockers
 

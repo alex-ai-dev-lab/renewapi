@@ -331,6 +331,13 @@ func AcknowledgeBillingLedgerTask(id uint64, targetQuota int64, task *Task) (*Bi
 		task.CreatedAt = current.CreatedAt
 		task.UpdatedAt = time.Now().Unix()
 		task.SubmitTime = current.SubmitTime
+
+		// Billing metadata was durably captured before the upstream request.
+		// A fresh acknowledgement object must not erase that snapshot.
+		task.PrivateData.BillingSource = current.PrivateData.BillingSource
+		task.PrivateData.SubscriptionId = current.PrivateData.SubscriptionId
+		task.PrivateData.TokenId = current.PrivateData.TokenId
+		task.PrivateData.BillingContext = current.PrivateData.BillingContext
 		task.BillingLedgerID = ledger.ID
 		task.BillingState = ledger.State
 		task.BillingVersion = ledger.Version
@@ -386,6 +393,136 @@ func RefundBillingLedger(id uint64, reason string) (*BillingLedger, error) {
 		return tx.Model(&Task{}).Where("billing_ledger_id = ? AND status = ?", ledger.ID, TaskStatusNotStart).Updates(map[string]any{
 			"status": TaskStatusFailure, "progress": "100%", "fail_reason": truncateBillingError(reason),
 		}).Error
+	})
+}
+
+func RefundStaleReservedBillingLedger(
+	id uint64,
+	kind string,
+	expectedVersion int64,
+	cutoff int64,
+	reason string,
+) (bool, error) {
+	return RefundStaleReservedBillingLedgerContext(
+		context.Background(),
+		id,
+		kind,
+		expectedVersion,
+		cutoff,
+		reason,
+	)
+}
+
+func RefundStaleReservedBillingLedgerContext(
+	ctx context.Context,
+	id uint64,
+	kind string,
+	expectedVersion int64,
+	cutoff int64,
+	reason string,
+) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	refunded := false
+	err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		ledger, err := lockBillingLedgerTx(tx, id)
+		if err != nil {
+			return err
+		}
+
+		if ledger.Kind != kind ||
+			ledger.State != BillingLedgerStateReserved ||
+			ledger.Version != expectedVersion ||
+			ledger.UpdatedAt > cutoff {
+			return nil
+		}
+
+		changed, err := mutateLockedBillingLedgerTx(
+			tx,
+			ledger,
+			BillingLedgerDesiredRefund,
+			0,
+			func(tx *gorm.DB, ledger *BillingLedger) error {
+				if reason != "" {
+					ledger.LastError = truncateBillingError(reason)
+				}
+				return tx.Model(&Task{}).
+					Where("billing_ledger_id = ? AND status = ?", ledger.ID, TaskStatusNotStart).
+					Updates(map[string]any{
+						"status":      TaskStatusFailure,
+						"progress":    "100%",
+						"fail_reason": truncateBillingError(reason),
+					}).Error
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		refunded = changed
+		return nil
+	})
+	return refunded, err
+}
+
+func MarkStaleReservedBillingLedgerForReconcileContext(
+	ctx context.Context,
+	id uint64,
+	kind string,
+	expectedVersion int64,
+	cutoff int64,
+	cause error,
+) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	now := time.Now().Unix()
+	message := ""
+	if cause != nil {
+		message = truncateBillingError(cause.Error())
+	}
+
+	return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		ledger, err := lockBillingLedgerTx(tx, id)
+		if err != nil {
+			return err
+		}
+
+		if ledger.Kind != kind ||
+			ledger.State != BillingLedgerStateReserved ||
+			ledger.Version != expectedVersion ||
+			ledger.UpdatedAt > cutoff {
+			return nil
+		}
+
+		ledger.State = BillingLedgerStateReconcileRequired
+		ledger.DesiredState = BillingLedgerDesiredRefund
+		ledger.DesiredQuota = 0
+		ledger.LastError = message
+		ledger.Attempts++
+		ledger.NextRetryAt = now + billingRetryDelay(ledger.Attempts)
+		ledger.UpdatedAt = now
+		ledger.Version++
+
+		if err := tx.Save(ledger).Error; err != nil {
+			return err
+		}
+
+		updates := map[string]any{
+			"billing_state":   BillingLedgerStateReconcileRequired,
+			"billing_version": ledger.Version,
+		}
+		if err := tx.Model(&Task{}).
+			Where("billing_ledger_id = ?", id).
+			Updates(updates).Error; err != nil {
+			return err
+		}
+		return tx.Model(&Midjourney{}).
+			Where("billing_ledger_id = ?", id).
+			Updates(updates).Error
 	})
 }
 
@@ -776,9 +913,13 @@ func ListStaleReservedBillingLedgersContext(ctx context.Context, kind string, cu
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	var ledgers []BillingLedger
-	err := DB.WithContext(ctx).Where("kind = ? AND state = ? AND created_at <= ?", kind, BillingLedgerStateReserved, cutoff).
-		Order("created_at asc, id asc").Limit(limit).Find(&ledgers).Error
+	err := DB.WithContext(ctx).
+		Where("kind = ? AND state = ? AND updated_at <= ?", kind, BillingLedgerStateReserved, cutoff).
+		Order("updated_at asc, id asc").Limit(limit).Find(&ledgers).Error
 	return ledgers, err
 }
 

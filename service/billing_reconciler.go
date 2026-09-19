@@ -17,7 +17,8 @@ func ReconcileBillingOnce(ctx context.Context, limit int) (int, error) {
 	if reservedTimeout < 60 {
 		reservedTimeout = 60
 	}
-	stale, err := model.ListStaleReservedTaskLedgersContext(ctx, time.Now().Unix()-int64(reservedTimeout), limit)
+	taskCutoff := time.Now().Unix() - int64(reservedTimeout)
+	stale, err := model.ListStaleReservedTaskLedgersContext(ctx, taskCutoff, limit)
 	if err != nil {
 		return 0, err
 	}
@@ -27,8 +28,26 @@ func ReconcileBillingOnce(ctx context.Context, limit int) (int, error) {
 			return resolved, err
 		}
 		ledger := stale[i]
-		if _, err := model.RefundBillingLedger(ledger.ID, "pending upstream task submission expired"); err != nil {
-			_ = model.MarkBillingLedgerForReconcile(ledger.ID, model.BillingLedgerDesiredRefund, 0, err)
+		refunded, refundErr := model.RefundStaleReservedBillingLedgerContext(
+			ctx,
+			ledger.ID,
+			"task",
+			ledger.Version,
+			taskCutoff,
+			"pending upstream task submission expired",
+		)
+		if refundErr != nil {
+			_ = model.MarkStaleReservedBillingLedgerForReconcileContext(
+				ctx,
+				ledger.ID,
+				"task",
+				ledger.Version,
+				taskCutoff,
+				refundErr,
+			)
+			continue
+		}
+		if !refunded {
 			continue
 		}
 		model.InvalidateBillingBalanceCaches(ledger.UserID, ledger.TokenID)
@@ -38,7 +57,8 @@ func ReconcileBillingOnce(ctx context.Context, limit int) (int, error) {
 	if requestTimeout < 300 {
 		requestTimeout = 300
 	}
-	orphanedRequests, err := model.ListStaleReservedBillingLedgersContext(ctx, "request", time.Now().Unix()-int64(requestTimeout), limit)
+	requestCutoff := time.Now().Unix() - int64(requestTimeout)
+	orphanedRequests, err := model.ListStaleReservedBillingLedgersContext(ctx, "request", requestCutoff, limit)
 	if err != nil {
 		return resolved, err
 	}
@@ -47,8 +67,26 @@ func ReconcileBillingOnce(ctx context.Context, limit int) (int, error) {
 			return resolved, err
 		}
 		ledger := orphanedRequests[i]
-		if _, err := model.RefundBillingLedger(ledger.ID, "reserved request expired before settlement"); err != nil {
-			_ = model.MarkBillingLedgerForReconcile(ledger.ID, model.BillingLedgerDesiredRefund, 0, err)
+		refunded, refundErr := model.RefundStaleReservedBillingLedgerContext(
+			ctx,
+			ledger.ID,
+			"request",
+			ledger.Version,
+			requestCutoff,
+			"reserved request expired before settlement",
+		)
+		if refundErr != nil {
+			_ = model.MarkStaleReservedBillingLedgerForReconcileContext(
+				ctx,
+				ledger.ID,
+				"request",
+				ledger.Version,
+				requestCutoff,
+				refundErr,
+			)
+			continue
+		}
+		if !refunded {
 			continue
 		}
 		model.InvalidateBillingBalanceCaches(ledger.UserID, ledger.TokenID)

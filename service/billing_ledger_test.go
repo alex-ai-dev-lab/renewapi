@@ -335,7 +335,10 @@ func TestBillingReconcilerRefundsStalePreparedTask(t *testing.T) {
 	task := model.Task{TaskID: "task-stale", UserId: 103, ChannelId: 103, Quota: 400,
 		Status: model.TaskStatusNotStart, Progress: "0%"}
 	require.NoError(t, model.BindBillingLedgerTask(reservation.Ledger.ID, &task))
-	require.NoError(t, model.DB.Model(&model.BillingLedger{}).Where("id = ?", reservation.Ledger.ID).Update("created_at", 1).Error)
+	require.NoError(t, model.DB.Model(&model.BillingLedger{}).Where("id = ?", reservation.Ledger.ID).Updates(map[string]any{
+		"created_at": 1,
+		"updated_at": 1,
+	}).Error)
 
 	_, err = ReconcileBillingOnce(t.Context(), 100)
 	require.NoError(t, err)

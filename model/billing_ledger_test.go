@@ -562,14 +562,41 @@ func TestRefundSubscriptionPreConsumeUsesOwningTransaction(t *testing.T) {
 func TestPreparedTaskAcknowledgementSurvivesSettlementRetry(t *testing.T) {
 	fixture := setupBillingLedgerTest(t)
 	reservation := reserveWalletLedger(t, fixture, "req-prepared-task", 400)
-	task := Task{TaskID: "task-prepared", UserId: fixture.user.Id, ChannelId: fixture.channel.Id,
-		Status: TaskStatusNotStart, Progress: "0%", Quota: 400}
-	require.NoError(t, BindBillingLedgerTask(reservation.Ledger.ID, &task))
-	require.NotZero(t, task.ID)
+	prepared := Task{
+		TaskID:    "task-prepared",
+		UserId:    fixture.user.Id,
+		ChannelId: fixture.channel.Id,
+		Status:    TaskStatusNotStart,
+		Progress:  "0%",
+		Quota:     400,
+		PrivateData: TaskPrivateData{
+			BillingSource: "wallet",
+			TokenId:       fixture.token.Id,
+			BillingContext: &TaskBillingContext{
+				ModelPrice:      2.5,
+				GroupRatio:      1.2,
+				ModelRatio:      1.5,
+				OriginModelName: "prepared-video-model",
+			},
+		},
+	}
+	require.NoError(t, BindBillingLedgerTask(reservation.Ledger.ID, &prepared))
+	require.NotZero(t, prepared.ID)
 
-	task.PrivateData.UpstreamTaskID = "upstream-accepted-1"
-	task.Data = []byte(`{"id":"upstream-accepted-1"}`)
-	acknowledged, err := AcknowledgeBillingLedgerTask(reservation.Ledger.ID, 300, &task)
+	ack := Task{
+		ID:        prepared.ID,
+		TaskID:    prepared.TaskID,
+		UserId:    prepared.UserId,
+		ChannelId: prepared.ChannelId,
+		Status:    TaskStatusSubmitted,
+		Progress:  "0%",
+		PrivateData: TaskPrivateData{
+			UpstreamTaskID: "upstream-accepted-1",
+		},
+		Data: []byte(`{"id":"upstream-accepted-1"}`),
+	}
+
+	acknowledged, err := AcknowledgeBillingLedgerTask(reservation.Ledger.ID, 300, &ack)
 	require.NoError(t, err)
 	require.Equal(t, BillingLedgerStateReconcileRequired, acknowledged.State)
 
@@ -577,9 +604,144 @@ func TestPreparedTaskAcknowledgementSurvivesSettlementRetry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, BillingLedgerStateSettled, settled.State)
 	var stored Task
-	require.NoError(t, DB.First(&stored, task.ID).Error)
+	require.NoError(t, DB.First(&stored, prepared.ID).Error)
 	require.Equal(t, "upstream-accepted-1", stored.PrivateData.UpstreamTaskID)
+	require.Equal(t, "wallet", stored.PrivateData.BillingSource)
+	require.Equal(t, fixture.token.Id, stored.PrivateData.TokenId)
+	require.NotNil(t, stored.PrivateData.BillingContext)
+	require.Equal(t, 2.5, stored.PrivateData.BillingContext.ModelPrice)
+	require.Equal(t, 1.2, stored.PrivateData.BillingContext.GroupRatio)
+	require.Equal(t, 1.5, stored.PrivateData.BillingContext.ModelRatio)
+	require.Equal(t, "prepared-video-model", stored.PrivateData.BillingContext.OriginModelName)
 	require.JSONEq(t, `{"id":"upstream-accepted-1"}`, string(stored.Data))
 	require.Equal(t, BillingLedgerStateSettled, stored.BillingState)
 	assertLedgerBalances(t, fixture, 700, 300, 300, 300)
+}
+
+func TestStaleReservedBillingLedgerUsesUpdatedAtAndVersionFence(t *testing.T) {
+	fixture := setupBillingLedgerTest(t)
+	reservation := reserveWalletLedger(t, fixture, "req-stale-activity-fence", 400)
+
+	cutoff := time.Now().Unix() - 60
+	staleAt := cutoff - 1
+	require.NoError(t, DB.Model(&BillingLedger{}).
+		Where("id = ?", reservation.Ledger.ID).
+		UpdateColumns(map[string]any{
+			"created_at": staleAt,
+			"updated_at": staleAt,
+		}).Error)
+
+	stale, err := ListStaleReservedBillingLedgers("request", cutoff, 10)
+	require.NoError(t, err)
+	require.Len(t, stale, 1)
+	observed := stale[0]
+
+	refreshed, err := ReserveMoreBillingLedger(reservation.Ledger.ID, 450)
+	require.NoError(t, err)
+	require.Greater(t, refreshed.Version, observed.Version)
+	require.Greater(t, refreshed.UpdatedAt, cutoff)
+
+	stale, err = ListStaleReservedBillingLedgers("request", cutoff, 10)
+	require.NoError(t, err)
+	require.Empty(t, stale)
+
+	refunded, err := RefundStaleReservedBillingLedger(
+		observed.ID,
+		"request",
+		observed.Version,
+		cutoff,
+		"stale snapshot",
+	)
+	require.NoError(t, err)
+	require.False(t, refunded)
+
+	var stored BillingLedger
+	require.NoError(t, DB.First(&stored, reservation.Ledger.ID).Error)
+	require.Equal(t, BillingLedgerStateReserved, stored.State)
+	require.EqualValues(t, 450, stored.AppliedQuota)
+	assertLedgerBalances(t, fixture, 550, 0, 450, 0)
+}
+
+func TestStaleReservedBillingLedgerDoesNotUndoCompletedSettlement(t *testing.T) {
+	fixture := setupBillingLedgerTest(t)
+	reservation := reserveWalletLedger(t, fixture, "req-stale-settle-race", 400)
+
+	cutoff := time.Now().Unix() - 60
+	staleAt := cutoff - 1
+	require.NoError(t, DB.Model(&BillingLedger{}).
+		Where("id = ?", reservation.Ledger.ID).
+		UpdateColumns(map[string]any{
+			"created_at": staleAt,
+			"updated_at": staleAt,
+		}).Error)
+
+	stale, err := ListStaleReservedBillingLedgers("request", cutoff, 10)
+	require.NoError(t, err)
+	require.Len(t, stale, 1)
+	observed := stale[0]
+
+	settled, err := SettleBillingLedger(reservation.Ledger.ID, 300)
+	require.NoError(t, err)
+	require.Equal(t, BillingLedgerStateSettled, settled.State)
+
+	refunded, err := RefundStaleReservedBillingLedger(
+		observed.ID,
+		"request",
+		observed.Version,
+		cutoff,
+		"stale snapshot must not win",
+	)
+	require.NoError(t, err)
+	require.False(t, refunded)
+
+	var stored BillingLedger
+	require.NoError(t, DB.First(&stored, reservation.Ledger.ID).Error)
+	require.Equal(t, BillingLedgerStateSettled, stored.State)
+	require.EqualValues(t, 300, stored.AppliedQuota)
+	assertLedgerBalances(t, fixture, 700, 300, 300, 300)
+}
+
+func TestStaleReservedBillingLedgerRefundsUnchangedReservation(t *testing.T) {
+	fixture := setupBillingLedgerTest(t)
+	reservation := reserveWalletLedger(t, fixture, "req-stale-refund", 400)
+
+	cutoff := time.Now().Unix() - 60
+	staleAt := cutoff - 1
+	require.NoError(t, DB.Model(&BillingLedger{}).
+		Where("id = ?", reservation.Ledger.ID).
+		UpdateColumns(map[string]any{
+			"created_at": staleAt,
+			"updated_at": staleAt,
+		}).Error)
+
+	stale, err := ListStaleReservedBillingLedgers("request", cutoff, 10)
+	require.NoError(t, err)
+	require.Len(t, stale, 1)
+	observed := stale[0]
+
+	refunded, err := RefundStaleReservedBillingLedger(
+		observed.ID,
+		"request",
+		observed.Version,
+		cutoff,
+		"reserved request expired before settlement",
+	)
+	require.NoError(t, err)
+	require.True(t, refunded)
+
+	refunded, err = RefundStaleReservedBillingLedger(
+		observed.ID,
+		"request",
+		observed.Version,
+		cutoff,
+		"duplicate stale delivery",
+	)
+	require.NoError(t, err)
+	require.False(t, refunded)
+
+	var stored BillingLedger
+	require.NoError(t, DB.First(&stored, reservation.Ledger.ID).Error)
+	require.Equal(t, BillingLedgerStateRefunded, stored.State)
+	require.Zero(t, stored.AppliedQuota)
+	assertLedgerBalances(t, fixture, 1000, 0, 0, 0)
 }

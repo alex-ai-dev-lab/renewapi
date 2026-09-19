@@ -59,6 +59,9 @@ Completed:
 - 修复 stale reservation 回收：在行锁内使用 `updated_at` 和 ledger `version`
   做 fence，避免旧快照退款已完成或已刷新额度的 reservation；写入新的
   acknowledgement 对象时保留 prepared async task 的计费上下文。
+- 补齐 fresh acknowledgement 的 prepared Task merge：保留持久化身份、路由、
+  模型、私有 key 和计费快照，只合并上游运行态字段；reconcile replay 和
+  retry marker 使用同一组 `state + desired + version` fence。
 - 新增 activity refresh、completed settlement race、未变化 stale refund、重复
   stale delivery 和 fresh async-task acknowledgement 对象的回归测试。
 - Focused model/service tests, focused race tests, all Go tests, `go vet`, and
@@ -133,7 +136,8 @@ go build ./...
 最新实现检查点 — 2026-09-19：
 
 - Branch：`agent/06-billing`
-- 源码 commit：`f3a457d3d7c0c20e2834819a8b76c22e761557ce`
+- 源码 commit：`18201e795`
+- 已 push：`origin/agent/06-billing`
 - `go test -count=1 ./model ./service`：PASS
 - `go test -race -count=1 ./model ./service`：PASS
 - `go test -count=1 ./...`：PASS

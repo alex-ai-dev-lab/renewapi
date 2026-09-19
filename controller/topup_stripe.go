@@ -101,7 +101,14 @@ func requestStripePayWithCheckout(
 	}
 
 	id := c.GetInt("id")
-	user, _ := model.GetUserById(id, false)
+	user, err := model.GetUserById(id, false)
+	if err != nil || user == nil {
+		if err != nil {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe 获取充值用户失败 user_id=%d error=%q", id, err.Error()))
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取用户信息失败"})
+		return
+	}
 	chargedMoney := GetChargedAmount(float64(req.Amount), *user)
 
 	reference := fmt.Sprintf("new-api-ref-%d-%d-%s", user.Id, time.Now().UnixMilli(), randstr.String(4))

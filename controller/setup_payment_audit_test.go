@@ -319,6 +319,25 @@ func TestStripeTopUpMarksOrderFailedWhenCheckoutFails(t *testing.T) {
 	}
 }
 
+func TestStripeTopUpRejectsMissingUserWithoutCallingCheckout(t *testing.T) {
+	setupControllerAuditTestDB(t)
+	configureStripeTopUpAuditTest(t)
+	c, response := newPaymentAuditContext(0)
+	checkoutCalled := false
+
+	requestStripePayWithCheckout(c, &StripePayRequest{Amount: 100, PaymentMethod: model.PaymentMethodStripe}, func(referenceID, customerID, email string, amount int64, successURL, cancelURL string) (string, error) {
+		checkoutCalled = true
+		return "https://checkout.example.test/should-not-be-called", nil
+	})
+
+	if checkoutCalled {
+		t.Fatal("Stripe checkout was called without a valid user")
+	}
+	if !strings.Contains(response.Body.String(), "获取用户信息失败") {
+		t.Fatalf("expected missing-user error, got %s", response.Body.String())
+	}
+}
+
 func TestStripeSubscriptionPersistsPendingOrderBeforeCheckout(t *testing.T) {
 	setupControllerAuditTestDB(t)
 	configureStripeSubscriptionAuditTest(t)

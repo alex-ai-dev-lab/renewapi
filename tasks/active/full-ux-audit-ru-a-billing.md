@@ -146,6 +146,16 @@ go build ./...
 - `git diff --check`：PASS
 - MySQL/PostgreSQL 和进程级 crash/restart：`BLOCKED_RUNTIME` / `NOT RUN`
 
+集成状态 — 2026-09-19：
+
+- `origin/main` 已前进到 `2e41e9bf6`，并删除/回退了 RU-A Billing v2 的多项
+  实现；不能把 `agent/06-billing` 直接 fast-forward 到该远端状态。
+- 从旧 `main` 到 `6e9dd4d25` 的本地 fast-forward 已在隔离 worktree 完成，
+  但 `git push origin main` 因远端前进返回 `fetch first`；未执行 force push。
+- Billing 适配最新 `origin/main` 需要重新审计和移植，当前为
+  `WAITING_INTEGRATION`；MySQL、PostgreSQL、进程级 crash/restart 仍为
+  `BLOCKED_RUNTIME` / `NOT RUN`。
+
 ## Risks / blockers
 
 - Existing pre-release shadow ledgers were created by the legacy path. New code

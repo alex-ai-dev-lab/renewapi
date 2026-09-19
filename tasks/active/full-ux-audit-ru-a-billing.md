@@ -135,9 +135,10 @@ go build ./...
 
 最新实现检查点 — 2026-09-19：
 
-- Branch：`agent/06-billing`
-- 源码 commit：`18201e795`
-- 已 push：`origin/agent/06-billing`
+- Branch：`main`
+- 当前源码 commit：`6e9dd4d2533e55558dda2436d9effc5349de6176`
+- GitHub commit/raw 可读取；`origin/main` 仍为 `2e41e9bf63495b73e2e9e8b4346e45cf5f930811`
+- 候选 `agent/06-billing-main-sync@5b4b0ba628ea4fbf57cdd63a9772fd1b6a17c783` 已完成合并前审计：四个候选 commit 均不合并，最小合并集合为 `∅`
 - `go test -count=1 ./model ./service`：PASS
 - `go test -race -count=1 ./model ./service`：PASS
 - `go test -count=1 ./...`：PASS

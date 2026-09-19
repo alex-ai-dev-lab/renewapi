@@ -102,17 +102,33 @@ func ReconcileBillingOnce(ctx context.Context, limit int) (int, error) {
 			return resolved, err
 		}
 		ledger := ledgers[i]
+		applied := false
 		var reconcileErr error
 		switch ledger.DesiredState {
-		case model.BillingLedgerDesiredSettle:
-			_, reconcileErr = model.SettleBillingLedger(ledger.ID, ledger.DesiredQuota)
-		case model.BillingLedgerDesiredRefund:
-			_, reconcileErr = model.RefundBillingLedger(ledger.ID, ledger.LastError)
+		case model.BillingLedgerDesiredSettle, model.BillingLedgerDesiredRefund:
+			applied, reconcileErr = model.ReplayBillingLedgerReconcileContext(
+				ctx,
+				ledger.ID,
+				ledger.Version,
+				ledger.DesiredState,
+				ledger.DesiredQuota,
+				ledger.LastError,
+			)
 		default:
 			reconcileErr = fmt.Errorf("unknown desired billing state %q", ledger.DesiredState)
 		}
 		if reconcileErr != nil {
-			_ = model.MarkBillingLedgerForReconcile(ledger.ID, ledger.DesiredState, ledger.DesiredQuota, reconcileErr)
+			_, _ = model.MarkBillingLedgerReconcileRetryContext(
+				ctx,
+				ledger.ID,
+				ledger.Version,
+				ledger.DesiredState,
+				ledger.DesiredQuota,
+				reconcileErr,
+			)
+			continue
+		}
+		if !applied {
 			continue
 		}
 		model.InvalidateBillingBalanceCaches(ledger.UserID, ledger.TokenID)

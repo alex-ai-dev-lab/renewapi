@@ -301,7 +301,9 @@ func AcknowledgeBillingLedgerTask(id uint64, targetQuota int64, task *Task) (*Bi
 	if targetQuota < 0 {
 		return nil, errors.New("billing target quota cannot be negative")
 	}
+
 	var result BillingLedger
+	var acknowledged Task
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		ledger, err := lockBillingLedgerTx(tx, id)
 		if err != nil {
@@ -310,54 +312,111 @@ func AcknowledgeBillingLedgerTask(id uint64, targetQuota int64, task *Task) (*Bi
 		if ledger.State == BillingLedgerStateRefunded {
 			return errors.New("refunded billing ledger cannot acknowledge an upstream task")
 		}
+
 		var current Task
-		if err := lockForUpdate(tx).Where("id = ? AND billing_ledger_id = ?", task.ID, id).First(&current).Error; err != nil {
+		if err := lockForUpdate(tx).
+			Where("id = ? AND billing_ledger_id = ?", task.ID, id).
+			First(&current).Error; err != nil {
 			return err
 		}
-		if ledger.State == BillingLedgerStateSettled && ledger.AppliedQuota == targetQuota {
-			result = *ledger
+
+		now := time.Now().Unix()
+		// prepared task 是上游请求前已经持久化的身份、路由、模型和计费快照。
+		// acknowledgement 只补充上游受理后产生的运行态字段。
+		merged := current
+		merged.UpdatedAt = now
+		if task.Status != "" {
+			merged.Status = task.Status
+		}
+		if task.FailReason != "" {
+			merged.FailReason = task.FailReason
+		}
+		if task.StartTime != 0 {
+			merged.StartTime = task.StartTime
+		}
+		if task.FinishTime != 0 {
+			merged.FinishTime = task.FinishTime
+		}
+		if task.Progress != "" {
+			merged.Progress = task.Progress
+		}
+		if task.PrivateData.UpstreamTaskID != "" {
+			merged.PrivateData.UpstreamTaskID = task.PrivateData.UpstreamTaskID
+		}
+		if task.PrivateData.ResultURL != "" {
+			merged.PrivateData.ResultURL = task.PrivateData.ResultURL
+		}
+		if len(task.Data) > 0 {
+			merged.Data = task.Data
+		}
+
+		merged.BillingLedgerID = ledger.ID
+		merged.Quota = int(targetQuota)
+		persistTask := func() error {
+			update := tx.Model(&Task{}).
+				Where("id = ? AND billing_ledger_id = ?", merged.ID, id).
+				Select("*").
+				Updates(&merged)
+			if update.Error != nil {
+				return update.Error
+			}
+			if update.RowsAffected != 0 {
+				return nil
+			}
+
+			// MySQL 默认可能对同值 UPDATE 返回 0 changed rows。
+			// 前面已经锁定该行，这里只确认记录仍存在，避免把幂等 acknowledgement
+			// 误判成 compare-and-swap 丢失。
+			var count int64
+			if err := tx.Model(&Task{}).
+				Where("id = ? AND billing_ledger_id = ?", merged.ID, id).
+				Count(&count).Error; err != nil {
+				return err
+			}
+			if count != 1 {
+				return errors.New("pending task acknowledgement lost")
+			}
 			return nil
 		}
+
+		// late acknowledgement 可能发生在 reconciler 已完成 settlement 之后。
+		// 此时只补齐 task，不重新打开已经完成的 ledger。
+		if ledger.State == BillingLedgerStateSettled && ledger.AppliedQuota == targetQuota {
+			merged.BillingState = ledger.State
+			merged.BillingVersion = ledger.Version
+			if err := persistTask(); err != nil {
+				return err
+			}
+			result = *ledger
+			acknowledged = merged
+			return nil
+		}
+
 		ledger.Kind = "task"
 		ledger.State = BillingLedgerStateReconcileRequired
 		ledger.DesiredState = BillingLedgerDesiredSettle
 		ledger.DesiredQuota = targetQuota
-		ledger.NextRetryAt = time.Now().Unix()
+		ledger.NextRetryAt = now
 		ledger.LastError = "upstream task accepted; settlement pending"
 		ledger.Version++
-		ledger.UpdatedAt = time.Now().Unix()
+		ledger.UpdatedAt = now
 
-		task.ID = current.ID
-		task.CreatedAt = current.CreatedAt
-		task.UpdatedAt = time.Now().Unix()
-		task.SubmitTime = current.SubmitTime
-
-		// Billing metadata was durably captured before the upstream request.
-		// A fresh acknowledgement object must not erase that snapshot.
-		task.PrivateData.BillingSource = current.PrivateData.BillingSource
-		task.PrivateData.SubscriptionId = current.PrivateData.SubscriptionId
-		task.PrivateData.TokenId = current.PrivateData.TokenId
-		task.PrivateData.BillingContext = current.PrivateData.BillingContext
-		task.BillingLedgerID = ledger.ID
-		task.BillingState = ledger.State
-		task.BillingVersion = ledger.Version
-		task.Quota = int(targetQuota)
-		update := tx.Model(&Task{}).Where("id = ? AND billing_ledger_id = ?", task.ID, id).Select("*").Updates(task)
-		if update.Error != nil {
-			return update.Error
-		}
-		if update.RowsAffected != 1 {
-			return errors.New("pending task acknowledgement lost")
+		merged.BillingState = ledger.State
+		merged.BillingVersion = ledger.Version
+		if err := persistTask(); err != nil {
+			return err
 		}
 		if err := tx.Save(ledger).Error; err != nil {
 			return err
 		}
 		result = *ledger
+		acknowledged = merged
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	*task = acknowledged
 	return &result, nil
 }
 
@@ -524,6 +583,124 @@ func MarkStaleReservedBillingLedgerForReconcileContext(
 			Where("billing_ledger_id = ?", id).
 			Updates(updates).Error
 	})
+}
+
+func ReplayBillingLedgerReconcileContext(
+	ctx context.Context,
+	id uint64,
+	expectedVersion int64,
+	desired string,
+	targetQuota int64,
+	reason string,
+) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if targetQuota < 0 {
+		return false, errors.New("billing target quota cannot be negative")
+	}
+
+	applied := false
+	err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		ledger, err := lockBillingLedgerTx(tx, id)
+		if err != nil {
+			return err
+		}
+		if ledger.State != BillingLedgerStateReconcileRequired ||
+			ledger.Version != expectedVersion ||
+			ledger.DesiredState != desired ||
+			ledger.DesiredQuota != targetQuota {
+			return nil
+		}
+
+		var beforeSave func(*gorm.DB, *BillingLedger) error
+		if desired == BillingLedgerDesiredRefund {
+			beforeSave = func(tx *gorm.DB, ledger *BillingLedger) error {
+				if reason != "" {
+					ledger.LastError = truncateBillingError(reason)
+				}
+				return tx.Model(&Task{}).
+					Where("billing_ledger_id = ? AND status = ?", ledger.ID, TaskStatusNotStart).
+					Updates(map[string]any{
+						"status":      TaskStatusFailure,
+						"progress":    "100%",
+						"fail_reason": truncateBillingError(reason),
+					}).Error
+			}
+		}
+
+		changed, err := mutateLockedBillingLedgerTx(tx, ledger, desired, targetQuota, beforeSave)
+		if err != nil {
+			return err
+		}
+		applied = changed
+		return nil
+	})
+	return applied, err
+}
+
+func MarkBillingLedgerReconcileRetryContext(
+	ctx context.Context,
+	id uint64,
+	expectedVersion int64,
+	desired string,
+	quota int64,
+	cause error,
+) (bool, error) {
+	if id == 0 {
+		return false, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	now := time.Now().Unix()
+	message := ""
+	if cause != nil {
+		message = truncateBillingError(cause.Error())
+	}
+
+	marked := false
+	err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		ledger, err := lockBillingLedgerTx(tx, id)
+		if err != nil {
+			return err
+		}
+		if ledger.State != BillingLedgerStateReconcileRequired ||
+			ledger.Version != expectedVersion ||
+			ledger.DesiredState != desired ||
+			ledger.DesiredQuota != quota {
+			return nil
+		}
+
+		ledger.LastError = message
+		ledger.Attempts++
+		ledger.NextRetryAt = now + billingRetryDelay(ledger.Attempts)
+		ledger.UpdatedAt = now
+		ledger.Version++
+		if err := tx.Save(ledger).Error; err != nil {
+			return err
+		}
+
+		updates := map[string]any{
+			"billing_state":   BillingLedgerStateReconcileRequired,
+			"billing_version": ledger.Version,
+		}
+		if err := tx.Model(&Task{}).
+			Where("billing_ledger_id = ?", id).
+			Updates(updates).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&Midjourney{}).
+			Where("billing_ledger_id = ?", id).
+			Updates(updates).Error; err != nil {
+			return err
+		}
+
+		marked = true
+		return nil
+	})
+	return marked, err
 }
 
 func ReserveMoreBillingLedger(id uint64, targetQuota int64) (*BillingLedger, error) {

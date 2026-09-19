@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -562,21 +563,35 @@ func TestRefundSubscriptionPreConsumeUsesOwningTransaction(t *testing.T) {
 func TestPreparedTaskAcknowledgementSurvivesSettlementRetry(t *testing.T) {
 	fixture := setupBillingLedgerTest(t)
 	reservation := reserveWalletLedger(t, fixture, "req-prepared-task", 400)
+
 	prepared := Task{
-		TaskID:    "task-prepared",
-		UserId:    fixture.user.Id,
-		ChannelId: fixture.channel.Id,
-		Status:    TaskStatusNotStart,
-		Progress:  "0%",
-		Quota:     400,
+		TaskID:     "task-prepared-public",
+		Platform:   "prepared-platform",
+		UserId:     fixture.user.Id,
+		Group:      "prepared-group",
+		ChannelId:  fixture.channel.Id,
+		Action:     "prepared-action",
+		Status:     TaskStatusNotStart,
+		SubmitTime: 123456789,
+		Progress:   "0%",
+		Quota:      400,
+		Properties: Properties{
+			Input:             "prepared-input",
+			UpstreamModelName: "prepared-upstream-model",
+			OriginModelName:   "prepared-origin-model",
+		},
 		PrivateData: TaskPrivateData{
-			BillingSource: "wallet",
-			TokenId:       fixture.token.Id,
+			Key:            "prepared-private-key",
+			BillingSource:  "wallet",
+			SubscriptionId: 77,
+			TokenId:        fixture.token.Id,
 			BillingContext: &TaskBillingContext{
 				ModelPrice:      2.5,
 				GroupRatio:      1.2,
 				ModelRatio:      1.5,
+				OtherRatios:     map[string]float64{"duration": 2},
 				OriginModelName: "prepared-video-model",
+				PerCallBilling:  true,
 			},
 		},
 	}
@@ -584,14 +599,37 @@ func TestPreparedTaskAcknowledgementSurvivesSettlementRetry(t *testing.T) {
 	require.NotZero(t, prepared.ID)
 
 	ack := Task{
-		ID:        prepared.ID,
-		TaskID:    prepared.TaskID,
-		UserId:    prepared.UserId,
-		ChannelId: prepared.ChannelId,
-		Status:    TaskStatusSubmitted,
-		Progress:  "0%",
+		ID:         prepared.ID,
+		TaskID:     "ack-must-not-replace-public-id",
+		Platform:   "ack-platform",
+		UserId:     prepared.UserId + 100,
+		Group:      "ack-group",
+		ChannelId:  prepared.ChannelId + 100,
+		Quota:      999,
+		Action:     "ack-action",
+		Status:     TaskStatusSubmitted,
+		SubmitTime: prepared.SubmitTime + 100,
+		StartTime:  prepared.SubmitTime + 1,
+		FinishTime: prepared.SubmitTime + 2,
+		Progress:   "10%",
+		Properties: Properties{
+			Input:             "ack-input",
+			UpstreamModelName: "ack-upstream-model",
+			OriginModelName:   "ack-origin-model",
+		},
 		PrivateData: TaskPrivateData{
+			Key:            "ack-private-key",
 			UpstreamTaskID: "upstream-accepted-1",
+			ResultURL:      "https://example.invalid/result",
+			BillingSource:  "ack-source",
+			SubscriptionId: 999,
+			TokenId:        999,
+			BillingContext: &TaskBillingContext{
+				ModelPrice:      99,
+				GroupRatio:      99,
+				ModelRatio:      99,
+				OriginModelName: "ack-model",
+			},
 		},
 		Data: []byte(`{"id":"upstream-accepted-1"}`),
 	}
@@ -600,22 +638,310 @@ func TestPreparedTaskAcknowledgementSurvivesSettlementRetry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, BillingLedgerStateReconcileRequired, acknowledged.State)
 
+	// 调用者拿到的 task 也必须是合并后的持久化身份，而不是 fresh object。
+	require.Equal(t, prepared.TaskID, ack.TaskID)
+	require.Equal(t, prepared.Platform, ack.Platform)
+	require.Equal(t, prepared.UserId, ack.UserId)
+	require.Equal(t, prepared.Group, ack.Group)
+	require.Equal(t, prepared.ChannelId, ack.ChannelId)
+	require.Equal(t, prepared.Action, ack.Action)
+	require.Equal(t, prepared.SubmitTime, ack.SubmitTime)
+	require.Equal(t, prepared.Properties, ack.Properties)
+	require.Equal(t, prepared.PrivateData.Key, ack.PrivateData.Key)
+	require.Equal(t, prepared.PrivateData.BillingSource, ack.PrivateData.BillingSource)
+	require.Equal(t, prepared.PrivateData.SubscriptionId, ack.PrivateData.SubscriptionId)
+	require.Equal(t, prepared.PrivateData.TokenId, ack.PrivateData.TokenId)
+	require.Equal(t, prepared.PrivateData.BillingContext, ack.PrivateData.BillingContext)
+
+	require.Equal(t, TaskStatus(TaskStatusSubmitted), ack.Status)
+	require.Equal(t, "10%", ack.Progress)
+	require.Equal(t, prepared.SubmitTime+1, ack.StartTime)
+	require.Equal(t, prepared.SubmitTime+2, ack.FinishTime)
+	require.Equal(t, "upstream-accepted-1", ack.PrivateData.UpstreamTaskID)
+	require.Equal(t, "https://example.invalid/result", ack.PrivateData.ResultURL)
+	require.Equal(t, 300, ack.Quota)
+
 	settled, err := SettleBillingLedger(reservation.Ledger.ID, 300)
 	require.NoError(t, err)
 	require.Equal(t, BillingLedgerStateSettled, settled.State)
+
 	var stored Task
 	require.NoError(t, DB.First(&stored, prepared.ID).Error)
+
+	require.Equal(t, prepared.TaskID, stored.TaskID)
+	require.Equal(t, prepared.Platform, stored.Platform)
+	require.Equal(t, prepared.UserId, stored.UserId)
+	require.Equal(t, prepared.Group, stored.Group)
+	require.Equal(t, prepared.ChannelId, stored.ChannelId)
+	require.Equal(t, prepared.Action, stored.Action)
+	require.Equal(t, prepared.SubmitTime, stored.SubmitTime)
+	require.Equal(t, prepared.Properties, stored.Properties)
+
+	require.Equal(t, "prepared-private-key", stored.PrivateData.Key)
 	require.Equal(t, "upstream-accepted-1", stored.PrivateData.UpstreamTaskID)
 	require.Equal(t, "wallet", stored.PrivateData.BillingSource)
+	require.Equal(t, 77, stored.PrivateData.SubscriptionId)
 	require.Equal(t, fixture.token.Id, stored.PrivateData.TokenId)
-	require.NotNil(t, stored.PrivateData.BillingContext)
-	require.Equal(t, 2.5, stored.PrivateData.BillingContext.ModelPrice)
-	require.Equal(t, 1.2, stored.PrivateData.BillingContext.GroupRatio)
-	require.Equal(t, 1.5, stored.PrivateData.BillingContext.ModelRatio)
-	require.Equal(t, "prepared-video-model", stored.PrivateData.BillingContext.OriginModelName)
+	require.Equal(t, prepared.PrivateData.BillingContext, stored.PrivateData.BillingContext)
+
+	require.Equal(t, TaskStatus(TaskStatusSubmitted), stored.Status)
+	require.Equal(t, "10%", stored.Progress)
+	require.Equal(t, prepared.SubmitTime+1, stored.StartTime)
+	require.Equal(t, prepared.SubmitTime+2, stored.FinishTime)
+	require.Equal(t, "https://example.invalid/result", stored.PrivateData.ResultURL)
 	require.JSONEq(t, `{"id":"upstream-accepted-1"}`, string(stored.Data))
+
+	require.Equal(t, 300, stored.Quota)
 	require.Equal(t, BillingLedgerStateSettled, stored.BillingState)
+	require.Equal(t, settled.Version, stored.BillingVersion)
 	assertLedgerBalances(t, fixture, 700, 300, 300, 300)
+}
+
+func TestBillingLedgerReconcileSnapshotFence(t *testing.T) {
+	t.Run("stale refund snapshot cannot undo newer settlement", func(t *testing.T) {
+		fixture := setupBillingLedgerTest(t)
+		reservation := reserveWalletLedger(t, fixture, "req-reconcile-stale-settlement", 400)
+
+		require.NoError(t, MarkBillingLedgerForReconcile(
+			reservation.Ledger.ID,
+			BillingLedgerDesiredRefund,
+			0,
+			fmt.Errorf("refund retry required"),
+		))
+
+		snapshot, err := GetBillingLedger(reservation.Ledger.ID)
+		require.NoError(t, err)
+		require.Equal(t, BillingLedgerStateReconcileRequired, snapshot.State)
+
+		settled, err := SettleBillingLedger(reservation.Ledger.ID, 300)
+		require.NoError(t, err)
+		require.Equal(t, BillingLedgerStateSettled, settled.State)
+		require.Greater(t, settled.Version, snapshot.Version)
+
+		applied, err := ReplayBillingLedgerReconcileContext(
+			nil,
+			snapshot.ID,
+			snapshot.Version,
+			snapshot.DesiredState,
+			snapshot.DesiredQuota,
+			snapshot.LastError,
+		)
+		require.NoError(t, err)
+		require.False(t, applied)
+
+		marked, err := MarkBillingLedgerReconcileRetryContext(
+			nil,
+			snapshot.ID,
+			snapshot.Version,
+			snapshot.DesiredState,
+			snapshot.DesiredQuota,
+			fmt.Errorf("stale replay failure"),
+		)
+		require.NoError(t, err)
+		require.False(t, marked)
+
+		stored, err := GetBillingLedger(reservation.Ledger.ID)
+		require.NoError(t, err)
+		require.Equal(t, BillingLedgerStateSettled, stored.State)
+		require.Equal(t, settled.Version, stored.Version)
+		require.EqualValues(t, 300, stored.AppliedQuota)
+
+		assertLedgerBalances(t, fixture, 700, 300, 300, 300)
+	})
+
+	t.Run("stale settle snapshot cannot cross newer acknowledgement", func(t *testing.T) {
+		fixture := setupBillingLedgerTest(t)
+		reservation := reserveWalletLedger(t, fixture, "req-reconcile-stale-ack", 400)
+
+		prepared := Task{
+			TaskID:    "task-reconcile-ack",
+			UserId:    fixture.user.Id,
+			ChannelId: fixture.channel.Id,
+			Status:    TaskStatusNotStart,
+			Progress:  "0%",
+		}
+		require.NoError(t, BindBillingLedgerTask(reservation.Ledger.ID, &prepared))
+
+		firstAck := Task{
+			ID:       prepared.ID,
+			Status:   TaskStatusSubmitted,
+			Progress: "0%",
+			PrivateData: TaskPrivateData{
+				UpstreamTaskID: "upstream-first",
+			},
+		}
+		ledger, err := AcknowledgeBillingLedgerTask(reservation.Ledger.ID, 300, &firstAck)
+		require.NoError(t, err)
+		require.Equal(t, BillingLedgerStateReconcileRequired, ledger.State)
+
+		snapshot, err := GetBillingLedger(reservation.Ledger.ID)
+		require.NoError(t, err)
+
+		lateAck := Task{
+			ID:       prepared.ID,
+			Status:   TaskStatusSubmitted,
+			Progress: "5%",
+			PrivateData: TaskPrivateData{
+				UpstreamTaskID: "upstream-late",
+			},
+		}
+		newer, err := AcknowledgeBillingLedgerTask(reservation.Ledger.ID, 300, &lateAck)
+		require.NoError(t, err)
+		require.Equal(t, BillingLedgerStateReconcileRequired, newer.State)
+		require.Greater(t, newer.Version, snapshot.Version)
+
+		applied, err := ReplayBillingLedgerReconcileContext(
+			nil,
+			snapshot.ID,
+			snapshot.Version,
+			snapshot.DesiredState,
+			snapshot.DesiredQuota,
+			snapshot.LastError,
+		)
+		require.NoError(t, err)
+		require.False(t, applied)
+
+		marked, err := MarkBillingLedgerReconcileRetryContext(
+			nil,
+			snapshot.ID,
+			snapshot.Version,
+			snapshot.DesiredState,
+			snapshot.DesiredQuota,
+			fmt.Errorf("stale replay failure"),
+		)
+		require.NoError(t, err)
+		require.False(t, marked)
+
+		stored, err := GetBillingLedger(reservation.Ledger.ID)
+		require.NoError(t, err)
+		require.Equal(t, BillingLedgerStateReconcileRequired, stored.State)
+		require.Equal(t, newer.Version, stored.Version)
+
+		var task Task
+		require.NoError(t, DB.First(&task, prepared.ID).Error)
+		require.Equal(t, "upstream-late", task.PrivateData.UpstreamTaskID)
+		require.Equal(t, "5%", task.Progress)
+
+		assertLedgerBalances(t, fixture, 600, 0, 400, 0)
+	})
+
+	t.Run("matching settle snapshot applies", func(t *testing.T) {
+		fixture := setupBillingLedgerTest(t)
+		reservation := reserveWalletLedger(t, fixture, "req-reconcile-matching-settle", 400)
+
+		require.NoError(t, MarkBillingLedgerForReconcile(
+			reservation.Ledger.ID,
+			BillingLedgerDesiredSettle,
+			300,
+			fmt.Errorf("settle retry required"),
+		))
+
+		snapshot, err := GetBillingLedger(reservation.Ledger.ID)
+		require.NoError(t, err)
+
+		applied, err := ReplayBillingLedgerReconcileContext(
+			nil,
+			snapshot.ID,
+			snapshot.Version,
+			snapshot.DesiredState,
+			snapshot.DesiredQuota,
+			snapshot.LastError,
+		)
+		require.NoError(t, err)
+		require.True(t, applied)
+
+		stored, err := GetBillingLedger(reservation.Ledger.ID)
+		require.NoError(t, err)
+		require.Equal(t, BillingLedgerStateSettled, stored.State)
+		require.EqualValues(t, 300, stored.AppliedQuota)
+
+		assertLedgerBalances(t, fixture, 700, 300, 300, 300)
+	})
+
+	t.Run("matching refund snapshot applies", func(t *testing.T) {
+		fixture := setupBillingLedgerTest(t)
+		reservation := reserveWalletLedger(t, fixture, "req-reconcile-matching-refund", 400)
+
+		require.NoError(t, MarkBillingLedgerForReconcile(
+			reservation.Ledger.ID,
+			BillingLedgerDesiredRefund,
+			0,
+			fmt.Errorf("refund retry required"),
+		))
+
+		snapshot, err := GetBillingLedger(reservation.Ledger.ID)
+		require.NoError(t, err)
+
+		applied, err := ReplayBillingLedgerReconcileContext(
+			nil,
+			snapshot.ID,
+			snapshot.Version,
+			snapshot.DesiredState,
+			snapshot.DesiredQuota,
+			snapshot.LastError,
+		)
+		require.NoError(t, err)
+		require.True(t, applied)
+
+		stored, err := GetBillingLedger(reservation.Ledger.ID)
+		require.NoError(t, err)
+		require.Equal(t, BillingLedgerStateRefunded, stored.State)
+		require.Zero(t, stored.AppliedQuota)
+
+		assertLedgerBalances(t, fixture, 1000, 0, 0, 0)
+	})
+
+	t.Run("matching retry marker advances version once", func(t *testing.T) {
+		fixture := setupBillingLedgerTest(t)
+		reservation := reserveWalletLedger(t, fixture, "req-reconcile-retry-marker", 400)
+
+		require.NoError(t, MarkBillingLedgerForReconcile(
+			reservation.Ledger.ID,
+			BillingLedgerDesiredSettle,
+			300,
+			fmt.Errorf("initial settlement failure"),
+		))
+
+		snapshot, err := GetBillingLedger(reservation.Ledger.ID)
+		require.NoError(t, err)
+
+		marked, err := MarkBillingLedgerReconcileRetryContext(
+			nil,
+			snapshot.ID,
+			snapshot.Version,
+			snapshot.DesiredState,
+			snapshot.DesiredQuota,
+			fmt.Errorf("replay failed"),
+		)
+		require.NoError(t, err)
+		require.True(t, marked)
+
+		afterRetry, err := GetBillingLedger(reservation.Ledger.ID)
+		require.NoError(t, err)
+		require.Equal(t, BillingLedgerStateReconcileRequired, afterRetry.State)
+		require.Equal(t, snapshot.Version+1, afterRetry.Version)
+		require.Equal(t, snapshot.DesiredState, afterRetry.DesiredState)
+		require.Equal(t, snapshot.DesiredQuota, afterRetry.DesiredQuota)
+		require.ErrorContains(t, errors.New(afterRetry.LastError), "replay failed")
+
+		marked, err = MarkBillingLedgerReconcileRetryContext(
+			nil,
+			snapshot.ID,
+			snapshot.Version,
+			snapshot.DesiredState,
+			snapshot.DesiredQuota,
+			fmt.Errorf("stale retry must not win"),
+		)
+		require.NoError(t, err)
+		require.False(t, marked)
+
+		stored, err := GetBillingLedger(reservation.Ledger.ID)
+		require.NoError(t, err)
+		require.Equal(t, afterRetry.Version, stored.Version)
+		require.Equal(t, afterRetry.LastError, stored.LastError)
+
+		assertLedgerBalances(t, fixture, 600, 0, 400, 0)
+	})
 }
 
 func TestStaleReservedBillingLedgerUsesUpdatedAtAndVersionFence(t *testing.T) {

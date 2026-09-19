@@ -36,6 +36,7 @@ func newCORSMiddleware(serverAddress string, frontendBaseURL string, debug bool)
 		"GET",
 		"POST",
 		"PUT",
+		"PATCH",
 		"DELETE",
 		"OPTIONS",
 	}

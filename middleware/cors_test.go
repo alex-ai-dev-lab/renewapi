@@ -143,6 +143,29 @@ func TestCORSAllowedPreflight(t *testing.T) {
 	}
 }
 
+func TestCORSAllowedPatchPreflight(t *testing.T) {
+	router := newCORSTestRouter("https://api.example.com", "https://app.example.com", false)
+
+	request := httptest.NewRequest(http.MethodOptions, "/test", nil)
+	request.Host = "api.example.com"
+	request.Header.Set("Origin", "https://app.example.com")
+	request.Header.Set("Access-Control-Request-Method", http.MethodPatch)
+	request.Header.Set("Access-Control-Request-Headers", "Content-Type")
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("PATCH preflight status = %d, want %d", response.Code, http.StatusNoContent)
+	}
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "https://app.example.com" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want %q", got, "https://app.example.com")
+	}
+	if !headerContainsToken(response.Header().Get("Access-Control-Allow-Methods"), http.MethodPatch) {
+		t.Fatalf("Access-Control-Allow-Methods = %q, missing PATCH", response.Header().Get("Access-Control-Allow-Methods"))
+	}
+}
+
 func TestCORSRejectsUntrustedOrigin(t *testing.T) {
 	router := newCORSTestRouter("https://api.example.com", "https://app.example.com", false)
 

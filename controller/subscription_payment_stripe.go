@@ -21,6 +21,13 @@ type SubscriptionStripePayRequest struct {
 }
 
 func SubscriptionRequestStripePay(c *gin.Context) {
+	subscriptionRequestStripePayWithCheckout(c, genStripeSubscriptionLink)
+}
+
+func subscriptionRequestStripePayWithCheckout(
+	c *gin.Context,
+	createCheckout func(referenceId string, customerId string, email string, priceId string) (string, error),
+) {
 	if !requirePaymentCompliance(c) {
 		return
 	}
@@ -79,13 +86,6 @@ func SubscriptionRequestStripePay(c *gin.Context) {
 	reference := fmt.Sprintf("sub-stripe-ref-%d-%d-%s", user.Id, time.Now().UnixMilli(), randstr.String(4))
 	referenceId := "sub_ref_" + common.Sha1([]byte(reference))
 
-	payLink, err := genStripeSubscriptionLink(referenceId, user.StripeCustomer, user.Email, plan.StripePriceId)
-	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe 订阅支付链接创建失败 trade_no=%s plan_id=%d error=%q", referenceId, plan.Id, err.Error()))
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "拉起支付失败"})
-		return
-	}
-
 	order := &model.SubscriptionOrder{
 		UserId:          userId,
 		PlanId:          plan.Id,
@@ -98,6 +98,18 @@ func SubscriptionRequestStripePay(c *gin.Context) {
 	}
 	if err := order.Insert(); err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建订单失败"})
+		return
+	}
+
+	payLink, err := createCheckout(referenceId, user.StripeCustomer, user.Email, plan.StripePriceId)
+	if err != nil {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe 订阅支付链接创建失败 trade_no=%s plan_id=%d error=%q", referenceId, plan.Id, err.Error()))
+		order.Status = common.TopUpStatusFailed
+		order.CompleteTime = common.GetTimestamp()
+		if updateErr := order.Update(); updateErr != nil {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe 订阅订单标记失败状态失败 trade_no=%s plan_id=%d error=%q", referenceId, plan.Id, updateErr.Error()))
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "拉起支付失败"})
 		return
 	}
 

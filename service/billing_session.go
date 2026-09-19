@@ -41,8 +41,9 @@ type BillingSession struct {
 }
 
 // Settle 根据实际消耗额度进行结算。
-// 资金来源和令牌额度分两步提交：若资金来源已提交但令牌调整失败，
-// 会标记 fundingSettled 防止 Refund 对已提交的资金来源执行退款。
+// Shadow/enforce ledger sessions apply funding and token legs atomically in
+// model.BillingLedger. The legacy two-step path remains only for explicit
+// BILLING_LEDGER_MODE=off compatibility.
 func (s *BillingSession) Settle(actualQuota int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -50,22 +51,18 @@ func (s *BillingSession) Settle(actualQuota int) error {
 		return nil
 	}
 	delta := actualQuota - s.preConsumedQuota
-	if s.ledgerID != 0 {
+	if s.usesPersistentBalanceLedger() {
 		if _, err := model.SettleBillingLedger(s.ledgerID, int64(actualQuota)); err != nil {
 			_ = model.MarkBillingLedgerForReconcile(s.ledgerID, model.BillingLedgerDesiredSettle, int64(actualQuota), err)
-			if ledgerModeOwnsBalances(s.ledgerMode) {
-				return err
-			}
-			common.SysLog("shadow billing ledger settle failed: " + err.Error())
-		} else if ledgerModeOwnsBalances(s.ledgerMode) {
-			if s.funding.Source() == BillingSourceSubscription {
-				s.relayInfo.SubscriptionPostDelta += int64(delta)
-			}
-			s.fundingSettled = true
-			s.settled = true
-			model.InvalidateBillingBalanceCaches(s.relayInfo.UserId, s.relayInfo.TokenId)
-			return nil
+			return err
 		}
+		if s.funding.Source() == BillingSourceSubscription {
+			s.relayInfo.SubscriptionPostDelta += int64(delta)
+		}
+		s.fundingSettled = true
+		s.settled = true
+		model.InvalidateBillingBalanceCaches(s.relayInfo.UserId, s.relayInfo.TokenId)
+		return nil
 	}
 	if delta == 0 {
 		s.settled = true
@@ -87,9 +84,9 @@ func (s *BillingSession) Settle(actualQuota int) error {
 			tokenErr = model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, -delta)
 		}
 		if tokenErr != nil {
-			// 资金来源已提交，令牌调整失败只能记录日志；标记 settled 防止 Refund 误退资金
-			common.SysLog(fmt.Sprintf("error adjusting token quota after funding settled (userId=%d, tokenId=%d, delta=%d): %s",
-				s.relayInfo.UserId, s.relayInfo.TokenId, delta, tokenErr.Error()))
+			// Explicit off mode retains the historical path, but never hides the
+			// failure behind a terminal in-memory state.
+			return tokenErr
 		}
 	}
 	// 3) 更新 relayInfo 上的订阅 PostDelta（用于日志）
@@ -97,7 +94,7 @@ func (s *BillingSession) Settle(actualQuota int) error {
 		s.relayInfo.SubscriptionPostDelta += int64(delta)
 	}
 	s.settled = true
-	return tokenErr
+	return nil
 }
 
 // Refund 退还所有预扣费，幂等安全，异步执行。
@@ -107,7 +104,6 @@ func (s *BillingSession) Refund(c *gin.Context) {
 		s.mu.Unlock()
 		return
 	}
-	s.refunded = true
 	s.mu.Unlock()
 
 	logger.LogInfo(c, fmt.Sprintf("用户 %d 请求失败, 返还预扣费（token_quota=%s, funding=%s）",
@@ -124,17 +120,25 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	extraReserved := s.extraReserved
 	subscriptionId := s.relayInfo.SubscriptionId
 	funding := s.funding
-	if s.ledgerID != 0 {
+	if s.usesPersistentBalanceLedger() {
 		_, err := model.RefundBillingLedger(s.ledgerID, "request failed before settlement")
 		if err != nil {
 			_ = model.MarkBillingLedgerForReconcile(s.ledgerID, model.BillingLedgerDesiredRefund, 0, err)
 			common.SysLog("error refunding billing ledger: " + err.Error())
-		} else if ledgerModeOwnsBalances(s.ledgerMode) {
-			model.InvalidateBillingBalanceCaches(s.relayInfo.UserId, s.relayInfo.TokenId)
 			return
 		}
+		s.mu.Lock()
+		s.refunded = true
+		s.mu.Unlock()
+		model.InvalidateBillingBalanceCaches(s.relayInfo.UserId, s.relayInfo.TokenId)
+		return
 	}
 
+	// Explicit off mode retains the legacy asynchronous refund path. It is not
+	// the default and has no durable ledger to coordinate with.
+	s.mu.Lock()
+	s.refunded = true
+	s.mu.Unlock()
 	gopool.Go(func() {
 		// 1) 退还资金来源
 		if err := funding.Refund(); err != nil {
@@ -194,7 +198,7 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 		return nil
 	}
 
-	if ledgerModeOwnsBalances(s.ledgerMode) && s.ledgerID != 0 {
+	if s.usesPersistentBalanceLedger() {
 		if _, err := model.ReserveMoreBillingLedger(s.ledgerID, int64(targetQuota)); err != nil {
 			_ = model.MarkBillingLedgerForReconcile(s.ledgerID, model.BillingLedgerDesiredSettle, int64(s.preConsumedQuota), err)
 			return err
@@ -219,11 +223,6 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 	s.tokenConsumed += delta
 	s.extraReserved += delta
 	s.syncRelayInfo()
-	if s.ledgerID != 0 {
-		if _, err := model.ReserveMoreBillingLedger(s.ledgerID, int64(targetQuota)); err != nil {
-			common.SysLog("shadow billing ledger reserve failed: " + err.Error())
-		}
-	}
 	return nil
 }
 
@@ -245,7 +244,7 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 		logger.LogInfo(c, fmt.Sprintf("用户 %d 需要预扣费 %s (funding=%s)", s.relayInfo.UserId, logger.FormatQuota(effectiveQuota), s.funding.Source()))
 	}
 
-	if ledgerModeOwnsBalances(s.ledgerMode) {
+	if s.ledgerMode != BillingLedgerModeOff {
 		channelID := common.GetContextKeyInt(c, constant.ContextKeyChannelId)
 		if s.relayInfo.ChannelMeta != nil && s.relayInfo.ChannelMeta.ChannelId > 0 {
 			channelID = s.relayInfo.ChannelMeta.ChannelId
@@ -272,6 +271,8 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 		return nil
 	}
 
+	// Explicit off mode keeps the legacy compatibility path. The default
+	// shadow mode is handled by the durable reservation above.
 	// ---- 1) 预扣令牌额度 ----
 	if effectiveQuota > 0 {
 		if err := PreConsumeTokenQuota(s.relayInfo, effectiveQuota); err != nil {
@@ -299,25 +300,6 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 	}
 
 	s.preConsumedQuota = effectiveQuota
-	if s.ledgerMode == BillingLedgerModeShadow {
-		subscriptionID := 0
-		if funding, ok := s.funding.(*SubscriptionFunding); ok {
-			subscriptionID = funding.subscriptionId
-		}
-		reservation, ledgerErr := model.ReserveBillingLedger(model.BillingReservation{
-			RequestID: s.relayInfo.RequestId, Kind: "request", Mode: s.ledgerMode,
-			FundingSource: s.funding.Source(), UserID: s.relayInfo.UserId,
-			TokenID: s.relayInfo.TokenId, ChannelID: s.relayInfo.ChannelId,
-			SubscriptionID: subscriptionID, Quota: int64(effectiveQuota),
-			TokenUnlimited: s.relayInfo.TokenUnlimited, Playground: s.relayInfo.IsPlayground,
-			ApplyBalances: false,
-		})
-		if ledgerErr != nil {
-			common.SysLog("shadow billing ledger reservation failed: " + ledgerErr.Error())
-		} else {
-			s.ledgerID = reservation.Ledger.ID
-		}
-	}
 
 	// ---- 同步 RelayInfo 兼容字段 ----
 	s.syncRelayInfo()
@@ -329,14 +311,18 @@ func (s *BillingSession) ownsLedgerAccounting() bool {
 	return s != nil && s.ledgerID != 0 && ledgerModeOwnsBalances(s.ledgerMode)
 }
 
+func (s *BillingSession) usesPersistentBalanceLedger() bool {
+	return s != nil && s.ledgerID != 0 && s.ledgerMode != BillingLedgerModeOff
+}
+
 func (s *BillingSession) settleWithTask(task *model.Task, actualQuota int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.settled {
 		return errors.New("billing session is already settled before task insertion")
 	}
-	if !s.ownsLedgerAccounting() {
-		return errors.New("billing session does not own ledger accounting")
+	if !s.usesPersistentBalanceLedger() {
+		return errors.New("billing session does not use a persistent balance ledger")
 	}
 	delta := actualQuota - s.preConsumedQuota
 	var ledger *model.BillingLedger
@@ -370,7 +356,7 @@ func (s *BillingSession) settleWithTask(task *model.Task, actualQuota int) error
 func (s *BillingSession) prepareTask(task *model.Task) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.ownsLedgerAccounting() {
+	if !s.usesPersistentBalanceLedger() {
 		return nil
 	}
 	if s.pendingTaskID > 0 {
@@ -390,8 +376,8 @@ func (s *BillingSession) settleWithMidjourney(task *model.Midjourney, actualQuot
 	if s.settled {
 		return errors.New("billing session is already settled before midjourney task insertion")
 	}
-	if !s.ownsLedgerAccounting() {
-		return errors.New("billing session does not own ledger accounting")
+	if !s.usesPersistentBalanceLedger() {
+		return errors.New("billing session does not use a persistent balance ledger")
 	}
 	delta := actualQuota - s.preConsumedQuota
 	ledger, err := model.SettleBillingLedgerWithMidjourney(s.ledgerID, int64(actualQuota), task)

@@ -37,27 +37,34 @@ type BillingAuditEvent struct {
 }
 
 type billingEventPayload struct {
-	LedgerID       uint64 `json:"ledger_id"`
-	RequestID      string `json:"request_id"`
-	Kind           string `json:"kind"`
-	Mode           string `json:"mode"`
-	State          string `json:"state"`
-	FundingSource  string `json:"funding_source"`
-	UserID         int    `json:"user_id"`
-	TokenID        int    `json:"token_id"`
-	ChannelID      int    `json:"channel_id"`
-	SubscriptionID int    `json:"subscription_id"`
-	ReservedQuota  int64  `json:"reserved_quota"`
-	ActualQuota    int64  `json:"actual_quota"`
-	AppliedQuota   int64  `json:"applied_quota"`
-	Version        int64  `json:"version"`
+	LedgerID          uint64 `json:"ledger_id"`
+	RequestID         string `json:"request_id"`
+	Kind              string `json:"kind"`
+	Mode              string `json:"mode"`
+	State             string `json:"state"`
+	FundingSource     string `json:"funding_source"`
+	UserID            int    `json:"user_id"`
+	TokenID           int    `json:"token_id"`
+	ChannelID         int    `json:"channel_id"`
+	SubscriptionID    int    `json:"subscription_id"`
+	ReservedQuota     int64  `json:"reserved_quota"`
+	ActualQuota       int64  `json:"actual_quota"`
+	AppliedQuota      int64  `json:"applied_quota"`
+	FundingState      string `json:"funding_state"`
+	TokenState        string `json:"token_state"`
+	SubscriptionState string `json:"subscription_state"`
+	StatisticsState   string `json:"statistics_state"`
+	Version           int64  `json:"version"`
 }
 
 func enqueueBillingOutboxTx(tx *gorm.DB, ledger *BillingLedger, eventType string) error {
 	payload, err := common.Marshal(billingEventPayload{
 		LedgerID: ledger.ID, RequestID: ledger.RequestID, Kind: ledger.Kind, Mode: ledger.Mode, State: ledger.State,
 		FundingSource: ledger.FundingSource, UserID: ledger.UserID, TokenID: ledger.TokenID, ChannelID: ledger.ChannelID, SubscriptionID: ledger.SubscriptionID,
-		ReservedQuota: ledger.ReservedQuota, ActualQuota: ledger.ActualQuota, AppliedQuota: ledger.AppliedQuota, Version: ledger.Version,
+		ReservedQuota: ledger.ReservedQuota, ActualQuota: ledger.ActualQuota, AppliedQuota: ledger.AppliedQuota,
+		FundingState: ledger.FundingState, TokenState: ledger.TokenState,
+		SubscriptionState: ledger.SubscriptionState, StatisticsState: ledger.StatisticsState,
+		Version: ledger.Version,
 	})
 	if err != nil {
 		return err

@@ -325,6 +325,7 @@ func mainSchemaMigrationDefinitions() []schemaMigrationDefinition {
 	return []schemaMigrationDefinition{
 		{Key: "core-schema:v1", Revision: "2026-07-28.1", Apply: migrateCoreSchemaV1},
 		{Key: "billing-ledger:v1", Revision: "2026-07-28.1", Apply: migrateBillingLedgerV1},
+		{Key: "billing-ledger:v2", Revision: "2026-08-17.1", Apply: migrateBillingLedgerV2},
 		{Key: "channel-config:v1", Revision: "2026-07-28.1", Apply: migrateChannelConfigV1},
 		{Key: "responses-capability:v1", Revision: "2026-07-28.1", Apply: migrateResponsesCapabilityV1},
 		{Key: "request-guard-events:v1", Revision: "2026-08-14.1", Apply: migrateRequestGuardEventsV1},
@@ -420,6 +421,12 @@ func CheckLogSchema() error {
 
 func migrateBillingLedgerV1() error {
 	return DB.AutoMigrate(&BillingLedger{}, &BillingOutbox{}, &Task{}, &Midjourney{})
+}
+
+func migrateBillingLedgerV2() error {
+	// Additive only: component states are nullable-free fields with defaults so
+	// old ledger rows remain readable by the previous schema during rollout.
+	return DB.AutoMigrate(&BillingLedger{})
 }
 
 func migrateChannelConfigV1() error {

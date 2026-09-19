@@ -1,6 +1,6 @@
 # RenewAPI Project State
 
-Last updated: 2026-08-15
+Last updated: 2026-08-17
 
 ## Current product version
 
@@ -12,7 +12,7 @@ The exact product tag for this version is `renewapi-v1.0.0-rc.2`. Raw
 upstream tag objects and remain untouched.
 
 Development branch:
-`fix/routing-rate-limit-channel-edit-20260814`
+`main`
 
 Release commit:
 `f0f8e6ff034906ebb62a4cd752a47f1cca45d55c`
@@ -63,6 +63,30 @@ See `UPSTREAM.md` and `UPSTREAM_PORTS.md`.
 - Runtime endpoints expose the product version. Git commit, build time, build
   channel, and audited upstream identity remain build/image metadata rather
   than application response fields.
+
+## Full UX and performance audit remediation
+
+Master task: `tasks/active/full-ux-performance-audit.md`
+
+Current release unit: `tasks/active/full-ux-audit-ru-a-billing.md`
+
+- Audit status was corrected against current material evidence: ISSUE-002
+  through ISSUE-010 are confirmed current; ISSUE-001 is partially fixed;
+  deferred P2/P3 issues remain unverified; ISSUE-018 remains runtime-blocked at
+  its original `Highly Likely` confidence pending generated SQL/EXPLAIN.
+- Release Unit A implements durable shadow billing balance transitions for
+  ISSUE-001. The default mode remains `shadow`.
+- New additive migration `billing-ledger:v2` stores funding/token/subscription
+  and statistics component state on `BillingLedger`.
+- Focused SQLite rollback/retry, duplicate transition, reconciler replay,
+  concurrency, shadow-session, subscription-extra, and legacy migration tests
+  pass, as do repository-wide Go test/vet/build checks.
+- Release Unit A is `NOT READY`: MySQL and PostgreSQL were not runnable in the
+  local environment and no hosted run for this checkout was inspected.
+  Process-level crash/restart recovery was also not run. Workflow coverage is
+  not counted as a pass until an actual run succeeds.
+- Product version remains `v1.0.0-rc.2`; `v1.0.0-rc.3` preparation and release
+  validation have not started.
 
 ## Compatibility invariants
 

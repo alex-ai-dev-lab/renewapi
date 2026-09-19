@@ -45,7 +45,7 @@ func PrepareAsyncTaskBilling(relayInfo *relaycommon.RelayInfo, platform constant
 		return nil
 	}
 	session, ok := relayInfo.Billing.(*BillingSession)
-	if !ok || !session.ownsLedgerAccounting() {
+	if !ok || !session.usesPersistentBalanceLedger() {
 		return nil
 	}
 	task := model.InitTask(platform, relayInfo)
@@ -65,13 +65,13 @@ func PrepareAsyncTaskBilling(relayInfo *relaycommon.RelayInfo, platform constant
 	return session.prepareTask(task)
 }
 
-// SettleBillingAndInsertTask atomically settles enforced ledger billing and
-// persists the local async task. Shadow/off modes retain the compatible path.
+// SettleBillingAndInsertTask atomically settles persistent-ledger billing and
+// persists the local async task. Explicit off mode retains the legacy path.
 func SettleBillingAndInsertTask(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuota int, task *model.Task) error {
 	if relayInfo == nil || task == nil {
 		return fmt.Errorf("billing relay info or task is nil")
 	}
-	if session, ok := relayInfo.Billing.(*BillingSession); ok && session.ownsLedgerAccounting() {
+	if session, ok := relayInfo.Billing.(*BillingSession); ok && session.usesPersistentBalanceLedger() {
 		return session.settleWithTask(task, actualQuota)
 	}
 	if err := SettleBilling(ctx, relayInfo, actualQuota); err != nil {
@@ -91,7 +91,7 @@ func SettleBillingAndInsertMidjourney(ctx *gin.Context, relayInfo *relaycommon.R
 	if relayInfo == nil || task == nil {
 		return fmt.Errorf("billing relay info or midjourney task is nil")
 	}
-	if session, ok := relayInfo.Billing.(*BillingSession); ok && session.ownsLedgerAccounting() {
+	if session, ok := relayInfo.Billing.(*BillingSession); ok && session.usesPersistentBalanceLedger() {
 		return session.settleWithMidjourney(task, actualQuota)
 	}
 	if err := SettleBilling(ctx, relayInfo, actualQuota); err != nil {

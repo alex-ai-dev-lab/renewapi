@@ -130,6 +130,261 @@ func TestBillingLedgerReserveRollsBackAllBalances(t *testing.T) {
 	require.Zero(t, count)
 }
 
+func TestShadowLedgerBalanceTransitionRollsBackAndRetries(t *testing.T) {
+	fixture := setupBillingLedgerTest(t)
+	reservation, err := ReserveBillingLedger(BillingReservation{
+		RequestID: "req-shadow-atomic", Kind: "request", Mode: "shadow", FundingSource: "wallet",
+		UserID: fixture.user.Id, TokenID: fixture.token.Id, ChannelID: fixture.channel.Id,
+		Quota: 400, ApplyBalances: true,
+	})
+	require.NoError(t, err)
+	assertLedgerBalances(t, fixture, 600, 0, 400, 0)
+	require.Equal(t, BillingComponentStateApplied, reservation.Ledger.FundingState)
+	require.Equal(t, BillingComponentStateApplied, reservation.Ledger.TokenState)
+	persisted, err := GetBillingLedger(reservation.Ledger.ID)
+	require.NoError(t, err)
+	require.Equal(t, BillingComponentStateApplied, persisted.FundingState)
+	require.Equal(t, BillingComponentStateApplied, persisted.TokenState)
+
+	// Make the token leg fail after the wallet leg would have been applied.
+	// The transaction must roll the wallet update back and leave the ledger
+	// retryable rather than claiming a terminal settle.
+	require.NoError(t, DB.Model(&Token{}).Where("id = ?", fixture.token.Id).Updates(map[string]any{
+		"remain_quota": 0,
+	}).Error)
+	_, err = SettleBillingLedger(reservation.Ledger.ID, 500)
+	require.Error(t, err)
+	var userAfterFailure User
+	var tokenAfterFailure Token
+	require.NoError(t, DB.First(&userAfterFailure, fixture.user.Id).Error)
+	require.NoError(t, DB.First(&tokenAfterFailure, fixture.token.Id).Error)
+	require.EqualValues(t, 600, userAfterFailure.Quota)
+	require.EqualValues(t, 0, tokenAfterFailure.RemainQuota)
+	require.EqualValues(t, 400, tokenAfterFailure.UsedQuota)
+	ledger, err := GetBillingLedger(reservation.Ledger.ID)
+	require.NoError(t, err)
+	require.Equal(t, BillingLedgerStateReserved, ledger.State)
+	require.EqualValues(t, 400, ledger.AppliedQuota)
+
+	// Restore the failed component and replay the same target. The retry is
+	// idempotent and applies the delta exactly once.
+	require.NoError(t, DB.Model(&Token{}).Where("id = ?", fixture.token.Id).Updates(map[string]any{
+		"remain_quota": 100,
+	}).Error)
+	settled, err := SettleBillingLedger(reservation.Ledger.ID, 500)
+	require.NoError(t, err)
+	require.Equal(t, BillingLedgerStateSettled, settled.State)
+	var settledUser User
+	var settledToken Token
+	require.NoError(t, DB.First(&settledUser, fixture.user.Id).Error)
+	require.NoError(t, DB.First(&settledToken, fixture.token.Id).Error)
+	require.EqualValues(t, 500, settledUser.Quota)
+	require.EqualValues(t, 0, settledToken.RemainQuota)
+	require.EqualValues(t, 500, settledToken.UsedQuota)
+	_, err = SettleBillingLedger(reservation.Ledger.ID, 500)
+	require.NoError(t, err)
+	require.NoError(t, DB.First(&settledUser, fixture.user.Id).Error)
+	require.NoError(t, DB.First(&settledToken, fixture.token.Id).Error)
+	require.EqualValues(t, 500, settledUser.Quota)
+	require.EqualValues(t, 0, settledToken.RemainQuota)
+	require.EqualValues(t, 500, settledToken.UsedQuota)
+}
+
+func TestShadowSubscriptionLedgerReserveMoreAndRefundPreservesAllLegs(t *testing.T) {
+	fixture := setupBillingLedgerTest(t)
+	require.NoError(t, DB.AutoMigrate(&SubscriptionPlan{}))
+	plan := SubscriptionPlan{Title: "ledger plan", DurationUnit: SubscriptionDurationMonth, DurationValue: 1, Enabled: true, TotalAmount: 1000}
+	require.NoError(t, DB.Create(&plan).Error)
+	subscription := UserSubscription{
+		UserId: fixture.user.Id, PlanId: plan.Id, AmountTotal: 1000, AmountUsed: 0,
+		Status: "active", StartTime: time.Now().Unix(), EndTime: time.Now().Add(time.Hour).Unix(),
+	}
+	require.NoError(t, DB.Create(&subscription).Error)
+
+	reservation, err := ReserveBillingLedger(BillingReservation{
+		RequestID: "req-shadow-subscription", Kind: "request", Mode: "shadow", FundingSource: "subscription",
+		UserID: fixture.user.Id, TokenID: fixture.token.Id, ChannelID: fixture.channel.Id,
+		Quota: 400, ApplyBalances: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, subscription.Id, reservation.Ledger.SubscriptionID)
+	require.NoError(t, DB.First(&subscription, subscription.Id).Error)
+	require.EqualValues(t, 400, subscription.AmountUsed)
+
+	_, err = ReserveMoreBillingLedger(reservation.Ledger.ID, 600)
+	require.NoError(t, err)
+	require.NoError(t, DB.First(&subscription, subscription.Id).Error)
+	require.EqualValues(t, 600, subscription.AmountUsed)
+
+	settled, err := SettleBillingLedger(reservation.Ledger.ID, 250)
+	require.NoError(t, err)
+	require.Equal(t, BillingLedgerStateSettled, settled.State)
+	require.Equal(t, BillingComponentStateApplied, settled.SubscriptionState)
+	require.NoError(t, DB.First(&subscription, subscription.Id).Error)
+	require.EqualValues(t, 250, subscription.AmountUsed)
+
+	refunded, err := RefundBillingLedger(reservation.Ledger.ID, "request failed")
+	require.NoError(t, err)
+	require.Equal(t, BillingLedgerStateRefunded, refunded.State)
+	require.NoError(t, DB.First(&subscription, subscription.Id).Error)
+	require.EqualValues(t, 0, subscription.AmountUsed)
+	var token Token
+	require.NoError(t, DB.First(&token, fixture.token.Id).Error)
+	require.EqualValues(t, 1000, token.RemainQuota)
+	require.EqualValues(t, 0, token.UsedQuota)
+	var record SubscriptionPreConsumeRecord
+	require.NoError(t, DB.Where("request_id = ?", reservation.Ledger.RequestID).First(&record).Error)
+	require.Equal(t, "refunded", record.Status)
+}
+
+func TestShadowLedgerConcurrentSettleIsExactlyOnce(t *testing.T) {
+	fixture := setupBillingLedgerTest(t)
+	reservation, err := ReserveBillingLedger(BillingReservation{
+		RequestID: "req-shadow-concurrent-settle", Kind: "request", Mode: "shadow", FundingSource: "wallet",
+		UserID: fixture.user.Id, TokenID: fixture.token.Id, ChannelID: fixture.channel.Id,
+		Quota: 400, ApplyBalances: true,
+	})
+	require.NoError(t, err)
+
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := SettleBillingLedger(reservation.Ledger.ID, 250)
+			errs <- err
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	ledger, err := GetBillingLedger(reservation.Ledger.ID)
+	require.NoError(t, err)
+	require.Equal(t, BillingLedgerStateSettled, ledger.State)
+	assertLedgerBalances(t, fixture, 750, 0, 250, 0)
+}
+
+func TestShadowLedgerConcurrentRefundIsExactlyOnce(t *testing.T) {
+	fixture := setupBillingLedgerTest(t)
+	reservation, err := ReserveBillingLedger(BillingReservation{
+		RequestID: "req-shadow-concurrent-refund", Kind: "request", Mode: "shadow", FundingSource: "wallet",
+		UserID: fixture.user.Id, TokenID: fixture.token.Id, ChannelID: fixture.channel.Id,
+		Quota: 400, ApplyBalances: true,
+	})
+	require.NoError(t, err)
+
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := RefundBillingLedger(reservation.Ledger.ID, "duplicate delivery")
+			errs <- err
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	ledger, err := GetBillingLedger(reservation.Ledger.ID)
+	require.NoError(t, err)
+	require.Equal(t, BillingLedgerStateRefunded, ledger.State)
+	assertLedgerBalances(t, fixture, 1000, 0, 0, 0)
+}
+
+func TestShadowLedgerConcurrentSettleAndRefundNeverLeavesPartialBalance(t *testing.T) {
+	fixture := setupBillingLedgerTest(t)
+	reservation, err := ReserveBillingLedger(BillingReservation{
+		RequestID: "req-shadow-concurrent-settle-refund", Kind: "request", Mode: "shadow", FundingSource: "wallet",
+		UserID: fixture.user.Id, TokenID: fixture.token.Id, ChannelID: fixture.channel.Id,
+		Quota: 400, ApplyBalances: true,
+	})
+	require.NoError(t, err)
+
+	start := make(chan struct{})
+	settleErr := make(chan error, 1)
+	refundErr := make(chan error, 1)
+	go func() {
+		<-start
+		_, err := SettleBillingLedger(reservation.Ledger.ID, 250)
+		settleErr <- err
+	}()
+	go func() {
+		<-start
+		_, err := RefundBillingLedger(reservation.Ledger.ID, "request failed")
+		refundErr <- err
+	}()
+	close(start)
+	_ = <-settleErr // Refund may win first, making settle correctly reject the terminal ledger.
+	require.NoError(t, <-refundErr)
+	ledger, err := GetBillingLedger(reservation.Ledger.ID)
+	require.NoError(t, err)
+	require.Equal(t, BillingLedgerStateRefunded, ledger.State)
+	assertLedgerBalances(t, fixture, 1000, 0, 0, 0)
+}
+
+func TestShadowLedgerRefundRollsBackAndRetries(t *testing.T) {
+	fixture := setupBillingLedgerTest(t)
+	reservation, err := ReserveBillingLedger(BillingReservation{
+		RequestID: "req-shadow-refund", Kind: "request", Mode: "shadow", FundingSource: "wallet",
+		UserID: fixture.user.Id, TokenID: fixture.token.Id, ChannelID: fixture.channel.Id,
+		Quota: 400, ApplyBalances: true,
+	})
+	require.NoError(t, err)
+
+	// Force the token refund invariant to fail. Wallet credit must be rolled
+	// back instead of leaving a partial refund.
+	require.NoError(t, DB.Model(&Token{}).Where("id = ?", fixture.token.Id).Update("used_quota", 0).Error)
+	_, err = RefundBillingLedger(reservation.Ledger.ID, "simulated refund failure")
+	require.Error(t, err)
+	assertLedgerBalances(t, fixture, 600, 0, 0, 0)
+	ledger, err := GetBillingLedger(reservation.Ledger.ID)
+	require.NoError(t, err)
+	require.Equal(t, BillingLedgerStateReserved, ledger.State)
+
+	require.NoError(t, DB.Model(&Token{}).Where("id = ?", fixture.token.Id).Update("used_quota", 400).Error)
+	refunded, err := RefundBillingLedger(reservation.Ledger.ID, "retry")
+	require.NoError(t, err)
+	require.Equal(t, BillingLedgerStateRefunded, refunded.State)
+	assertLedgerBalances(t, fixture, 1000, 0, 0, 0)
+	_, err = RefundBillingLedger(reservation.Ledger.ID, "duplicate")
+	require.NoError(t, err)
+	assertLedgerBalances(t, fixture, 1000, 0, 0, 0)
+}
+
+func TestShadowLedgerRefundMissingWalletDoesNotBecomeTerminal(t *testing.T) {
+	fixture := setupBillingLedgerTest(t)
+	reservation, err := ReserveBillingLedger(BillingReservation{
+		RequestID: "req-shadow-missing-wallet", Kind: "request", Mode: "shadow", FundingSource: "wallet",
+		UserID: fixture.user.Id, TokenID: fixture.token.Id, ChannelID: fixture.channel.Id,
+		Quota: 400, ApplyBalances: true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, DB.Delete(&User{}, fixture.user.Id).Error)
+
+	_, err = RefundBillingLedger(reservation.Ledger.ID, "user removed during refund")
+	require.ErrorContains(t, err, "user quota refund invariant failed")
+
+	var ledger BillingLedger
+	var token Token
+	require.NoError(t, DB.First(&ledger, reservation.Ledger.ID).Error)
+	require.NoError(t, DB.First(&token, fixture.token.Id).Error)
+	require.Equal(t, BillingLedgerStateReserved, ledger.State)
+	require.Equal(t, 600, token.RemainQuota)
+	require.Equal(t, 400, token.UsedQuota)
+}
+
 func TestBillingLedgerTaskTerminalCASKeepsBalancesConsistent(t *testing.T) {
 	fixture := setupBillingLedgerTest(t)
 	reservation := reserveWalletLedger(t, fixture, "req-ledger-task-race", 400)

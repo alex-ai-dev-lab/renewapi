@@ -83,11 +83,11 @@ jobs:
           CHANNELCONFIG_TEST_DSN: root:root@tcp(127.0.0.1:3306)/renewapi_test?charset=utf8mb4&parseTime=True&loc=UTC
         run: go test -count=1 -run TestUpdateTransactionOnExternalDatabase ./service/channelconfig
 
-      - name: Verify RequestGuard migration on MySQL
+      - name: Verify billing and RequestGuard migrations on MySQL
         env:
           REQUEST_GUARD_TEST_DRIVER: mysql
           REQUEST_GUARD_TEST_DSN: root:root@tcp(127.0.0.1:3306)/renewapi_test?charset=utf8mb4&parseTime=True&loc=UTC
-        run: go test -count=1 -run TestMigrateRequestGuardEventsExternalDatabase ./model
+        run: go test -count=1 -run 'TestMigrate(RequestGuardEvents|BillingLedgerV2)ExternalDatabase' ./model
 
       - name: Verify channel transaction on PostgreSQL
         env:
@@ -95,11 +95,11 @@ jobs:
           CHANNELCONFIG_TEST_DSN: host=127.0.0.1 user=postgres password=postgres dbname=renewapi_test port=5432 sslmode=disable TimeZone=UTC
         run: go test -count=1 -run TestUpdateTransactionOnExternalDatabase ./service/channelconfig
 
-      - name: Verify RequestGuard migration on PostgreSQL
+      - name: Verify billing and RequestGuard migrations on PostgreSQL
         env:
           REQUEST_GUARD_TEST_DRIVER: postgres
           REQUEST_GUARD_TEST_DSN: host=127.0.0.1 user=postgres password=postgres dbname=renewapi_test port=5432 sslmode=disable TimeZone=UTC
-        run: go test -count=1 -run TestMigrateRequestGuardEventsExternalDatabase ./model
+        run: go test -count=1 -run 'TestMigrate(RequestGuardEvents|BillingLedgerV2)ExternalDatabase' ./model
 
   quality:
     runs-on: ubuntu-latest

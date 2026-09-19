@@ -25,32 +25,44 @@ const (
 	BillingLedgerDesiredRefund = "refunded"
 )
 
+// Billing component states are persisted with the ledger so a transition is
+// inspectable after a process restart instead of relying on in-memory flags.
+const (
+	BillingComponentStatePending       = "pending"
+	BillingComponentStateApplied       = "applied"
+	BillingComponentStateNotApplicable = "not_applicable"
+)
+
 type BillingLedger struct {
-	ID             uint64 `json:"id" gorm:"primaryKey"`
-	RequestID      string `json:"request_id" gorm:"type:varchar(64);not null;uniqueIndex"`
-	Kind           string `json:"kind" gorm:"type:varchar(24);not null;default:'request';index"`
-	Mode           string `json:"mode" gorm:"type:varchar(16);not null;index"`
-	State          string `json:"state" gorm:"type:varchar(32);not null;index"`
-	DesiredState   string `json:"desired_state" gorm:"type:varchar(32);index"`
-	FundingSource  string `json:"funding_source" gorm:"type:varchar(24);not null"`
-	UserID         int    `json:"user_id" gorm:"not null;index"`
-	TokenID        int    `json:"token_id" gorm:"index"`
-	ChannelID      int    `json:"channel_id" gorm:"index"`
-	SubscriptionID int    `json:"subscription_id" gorm:"index"`
-	ReservedQuota  int64  `json:"reserved_quota" gorm:"not null;default:0"`
-	ActualQuota    int64  `json:"actual_quota" gorm:"not null;default:0"`
-	AppliedQuota   int64  `json:"applied_quota" gorm:"not null;default:0"`
-	DesiredQuota   int64  `json:"desired_quota" gorm:"not null;default:0"`
-	CountedQuota   int64  `json:"counted_quota" gorm:"not null;default:0"`
-	RequestCounted bool   `json:"request_counted" gorm:"not null;default:false"`
-	TokenUnlimited bool   `json:"token_unlimited" gorm:"not null;default:false"`
-	Playground     bool   `json:"playground" gorm:"not null;default:false"`
-	Version        int64  `json:"version" gorm:"not null;default:1"`
-	Attempts       int    `json:"attempts" gorm:"not null;default:0"`
-	NextRetryAt    int64  `json:"next_retry_at" gorm:"not null;default:0;index"`
-	LastError      string `json:"last_error" gorm:"type:text"`
-	CreatedAt      int64  `json:"created_at" gorm:"not null;index"`
-	UpdatedAt      int64  `json:"updated_at" gorm:"not null;index"`
+	ID                uint64 `json:"id" gorm:"primaryKey"`
+	RequestID         string `json:"request_id" gorm:"type:varchar(64);not null;uniqueIndex"`
+	Kind              string `json:"kind" gorm:"type:varchar(24);not null;default:'request';index"`
+	Mode              string `json:"mode" gorm:"type:varchar(16);not null;index"`
+	State             string `json:"state" gorm:"type:varchar(32);not null;index"`
+	DesiredState      string `json:"desired_state" gorm:"type:varchar(32);index"`
+	FundingSource     string `json:"funding_source" gorm:"type:varchar(24);not null"`
+	UserID            int    `json:"user_id" gorm:"not null;index"`
+	TokenID           int    `json:"token_id" gorm:"index"`
+	ChannelID         int    `json:"channel_id" gorm:"index"`
+	SubscriptionID    int    `json:"subscription_id" gorm:"index"`
+	ReservedQuota     int64  `json:"reserved_quota" gorm:"not null;default:0"`
+	ActualQuota       int64  `json:"actual_quota" gorm:"not null;default:0"`
+	AppliedQuota      int64  `json:"applied_quota" gorm:"not null;default:0"`
+	DesiredQuota      int64  `json:"desired_quota" gorm:"not null;default:0"`
+	CountedQuota      int64  `json:"counted_quota" gorm:"not null;default:0"`
+	RequestCounted    bool   `json:"request_counted" gorm:"not null;default:false"`
+	TokenUnlimited    bool   `json:"token_unlimited" gorm:"not null;default:false"`
+	Playground        bool   `json:"playground" gorm:"not null;default:false"`
+	FundingState      string `json:"funding_state" gorm:"type:varchar(16);not null;default:'pending'"`
+	TokenState        string `json:"token_state" gorm:"type:varchar(16);not null;default:'pending'"`
+	SubscriptionState string `json:"subscription_state" gorm:"type:varchar(16);not null;default:'pending'"`
+	StatisticsState   string `json:"statistics_state" gorm:"type:varchar(16);not null;default:'pending'"`
+	Version           int64  `json:"version" gorm:"not null;default:1"`
+	Attempts          int    `json:"attempts" gorm:"not null;default:0"`
+	NextRetryAt       int64  `json:"next_retry_at" gorm:"not null;default:0;index"`
+	LastError         string `json:"last_error" gorm:"type:text"`
+	CreatedAt         int64  `json:"created_at" gorm:"not null;index"`
+	UpdatedAt         int64  `json:"updated_at" gorm:"not null;index"`
 }
 
 type BillingReservation struct {
@@ -130,6 +142,13 @@ func ReserveBillingLedger(input BillingReservation) (*BillingReservationResult, 
 			UserID: input.UserID, TokenID: input.TokenID, ChannelID: input.ChannelID, SubscriptionID: input.SubscriptionID,
 			ReservedQuota: input.Quota, AppliedQuota: input.Quota, DesiredQuota: input.Quota,
 			TokenUnlimited: input.TokenUnlimited, Playground: input.Playground,
+			FundingState:      BillingComponentStatePending,
+			TokenState:        BillingComponentStatePending,
+			SubscriptionState: BillingComponentStatePending,
+			StatisticsState:   BillingComponentStatePending,
+		}
+		if input.Mode != "enforce" {
+			ledger.StatisticsState = BillingComponentStateNotApplicable
 		}
 		if err := tx.Create(&ledger).Error; err != nil {
 			return err
@@ -149,10 +168,16 @@ func ReserveBillingLedger(input BillingReservation) (*BillingReservationResult, 
 			if err := adjustTokenQuotaTx(tx, &ledger, input.Quota); err != nil {
 				return err
 			}
+			markBillingBalanceComponentsApplied(&ledger)
 		}
 		ledger.UpdatedAt = time.Now().Unix()
 		if err := tx.Model(&BillingLedger{}).Where("id = ?", ledger.ID).Updates(map[string]any{
-			"subscription_id": ledger.SubscriptionID, "updated_at": ledger.UpdatedAt,
+			"subscription_id":    ledger.SubscriptionID,
+			"funding_state":      ledger.FundingState,
+			"token_state":        ledger.TokenState,
+			"subscription_state": ledger.SubscriptionState,
+			"statistics_state":   ledger.StatisticsState,
+			"updated_at":         ledger.UpdatedAt,
 		}).Error; err != nil {
 			return err
 		}
@@ -379,10 +404,11 @@ func ReserveMoreBillingLedger(id uint64, targetQuota int64) (*BillingLedger, err
 			return nil
 		}
 		delta := targetQuota - ledger.AppliedQuota
-		if ledger.Mode == "enforce" {
+		if billingLedgerAppliesBalances(ledger.Mode) {
 			if err := adjustLedgerBalancesTx(tx, ledger, delta); err != nil {
 				return err
 			}
+			markBillingBalanceComponentsApplied(ledger)
 		}
 		ledger.ReservedQuota = targetQuota
 		ledger.AppliedQuota = targetQuota
@@ -448,10 +474,15 @@ func mutateLockedBillingLedgerTx(tx *gorm.DB, ledger *BillingLedger, desired str
 		ledger.State = BillingLedgerStateCompensating
 	}
 	delta := targetQuota - ledger.AppliedQuota
-	if ledger.Mode == "enforce" && delta != 0 {
+	if billingLedgerAppliesBalances(ledger.Mode) && delta != 0 {
 		if err := adjustLedgerBalancesTx(tx, ledger, delta); err != nil {
 			return false, err
 		}
+		markBillingBalanceComponentsApplied(ledger)
+	} else if billingLedgerAppliesBalances(ledger.Mode) {
+		// A zero-delta transition still persists the observation for trusted
+		// requests and legacy shadow ledgers during reconciliation.
+		markBillingBalanceComponentsApplied(ledger)
 	}
 	if beforeSave != nil {
 		if err := beforeSave(tx, ledger); err != nil {
@@ -460,6 +491,12 @@ func mutateLockedBillingLedgerTx(tx *gorm.DB, ledger *BillingLedger, desired str
 	}
 	if ledger.Mode == "enforce" {
 		if err := updateBillingCountersTx(tx, ledger, targetQuota); err != nil {
+			return false, err
+		}
+		ledger.StatisticsState = BillingComponentStateApplied
+	}
+	if desired == BillingLedgerDesiredRefund && ledger.FundingSource == "subscription" {
+		if err := markSubscriptionPreConsumeRefundedTx(tx, ledger.RequestID); err != nil {
 			return false, err
 		}
 	}
@@ -691,6 +728,7 @@ func MarkBillingLedgerForReconcile(id uint64, desired string, quota int64, cause
 		ledger.DesiredState = desired
 		ledger.DesiredQuota = quota
 		ledger.LastError = message
+		ledger.Attempts++
 		ledger.NextRetryAt = now + billingRetryDelay(ledger.Attempts)
 		ledger.UpdatedAt = now
 		ledger.Version++
@@ -769,6 +807,40 @@ func adjustLedgerBalancesTx(tx *gorm.DB, ledger *BillingLedger, delta int64) err
 	return adjustTokenQuotaTx(tx, ledger, delta)
 }
 
+// billingLedgerAppliesBalances is intentionally broader than the enforce
+// accounting-owner check. Shadow remains the default compatibility mode, but
+// its balance legs must still be committed through the durable ledger so a
+// partial funding/token update cannot be hidden by a terminal session flag.
+func billingLedgerAppliesBalances(mode string) bool {
+	return mode == "shadow" || mode == "enforce"
+}
+
+func markBillingBalanceComponentsApplied(ledger *BillingLedger) {
+	if ledger == nil {
+		return
+	}
+	ledger.FundingState = BillingComponentStateApplied
+	if ledger.FundingSource == "subscription" {
+		ledger.SubscriptionState = BillingComponentStateApplied
+	} else {
+		ledger.SubscriptionState = BillingComponentStateNotApplicable
+	}
+	if ledger.Playground || ledger.TokenUnlimited || ledger.TokenID <= 0 {
+		ledger.TokenState = BillingComponentStateNotApplicable
+	} else {
+		ledger.TokenState = BillingComponentStateApplied
+	}
+}
+
+func markSubscriptionPreConsumeRefundedTx(tx *gorm.DB, requestID string) error {
+	if strings.TrimSpace(requestID) == "" {
+		return nil
+	}
+	return tx.Model(&SubscriptionPreConsumeRecord{}).
+		Where("request_id = ? AND status <> ?", requestID, "refunded").
+		Updates(map[string]any{"status": "refunded", "updated_at": common.GetTimestamp()}).Error
+}
+
 func updateBillingCountersTx(tx *gorm.DB, ledger *BillingLedger, targetQuota int64) error {
 	delta := targetQuota - ledger.CountedQuota
 	countDelta := 0
@@ -824,8 +896,15 @@ func adjustWalletQuotaTx(tx *gorm.DB, userID int, delta int64) error {
 		}
 		return nil
 	}
-	return tx.Model(&User{}).Where("id = ?", userID).
-		Update("quota", gorm.Expr("quota + ?", -delta)).Error
+	res := tx.Model(&User{}).Where("id = ?", userID).
+		Update("quota", gorm.Expr("quota + ?", -delta))
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected != 1 {
+		return errors.New("user quota refund invariant failed")
+	}
+	return nil
 }
 
 func adjustTokenQuotaTx(tx *gorm.DB, ledger *BillingLedger, delta int64) error {
@@ -913,7 +992,14 @@ func adjustSubscriptionQuotaTx(tx *gorm.DB, subscriptionID int, delta int64) err
 	if sub.AmountTotal > 0 && next > sub.AmountTotal {
 		return fmt.Errorf("subscription used exceeds total, used=%d total=%d", next, sub.AmountTotal)
 	}
-	return tx.Model(&UserSubscription{}).Where("id = ?", subscriptionID).Update("amount_used", next).Error
+	res := tx.Model(&UserSubscription{}).Where("id = ?", subscriptionID).Update("amount_used", next)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected != 1 {
+		return errors.New("subscription quota update invariant failed")
+	}
+	return nil
 }
 
 func billingRetryDelay(attempt int) int64 {

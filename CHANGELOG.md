@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- Shadow billing balance transitions now use the durable ledger transaction for
+  wallet, token, and subscription legs, so failed settle/refund attempts remain
+  retryable instead of being hidden by an in-memory terminal flag.
+
 ## v1.0.0-rc.2 - 2026-08-15
 
 ### Changed

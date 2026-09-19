@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -11,10 +12,33 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type corsOrigin struct {
+	value    string
+	hostname string
+}
+
 func CORS() gin.HandlerFunc {
+	return newCORSMiddleware(
+		system_setting.ServerAddress,
+		os.Getenv("FRONTEND_BASE_URL"),
+		corsDebugEnabled(),
+	)
+}
+
+func corsDebugEnabled() bool {
+	return common.DebugEnabled || os.Getenv("GIN_MODE") == gin.DebugMode
+}
+
+func newCORSMiddleware(serverAddress string, frontendBaseURL string, debug bool) gin.HandlerFunc {
 	config := cors.DefaultConfig()
 	config.AllowCredentials = true
-	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
+	config.AllowMethods = []string{
+		"GET",
+		"POST",
+		"PUT",
+		"DELETE",
+		"OPTIONS",
+	}
 	config.AllowHeaders = []string{
 		"Accept",
 		"Authorization",
@@ -25,53 +49,105 @@ func CORS() gin.HandlerFunc {
 		"X-Requested-With",
 		"X-Request-Id",
 	}
-	config.ExposeHeaders = []string{"X-New-Api-Version", "X-Request-Id"}
-	config.AllowOriginFunc = func(origin string) bool {
-		return isTrustedCORSOrigin(origin)
+	config.ExposeHeaders = []string{
+		"X-New-Api-Version",
+		"X-Request-Id",
 	}
+	config.AllowOriginFunc = func(origin string) bool {
+		return isOriginAllowed(origin, serverAddress, frontendBaseURL, debug)
+	}
+
 	return cors.New(config)
 }
 
-func isTrustedCORSOrigin(origin string) bool {
-	origin = strings.TrimRight(strings.TrimSpace(origin), "/")
-	if origin == "" {
-		// Non-browser and same-origin requests legitimately omit Origin; CORS
-		// should not reject those paths before normal authentication runs.
-		return true
-	}
-	allowed := map[string]struct{}{}
-	addOrigin := func(raw string) {
-		parsedOrigin := normalizeOrigin(raw)
-		if parsedOrigin != "" {
-			allowed[parsedOrigin] = struct{}{}
-		}
-	}
-	addOrigin(system_setting.ServerAddress)
-	addOrigin(os.Getenv("FRONTEND_BASE_URL"))
-	if _, ok := allowed[normalizeOrigin(origin)]; ok {
-		return true
-	}
-	parsed, err := url.Parse(origin)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+func isOriginAllowed(origin string, serverAddress string, frontendBaseURL string, debug bool) bool {
+	requestOrigin, ok := parseRequestOrigin(origin)
+	if !ok {
 		return false
 	}
-	host := strings.ToLower(parsed.Hostname())
-	if !common.DebugEnabled && os.Getenv("GIN_MODE") != "debug" {
+
+	if configuredOrigin, ok := parseConfiguredOrigin(serverAddress); ok &&
+		requestOrigin.value == configuredOrigin.value {
+		return true
+	}
+
+	if configuredOrigin, ok := parseConfiguredOrigin(frontendBaseURL); ok &&
+		requestOrigin.value == configuredOrigin.value {
+		return true
+	}
+
+	if !debug {
 		return false
 	}
-	return host == "localhost" || host == "127.0.0.1" || host == "::1"
+
+	switch requestOrigin.hostname {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
 }
 
-func normalizeOrigin(raw string) string {
-	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
-	if raw == "" {
-		return ""
-	}
+func parseRequestOrigin(raw string) (corsOrigin, bool) {
 	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return ""
+	if err != nil ||
+		parsed.Scheme == "" ||
+		parsed.Host == "" ||
+		parsed.User != nil ||
+		parsed.Path != "" ||
+		parsed.RawQuery != "" ||
+		parsed.Fragment != "" {
+		return corsOrigin{}, false
 	}
-	return strings.ToLower(parsed.Scheme) + "://" + strings.ToLower(parsed.Host)
+
+	return normalizeOrigin(parsed)
+}
+
+func parseConfiguredOrigin(raw string) (corsOrigin, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return corsOrigin{}, false
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil ||
+		parsed.Scheme == "" ||
+		parsed.Host == "" ||
+		parsed.User != nil {
+		return corsOrigin{}, false
+	}
+
+	return normalizeOrigin(parsed)
+}
+
+func normalizeOrigin(parsed *url.URL) (corsOrigin, bool) {
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return corsOrigin{}, false
+	}
+
+	hostName := strings.ToLower(parsed.Hostname())
+	if hostName == "" {
+		return corsOrigin{}, false
+	}
+
+	port := parsed.Port()
+	if (scheme == "http" && port == "80") ||
+		(scheme == "https" && port == "443") {
+		port = ""
+	}
+
+	host := hostName
+	if port != "" {
+		host = net.JoinHostPort(hostName, port)
+	} else if strings.Contains(hostName, ":") {
+		host = "[" + hostName + "]"
+	}
+
+	return corsOrigin{
+		value:    scheme + "://" + host,
+		hostname: hostName,
+	}, true
 }
 
 func PoweredBy() gin.HandlerFunc {

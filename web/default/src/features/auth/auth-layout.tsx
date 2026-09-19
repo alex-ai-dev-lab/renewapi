@@ -30,7 +30,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
   const { systemName, logo, loading } = useSystemConfig()
 
   return (
-    <div className='relative grid h-svh max-w-none'>
+    <div className='relative grid min-h-svh max-w-none overflow-hidden'>
       <Link
         to='/'
         className='absolute top-4 left-4 z-10 flex items-center gap-2 transition-opacity hover:opacity-80 sm:top-8 sm:left-8'
@@ -42,18 +42,18 @@ export function AuthLayout({ children }: AuthLayoutProps) {
             <img
               src={logo}
               alt={t('Logo')}
-              className='h-8 w-8 rounded-full object-cover'
+              className='ring-border/60 h-8 w-8 rounded-full object-cover ring-1'
             />
           )}
         </div>
         {loading ? (
           <Skeleton className='h-6 w-24' />
         ) : (
-          <h1 className='text-xl font-medium'>{systemName}</h1>
+          <h1 className='text-xl font-semibold tracking-tight'>{systemName}</h1>
         )}
       </Link>
-      <div className='container flex items-center pt-16 sm:pt-0'>
-        <div className='mx-auto flex w-full flex-col justify-center space-y-2 px-4 py-8 sm:w-[480px] sm:p-8'>
+      <div className='container flex items-center py-20 sm:min-h-svh sm:py-8'>
+        <div className='glass-tile mx-auto flex w-full flex-col justify-center space-y-3 px-6 py-8 sm:w-[480px] sm:p-8'>
           {children}
         </div>
       </div>

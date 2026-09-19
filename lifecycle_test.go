@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,4 +35,32 @@ func TestBackgroundWorkersStopHonorsDeadline(t *testing.T) {
 	deadline, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 	require.ErrorIs(t, workers.Stop(deadline), context.DeadlineExceeded)
+}
+
+func TestBackgroundWorkersStopWaitsForGoPool(t *testing.T) {
+	workers := newBackgroundWorkers()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	gopool.Go(func() {
+		close(started)
+		<-release
+	})
+	<-started
+
+	deadline, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	stopped := make(chan error, 1)
+	go func() {
+		stopped <- workers.Stop(deadline)
+	}()
+
+	select {
+	case err := <-stopped:
+		t.Fatalf("Stop returned before pooled work completed: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	close(release)
+	require.NoError(t, <-stopped)
+	require.Zero(t, gopool.WorkerCount())
 }

@@ -28,6 +28,7 @@ const AUTH_SECTIONS = [
   {
     id: 'basic-auth',
     titleKey: 'Basic Authentication',
+    keywords: ['登录', '注册', '邮箱验证', 'login'],
     build: (settings: AuthSettings) => (
       <BasicAuthSection
         defaultValues={{
@@ -45,6 +46,7 @@ const AUTH_SECTIONS = [
   {
     id: 'oauth',
     titleKey: 'OAuth Integrations',
+    keywords: ['oauth', '第三方登录', 'github', 'oidc', 'wechat', 'telegram'],
     build: (settings: AuthSettings) => (
       <OAuthSection
         defaultValues={{
@@ -80,6 +82,7 @@ const AUTH_SECTIONS = [
   {
     id: 'passkey',
     titleKey: 'Passkey Authentication',
+    keywords: ['passkey', '通行密钥', '免密'],
     build: (settings: AuthSettings) => (
       <PasskeySection
         defaultValues={{
@@ -102,6 +105,7 @@ const AUTH_SECTIONS = [
   {
     id: 'bot-protection',
     titleKey: 'Bot Protection',
+    keywords: ['机器人', '人机验证', 'turnstile', 'captcha'],
     build: (settings: AuthSettings) => (
       <BotProtectionSection
         defaultValues={{
@@ -115,6 +119,7 @@ const AUTH_SECTIONS = [
   {
     id: 'custom-oauth',
     titleKey: 'Custom OAuth',
+    keywords: ['自定义 oauth', 'custom oauth', '自定义登录'],
     build: () => <CustomOAuthSection />,
   },
 ] as const
@@ -131,5 +136,6 @@ const authRegistry = createSectionRegistry<AuthSectionId, AuthSettings>({
 export const AUTH_SECTION_IDS = authRegistry.sectionIds
 export const AUTH_DEFAULT_SECTION = authRegistry.defaultSection
 export const getAuthSectionNavItems = authRegistry.getSectionNavItems
+export const getAuthSectionCatalogItems = authRegistry.getSectionCatalogItems
 export const getAuthSectionContent = authRegistry.getSectionContent
 export const getAuthSectionMeta = authRegistry.getSectionMeta

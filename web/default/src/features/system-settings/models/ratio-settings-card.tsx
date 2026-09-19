@@ -38,7 +38,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { resetModelRatios } from '../api'
 import { SettingsPageActionsPortal } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
-import { useUpdateOption } from '../hooks/use-update-option'
+import { useUpdateOptionsBulk } from '../hooks/use-update-option'
 import { GroupRatioForm } from './group-ratio-form'
 import { ModelRatioForm } from './model-ratio-form'
 import { OfficialPriceSyncPanel } from './official-price-sync-panel'
@@ -238,7 +238,7 @@ export function RatioSettingsCard({
   visibleTabs = ['models', 'groups', 'tool-prices'],
 }: RatioSettingsCardProps) {
   const { t } = useTranslation()
-  const updateOption = useUpdateOption()
+  const updateOptionsBulk = useUpdateOptionsBulk()
   const queryClient = useQueryClient()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
@@ -594,12 +594,15 @@ export function RatioSettingsCard({
         return
       }
 
-      for (const key of updates) {
-        const apiKey = apiKeyMap[key as string] || (key as string)
-        await updateOption.mutateAsync({ key: apiKey, value: normalized[key] })
-      }
+      const options = Object.fromEntries(
+        updates.map((key) => [
+          apiKeyMap[key as string] || (key as string),
+          normalized[key],
+        ])
+      )
+      await updateOptionsBulk.mutateAsync({ options })
     },
-    [t, updateOption]
+    [t, updateOptionsBulk]
   )
 
   const saveGroupRatios = useCallback(
@@ -628,12 +631,14 @@ export function RatioSettingsCard({
         (key) => normalized[key] !== groupNormalizedDefaults.current[key]
       )
 
-      for (const key of updates) {
-        const apiKey = apiKeyMap[key] || key
-        await updateOption.mutateAsync({ key: apiKey, value: normalized[key] })
-      }
+      if (updates.length === 0) return
+
+      const options = Object.fromEntries(
+        updates.map((key) => [apiKeyMap[key] || key, normalized[key]])
+      )
+      await updateOptionsBulk.mutateAsync({ options })
     },
-    [updateOption]
+    [updateOptionsBulk]
   )
 
   const handleResetRatios = useCallback(() => {
@@ -666,7 +671,7 @@ export function RatioSettingsCard({
           form={modelForm}
           onSave={saveModelRatios}
           onReset={handleResetRatios}
-          isSaving={updateOption.isPending}
+          isSaving={updateOptionsBulk.isPending}
           isResetting={resetMutation.isPending}
         />
       )
@@ -676,7 +681,7 @@ export function RatioSettingsCard({
         <GroupRatioForm
           form={groupForm}
           onSave={saveGroupRatios}
-          isSaving={updateOption.isPending}
+          isSaving={updateOptionsBulk.isPending}
         />
       )
     }

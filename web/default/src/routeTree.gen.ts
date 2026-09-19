@@ -53,6 +53,7 @@ import { Route as AuthenticatedModelsSectionRouteImport } from './routes/_authen
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
 import { Route as AuthenticatedChatChatIdRouteImport } from './routes/_authenticated/chat/$chatId'
+import { Route as AuthenticatedChannelsNewRouteImport } from './routes/_authenticated/channels/new'
 import { Route as authUserResetRouteImport } from './routes/(auth)/user/reset'
 import { Route as AuthenticatedSystemSettingsSiteIndexRouteImport } from './routes/_authenticated/system-settings/site/index'
 import { Route as AuthenticatedSystemSettingsSecurityIndexRouteImport } from './routes/_authenticated/system-settings/security/index'
@@ -68,6 +69,7 @@ import { Route as AuthenticatedSystemSettingsModelsSectionRouteImport } from './
 import { Route as AuthenticatedSystemSettingsContentSectionRouteImport } from './routes/_authenticated/system-settings/content/$section'
 import { Route as AuthenticatedSystemSettingsBillingSectionRouteImport } from './routes/_authenticated/system-settings/billing/$section'
 import { Route as AuthenticatedSystemSettingsAuthSectionRouteImport } from './routes/_authenticated/system-settings/auth/$section'
+import { Route as AuthenticatedChannelsChannelIdEditRouteImport } from './routes/_authenticated/channels/$channelId/edit'
 
 const UserAgreementRoute = UserAgreementRouteImport.update({
   id: '/user-agreement',
@@ -302,6 +304,14 @@ const AuthenticatedChatChatIdRoute = AuthenticatedChatChatIdRouteImport.update({
   path: '/chat/$chatId',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedChannelsNewRoute =
+  AuthenticatedChannelsNewRouteImport.update({
+    id: '/channels/new',
+    path: '/channels/new',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any).lazy(() =>
+    import('./routes/_authenticated/channels/new.lazy').then((d) => d.Route),
+  )
 const authUserResetRoute = authUserResetRouteImport.update({
   id: '/user/reset',
   path: '/user/reset',
@@ -391,6 +401,16 @@ const AuthenticatedSystemSettingsAuthSectionRoute =
     path: '/auth/$section',
     getParentRoute: () => AuthenticatedSystemSettingsRouteRoute,
   } as any)
+const AuthenticatedChannelsChannelIdEditRoute =
+  AuthenticatedChannelsChannelIdEditRouteImport.update({
+    id: '/channels/$channelId/edit',
+    path: '/channels/$channelId/edit',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any).lazy(() =>
+    import('./routes/_authenticated/channels/$channelId/edit.lazy').then(
+      (d) => d.Route,
+    ),
+  )
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -418,6 +438,7 @@ export interface FileRoutesByFullPath {
   '/rankings/': typeof RankingsIndexRoute
   '/setup/': typeof SetupIndexRoute
   '/user/reset': typeof authUserResetRoute
+  '/channels/new': typeof AuthenticatedChannelsNewRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -436,6 +457,7 @@ export interface FileRoutesByFullPath {
   '/users/': typeof AuthenticatedUsersIndexRoute
   '/wallet/': typeof AuthenticatedWalletIndexRoute
   '/pricing/$modelId/': typeof PricingModelIdIndexRoute
+  '/channels/$channelId/edit': typeof AuthenticatedChannelsChannelIdEditRoute
   '/system-settings/auth/$section': typeof AuthenticatedSystemSettingsAuthSectionRoute
   '/system-settings/billing/$section': typeof AuthenticatedSystemSettingsBillingSectionRoute
   '/system-settings/content/$section': typeof AuthenticatedSystemSettingsContentSectionRoute
@@ -476,6 +498,7 @@ export interface FileRoutesByTo {
   '/rankings': typeof RankingsIndexRoute
   '/setup': typeof SetupIndexRoute
   '/user/reset': typeof authUserResetRoute
+  '/channels/new': typeof AuthenticatedChannelsNewRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -494,6 +517,7 @@ export interface FileRoutesByTo {
   '/users': typeof AuthenticatedUsersIndexRoute
   '/wallet': typeof AuthenticatedWalletIndexRoute
   '/pricing/$modelId': typeof PricingModelIdIndexRoute
+  '/channels/$channelId/edit': typeof AuthenticatedChannelsChannelIdEditRoute
   '/system-settings/auth/$section': typeof AuthenticatedSystemSettingsAuthSectionRoute
   '/system-settings/billing/$section': typeof AuthenticatedSystemSettingsBillingSectionRoute
   '/system-settings/content/$section': typeof AuthenticatedSystemSettingsContentSectionRoute
@@ -538,6 +562,7 @@ export interface FileRoutesById {
   '/rankings/': typeof RankingsIndexRoute
   '/setup/': typeof SetupIndexRoute
   '/(auth)/user/reset': typeof authUserResetRoute
+  '/_authenticated/channels/new': typeof AuthenticatedChannelsNewRoute
   '/_authenticated/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/_authenticated/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -556,6 +581,7 @@ export interface FileRoutesById {
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/wallet/': typeof AuthenticatedWalletIndexRoute
   '/pricing/$modelId/': typeof PricingModelIdIndexRoute
+  '/_authenticated/channels/$channelId/edit': typeof AuthenticatedChannelsChannelIdEditRoute
   '/_authenticated/system-settings/auth/$section': typeof AuthenticatedSystemSettingsAuthSectionRoute
   '/_authenticated/system-settings/billing/$section': typeof AuthenticatedSystemSettingsBillingSectionRoute
   '/_authenticated/system-settings/content/$section': typeof AuthenticatedSystemSettingsContentSectionRoute
@@ -599,6 +625,7 @@ export interface FileRouteTypes {
     | '/rankings/'
     | '/setup/'
     | '/user/reset'
+    | '/channels/new'
     | '/chat/$chatId'
     | '/dashboard/$section'
     | '/errors/$error'
@@ -617,6 +644,7 @@ export interface FileRouteTypes {
     | '/users/'
     | '/wallet/'
     | '/pricing/$modelId/'
+    | '/channels/$channelId/edit'
     | '/system-settings/auth/$section'
     | '/system-settings/billing/$section'
     | '/system-settings/content/$section'
@@ -657,6 +685,7 @@ export interface FileRouteTypes {
     | '/rankings'
     | '/setup'
     | '/user/reset'
+    | '/channels/new'
     | '/chat/$chatId'
     | '/dashboard/$section'
     | '/errors/$error'
@@ -675,6 +704,7 @@ export interface FileRouteTypes {
     | '/users'
     | '/wallet'
     | '/pricing/$modelId'
+    | '/channels/$channelId/edit'
     | '/system-settings/auth/$section'
     | '/system-settings/billing/$section'
     | '/system-settings/content/$section'
@@ -718,6 +748,7 @@ export interface FileRouteTypes {
     | '/rankings/'
     | '/setup/'
     | '/(auth)/user/reset'
+    | '/_authenticated/channels/new'
     | '/_authenticated/chat/$chatId'
     | '/_authenticated/dashboard/$section'
     | '/_authenticated/errors/$error'
@@ -736,6 +767,7 @@ export interface FileRouteTypes {
     | '/_authenticated/users/'
     | '/_authenticated/wallet/'
     | '/pricing/$modelId/'
+    | '/_authenticated/channels/$channelId/edit'
     | '/_authenticated/system-settings/auth/$section'
     | '/_authenticated/system-settings/billing/$section'
     | '/_authenticated/system-settings/content/$section'
@@ -1083,6 +1115,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChatChatIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/channels/new': {
+      id: '/_authenticated/channels/new'
+      path: '/channels/new'
+      fullPath: '/channels/new'
+      preLoaderRoute: typeof AuthenticatedChannelsNewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/(auth)/user/reset': {
       id: '/(auth)/user/reset'
       path: '/user/reset'
@@ -1188,6 +1227,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemSettingsAuthSectionRouteImport
       parentRoute: typeof AuthenticatedSystemSettingsRouteRoute
     }
+    '/_authenticated/channels/$channelId/edit': {
+      id: '/_authenticated/channels/$channelId/edit'
+      path: '/channels/$channelId/edit'
+      fullPath: '/channels/$channelId/edit'
+      preLoaderRoute: typeof AuthenticatedChannelsChannelIdEditRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -1277,6 +1323,7 @@ const AuthenticatedSystemSettingsRouteRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemSettingsRouteRoute: typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   AuthenticatedChat2linkRoute: typeof AuthenticatedChat2linkRoute
+  AuthenticatedChannelsNewRoute: typeof AuthenticatedChannelsNewRoute
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -1293,12 +1340,14 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedUsageLogsIndexRoute: typeof AuthenticatedUsageLogsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedWalletIndexRoute: typeof AuthenticatedWalletIndexRoute
+  AuthenticatedChannelsChannelIdEditRoute: typeof AuthenticatedChannelsChannelIdEditRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSystemSettingsRouteRoute:
     AuthenticatedSystemSettingsRouteRouteWithChildren,
   AuthenticatedChat2linkRoute: AuthenticatedChat2linkRoute,
+  AuthenticatedChannelsNewRoute: AuthenticatedChannelsNewRoute,
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
@@ -1316,6 +1365,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedUsageLogsIndexRoute: AuthenticatedUsageLogsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
   AuthenticatedWalletIndexRoute: AuthenticatedWalletIndexRoute,
+  AuthenticatedChannelsChannelIdEditRoute:
+    AuthenticatedChannelsChannelIdEditRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

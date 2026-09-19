@@ -379,10 +379,7 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 		}
 	}
 
-	finishReason := "stop"
-	if len(toolCalls) > 0 {
-		finishReason = "tool_calls"
-	}
+	finishReason := ResponsesFinishReason(resp, len(toolCalls) > 0)
 
 	msg := dto.Message{
 		Role:    "assistant",

@@ -87,7 +87,6 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const isMobile = useMediaQuery('(max-width: 640px)')
-
   const hasAdvancedFilters = props.advancedFilters != null
   const activeAdvancedCount =
     props.advancedFilterCount ?? (props.hasAdvancedActiveFilters ? 1 : 0)
@@ -97,7 +96,6 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
     props.onReset()
     setMobileFiltersOpen(false)
   }
-
   const handleMobileSearch = () => {
     props.onSearch()
     setMobileFiltersOpen(false)
@@ -108,12 +106,11 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
       <Drawer open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
         <div
           className={cn(
-            'bg-card/50 min-w-0 rounded-lg border p-2.5',
+            'bg-card/60 border-border/60 min-w-0 rounded-xl border p-2.5',
             props.className
           )}
         >
           <div className='grid gap-2'>{props.mobilePinnedFilters}</div>
-
           <div className='mt-2 flex flex-col gap-2'>
             {props.stats}
             <div className='flex items-center justify-end gap-1.5'>
@@ -191,7 +188,7 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
   return (
     <div
       className={cn(
-        'bg-card/50 max-w-full min-w-0 rounded-lg border p-2.5',
+        'bg-card/60 border-border/60 max-w-full min-w-0 rounded-xl border p-2.5',
         props.className
       )}
     >
@@ -199,7 +196,6 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
         {props.primaryFilters}
         {advancedOpen && props.advancedFilters}
       </div>
-
       <div className='mt-2 flex flex-wrap items-center gap-2'>
         {props.stats}
         <div className='ms-auto flex flex-wrap items-center justify-end gap-1.5 sm:gap-2'>
@@ -230,7 +226,6 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
               />
             </Button>
           )}
-
           <Button
             type='button'
             variant='outline'

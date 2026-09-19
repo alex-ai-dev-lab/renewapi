@@ -64,9 +64,16 @@ const STATUS_RELATED_KEYS = [
   'DashboardSuccessRateDegradedThreshold',
 ]
 
+// Settings mutations are one continuous operator feedback channel. Reuse a
+// stable Sonner id so a later failure replaces an earlier success instead of
+// rendering contradictory success/error toasts at the same time.
+const SETTINGS_MUTATION_TOAST_ID = 'system-settings-mutation'
+
 function showMutationError(error: unknown, fallback: string) {
   if (isRequestCanceled(error)) return
-  toast.error(getApiErrorMessage(error, fallback))
+  toast.error(getApiErrorMessage(error, fallback), {
+    id: SETTINGS_MUTATION_TOAST_ID,
+  })
 }
 
 export function useUpdateOption() {
@@ -88,7 +95,9 @@ export function useUpdateOption() {
         }
       }
 
-      toast.success(i18next.t('Setting updated successfully'))
+      toast.success(i18next.t('Setting updated successfully'), {
+        id: SETTINGS_MUTATION_TOAST_ID,
+      })
     },
     onError: (error: unknown) => {
       showMutationError(error, i18next.t('Failed to update setting'))
@@ -115,7 +124,9 @@ export function useUpdateOptionsBulk() {
         }
       }
 
-      toast.success(i18next.t('Settings updated successfully'))
+      toast.success(i18next.t('Settings updated successfully'), {
+        id: SETTINGS_MUTATION_TOAST_ID,
+      })
     },
     onError: (error: unknown) => {
       showMutationError(error, i18next.t('Failed to update settings'))

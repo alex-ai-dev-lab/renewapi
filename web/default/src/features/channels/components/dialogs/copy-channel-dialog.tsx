@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -49,8 +50,9 @@ export function CopyChannelDialog({
   onOpenChange,
 }: CopyChannelDialogProps) {
   const { t } = useTranslation()
-  const { currentRow, setCurrentRow, setOpen } = useChannels()
+  const { currentRow } = useChannels()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [suffix, setSuffix] = useState('_copy')
   const [resetBalance, setResetBalance] = useState(true)
   const [isCopying, setIsCopying] = useState(false)
@@ -91,8 +93,10 @@ export function CopyChannelDialog({
       onOpenChange(false)
       setSuffix('_copy')
       setResetBalance(true)
-      setCurrentRow(copiedChannel.data)
-      setOpen('update-channel')
+      void navigate({
+        to: '/channels/$channelId/edit',
+        params: { channelId: String(copiedChannel.data.id) },
+      })
     } finally {
       setIsCopying(false)
     }

@@ -16,26 +16,46 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useEffect } from 'react'
+import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
+import {
+  Activity,
+  CircleCheck,
+  CircleDollarSign,
+  Gauge,
+  Timer,
+  Users,
+} from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { useAuthStore } from '@/stores/auth-store'
+import { formatQuota } from '@/lib/format'
+import { ROLE } from '@/lib/roles'
+import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/empty-state'
+import { ErrorState } from '@/components/error-state'
+import { RequestVolumePanel, SpendPanel } from './aurora-overview-panels'
+import { AutoRefreshToggle } from './auto-refresh-toggle'
+import { ChannelStatsTable } from './channel-stats-table'
+import { KPICard } from './kpi-card'
+import { ModelDistributionChart } from './model-distribution-chart'
 import {
   useOverviewStats,
+  useSelfOverviewStats,
   type TimeRange,
 } from './stats-api'
-import { KPICard } from './kpi-card'
 import { TimeRangeSelector } from './time-range-selector'
-import { AutoRefreshToggle } from './auto-refresh-toggle'
 import { TrendChart } from './trend-chart'
-import { ChannelStatsTable } from './channel-stats-table'
-import { Activity, TrendingUp, Zap, DollarSign, Loader2 } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useDashboardControls } from './use-dashboard-controls'
-import { useEffect } from 'react'
-import { getRouteApi, useNavigate } from '@tanstack/react-router'
 
 const route = getRouteApi('/_authenticated/dashboard/$section')
 
 export function OverviewDashboard() {
+  const { t, i18n } = useTranslation()
+  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
   const search = route.useSearch()
   const navigate = useNavigate()
+  const userRole = useAuthStore((state) => state.auth.user?.role)
+  const isAdmin = Boolean(userRole && userRole >= ROLE.ADMIN)
   const {
     timeRange,
     autoRefresh,
@@ -63,117 +83,238 @@ export function OverviewDashboard() {
     }
   }, [search.time_range, setTimeRange, timeRange])
 
-  const {
-    data: stats,
-    isLoading,
-    isFetching,
-    error,
-    refetch,
-    dataUpdatedAt,
-  } = useOverviewStats(
+  const adminQuery = useOverviewStats(
     timeRange,
     autoRefresh,
-    refreshInterval
+    refreshInterval,
+    isAdmin
   )
+  const selfQuery = useSelfOverviewStats(
+    timeRange,
+    autoRefresh,
+    refreshInterval,
+    !isAdmin
+  )
+  const isLoading = isAdmin ? adminQuery.isLoading : selfQuery.isLoading
+  const isFetching = isAdmin ? adminQuery.isFetching : selfQuery.isFetching
+  const error = isAdmin ? adminQuery.error : selfQuery.error
+  const dataUpdatedAt = isAdmin
+    ? adminQuery.dataUpdatedAt
+    : selfQuery.dataUpdatedAt
+  const hasData = isAdmin ? Boolean(adminQuery.data) : Boolean(selfQuery.data)
+  const handleRefresh = () => {
+    void (isAdmin ? adminQuery.refetch() : selfQuery.refetch())
+  }
 
-  if (isLoading && !stats) {
+  if (isLoading && !hasData) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className='grid grid-cols-12 gap-4'>
+        <div className='bg-card/55 col-span-12 h-[310px] animate-pulse rounded-[22px] border lg:col-span-8' />
+        <div className='bg-card/55 col-span-12 h-[310px] animate-pulse rounded-[22px] border lg:col-span-4' />
       </div>
     )
   }
 
   if (error) {
     return (
-      <Alert variant="destructive">
-        <AlertDescription>
-          Failed to load statistics. Please try again later.
-        </AlertDescription>
-      </Alert>
+      <ErrorState
+        title={t('Failed to load statistics')}
+        description={t('Please try again later.')}
+        onRetry={handleRefresh}
+      />
     )
   }
 
-  if (!stats) {
-    return null
-  }
+  const stats = adminQuery.data
+  const selfStats = selfQuery.data
+  if (isAdmin && !stats) return null
+  if (!isAdmin && !selfStats) return null
 
-  return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Overview of your API usage and performance
-          </p>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <AutoRefreshToggle
-            value={autoRefresh}
-            onChange={setAutoRefresh}
-            intervalMs={refreshInterval}
-            onIntervalChange={setRefreshInterval}
-            onRefresh={refetch}
-            isRefreshing={isFetching}
-            lastUpdatedAt={dataUpdatedAt}
-          />
-          <TimeRangeSelector value={timeRange} onChange={changeTimeRange} />
-        </div>
-      </div>
+  const totalTokens = stats
+    ? stats.total_prompt_tokens + stats.total_output_tokens
+    : 0
+  const controls = (
+    <div className='flex flex-wrap items-center justify-end gap-1.5'>
+      <AutoRefreshToggle
+        value={autoRefresh}
+        onChange={setAutoRefresh}
+        intervalMs={refreshInterval}
+        onIntervalChange={setRefreshInterval}
+        onRefresh={handleRefresh}
+        isRefreshing={isFetching}
+        lastUpdatedAt={dataUpdatedAt}
+        className='gap-1.5 [&>label]:sr-only [&>span:last-child]:hidden'
+      />
+      <TimeRangeSelector value={timeRange} onChange={changeTimeRange} />
+    </div>
+  )
 
-      {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+  if (!isAdmin && selfStats) {
+    const hasUsage =
+      selfStats.total_requests > 0 ||
+      selfStats.total_tokens > 0 ||
+      selfStats.range_usage > 0
+
+    return (
+      <div className='grid grid-cols-12 gap-4'>
+        <div className='col-span-12 flex justify-end'>{controls}</div>
         <KPICard
-          title="Total Requests"
-          value={stats.total_requests.toLocaleString()}
-          subtitle="API requests processed"
+          title={t('Credit remaining')}
+          value={formatQuota(selfStats.remaining_quota)}
+          subtitle={t('Available balance for future requests')}
+          icon={Gauge}
+          className='col-span-12 sm:col-span-6 lg:col-span-3'
+        />
+        <KPICard
+          title={t('Usage')}
+          value={formatQuota(selfStats.range_usage)}
+          subtitle={t('Usage in the selected period')}
+          icon={CircleDollarSign}
+          className='col-span-12 sm:col-span-6 lg:col-span-3'
+        />
+        <KPICard
+          title={t('Requests')}
+          value={selfStats.total_requests.toLocaleString()}
+          subtitle={t('Requests in the selected period')}
           icon={Activity}
+          className='col-span-12 sm:col-span-6 lg:col-span-3'
         />
         <KPICard
-          title="Success Rate"
-          value={`${stats.success_rate.toFixed(2)}%`}
-          subtitle="Successful requests"
-          icon={TrendingUp}
+          title={t('Tokens')}
+          value={Intl.NumberFormat('en-US', {
+            notation: 'compact',
+            maximumFractionDigits: 1,
+          }).format(selfStats.total_tokens)}
+          subtitle={t('Tokens in the selected period')}
+          icon={CircleCheck}
+          className='col-span-12 sm:col-span-6 lg:col-span-3'
         />
-        <KPICard
-          title="Avg First Token"
-          value={stats.avg_first_token_time > 0 ? `${stats.avg_first_token_time.toFixed(0)}ms` : 'N/A'}
-          subtitle="Average response time"
-          icon={Zap}
-        />
-        <KPICard
-          title="Total Cost"
-          value={`$${stats.total_cost.toFixed(2)}`}
-          subtitle="Total API cost"
-          icon={DollarSign}
-        />
-      </div>
 
-      {/* Charts and Tables */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <TrendChart
-          data={stats.trend}
-          storageKey='dashboard:overview:trend'
-        />
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <KPICard
-              title="Active Channels"
-              value={stats.active_channels}
-              className="col-span-1"
-            />
-            <KPICard
-              title="Active Users"
-              value={stats.active_users}
-              className="col-span-1"
+        {!hasUsage ? (
+          <div className='col-span-12'>
+            <EmptyState
+              bordered
+              title={t('No usage yet')}
+              description={t(
+                'Create an API key, copy the integration details, and send your first request to populate this dashboard.'
+              )}
+              action={
+                <div className='flex flex-col items-center gap-3'>
+                  <ol className='text-muted-foreground list-inside list-decimal space-y-1 text-left text-sm'>
+                    <li>{t('Create an API key')}</li>
+                    <li>{t('Copy the API endpoint and key')}</li>
+                    <li>{t('Send your first request')}</li>
+                  </ol>
+                  <Button render={<Link to='/keys' />}>
+                    {t('Create API Key')}
+                  </Button>
+                </div>
+              }
             />
           </div>
-        </div>
+        ) : (
+          <>
+            <div className='col-span-12 xl:col-span-8'>
+              <TrendChart
+                data={selfStats.trend}
+                usageOnly
+                title={t('Usage trend')}
+                description={t('Request and token volume over time.')}
+                storageKey='dashboard:self-trend'
+              />
+            </div>
+            <div className='col-span-12 xl:col-span-4'>
+              <ModelDistributionChart data={selfStats.top_models} />
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  if (!stats) return null
+
+  return (
+    <div className='grid grid-cols-12 gap-4'>
+      <div className='col-span-12 lg:col-span-8'>
+        <RequestVolumePanel
+          stats={stats}
+          timeRange={timeRange}
+          controls={controls}
+        />
+      </div>
+      <div className='col-span-12 lg:col-span-4'>
+        <SpendPanel stats={stats} timeRange={timeRange} />
       </div>
 
-      {/* Channel Stats Table */}
-      <ChannelStatsTable data={stats.top_channels} />
+      <KPICard
+        title={t('Tokens')}
+        value={Intl.NumberFormat('en-US', {
+          notation: 'compact',
+          maximumFractionDigits: 1,
+        }).format(totalTokens)}
+        subtitle={t('aurora.dashboard.tokens.detail', {
+          defaultValue: isChinese
+            ? '{{input}} 输入 · {{output}} 输出'
+            : '{{input}} in · {{output}} out',
+          input: stats.total_prompt_tokens.toLocaleString(),
+          output: stats.total_output_tokens.toLocaleString(),
+        })}
+        icon={Activity}
+        className='col-span-12 sm:col-span-6 lg:col-span-3'
+      />
+      <KPICard
+        title={t('aurora.metric.successRate', {
+          defaultValue: isChinese ? '成功率' : 'Success rate',
+        })}
+        value={`${stats.success_rate.toFixed(2)}%`}
+        subtitle={t('aurora.dashboard.failures', {
+          defaultValue: isChinese
+            ? '{{count}} 次失败请求'
+            : '{{count}} failed requests',
+          count: stats.failed_requests.toLocaleString(),
+        })}
+        icon={CircleCheck}
+        className='col-span-12 sm:col-span-6 lg:col-span-3'
+      />
+      <KPICard
+        title={t('aurora.metric.firstToken', {
+          defaultValue: isChinese ? '平均延迟' : 'First token',
+        })}
+        value={
+          stats.avg_first_token_time > 0
+            ? `${stats.avg_first_token_time.toFixed(0)}ms`
+            : t('N/A')
+        }
+        subtitle={t('aurora.dashboard.firstToken.detail', {
+          defaultValue: isChinese
+            ? '首 Token 平均延迟'
+            : 'Average first-token latency',
+        })}
+        icon={Timer}
+        className='col-span-12 sm:col-span-6 lg:col-span-3'
+      />
+      <KPICard
+        title={t('aurora.dashboard.activeUsers', {
+          defaultValue: isChinese ? '活跃用户' : 'Active users',
+        })}
+        value={stats.active_users.toLocaleString()}
+        subtitle={t('aurora.dashboard.activeChannels', {
+          defaultValue: isChinese
+            ? '{{count}} 个活跃渠道'
+            : '{{count}} active channels',
+          count: stats.active_channels,
+        })}
+        icon={Users}
+        className='col-span-12 sm:col-span-6 lg:col-span-3'
+      />
+
+      <div className='col-span-12'>
+        <ChannelStatsTable
+          data={stats.top_channels}
+          totalChannels={stats.active_channels}
+        />
+      </div>
     </div>
   )
 }

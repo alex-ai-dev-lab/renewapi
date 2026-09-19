@@ -36,6 +36,7 @@ import {
   Loader2,
   ShieldCheck,
   Activity,
+  ExternalLink,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -74,6 +75,7 @@ interface DataTableRowActionsProps {
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { t } = useTranslation()
   const channel = row.original
+  const editHref = `/channels/${channel.id}/edit`
   const { setOpen, setCurrentRow, upstream } = useChannels()
   const queryClient = useQueryClient()
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -96,11 +98,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
       return false
     }
   })()
-
-  const handleEdit = () => {
-    setCurrentRow(channel)
-    setOpen('update-channel')
-  }
 
   const handleTest = () => {
     setCurrentRow(channel)
@@ -170,6 +167,8 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     }
   }
 
+  const deleteDescription = `${t('Are you sure you want to delete')}${t('? This action cannot be undone.')}`
+
   return (
     <div className='flex items-center justify-end gap-1'>
       <Tooltip>
@@ -229,6 +228,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             <Button
               variant='ghost'
               className='data-popup-open:bg-muted flex h-8 w-8 p-0'
+              aria-label={t('Open menu')}
             />
           }
         >
@@ -236,15 +236,23 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           <span className='sr-only'>{t('Open menu')}</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end' className='w-48'>
-          {/* Edit */}
-          <DropdownMenuItem onClick={handleEdit}>
+          <DropdownMenuItem render={<a href={editHref} />}>
             {t('Edit')}
             <DropdownMenuShortcut>
               <Pencil size={16} />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
+          <DropdownMenuItem
+            render={
+              <a href={editHref} target='_blank' rel='noopener noreferrer' />
+            }
+          >
+            {t('Open in new tab')}
+            <DropdownMenuShortcut>
+              <ExternalLink size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
 
-          {/* Test Connection */}
           <DropdownMenuItem onClick={handleTest}>
             {t('Test Connection')}
             <DropdownMenuShortcut>
@@ -252,7 +260,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 
-          {/* Query Balance */}
           <DropdownMenuItem onClick={handleQueryBalance}>
             {t('Query Balance')}
             <DropdownMenuShortcut>
@@ -267,7 +274,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 
-          {/* Fetch Models */}
           <DropdownMenuItem onClick={handleFetchModels}>
             {t('Fetch Models')}
             <DropdownMenuShortcut>
@@ -275,7 +281,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 
-          {/* Detect Upstream Updates (only for fetchable channel types) */}
           {MODEL_FETCHABLE_TYPES.has(channel.type) && (
             <DropdownMenuItem
               onClick={() => {
@@ -302,7 +307,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuItem>
           )}
 
-          {/* Ollama Models (only for Ollama channels) */}
           {channel.type === 4 && (
             <DropdownMenuItem onClick={handleManageOllamaModels}>
               {t('Manage Ollama Models')}
@@ -314,7 +318,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
 
           <DropdownMenuSeparator />
 
-          {/* Copy Channel */}
           <DropdownMenuItem onClick={handleCopy}>
             {t('Copy Channel')}
             <DropdownMenuShortcut>
@@ -322,7 +325,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 
-          {/* Manage Keys (only for multi-key channels) */}
           {isMultiKey && (
             <DropdownMenuItem onClick={handleManageKeys}>
               {t('Manage Keys')}
@@ -333,7 +335,10 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           )}
 
           {hasAntiPoisonRisk && (
-            <DropdownMenuItem onClick={handleClearRisk} disabled={isClearingRisk}>
+            <DropdownMenuItem
+              onClick={handleClearRisk}
+              disabled={isClearingRisk}
+            >
               {t('Clear Anti-poison Risk')}
               <DropdownMenuShortcut>
                 {isClearingRisk ? (
@@ -347,7 +352,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
 
           <DropdownMenuSeparator />
 
-          {/* Delete */}
           <DropdownMenuItem
             onSelect={(e) => {
               e.preventDefault()
@@ -367,8 +371,8 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
         title={t('Delete Channel')}
-        desc={`Are you sure you want to delete "${channel.name}"? This action cannot be undone.`}
-        confirmText='Delete'
+        desc={deleteDescription}
+        confirmText={t('Delete')}
         destructive
         handleConfirm={() => {
           handleDeleteChannel(channel.id, queryClient)

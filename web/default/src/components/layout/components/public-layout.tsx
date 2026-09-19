@@ -35,7 +35,7 @@ type PublicLayoutProps = {
 
 export function PublicLayout(props: PublicLayoutProps) {
   return (
-    <div className='bg-background text-foreground relative min-h-svh overflow-x-clip'>
+    <div className='bg-background/70 text-foreground relative min-h-svh overflow-x-clip'>
       <a
         href='#main-content'
         className='bg-foreground text-background fixed top-3 left-3 z-[200] -translate-y-16 px-4 py-2 font-mono text-xs tracking-[0.08em] uppercase transition-transform focus:translate-y-0'
@@ -56,11 +56,17 @@ export function PublicLayout(props: PublicLayoutProps) {
       )}
 
       {props.showMainContainer !== false ? (
-        <main className='container px-4 py-6 pt-20 md:px-4'>
+        <main
+          id='main-content'
+          tabIndex={-1}
+          className='container px-4 py-6 pt-20 outline-none md:px-4'
+        >
           {props.children}
         </main>
       ) : (
-        props.children
+        <div id='main-content' tabIndex={-1} className='outline-none'>
+          {props.children}
+        </div>
       )}
     </div>
   )

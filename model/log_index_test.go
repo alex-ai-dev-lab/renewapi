@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -57,5 +58,37 @@ func TestGetAllLogsOrdersByCreatedAtThenID(t *testing.T) {
 		logs[0].Content,
 		logs[1].Content,
 		logs[2].Content,
+	})
+}
+
+func TestDeleteOldLogRespectsCutoffAndPreservesNewerRows(t *testing.T) {
+	oldLogDB := LOG_DB
+	t.Cleanup(func() { LOG_DB = oldLogDB })
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&Log{}))
+	LOG_DB = db
+
+	logs := []Log{
+		{CreatedAt: 10, Content: "old-1"},
+		{CreatedAt: 20, Content: "old-2"},
+		{CreatedAt: 30, Content: "old-3"},
+		{CreatedAt: 40, Content: "old-4"},
+		{CreatedAt: 50, Content: "old-5"},
+		{CreatedAt: 100, Content: "cutoff"},
+		{CreatedAt: 101, Content: "newer"},
+	}
+	require.NoError(t, db.Create(&logs).Error)
+
+	deleted, err := DeleteOldLog(context.Background(), 100, 2)
+	require.NoError(t, err)
+	require.Equal(t, int64(5), deleted)
+
+	var remaining []Log
+	require.NoError(t, db.Order("created_at asc").Find(&remaining).Error)
+	require.Equal(t, []string{"cutoff", "newer"}, []string{
+		remaining[0].Content,
+		remaining[1].Content,
 	})
 }

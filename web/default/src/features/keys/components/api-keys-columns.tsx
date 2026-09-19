@@ -20,6 +20,7 @@ import { useQuery } from '@tanstack/react-query'
 import { type ColumnDef } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
 import { getUserGroups } from '@/lib/api'
+import dayjs from '@/lib/dayjs'
 import { formatQuota, formatTimestampToDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -42,7 +43,8 @@ import {
 import { DataTableRowActions } from './data-table-row-actions'
 
 function getQuotaProgressColor(percentage: number): string {
-  if (percentage <= 10) return '[&_[data-slot=progress-indicator]]:bg-destructive'
+  if (percentage <= 10)
+    return '[&_[data-slot=progress-indicator]]:bg-destructive'
   if (percentage <= 30) return '[&_[data-slot=progress-indicator]]:bg-warning'
   return '[&_[data-slot=progress-indicator]]:bg-success'
 }
@@ -93,6 +95,7 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
       enableSorting: false,
       enableHiding: false,
       meta: { label: t('Select') },
+      size: 40,
     },
     {
       accessorKey: 'name',
@@ -105,6 +108,8 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
         </div>
       ),
       meta: { label: t('Name'), mobileTitle: true },
+      size: 180,
+      maxSize: 220,
     },
     {
       accessorKey: 'status',
@@ -124,6 +129,7 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
       },
       filterFn: (row, id, value) => value.includes(String(row.getValue(id))),
       meta: { label: t('Status'), mobileBadge: true },
+      size: 100,
     },
     {
       id: 'key',
@@ -132,6 +138,8 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
       cell: ({ row }) => <ApiKeyCell apiKey={row.original} />,
       enableSorting: false,
       meta: { label: t('API Key') },
+      size: 220,
+      maxSize: 240,
     },
     {
       id: 'quota',
@@ -169,6 +177,7 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
               </div>
               <Progress
                 value={percentage}
+                aria-label={t('Remaining quota')}
                 className={cn('h-1.5', getQuotaProgressColor(percentage))}
               />
             </TooltipTrigger>
@@ -190,6 +199,8 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
         )
       },
       meta: { label: t('Quota') },
+      size: 180,
+      maxSize: 190,
     },
     {
       accessorKey: 'group',
@@ -231,6 +242,7 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
         return <GroupBadge group={group} ratio={ratio} />
       },
       meta: { label: t('Group'), mobileHidden: true },
+      size: 130,
     },
     {
       id: 'model_limits',
@@ -241,6 +253,8 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
       cell: ({ row }) => <ModelLimitsCell apiKey={row.original} />,
       enableSorting: false,
       meta: { label: t('Models'), mobileHidden: true },
+      size: 120,
+      maxSize: 140,
     },
     {
       id: 'allow_ips',
@@ -251,18 +265,37 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
       cell: ({ row }) => <IpRestrictionsCell apiKey={row.original} />,
       enableSorting: false,
       meta: { label: t('IP Restriction'), mobileHidden: true },
+      size: 120,
+      maxSize: 140,
     },
     {
       accessorKey: 'created_time',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title={t('Created')} />
       ),
-      cell: ({ row }) => (
-        <span className='text-muted-foreground font-mono text-xs tabular-nums'>
-          {formatTimestampToDate(row.getValue('created_time'))}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const createdTime = row.getValue('created_time') as number
+        if (!createdTime) {
+          return <span className='text-muted-foreground text-xs'>-</span>
+        }
+        return (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span className='text-muted-foreground cursor-help text-xs tabular-nums' />
+              }
+            >
+              {dayjs(createdTime * 1000).fromNow()}
+            </TooltipTrigger>
+            <TooltipContent>
+              {formatTimestampToDate(createdTime)}
+            </TooltipContent>
+          </Tooltip>
+        )
+      },
       meta: { label: t('Created'), mobileHidden: true },
+      size: 112,
+      maxSize: 128,
     },
     {
       accessorKey: 'accessed_time',
@@ -275,12 +308,23 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
           return <span className='text-muted-foreground text-xs'>-</span>
         }
         return (
-          <span className='text-muted-foreground font-mono text-xs tabular-nums'>
-            {formatTimestampToDate(accessedTime)}
-          </span>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span className='text-muted-foreground cursor-help text-xs tabular-nums' />
+              }
+            >
+              {dayjs(accessedTime * 1000).fromNow()}
+            </TooltipTrigger>
+            <TooltipContent>
+              {formatTimestampToDate(accessedTime)}
+            </TooltipContent>
+          </Tooltip>
         )
       },
       meta: { label: t('Last Used'), mobileHidden: true },
+      size: 112,
+      maxSize: 128,
     },
     {
       accessorKey: 'expired_time',
@@ -311,6 +355,8 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
         )
       },
       meta: { label: t('Expires'), mobileHidden: true },
+      size: 120,
+      maxSize: 140,
     },
     {
       id: 'actions',

@@ -95,7 +95,11 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	return RequestOpenAI2ClaudeMessage(c, *request)
+	if err := validateOpenAIRequestForClaude(request); err != nil {
+		return nil, err
+	}
+	preparedRequest := prepareOpenAIRequestForClaude(request)
+	return RequestOpenAI2ClaudeMessage(c, *preparedRequest)
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {
@@ -119,9 +123,9 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
 	info.FinalRequestRelayFormat = types.RelayFormatClaude
 	if info.IsStream {
-		return ClaudeStreamHandler(c, resp, info)
+		return claudeStreamHandlerWithCompletionGuard(c, resp, info)
 	} else {
-		return ClaudeHandler(c, resp, info)
+		return claudeHandlerWithPauseTurnGuard(c, resp, info)
 	}
 }
 

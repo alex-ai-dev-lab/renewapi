@@ -26,6 +26,16 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/lib/api-errors'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -285,6 +295,10 @@ export function RequestGuardSection() {
   const [probeResults, setProbeResults] = useState<
     Record<string, RequestGuardProbeResult>
   >({})
+  const [pendingEndpointRemoval, setPendingEndpointRemoval] = useState<{
+    index: number
+    label: string
+  } | null>(null)
   const configQuery = useQuery({
     queryKey: ['request-guard-config'],
     queryFn: getRequestGuardConfig,
@@ -375,6 +389,12 @@ export function RequestGuardSection() {
       })),
     }
     saveMutation.mutate(payload)
+  }
+
+  const confirmEndpointRemoval = () => {
+    if (!pendingEndpointRemoval) return
+    endpoints.remove(pendingEndpointRemoval.index)
+    setPendingEndpointRemoval(null)
   }
 
   if (configQuery.isLoading) {
@@ -697,12 +717,13 @@ export function RequestGuardSection() {
                     `endpoints.${index}.proxy_policy`
                   )
                   const hasSecret = form.watch(`endpoints.${index}.has_secret`)
+                  const endpointLabel = endpointId || t('New endpoint')
                   return (
                     <div key={endpoint.id} className='rounded-md border p-4'>
                       <div className='mb-4 flex min-w-0 items-center justify-between gap-3'>
                         <div className='flex min-w-0 items-center gap-2'>
                           <span className='truncate font-mono text-sm font-medium'>
-                            {endpointId || t('New endpoint')}
+                            {endpointLabel}
                           </span>
                           {endpointStatus ? (
                             <Badge
@@ -751,14 +772,21 @@ export function RequestGuardSection() {
                                   type='button'
                                   size='icon-sm'
                                   variant='ghost'
-                                  aria-label={t('Delete')}
-                                  onClick={() => endpoints.remove(index)}
+                                  aria-label={t('Remove endpoint {{endpoint}}', {
+                                    endpoint: endpointLabel,
+                                  })}
+                                  onClick={() =>
+                                    setPendingEndpointRemoval({
+                                      index,
+                                      label: endpointLabel,
+                                    })
+                                  }
                                 />
                               }
                             >
                               <Trash2 />
                             </TooltipTrigger>
-                            <TooltipContent>{t('Delete')}</TooltipContent>
+                            <TooltipContent>{t('Remove endpoint')}</TooltipContent>
                           </Tooltip>
                         </div>
                       </div>
@@ -1132,6 +1160,38 @@ export function RequestGuardSection() {
           </SettingsControlGroup>
         </SettingsForm>
       </Form>
+      <AlertDialog
+        open={pendingEndpointRemoval !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingEndpointRemoval(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('Remove Request Guard endpoint?')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t(
+                'Remove {{endpoint}} from the current configuration draft?',
+                { endpoint: pendingEndpointRemoval?.label ?? '' }
+              )}{' '}
+              {t(
+                'The saved configuration will not change until you click Save.'
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('Cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              variant='destructive'
+              onClick={confirmEndpointRemoval}
+            >
+              {t('Remove endpoint')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SettingsSection>
   )
 }

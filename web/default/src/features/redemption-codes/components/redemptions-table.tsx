@@ -81,7 +81,6 @@ export function RedemptionsTable() {
     columnFilters: [{ columnId: 'status', searchKey: 'status', type: 'array' }],
   })
 
-  // Fetch data with React Query
   const { data, isLoading, isFetching } = useQuery({
     queryKey: [
       'redemptions',
@@ -161,10 +160,13 @@ export function RedemptionsTable() {
       <RedemptionsStats redemptions={redemptions} />
 
       <DataTablePage
+        verticalScroll={{ mode: 'page' }}
         table={table}
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
+        tableHeaderClassName='sticky top-0 z-10 bg-background/80 backdrop-blur-md'
+        tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
         emptyTitle={t('No Redemption Codes Found')}
         emptyDescription={t(
           'No redemption codes available. Create your first redemption code to get started.'

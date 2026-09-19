@@ -27,6 +27,7 @@ import {
 import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { shouldRetryQuery, unwrapApiResponse } from '@/lib/api-errors'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import {
   AlertDialog,
@@ -57,7 +58,6 @@ export function DeploymentsTable() {
   const queryClient = useQueryClient()
   const isMobile = useMediaQuery('(max-width: 640px)')
 
-  // URL state (use dedicated keys so it won't collide with metadata table)
   const {
     globalFilter,
     onGlobalFilterChange,
@@ -89,7 +89,6 @@ export function DeploymentsTable() {
       ? statusFilter[0]
       : undefined
 
-  // Dialog state
   const [logsOpen, setLogsOpen] = useState(false)
   const [logsDeploymentId, setLogsDeploymentId] = useState<
     string | number | null
@@ -111,13 +110,11 @@ export function DeploymentsTable() {
     string | number | null
   >(null)
   const [renameCurrentName, setRenameCurrentName] = useState<string>('')
-
-  // Delete confirm
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Deployment | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: deploymentsQueryKeys.list({
       keyword,
       status: activeStatus,
@@ -125,20 +122,22 @@ export function DeploymentsTable() {
       page_size: pagination.pageSize,
     }),
     queryFn: async () => {
-      if (keyword.trim()) {
-        return searchDeployments({
-          keyword,
-          status: activeStatus,
-          p: pagination.pageIndex + 1,
-          page_size: pagination.pageSize,
-        })
-      }
-      return listDeployments({
-        status: activeStatus,
-        p: pagination.pageIndex + 1,
-        page_size: pagination.pageSize,
-      })
+      const response = keyword.trim()
+        ? await searchDeployments({
+            keyword,
+            status: activeStatus,
+            p: pagination.pageIndex + 1,
+            page_size: pagination.pageSize,
+          })
+        : await listDeployments({
+            status: activeStatus,
+            p: pagination.pageIndex + 1,
+            page_size: pagination.pageSize,
+          })
+
+      return unwrapApiResponse(response)
     },
+    retry: shouldRetryQuery,
     placeholderData: (prev) => prev,
   })
 
@@ -231,10 +230,15 @@ export function DeploymentsTable() {
   return (
     <>
       <DataTablePage
+        verticalScroll={{ mode: 'page' }}
         table={table}
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
+        isError={isError}
+        errorDescription={error instanceof Error ? error.message : undefined}
+        tableHeaderClassName='sticky top-0 z-10 bg-background/80 backdrop-blur-md'
+        tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
         emptyTitle={t('No Deployments Found')}
         emptyDescription={t(
           'No deployments available. Create one to get started.'

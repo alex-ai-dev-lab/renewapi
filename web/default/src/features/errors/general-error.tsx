@@ -54,10 +54,20 @@ export function GeneralError({
     : t('Please try again later.')
 
   return (
-    <div className={cn('h-svh w-full', className)}>
-      <div className='m-auto flex h-full w-full flex-col items-center justify-center gap-2'>
+    <div
+      className={cn(
+        'flex min-h-svh w-full items-center justify-center px-4 py-8',
+        className
+      )}
+    >
+      <div
+        className={cn(
+          'flex w-full flex-col items-center justify-center gap-2 text-center',
+          !minimal && 'glass-tile max-w-2xl px-6 py-10 sm:px-10'
+        )}
+      >
         {!minimal && (
-          <h1 className='text-[7rem] leading-tight font-bold'>
+          <h1 className='text-aurora text-[7rem] leading-tight font-bold'>
             {status ?? 500}
           </h1>
         )}
@@ -71,7 +81,7 @@ export function GeneralError({
           </p>
         )}
         {!minimal && (
-          <div className='mt-6 flex flex-wrap justify-center gap-4'>
+          <div className='mt-6 flex flex-wrap justify-center gap-3 sm:gap-4'>
             <Button variant='outline' onClick={() => history.go(-1)}>
               {t('Go Back')}
             </Button>

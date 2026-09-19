@@ -164,6 +164,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		usageText   strings.Builder
 		sentStart   bool
 		sentStop    bool
+		sawTerminal bool
 		sawToolCall bool
 		streamErr   *types.NewAPIError
 	)
@@ -586,7 +587,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 		case "response.function_call_arguments.done":
 
-		case "response.completed":
+		case "response.completed", "response.incomplete":
 			if streamResp.Response != nil {
 				if streamResp.Response.Model != "" {
 					model = streamResp.Response.Model
@@ -665,10 +666,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				if info.RelayFormat == types.RelayFormatClaude && info.ClaudeConvertInfo != nil {
 					info.ClaudeConvertInfo.Usage = usage
 				}
-				finishReason := "stop"
-				if sawToolCall && outputText.Len() == 0 {
-					finishReason = "tool_calls"
-				}
+				finishReason := service.ResponsesFinishReason(streamResp.Response, sawToolCall && outputText.Len() == 0)
 				stop := helper.GenerateStopResponse(responseId, createAt, model, finishReason)
 				if !sendChatChunk(stop) {
 					sr.Stop(streamErr)
@@ -676,6 +674,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				}
 				sentStop = true
 			}
+			sawTerminal = true
 
 		case "response.error", "response.failed":
 			if streamResp.Response != nil {
@@ -695,6 +694,12 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 	if streamErr != nil {
 		return nil, streamErr
+	}
+	if !sawTerminal {
+		if outcomeErr := responsesStreamOutcomeError(info); outcomeErr != nil {
+			return nil, outcomeErr
+		}
+		return nil, types.NewOpenAIError(fmt.Errorf("responses stream missing terminal event"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 	}
 	if responseProof != nil {
 		if proofErr := responseProof.Finalize(); proofErr != nil {

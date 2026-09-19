@@ -32,7 +32,11 @@ import {
 } from '@tanstack/react-table'
 import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
+import {
+  ApiBusinessError,
+  shouldRetryQuery,
+  unwrapApiResponse,
+} from '@/lib/api-errors'
 import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
@@ -53,7 +57,7 @@ import { UsageLogsMobileList } from './usage-logs-mobile-card'
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 
 const logTypeRowTint: Record<number, string> = {
-  [LOG_TYPE_ENUM.ERROR]: 'bg-rose-50/40 dark:bg-rose-950/20',
+  [LOG_TYPE_ENUM.ERROR]: 'bg-destructive/5 dark:bg-destructive/10',
   [LOG_TYPE_ENUM.REFUND]: 'bg-chart-1/10',
 }
 
@@ -123,7 +127,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     ],
   })
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: [
       'logs',
       logCategory,
@@ -135,7 +139,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       t,
     ],
     queryFn: async ({ signal }) => {
-      const result = await fetchLogsByCategory({
+      const response = await fetchLogsByCategory({
         logCategory,
         isAdmin,
         page: pagination.pageIndex + 1,
@@ -145,13 +149,17 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         signal,
       })
 
-      if (!result?.success) {
-        toast.error(result?.message || t('Failed to load logs'))
-        return DEFAULT_LOGS_DATA
+      if (!response) {
+        throw new ApiBusinessError({
+          success: false,
+          message: t('Failed to load logs'),
+        })
       }
 
+      const result = unwrapApiResponse(response)
       return result.data || DEFAULT_LOGS_DATA
     },
+    retry: shouldRetryQuery,
     placeholderData: (previousData, previousQuery) => {
       if (previousQuery?.queryKey[1] === logCategory) {
         return previousData
@@ -194,10 +202,13 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   return (
     <DataTablePage
       className='max-w-full min-w-0'
+      verticalScroll={{ mode: 'page' }}
       table={table}
       columns={columns as ColumnDef<Record<string, unknown>>[]}
       isLoading={isLoadingData}
       isFetching={isFetching}
+      isError={isError}
+      errorDescription={error instanceof Error ? error.message : undefined}
       emptyTitle={t('No Logs Found')}
       emptyDescription={t(
         'No usage logs available. Logs will appear here once API calls are made.'
@@ -207,7 +218,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       tableClassName={cn(
         'min-w-0 max-w-full [&_[data-slot=table]]:table-fixed [&_[data-slot=table]]:text-[13px] [&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
       )}
-      tableHeaderClassName='bg-muted/35 sticky top-0 z-10'
+      tableHeaderClassName='bg-background/80 backdrop-blur-md sticky top-0 z-10'
       mobile={
         <UsageLogsMobileList
           table={table}
@@ -235,7 +246,6 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
           | undefined
         const tintClass =
           isCommon && logType != null ? (logTypeRowTint[logType] ?? '') : ''
-
         return (
           <TableRow key={row.id} className={cn('transition-colors', tintClass)}>
             {row.getVisibleCells().map((cell) => (

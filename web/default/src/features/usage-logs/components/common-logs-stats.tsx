@@ -30,7 +30,7 @@ import { useUsageLogsContext } from './usage-logs-provider'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 
-function StatBadge(props: {
+function CompactStat(props: {
   label: string
   value: string | number
   accent: string
@@ -46,11 +46,13 @@ function StatBadge(props: {
   )
 }
 
-export function CommonLogsStats() {
-  const { t } = useTranslation()
+export function CommonLogsStats(props: { variant?: 'compact' | 'bento' }) {
+  const { t, i18n } = useTranslation()
+  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
   const isAdmin = useIsAdmin()
   const searchParams = route.useSearch()
   const { sensitiveVisible } = useUsageLogsContext()
+  const variant = props.variant ?? 'compact'
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['usage-logs-stats', isAdmin, searchParams],
@@ -62,11 +64,9 @@ export function CommonLogsStats() {
         columnFilters: [],
         isAdmin,
       })
-
       const result = isAdmin
         ? await getLogStats(params, { signal })
         : await getUserLogStats(params, { signal })
-
       return result.success
         ? result.data || DEFAULT_LOG_STATS
         : DEFAULT_LOG_STATS
@@ -74,33 +74,130 @@ export function CommonLogsStats() {
     placeholderData: (previousData) => previousData,
   })
 
-  if (isLoading) {
+  const values = {
+    usage: sensitiveVisible ? formatLogQuota(stats?.quota || 0) : '••••',
+    rpm: stats?.rpm || 0,
+    tpm: stats?.tpm || 0,
+  }
+
+  if (variant === 'compact') {
+    if (isLoading) {
+      return (
+        <div className='flex items-center gap-2'>
+          <Skeleton className='h-7 w-[150px] rounded-md' />
+          <Skeleton className='h-7 w-[100px] rounded-md' />
+          <Skeleton className='h-7 w-[120px] rounded-md' />
+        </div>
+      )
+    }
+
     return (
-      <div className='flex items-center gap-2'>
-        <Skeleton className='h-7 w-[150px] rounded-md' />
-        <Skeleton className='h-7 w-[100px] rounded-md' />
-        <Skeleton className='h-7 w-[120px] rounded-md' />
+      <div className='flex flex-wrap items-center gap-2'>
+        <CompactStat
+          label={t('Usage')}
+          value={values.usage}
+          accent='bg-success'
+        />
+        <CompactStat
+          label={t('RPM')}
+          value={values.rpm}
+          accent='bg-destructive'
+        />
+        <CompactStat label={t('TPM')} value={values.tpm} accent='bg-warning' />
       </div>
     )
   }
 
+  if (isLoading) {
+    return (
+      <div className='space-y-4'>
+        <div className='grid gap-4 sm:grid-cols-3'>
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Skeleton key={index} className='h-[118px] rounded-[22px]' />
+          ))}
+        </div>
+        <LiveHeading />
+      </div>
+    )
+  }
+
+  const items = [
+    {
+      label: t('aurora.logs.usage.title', {
+        defaultValue: isChinese ? '当前消耗' : 'Usage',
+      }),
+      value: values.usage,
+      detail: t('aurora.logs.usage.detail', {
+        defaultValue: isChinese
+          ? '当前筛选时间窗内累计额度消耗'
+          : 'Quota consumed in the current filter window',
+      }),
+      tone: 'text-success',
+    },
+    {
+      label: t('RPM'),
+      value: values.rpm,
+      detail: t('aurora.logs.rpm.detail', {
+        defaultValue: isChinese ? '每分钟请求数' : 'Requests per minute',
+      }),
+      tone: 'text-destructive',
+    },
+    {
+      label: t('TPM'),
+      value: values.tpm,
+      detail: t('aurora.logs.tpm.detail', {
+        defaultValue: isChinese ? '每分钟 Token 数' : 'Tokens per minute',
+      }),
+      tone: 'text-warning',
+    },
+  ]
+
   return (
-    <div className='flex flex-wrap items-center gap-2'>
-      <StatBadge
-        label={t('Usage')}
-        value={sensitiveVisible ? formatLogQuota(stats?.quota || 0) : '••••'}
-        accent='bg-chart-1'
-      />
-      <StatBadge
-        label={t('RPM')}
-        value={stats?.rpm || 0}
-        accent='bg-destructive'
-      />
-      <StatBadge
-        label={t('TPM')}
-        value={stats?.tpm || 0}
-        accent='bg-muted-foreground'
-      />
+    <div className='space-y-4'>
+      <div className='grid gap-4 sm:grid-cols-3'>
+        {items.map((item) => (
+          <div key={item.label} className='glass-tile min-h-[118px] p-5'>
+            <div className='flex h-full flex-col justify-between gap-3'>
+              <span className='text-muted-foreground text-[10px] font-bold tracking-[1.35px] uppercase'>
+                {item.label}
+              </span>
+              <div>
+                <div
+                  className={cn(
+                    'text-[28px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
+                    item.tone
+                  )}
+                >
+                  {item.value}
+                </div>
+                <div className='text-muted-foreground mt-1 text-[10px]'>
+                  {item.detail}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <LiveHeading />
+    </div>
+  )
+}
+
+function LiveHeading() {
+  const { t, i18n } = useTranslation()
+  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
+
+  return (
+    <div className='flex items-center justify-between px-1 pt-1'>
+      <h2 className='text-[15px] font-extrabold tracking-[-0.01em]'>
+        {t('aurora.logs.live.title', {
+          defaultValue: isChinese ? '实时调用流' : 'Live request stream',
+        })}
+      </h2>
+      <span className='border-success/15 bg-success/8 text-success inline-flex h-6 items-center gap-1.5 rounded-full border px-2.5 text-[10px] font-bold tracking-[0.8px]'>
+        <span className='bg-success size-1.5 rounded-full' />
+        {t('aurora.logs.live.badge', { defaultValue: 'LIVE' })}
+      </span>
     </div>
   )
 }

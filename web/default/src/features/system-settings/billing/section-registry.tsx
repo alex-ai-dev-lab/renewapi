@@ -54,6 +54,7 @@ const BILLING_SECTIONS = [
   {
     id: 'quota',
     titleKey: 'Quota Settings',
+    keywords: ['额度', '配额', '充值', 'quota'],
     build: (settings: BillingSettings) => (
       <QuotaSettingsSection
         defaultValues={{
@@ -80,6 +81,7 @@ const BILLING_SECTIONS = [
   {
     id: 'currency',
     titleKey: 'Currency & Display',
+    keywords: ['货币', '汇率', '显示单位', 'currency'],
     build: (settings: BillingSettings) => (
       <PricingSection
         defaultValues={{
@@ -103,6 +105,7 @@ const BILLING_SECTIONS = [
   {
     id: 'model-pricing',
     titleKey: 'Model Pricing',
+    keywords: ['模型定价', '定价', '价格', '倍率', 'pricing'],
     build: (settings: BillingSettings) => (
       <RatioSettingsCard
         titleKey='Model Pricing'
@@ -116,6 +119,7 @@ const BILLING_SECTIONS = [
   {
     id: 'group-pricing',
     titleKey: 'Group Pricing',
+    keywords: ['分组定价', '分组倍率', 'group pricing'],
     build: (settings: BillingSettings) => (
       <RatioSettingsCard
         titleKey='Group Pricing'
@@ -129,6 +133,7 @@ const BILLING_SECTIONS = [
   {
     id: 'payment',
     titleKey: 'Payment Gateway',
+    keywords: ['支付', '收款', 'stripe', 'creem', '易支付'],
     build: (settings: BillingSettings) => (
       <PaymentSettingsSection
         defaultValues={{
@@ -189,6 +194,7 @@ const BILLING_SECTIONS = [
   {
     id: 'checkin',
     titleKey: 'Check-in Rewards',
+    keywords: ['签到', '打卡', 'checkin'],
     build: (settings: BillingSettings) => (
       <CheckinSettingsSection
         defaultValues={{
@@ -216,5 +222,7 @@ const billingRegistry = createSectionRegistry<
 export const BILLING_SECTION_IDS = billingRegistry.sectionIds
 export const BILLING_DEFAULT_SECTION = billingRegistry.defaultSection
 export const getBillingSectionNavItems = billingRegistry.getSectionNavItems
+export const getBillingSectionCatalogItems =
+  billingRegistry.getSectionCatalogItems
 export const getBillingSectionContent = billingRegistry.getSectionContent
 export const getBillingSectionMeta = billingRegistry.getSectionMeta

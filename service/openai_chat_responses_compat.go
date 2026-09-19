@@ -27,6 +27,10 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 	return openaicompat.ResponsesResponseToChatCompletionsResponse(resp, id)
 }
 
+func ResponsesFinishReason(resp *dto.OpenAIResponsesResponse, hasToolCalls bool) string {
+	return openaicompat.ResponsesFinishReason(resp, hasToolCalls)
+}
+
 func ExtractOutputTextFromResponses(resp *dto.OpenAIResponsesResponse) string {
 	return openaicompat.ExtractOutputTextFromResponses(resp)
 }

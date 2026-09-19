@@ -22,6 +22,7 @@ import { getRouteApi } from '@tanstack/react-router'
 import {
   type SortingState,
   type VisibilityState,
+  type ColumnPinningState,
   getCoreRowModel,
   getFacetedRowModel,
   getFacetedUniqueValues,
@@ -33,7 +34,7 @@ import {
 import { useDebounce } from '@/hooks'
 import { Database } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
+import { shouldRetryQuery, unwrapApiResponse } from '@/lib/api-errors'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
@@ -57,7 +58,6 @@ import {
   API_KEY_STATUS,
   API_KEY_STATUS_OPTIONS,
   API_KEY_STATUSES,
-  ERROR_MESSAGES,
 } from '../constants'
 import { type ApiKey } from '../types'
 import { ApiKeyCell } from './api-keys-cells'
@@ -167,7 +167,6 @@ function ApiKeysMobileList({
               </div>
               <DataTableRowActions row={row} />
             </div>
-
             <div className='flex items-center justify-between gap-2 text-xs'>
               <span className='text-muted-foreground'>{t('Quota')}</span>
               {apiKey.unlimited_quota ? (
@@ -196,6 +195,10 @@ export function ApiKeysTable() {
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({
+    left: ['select', 'name'],
+    right: ['actions'],
+  })
 
   const {
     globalFilter,
@@ -239,9 +242,8 @@ export function ApiKeysTable() {
   const tokenFilter = tokenFilterFromUrl
   const shouldSearch = Boolean(globalFilter?.trim() || tokenFilter.trim())
 
-  // Fetch data with React Query
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: [
       'keys',
       pagination.pageIndex + 1,
@@ -251,35 +253,26 @@ export function ApiKeysTable() {
       refreshTrigger,
     ],
     queryFn: async () => {
-      const result = shouldSearch
-        ? await searchApiKeys({
-            keyword: globalFilter,
-            token: tokenFilter,
-            p: pagination.pageIndex + 1,
-            size: pagination.pageSize,
-          })
-        : await getApiKeys({
-            p: pagination.pageIndex + 1,
-            size: pagination.pageSize,
-          })
-
-      if (!result.success) {
-        toast.error(
-          result.message ||
-            t(
-              shouldSearch
-                ? ERROR_MESSAGES.SEARCH_FAILED
-                : ERROR_MESSAGES.LOAD_FAILED
-            )
-        )
-        return { items: [], total: 0 }
-      }
+      const result = unwrapApiResponse(
+        shouldSearch
+          ? await searchApiKeys({
+              keyword: globalFilter,
+              token: tokenFilter,
+              p: pagination.pageIndex + 1,
+              size: pagination.pageSize,
+            })
+          : await getApiKeys({
+              p: pagination.pageIndex + 1,
+              size: pagination.pageSize,
+            })
+      )
 
       return {
         items: result.data?.items || [],
         total: result.data?.total || 0,
       }
     },
+    retry: shouldRetryQuery,
     placeholderData: (previousData) => previousData,
   })
 
@@ -291,6 +284,7 @@ export function ApiKeysTable() {
     state: {
       sorting,
       columnVisibility,
+      columnPinning,
       rowSelection,
       columnFilters,
       globalFilter,
@@ -300,6 +294,7 @@ export function ApiKeysTable() {
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnPinningChange: setColumnPinning,
     globalFilterFn: () => true,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -324,10 +319,16 @@ export function ApiKeysTable() {
       <ApiKeysStats apiKeys={apiKeys} />
 
       <DataTablePage
+        verticalScroll={{ mode: 'page' }}
+        applyHeaderSize
         table={table}
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
+        isError={isError}
+        errorDescription={error instanceof Error ? error.message : undefined}
+        tableHeaderClassName='sticky top-0 z-10 bg-background/80 backdrop-blur-md'
+        tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
         emptyTitle={t('No API Keys Found')}
         emptyDescription={t(
           'No API keys available. Create your first API key to get started.'

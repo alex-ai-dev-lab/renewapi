@@ -41,19 +41,18 @@ type SettingsSwitchFieldProps = SettingsSwitchRowProps & {
   label: ReactNode
   description?: ReactNode
   disabled?: boolean
-  /** Overrides the generated id used to tie the label to the switch. */
   switchId?: string
 }
 
 const settingsSwitchRowClassName =
-  'flex min-w-0 flex-row items-start justify-between gap-5 rounded-xl border border-border/70 bg-card px-4 py-4.5 shadow-[0_1px_0_0_theme(colors.border)]'
+  'border-border/60 bg-card/65 flex min-w-0 flex-row items-start justify-between gap-5 rounded-[calc(var(--radius)*1.125)] border px-4 py-4 shadow-sm backdrop-blur-sm'
 
 export function SettingsFormGrid(props: SettingsFormGridProps) {
   return (
     <div
       data-settings-form-span='full'
       className={cn(
-        'grid min-w-0 gap-x-5 gap-y-6 lg:grid-cols-2',
+        'grid min-w-0 gap-x-5 gap-y-5 lg:grid-cols-2',
         props.className
       )}
     >
@@ -113,9 +112,6 @@ export function SettingsSwitchField({
   switchId,
   ...props
 }: SettingsSwitchFieldProps) {
-  // Without an explicit association the label is inert: the switch itself is a
-  // small hit target on a full-width row, and assistive technology announces
-  // the control with no name.
   const generatedId = useId()
   const controlId = switchId ?? generatedId
   const descriptionId = `${controlId}-description`
@@ -160,7 +156,7 @@ export function SettingsControlGroup({
     <div
       data-settings-form-span='full'
       className={cn(
-        'bg-muted/20 border-border/70 min-w-0 space-y-4 rounded-xl border px-4 py-4.5',
+        'border-border/60 bg-card/45 min-w-0 space-y-4 rounded-[calc(var(--radius)*1.125)] border px-4 py-4 shadow-sm',
         className
       )}
       {...props}
@@ -174,7 +170,10 @@ export function SettingsControlChildren({
 }: SettingsControlChildrenProps) {
   return (
     <div
-      className={cn('border-border/70 ml-3 min-w-0 border-l pl-4', className)}
+      className={cn(
+        'border-primary/15 ml-3 min-w-0 border-l pl-4',
+        className
+      )}
       {...props}
     />
   )
@@ -184,7 +183,7 @@ export function SettingsForm({ className, ...props }: ComponentProps<'form'>) {
   return (
     <form
       className={cn(
-        'grid min-w-0 gap-x-5 gap-y-7 lg:grid-cols-2',
+        'grid min-w-0 gap-x-5 gap-y-6 lg:grid-cols-2',
         'lg:[&>*:not([data-slot=form-item])]:col-span-2',
         'lg:[&>[data-settings-form-span=full]]:col-span-2',
         'lg:[&>[data-slot=alert]]:col-span-2',

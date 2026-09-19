@@ -45,7 +45,7 @@ export function SettingsSection({
           </span>
         )
       }
-      contentClassName='space-y-5 sm:space-y-6'
+      contentClassName='space-y-4 sm:space-y-5'
     >
       {children}
     </SectionCard>

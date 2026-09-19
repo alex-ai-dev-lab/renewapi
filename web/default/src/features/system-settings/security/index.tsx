@@ -62,6 +62,7 @@ export function SecuritySettings() {
   return (
     <SettingsPage
       routePath='/_authenticated/system-settings/security/$section'
+      categoryId='security'
       defaultSettings={defaultSecuritySettings}
       defaultSection={SECURITY_DEFAULT_SECTION}
       getSectionContent={getSecuritySectionContent}

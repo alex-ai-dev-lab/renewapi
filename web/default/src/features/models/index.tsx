@@ -29,7 +29,6 @@ import { DeploymentAccessGuard } from './components/deployment-access-guard'
 import { DeploymentsTable } from './components/deployments-table'
 import { CreateDeploymentDrawer } from './components/dialogs/create-deployment-drawer'
 import { ModelsDialogs } from './components/models-dialogs'
-import { ModelsPrimaryButtons } from './components/models-primary-buttons'
 import { ModelsProvider, useModels } from './components/models-provider'
 import { ModelsTable } from './components/models-table'
 import { useModelDeploymentSettings } from './hooks/use-model-deployment-settings'
@@ -52,18 +51,16 @@ const SECTION_META: Record<ModelsSectionId, { titleKey: string }> = {
 }
 
 function ModelsContent() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { tabCategory, setTabCategory } = useModels()
   const params = route.useParams()
   const activeSection = (params.section ??
     MODELS_DEFAULT_SECTION) as ModelsSectionId
-
-  // Deployment create dialog state
   const [createDeploymentOpen, setCreateDeploymentOpen] = useState(false)
 
-  // keep context state in sync (for components that rely on it)
   useEffect(() => {
     if (tabCategory !== activeSection) {
       setTabCategory(activeSection)
@@ -81,15 +78,12 @@ function ModelsContent() {
     refresh: refreshDeploymentSettings,
   } = useModelDeploymentSettings()
 
-  // Ensure settings are fresh when switching to deployments section
   useEffect(() => {
     if (activeSection === 'deployments') {
       refreshDeploymentSettings()
     }
   }, [activeSection, refreshDeploymentSettings])
 
-  // Prefetch deployments list while connection check is in progress
-  // This allows the data to be ready as soon as the guard passes
   useEffect(() => {
     if (
       activeSection === 'deployments' &&
@@ -100,7 +94,7 @@ function ModelsContent() {
       queryClient.prefetchQuery({
         queryKey: deploymentsQueryKeys.list(defaultParams),
         queryFn: () => listDeployments(defaultParams),
-        staleTime: 30 * 1000, // 30 seconds
+        staleTime: 30 * 1000,
       })
     }
   }, [activeSection, isIoNetEnabled, loadingPhase, queryClient])
@@ -121,34 +115,36 @@ function ModelsContent() {
     <>
       <SectionPageLayout>
         <SectionPageLayout.Title>{t(meta.titleKey)}</SectionPageLayout.Title>
-        <SectionPageLayout.Description>
-          {t(
-            activeSection === 'metadata'
-              ? 'Curate model catalog metadata, vendors, and sync state in one workspace.'
-              : 'Monitor deployment inventory and runtime availability without leaving the admin workspace.'
-          )}
-        </SectionPageLayout.Description>
-        <SectionPageLayout.Actions>
-          {activeSection === 'metadata' ? (
-            <ModelsPrimaryButtons />
-          ) : (
+        {activeSection === 'deployments' ? (
+          <SectionPageLayout.Description>
+            {t('aurora.models.deployments.description', {
+              defaultValue: isChinese
+                ? '监控部署库存、连接状态与运行时可用性。'
+                : 'Monitor deployment inventory, connection state and runtime availability.',
+            })}
+          </SectionPageLayout.Description>
+        ) : null}
+        {activeSection === 'deployments' ? (
+          <SectionPageLayout.Actions>
             <Button onClick={() => setCreateDeploymentOpen(true)} size='sm'>
               <Plus className='h-4 w-4' />
               {t('Create deployment')}
             </Button>
-          )}
-        </SectionPageLayout.Actions>
+          </SectionPageLayout.Actions>
+        ) : null}
         <SectionPageLayout.Content>
           <div className='space-y-4'>
-            <Tabs value={activeSection} onValueChange={handleSectionChange}>
-              <TabsList className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'>
-                {MODELS_SECTION_IDS.map((section) => (
-                  <TabsTrigger key={section} value={section}>
-                    {t(SECTION_META[section].titleKey)}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+            {activeSection === 'deployments' ? (
+              <Tabs value={activeSection} onValueChange={handleSectionChange}>
+                <TabsList className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'>
+                  {MODELS_SECTION_IDS.map((section) => (
+                    <TabsTrigger key={section} value={section}>
+                      {t(SECTION_META[section].titleKey)}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            ) : null}
             {activeSection === 'metadata' ? (
               <ModelsTable />
             ) : (

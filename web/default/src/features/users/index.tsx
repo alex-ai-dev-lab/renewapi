@@ -20,7 +20,6 @@ import { useTranslation } from 'react-i18next'
 import { SectionPageLayout } from '@/components/layout'
 import { UsersDeleteDialog } from './components/users-delete-dialog'
 import { UsersMutateDrawer } from './components/users-mutate-drawer'
-import { UsersPrimaryButtons } from './components/users-primary-buttons'
 import { UsersProvider, useUsers } from './components/users-provider'
 import { UsersTable } from './components/users-table'
 
@@ -32,14 +31,6 @@ function UsersContent() {
     <>
       <SectionPageLayout>
         <SectionPageLayout.Title>{t('Users')}</SectionPageLayout.Title>
-        <SectionPageLayout.Description>
-          {t(
-            'Review account status, quota posture, and access roles from one operational view.'
-          )}
-        </SectionPageLayout.Description>
-        <SectionPageLayout.Actions>
-          <UsersPrimaryButtons />
-        </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
           <UsersTable />
         </SectionPageLayout.Content>

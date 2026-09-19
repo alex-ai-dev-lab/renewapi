@@ -314,6 +314,7 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
                         type='number'
                         min={1}
                         step={1}
+                        aria-label={t('Limit period')}
                         {...field}
                         onChange={(e) =>
                           field.onChange(parseInt(e.target.value) || 1)
@@ -345,6 +346,7 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
                         min={0}
                         max={100000000}
                         step={1}
+                        aria-label={t('Max requests per period')}
                         {...field}
                         onChange={(e) =>
                           field.onChange(parseInt(e.target.value) || 0)
@@ -376,6 +378,7 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
                         min={0}
                         max={100000000}
                         step={1}
+                        aria-label={t('Max successful requests')}
                         {...field}
                         onChange={(e) =>
                           field.onChange(parseInt(e.target.value) || 0)

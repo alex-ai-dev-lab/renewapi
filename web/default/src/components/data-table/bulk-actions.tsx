@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { type Table } from '@tanstack/react-table'
 import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -42,7 +42,7 @@ type DataTableBulkActionsProps<TData> = {
  * @template TData The type of data in the table.
  * @param {object} props The component props.
  * @param {Table<TData>} props.table The react-table instance.
- * @param {string} props.entityName The name of the entity being acted upon (e.g., "task", "user").
+ * @param {string} props.entityName Stable entity identifier for diagnostics.
  * @param {React.ReactNode} props.children The action buttons to be rendered inside the toolbar.
  * @returns {React.ReactNode | null} The rendered component or null if no rows are selected.
  */
@@ -56,19 +56,19 @@ export function DataTableBulkActions<TData>({
   const selectedCount = selectedRows.length
   const toolbarRef = useRef<HTMLDivElement>(null)
   const [announcement, setAnnouncement] = useState('')
+  const selectionLabel = `${selectedCount} ${t('selected')}`
 
-  // Announce selection changes to screen readers
+  // Announce selection changes to screen readers without leaking an English-only
+  // entity label into localized interfaces.
   useEffect(() => {
     if (selectedCount > 0) {
-      const message = `${selectedCount} ${entityName}${selectedCount > 1 ? 's' : ''} selected. Bulk actions toolbar is available.`
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setAnnouncement(message)
+      setAnnouncement(selectionLabel)
 
-      // Clear announcement after a delay
       const timer = setTimeout(() => setAnnouncement(''), 3000)
       return () => clearTimeout(timer)
     }
-  }, [selectedCount, entityName])
+  }, [selectedCount, selectionLabel])
 
   const handleClearSelection = () => {
     table.resetRowSelection()
@@ -105,12 +105,9 @@ export function DataTableBulkActions<TData>({
         buttons[buttons.length - 1]?.focus()
         break
       case 'Escape': {
-        // Check if the Escape key came from a dropdown trigger or content
-        // We can't check dropdown state because the menu closes before our handler runs.
         const target = event.target as HTMLElement
         const activeElement = document.activeElement as HTMLElement
 
-        // Check if the event target or currently focused element is a dropdown trigger
         const isFromDropdownTrigger =
           target?.getAttribute('data-slot') === 'dropdown-menu-trigger' ||
           activeElement?.getAttribute('data-slot') ===
@@ -118,17 +115,14 @@ export function DataTableBulkActions<TData>({
           target?.closest('[data-slot="dropdown-menu-trigger"]') ||
           activeElement?.closest('[data-slot="dropdown-menu-trigger"]')
 
-        // Check if the focused element is inside dropdown content (which is portaled)
         const isFromDropdownContent =
           activeElement?.closest('[data-slot="dropdown-menu-content"]') ||
           target?.closest('[data-slot="dropdown-menu-content"]')
 
         if (isFromDropdownTrigger || isFromDropdownContent) {
-          // Escape was meant for the dropdown - don't clear selection
           return
         }
 
-        // Escape was meant for the toolbar - clear selection
         event.preventDefault()
         handleClearSelection()
         break
@@ -142,7 +136,6 @@ export function DataTableBulkActions<TData>({
 
   return (
     <>
-      {/* Live region for screen reader announcements */}
       <div
         aria-live='polite'
         aria-atomic='true'
@@ -155,12 +148,13 @@ export function DataTableBulkActions<TData>({
       <div
         ref={toolbarRef}
         role='toolbar'
-        aria-label={`Bulk actions for ${selectedCount} selected ${entityName}${selectedCount > 1 ? 's' : ''}`}
+        data-entity={entityName}
+        aria-label={selectionLabel}
         aria-describedby='bulk-actions-description'
         tabIndex={-1}
         onKeyDown={handleKeyDown}
         className={cn(
-          'fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl',
+          'fixed bottom-24 left-1/2 z-[60] -translate-x-1/2 rounded-xl',
           'transition-all delay-100 duration-300 ease-out hover:scale-105',
           'focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none'
         )}
@@ -207,15 +201,11 @@ export function DataTableBulkActions<TData>({
             <Badge
               variant='default'
               className='min-w-8 rounded-lg'
-              aria-label={`${selectedCount} selected`}
+              aria-label={selectionLabel}
             >
               {selectedCount}
             </Badge>{' '}
-            <span className='hidden sm:inline'>
-              {entityName}
-              {selectedCount > 1 ? 's' : ''}
-            </span>{' '}
-            {t('selected')}
+            <span>{t('selected')}</span>
           </div>
 
           <Separator

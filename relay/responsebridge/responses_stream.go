@@ -217,7 +217,7 @@ func CompleteChatStream(c *gin.Context, info *relaycommon.RelayInfo, usage *dto.
 	statusRaw, _ := common.Marshal(status)
 	response.Status = statusRaw
 	if status == "incomplete" {
-		response.IncompleteDetails = &dto.IncompleteDetails{Reasoning: emitter.FinishReason}
+		response.IncompleteDetails = &dto.IncompleteDetails{Reasoning: "max_output_tokens"}
 	}
 	if err := emitter.send(c, eventType, map[string]any{"response": response}); err != nil {
 		return err

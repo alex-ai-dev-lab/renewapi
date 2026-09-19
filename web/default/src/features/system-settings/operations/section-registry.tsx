@@ -16,8 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { SystemBehaviorSection } from '../general/system-behavior-section'
 import { UptimeKumaSection } from '../content/uptime-kuma-section'
+import { SystemBehaviorSection } from '../general/system-behavior-section'
 import { EmailSettingsSection } from '../integrations/email-settings-section'
 import { MonitoringSettingsSection } from '../integrations/monitoring-settings-section'
 import { WorkerSettingsSection } from '../integrations/worker-settings-section'
@@ -33,6 +33,7 @@ const OPERATIONS_SECTIONS = [
   {
     id: 'email',
     titleKey: 'SMTP Email',
+    keywords: ['smtp', 'mail', '邮件', '邮箱'],
     build: (settings: OperationsSettings) => (
       <EmailSettingsSection
         defaultValues={{
@@ -50,6 +51,7 @@ const OPERATIONS_SECTIONS = [
   {
     id: 'worker',
     titleKey: 'Worker Proxy',
+    keywords: ['worker', '代理'],
     build: (settings: OperationsSettings) => (
       <WorkerSettingsSection
         defaultValues={{
@@ -64,6 +66,7 @@ const OPERATIONS_SECTIONS = [
   {
     id: 'monitoring',
     titleKey: 'Monitoring & Alerts',
+    keywords: ['监控', '告警', 'alerts'],
     build: (settings: OperationsSettings) => (
       <MonitoringSettingsSection
         defaultValues={{
@@ -86,15 +89,15 @@ const OPERATIONS_SECTIONS = [
   {
     id: 'channel-test',
     titleKey: 'Channel Test',
+    keywords: ['渠道测试', '通道测试', '测试渠道'],
     build: (settings: OperationsSettings) => (
-      <ChannelTestSettingsSection
-        defaultValue={settings.ChannelTestSetting}
-      />
+      <ChannelTestSettingsSection defaultValue={settings.ChannelTestSetting} />
     ),
   },
   {
     id: 'model-endpoint-defaults',
     titleKey: 'Model Endpoint Defaults',
+    keywords: ['端点默认值', 'endpoint defaults'],
     build: (settings: OperationsSettings) => (
       <ModelEndpointDefaultsSection
         defaultValue={settings.ModelEndpointDefaults}
@@ -104,6 +107,7 @@ const OPERATIONS_SECTIONS = [
   {
     id: 'uptime-kuma',
     titleKey: 'Uptime Kuma',
+    keywords: ['uptime', '可用性'],
     build: (settings: OperationsSettings) => (
       <UptimeKumaSection
         enabled={settings['console_setting.uptime_kuma_enabled']}
@@ -114,6 +118,7 @@ const OPERATIONS_SECTIONS = [
   {
     id: 'behavior',
     titleKey: 'System Behavior',
+    keywords: ['系统行为', '重试', 'retry'],
     build: (settings: OperationsSettings) => (
       <SystemBehaviorSection
         defaultValues={{
@@ -128,6 +133,7 @@ const OPERATIONS_SECTIONS = [
   {
     id: 'logs',
     titleKey: 'Log Maintenance',
+    keywords: ['日志', '日志清理'],
     build: (settings: OperationsSettings) => (
       <LogSettingsSection
         defaultEnabled={Boolean(settings.LogConsumeEnabled)}
@@ -171,6 +177,7 @@ const OPERATIONS_SECTIONS = [
   {
     id: 'update-checker',
     titleKey: 'System maintenance',
+    keywords: ['更新', '版本', 'update'],
     build: (
       _settings: OperationsSettings,
       currentVersion?: string | null,
@@ -201,5 +208,7 @@ export const OPERATIONS_SECTION_IDS = operationsRegistry.sectionIds
 export const OPERATIONS_DEFAULT_SECTION = operationsRegistry.defaultSection
 export const getOperationsSectionNavItems =
   operationsRegistry.getSectionNavItems
+export const getOperationsSectionCatalogItems =
+  operationsRegistry.getSectionCatalogItems
 export const getOperationsSectionContent = operationsRegistry.getSectionContent
 export const getOperationsSectionMeta = operationsRegistry.getSectionMeta

@@ -41,6 +41,7 @@ export function SiteSettings() {
   return (
     <SettingsPage
       routePath='/_authenticated/system-settings/site/$section'
+      categoryId='site'
       defaultSettings={defaultSiteSettings}
       defaultSection={SITE_DEFAULT_SECTION}
       getSectionContent={getSiteSectionContent}

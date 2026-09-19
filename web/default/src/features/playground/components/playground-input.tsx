@@ -18,19 +18,19 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
 import {
-  PaperclipIcon,
-  FileIcon,
-  ImageIcon,
-  ScreenShareIcon,
-  CameraIcon,
-  GlobeIcon,
-  SendIcon,
-  SquareIcon,
   BarChartIcon,
   BoxIcon,
-  NotepadTextIcon,
+  CameraIcon,
   CodeSquareIcon,
+  FileIcon,
+  GlobeIcon,
   GraduationCapIcon,
+  ImageIcon,
+  NotepadTextIcon,
+  PaperclipIcon,
+  ScreenShareIcon,
+  SendIcon,
+  SquareIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -44,13 +44,13 @@ import {
   PromptInput,
   PromptInputButton,
   PromptInputFooter,
+  type PromptInputMessage,
   PromptInputTextarea,
   PromptInputTools,
-  type PromptInputMessage,
 } from '@/components/ai-elements/prompt-input'
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
 import { ModelGroupSelector } from '@/components/model-group-selector'
-import type { ModelOption, GroupOption } from '../types'
+import type { GroupOption, ModelOption } from '../types'
 
 interface PlaygroundInputProps {
   onSubmit: (text: string) => void
@@ -71,7 +71,11 @@ const suggestions = [
   { icon: BoxIcon, text: 'Surprise me', className: 'text-muted-foreground' },
   { icon: NotepadTextIcon, text: 'Summarize text', className: 'text-chart-1' },
   { icon: CodeSquareIcon, text: 'Code', className: 'text-foreground' },
-  { icon: GraduationCapIcon, text: 'Get advice', className: 'text-muted-foreground' },
+  {
+    icon: GraduationCapIcon,
+    text: 'Get advice',
+    className: 'text-muted-foreground',
+  },
   { icon: null, text: 'More' },
 ]
 
@@ -113,7 +117,10 @@ export function PlaygroundInput({
 
   return (
     <div className='grid shrink-0 gap-4 px-1 md:pb-4'>
-      <PromptInput groupClassName='rounded-xl' onSubmit={handleSubmit}>
+      <PromptInput
+        groupClassName='border-border/60 rounded-[calc(var(--radius)*1.25)] shadow-lg shadow-foreground/5'
+        onSubmit={handleSubmit}
+      >
         <PromptInputTextarea
           autoComplete='off'
           autoCorrect='off'

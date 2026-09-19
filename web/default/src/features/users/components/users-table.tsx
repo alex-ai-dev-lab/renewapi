@@ -32,7 +32,7 @@ import {
 } from '@tanstack/react-table'
 import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
+import { shouldRetryQuery, unwrapApiResponse } from '@/lib/api-errors'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import {
   DISABLED_ROW_DESKTOP,
@@ -103,8 +103,9 @@ export function UsersTable() {
     (columnFilters.find((filter) => filter.id === 'group')?.value as string) ??
     ''
 
-  // Fetch data with React Query
-  const { data, isLoading, isFetching } = useQuery({
+  // The full filter arrays are already part of the query key.
+  // eslint-disable-next-line @tanstack/query/exhaustive-deps
+  const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: [
       'users',
       pagination.pageIndex + 1,
@@ -124,7 +125,7 @@ export function UsersTable() {
         page_size: pagination.pageSize,
       }
 
-      const result =
+      const result = unwrapApiResponse(
         hasFilter || hasColumnFilter
           ? await searchUsers({
               ...params,
@@ -134,19 +135,14 @@ export function UsersTable() {
               group: groupFilter,
             })
           : await getUsers(params)
-
-      if (!result.success) {
-        toast.error(
-          result.message || `Failed to ${hasFilter ? 'search' : 'load'} users`
-        )
-        return { items: [], total: 0 }
-      }
+      )
 
       return {
         items: result.data?.items || [],
         total: result.data?.total || 0,
       }
     },
+    retry: shouldRetryQuery,
     placeholderData: (previousData) => previousData,
   })
 
@@ -212,10 +208,15 @@ export function UsersTable() {
       <UsersStats users={users} />
 
       <DataTablePage
+        verticalScroll={{ mode: 'page' }}
         table={table}
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
+        isError={isError}
+        errorDescription={error instanceof Error ? error.message : undefined}
+        tableHeaderClassName='sticky top-0 z-10 bg-background/80 backdrop-blur-md'
+        tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
         emptyTitle={t('No Users Found')}
         emptyDescription={t(
           'No users available. Try adjusting your search or filters.'

@@ -74,10 +74,6 @@ type PageHeaderProps = Omit<ComponentProps<'header'>, 'title'> & {
   title?: ReactNode
   description?: ReactNode
   actions?: ReactNode
-  /**
-   * Visual density. `compact` uses a smaller title — used by list pages
-   * (SectionPageLayout) to keep the header tight and surface more rows.
-   */
   size?: 'default' | 'compact'
 }
 
@@ -94,7 +90,7 @@ export function PageHeader({
     <header
       data-slot='page-header'
       className={cn(
-        'border-border flex flex-col gap-1.5 border-b pb-2 sm:flex-row sm:items-end sm:justify-between',
+        'flex flex-col gap-1.5 pb-2 sm:flex-row sm:items-end sm:justify-between',
         className
       )}
       {...props}
@@ -103,7 +99,7 @@ export function PageHeader({
         {title != null && (
           <h1
             className={cn(
-              'leading-tight font-semibold tracking-tight',
+              'leading-[1.06] font-extrabold tracking-[-0.02em]',
               size === 'compact'
                 ? 'text-[15px] sm:text-base'
                 : 'text-2xl sm:text-3xl'
@@ -155,7 +151,7 @@ export function SectionCard({
     <Card
       data-slot='section-card'
       className={cn(
-        'border-border min-w-0 gap-0 rounded-xl py-0 shadow-none',
+        'border-border/60 min-w-0 gap-0 rounded-[calc(var(--radius)*1.375)] py-0 shadow-none',
         className
       )}
       {...props}
@@ -255,7 +251,7 @@ export function StatCard({
           )}
         </div>
         <div>
-          <div className='font-mono text-xl font-semibold tracking-tight tabular-nums'>
+          <div className='text-[26px] leading-none font-extrabold tracking-[-0.03em] tabular-nums'>
             {value}
           </div>
           {description != null && (
@@ -276,7 +272,7 @@ export function DataTable({
   return (
     <div
       data-slot='primitive-data-table'
-      className='border-border bg-card overflow-x-auto rounded-xl border'
+      className='border-border/60 bg-card overflow-x-auto rounded-[calc(var(--radius)*1.375)] border'
     >
       <Table
         className={cn('[&_th]:text-muted-foreground', className)}
@@ -329,7 +325,7 @@ export function FilterPills({
             variant={selected ? 'default' : 'outline'}
             disabled={option.disabled}
             onClick={() => onValueChange?.(option.value)}
-            className='rounded-lg'
+            className='rounded-full'
           >
             {option.label}
           </Button>
@@ -350,7 +346,7 @@ export function SegmentedTabs({
 }: SegmentedTabsProps) {
   return (
     <Tabs className={cn('w-full sm:w-auto', className)} {...props}>
-      <TabsList className='border-border bg-card h-auto max-w-full flex-wrap justify-start rounded-xl border p-1'>
+      <TabsList className='border-border/60 bg-card h-auto max-w-full flex-wrap justify-start rounded-full border p-1'>
         {options.map((option) => (
           <TabsTrigger
             key={option.value}
@@ -386,7 +382,7 @@ export function EmptyState({
   return (
     <Empty
       className={cn(
-        'border-border bg-card min-h-64 rounded-xl border border-dashed p-8',
+        'border-border/60 bg-card min-h-64 rounded-[calc(var(--radius)*1.375)] border border-dashed p-8',
         className
       )}
       {...props}
@@ -425,7 +421,7 @@ export function Toolbar({
     <div
       data-slot='toolbar'
       className={cn(
-        'border-border bg-card flex flex-col gap-3 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between',
+        'border-border/60 bg-card flex flex-col gap-3 rounded-[calc(var(--radius)*1.125)] border p-3 sm:flex-row sm:items-center sm:justify-between',
         className
       )}
       {...props}

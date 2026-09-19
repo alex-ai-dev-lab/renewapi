@@ -275,9 +275,25 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         return (
           <div className='flex flex-col gap-0.5'>
-            <span className='font-mono text-xs tabular-nums'>
-              {formatTimestampToDate(timestamp)}
-            </span>
+            <TooltipProvider delay={300}>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span className='cursor-help font-mono text-xs tabular-nums' />
+                  }
+                >
+                  {new Date(timestamp * 1000).toLocaleTimeString(undefined, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false,
+                  })}
+                </TooltipTrigger>
+                <TooltipContent side='top'>
+                  {formatTimestampToDate(timestamp)}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <StatusBadge
               label={t(config.label)}
               variant={config.color as StatusBadgeProps['variant']}
@@ -295,6 +311,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
       },
       enableHiding: false,
       meta: { label: t('Time') },
+      size: 122,
+      maxSize: 136,
     },
   ]
 
@@ -404,6 +422,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           )
         },
         meta: { label: t('Channel') },
+        size: 150,
+        maxSize: 170,
       },
       {
         id: 'user',
@@ -461,6 +481,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           )
         },
         meta: { label: t('User') },
+        size: 120,
+        maxSize: 140,
       }
     )
   }
@@ -521,8 +543,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
       )
     },
     meta: { label: t('Token') },
-    size: 240,
-    maxSize: 280,
+    size: 180,
+    maxSize: 220,
   })
 
   columns.push(
@@ -547,8 +569,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         )
       },
       meta: { label: t('Model'), mobileTitle: true },
-      size: 240,
-      maxSize: 280,
+      size: 180,
+      maxSize: 220,
     },
 
     {
@@ -661,6 +683,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         )
       },
       meta: { label: t('Timing') },
+      size: 150,
+      maxSize: 170,
     },
 
     {
@@ -712,6 +736,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         )
       },
       meta: { label: 'Tokens' },
+      size: 132,
+      maxSize: 150,
     },
 
     {
@@ -767,6 +793,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         )
       },
       meta: { label: t('Cost') },
+      size: 112,
+      maxSize: 128,
     },
 
     {

@@ -47,6 +47,7 @@ interface TrendChartProps {
   title?: string
   description?: string
   storageKey?: string
+  usageOnly?: boolean
 }
 
 const TREND_MODES = [
@@ -134,6 +135,7 @@ export function TrendChart({
   title = 'Operational trends',
   description = 'Requests, reliability, first-token latency, cost, and token volume over time.',
   storageKey = 'dashboard:trend-chart',
+  usageOnly = false,
 }: TrendChartProps) {
   const defaultTrendMode = useDashboardDefaultTrendMode()
   const [mode, setMode] = useDashboardDefaultPreference<TrendMode>(
@@ -158,11 +160,24 @@ export function TrendChart({
     tokens: point.total_prompt_tokens + point.total_output_tokens,
   }))
   const summary = buildTrendSummary(data)
+  const effectiveMode =
+    usageOnly && (mode === 'reliability' || mode === 'latency')
+      ? 'overview'
+      : mode
+  const modeOptions = usageOnly
+    ? TREND_MODE_OPTIONS.filter((option) =>
+        ['overview', 'traffic', 'spend'].includes(option.value)
+      )
+    : TREND_MODE_OPTIONS
   const visibleCharts = {
-    traffic: mode === 'overview' || mode === 'traffic',
-    reliability: mode === 'overview' || mode === 'reliability',
-    latency: mode === 'overview' || mode === 'latency',
-    spend: mode === 'overview' || mode === 'spend',
+    traffic: effectiveMode === 'overview' || effectiveMode === 'traffic',
+    reliability:
+      !usageOnly &&
+      (effectiveMode === 'overview' || effectiveMode === 'reliability'),
+    latency:
+      !usageOnly &&
+      (effectiveMode === 'overview' || effectiveMode === 'latency'),
+    spend: effectiveMode === 'overview' || effectiveMode === 'spend',
   }
 
   return (
@@ -173,16 +188,16 @@ export function TrendChart({
           <CardDescription>{description}</CardDescription>
         </div>
         <div className='inline-flex w-fit flex-wrap items-center gap-1 rounded-md border p-1'>
-          {TREND_MODE_OPTIONS.map((option) => (
+          {modeOptions.map((option) => (
             <Button
               key={option.value}
               type='button'
-              variant={mode === option.value ? 'secondary' : 'ghost'}
+              variant={effectiveMode === option.value ? 'secondary' : 'ghost'}
               size='sm'
               onClick={() => setMode(option.value)}
               className={cn(
                 'h-8 px-3 text-xs',
-                mode === option.value && 'bg-secondary'
+                effectiveMode === option.value && 'bg-secondary'
               )}
             >
               {option.label}
@@ -191,24 +206,33 @@ export function TrendChart({
         </div>
       </CardHeader>
       <CardContent className='space-y-4'>
-        <div className='bg-muted/20 grid gap-2 rounded-lg border p-3 sm:grid-cols-2 xl:grid-cols-6'>
+        <div
+          className={cn(
+            'bg-muted/20 grid gap-2 rounded-lg border p-3 sm:grid-cols-2',
+            !usageOnly && 'xl:grid-cols-6'
+          )}
+        >
           <TrendSummaryItem
             label='Requests'
             value={formatCount(summary.requests)}
           />
-          <TrendSummaryItem
-            label='Success'
-            value={formatPercent(summary.successRate)}
-          />
-          <TrendSummaryItem
-            label='Failures'
-            value={formatCount(summary.failure)}
-          />
-          <TrendSummaryItem
-            label='First token'
-            value={formatMs(summary.avgFirstToken)}
-          />
-          <TrendSummaryItem label='Cost' value={formatUsd(summary.cost)} />
+          {!usageOnly && (
+            <>
+              <TrendSummaryItem
+                label='Success'
+                value={formatPercent(summary.successRate)}
+              />
+              <TrendSummaryItem
+                label='Failures'
+                value={formatCount(summary.failure)}
+              />
+              <TrendSummaryItem
+                label='First token'
+                value={formatMs(summary.avgFirstToken)}
+              />
+              <TrendSummaryItem label='Cost' value={formatUsd(summary.cost)} />
+            </>
+          )}
           <TrendSummaryItem
             label='Tokens'
             value={formatCount(summary.tokens)}
@@ -217,7 +241,7 @@ export function TrendChart({
         <div
           className={cn(
             'grid gap-4',
-            mode === 'overview' ? 'lg:grid-cols-2' : 'grid-cols-1'
+            effectiveMode === 'overview' ? 'lg:grid-cols-2' : 'grid-cols-1'
           )}
         >
           {visibleCharts.traffic ? (
@@ -225,26 +249,36 @@ export function TrendChart({
               data={chartData}
               title='Traffic'
               kind='area'
-              expanded={mode !== 'overview'}
-              series={[
-                {
-                  key: 'requests',
-                  name: 'Requests',
-                  color: 'var(--primary)',
-                },
-                {
-                  key: 'failure',
-                  name: 'Failures',
-                  color: 'var(--destructive)',
-                },
-              ]}
+              expanded={effectiveMode !== 'overview'}
+              series={
+                usageOnly
+                  ? [
+                      {
+                        key: 'requests',
+                        name: 'Requests',
+                        color: 'var(--primary)',
+                      },
+                    ]
+                  : [
+                      {
+                        key: 'requests',
+                        name: 'Requests',
+                        color: 'var(--primary)',
+                      },
+                      {
+                        key: 'failure',
+                        name: 'Failures',
+                        color: 'var(--destructive)',
+                      },
+                    ]
+              }
             />
           ) : null}
           {visibleCharts.reliability ? (
             <TrendMiniChart
               data={chartData}
               title='Reliability'
-              expanded={mode !== 'overview'}
+              expanded={effectiveMode !== 'overview'}
               series={[
                 {
                   key: 'successRate',
@@ -264,7 +298,7 @@ export function TrendChart({
             <TrendMiniChart
               data={chartData}
               title='Latency'
-              expanded={mode !== 'overview'}
+              expanded={effectiveMode !== 'overview'}
               series={[
                 {
                   key: 'firstToken',
@@ -282,12 +316,30 @@ export function TrendChart({
           {visibleCharts.spend ? (
             <TrendMiniChart
               data={chartData}
-              title='Cost and tokens'
-              expanded={mode !== 'overview'}
-              series={[
-                { key: 'cost', name: 'Cost $', color: 'var(--success)' },
-                { key: 'tokens', name: 'Tokens', color: 'var(--primary)' },
-              ]}
+              title={usageOnly ? 'Tokens' : 'Cost and tokens'}
+              expanded={effectiveMode !== 'overview'}
+              series={
+                usageOnly
+                  ? [
+                      {
+                        key: 'tokens',
+                        name: 'Tokens',
+                        color: 'var(--primary)',
+                      },
+                    ]
+                  : [
+                      {
+                        key: 'cost',
+                        name: 'Cost $',
+                        color: 'var(--success)',
+                      },
+                      {
+                        key: 'tokens',
+                        name: 'Tokens',
+                        color: 'var(--primary)',
+                      },
+                    ]
+              }
             />
           ) : null}
         </div>
@@ -357,10 +409,7 @@ function TrendMiniChart(props: {
         <ResponsiveContainer width='100%' height={props.expanded ? 320 : 210}>
           {props.kind === 'area' ? (
             <AreaChart data={props.data}>
-              <CartesianGrid
-                strokeDasharray='3 3'
-                stroke='var(--border)'
-              />
+              <CartesianGrid strokeDasharray='3 3' stroke='var(--border)' />
               <XAxis
                 dataKey='time'
                 minTickGap={24}
@@ -389,10 +438,7 @@ function TrendMiniChart(props: {
             </AreaChart>
           ) : (
             <LineChart data={props.data}>
-              <CartesianGrid
-                strokeDasharray='3 3'
-                stroke='var(--border)'
-              />
+              <CartesianGrid strokeDasharray='3 3' stroke='var(--border)' />
               <XAxis
                 dataKey='time'
                 minTickGap={24}

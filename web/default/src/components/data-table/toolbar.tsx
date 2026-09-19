@@ -247,6 +247,7 @@ export function DataTableToolbar<TData>(props: DataTableToolbarProps<TData>) {
   if (hasLeftActions) {
     return (
       <div
+        data-ui='data-table-toolbar'
         className={cn(
           'border-border bg-card shadow-[0_1px_0_0_theme(colors.border)] flex max-w-full min-w-0 flex-col gap-2 rounded-lg border p-2.5 [&_input]:h-8',
           props.className
@@ -282,6 +283,7 @@ export function DataTableToolbar<TData>(props: DataTableToolbarProps<TData>) {
 
   return (
     <div
+      data-ui='data-table-toolbar'
       className={cn(
         'border-border bg-card shadow-[0_1px_0_0_theme(colors.border)] flex max-w-full min-w-0 flex-wrap items-center gap-2 rounded-lg border p-2.5 [&_input]:h-8',
         props.className

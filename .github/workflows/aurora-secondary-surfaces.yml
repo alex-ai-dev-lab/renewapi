@@ -1,0 +1,183 @@
+name: Aurora Secondary Surfaces QA
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'web/default/src/**'
+      - '.github/aurora-secondary-surfaces.mjs'
+      - '.github/workflows/aurora-secondary-surfaces.yml'
+      - 'controller/**'
+      - 'model/**'
+      - 'router/**'
+      - 'common/**'
+      - 'setting/**'
+      - 'main.go'
+      - 'go.mod'
+      - 'go.sum'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: aurora-secondary-surfaces-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secondary-surfaces:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mark Secondary Surfaces QA pending
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'pending',
+              context: 'aurora-secondary-surfaces',
+              description: 'Secondary Surfaces browser QA is running',
+              target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            })
+
+      - name: Prepare QA artifact directory
+        run: |
+          mkdir -p qa-artifacts/aurora-secondary-surfaces
+          printf 'sha=%s\nrun_id=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > qa-artifacts/aurora-secondary-surfaces/run.txt
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Verify default frontend
+        working-directory: web/default
+        run: |
+          bun install --frozen-lockfile
+          bun test
+          bun run typecheck
+          bun run build
+
+      - name: Build classic frontend
+        working-directory: web/classic
+        run: |
+          if ! bun install --frozen-lockfile; then
+            bun pm cache rm
+            bun install --frozen-lockfile
+          fi
+          bun run build
+
+      - name: Run router regression tests
+        run: go test ./router
+
+      - name: Build real RenewAPI binary
+        run: go build -o "$RUNNER_TEMP/renewapi-secondary-surfaces" .
+
+      - name: Bootstrap fresh SQLite with production migrations
+        env:
+          SQLITE_PATH: ${{ runner.temp }}/renewapi-secondary-surfaces.db
+          SESSION_SECRET: aurora-secondary-surfaces-migration-2026-08-24
+          GIN_MODE: release
+          DEBUG: 'false'
+          MEMORY_CACHE_ENABLED: 'false'
+          OFFICIAL_PRICE_SYNC_ENABLED: 'false'
+          UPDATE_TASK: 'false'
+          BATCH_UPDATE_ENABLED: 'false'
+          NODE_TYPE: slave
+          TZ: Asia/Taipei
+        run: |
+          "$RUNNER_TEMP/renewapi-secondary-surfaces" migrate --up
+          "$RUNNER_TEMP/renewapi-secondary-surfaces" migrate --check
+
+      - name: Install browser QA dependencies
+        working-directory: web/default
+        run: |
+          bun add --no-save playwright@1.55.0 axe-core@4.10.2
+          bunx playwright install --with-deps chromium
+
+      - name: Stage Secondary Surfaces harness
+        working-directory: web/default
+        run: cp ../../.github/aurora-secondary-surfaces.mjs .aurora-secondary-surfaces.mjs
+
+      - name: Run Secondary Surfaces real-browser gate
+        working-directory: web/default
+        env:
+          QA_BINARY: ${{ runner.temp }}/renewapi-secondary-surfaces
+          QA_DB: ${{ runner.temp }}/renewapi-secondary-surfaces.db
+          QA_OUT: ../../qa-artifacts/aurora-secondary-surfaces
+          QA_PORT: '4173'
+          # The 72-case matrix deliberately concentrates document and API traffic
+          # onto one loopback IP. Keep both production limiters enabled, but give
+          # this isolated QA process budgets above the synthetic burst so a
+          # limiter smoke remains active without contaminating the UI audit.
+          GLOBAL_WEB_RATE_LIMIT: '600'
+          GLOBAL_API_RATE_LIMIT: '2000'
+        run: bun .aurora-secondary-surfaces.mjs
+
+      - name: Verify Secondary evidence redaction
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence='qa-artifacts/aurora-secondary-surfaces'
+          if [[ ! -d "$evidence" ]]; then
+            exit 0
+          fi
+          leaks="$(
+            find "$evidence" -type f \( -name '*.json' -o -name '*.txt' -o -name '*.log' \) -print0 \
+              | xargs -0 -r grep -l -F \
+                  -e 'QaRoot123!' \
+                  -e 'aurora-secondary-surfaces-2026-08-24' \
+              || true
+          )"
+          if [[ -n "$leaks" ]]; then
+            rm -rf "$evidence"
+            printf '%s\n' 'Secondary evidence contained a QA credential and was removed before upload.'
+            exit 1
+          fi
+
+      - name: Show Secondary Surfaces summary
+        if: always()
+        run: |
+          cat qa-artifacts/aurora-secondary-surfaces/summary.txt || true
+          cat qa-artifacts/aurora-secondary-surfaces/failure.json || true
+          cat qa-artifacts/aurora-secondary-surfaces/failures.json || true
+
+      - name: Upload Secondary Surfaces evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurora-secondary-surfaces
+          path: qa-artifacts/aurora-secondary-surfaces
+          if-no-files-found: error
+
+      - name: Report Secondary Surfaces QA status
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          JOB_STATUS: ${{ job.status }}
+        with:
+          script: |
+            const state = process.env.JOB_STATUS === 'success' ? 'success' : 'failure'
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state,
+              context: 'aurora-secondary-surfaces',
+              description: state === 'success'
+                ? 'Secondary Surfaces browser QA passed'
+                : 'Secondary Surfaces browser QA failed',
+              target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            })

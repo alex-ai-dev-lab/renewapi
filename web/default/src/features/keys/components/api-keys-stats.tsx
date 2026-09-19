@@ -21,11 +21,13 @@ import { InlineStatsBar } from '@/components/inline-stats-bar'
 import { API_KEY_STATUS } from '../constants'
 import type { ApiKey } from '../types'
 
-export function ApiKeysStats({ apiKeys }: { apiKeys: ApiKey[] }) {
+export function ApiKeysStats(props: { apiKeys: ApiKey[] }) {
   const { t } = useTranslation()
-  const enabled = apiKeys.filter((item) => item.status === API_KEY_STATUS.ENABLED)
-  const limited = apiKeys.filter((item) => !item.unlimited_quota)
-  const exhausted = apiKeys.filter(
+  const enabled = props.apiKeys.filter(
+    (item) => item.status === API_KEY_STATUS.ENABLED
+  )
+  const limited = props.apiKeys.filter((item) => !item.unlimited_quota)
+  const exhausted = props.apiKeys.filter(
     (item) =>
       !item.unlimited_quota &&
       item.remain_quota <= 0 &&
@@ -34,8 +36,9 @@ export function ApiKeysStats({ apiKeys }: { apiKeys: ApiKey[] }) {
 
   return (
     <InlineStatsBar
+      className='hidden'
       items={[
-        { label: t('Total Keys'), value: apiKeys.length },
+        { label: t('Total Keys'), value: props.apiKeys.length },
         { label: t('Enabled'), value: enabled.length, tone: 'success' },
         { label: t('Quota-limited'), value: limited.length, tone: 'accent' },
         {

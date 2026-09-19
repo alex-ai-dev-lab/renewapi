@@ -28,8 +28,6 @@ import type { Channel } from '../types'
 // ============================================================================
 
 type DialogType =
-  | 'create-channel'
-  | 'update-channel'
   | 'test-channel'
   | 'balance-query'
   | 'fetch-models'
@@ -111,8 +109,12 @@ export function ChannelsProvider({ children }: { children: React.ReactNode }) {
 // Hook
 // ============================================================================
 
+export function useChannelsOptional() {
+  return useContext(ChannelsContext)
+}
+
 export function useChannels() {
-  const context = useContext(ChannelsContext)
+  const context = useChannelsOptional()
   if (!context) {
     throw new Error('useChannels must be used within ChannelsProvider')
   }

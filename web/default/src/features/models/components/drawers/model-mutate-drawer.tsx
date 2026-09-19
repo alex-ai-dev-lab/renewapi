@@ -739,7 +739,7 @@ export function ModelMutateDrawer({
                       value={field.value ? String(field.value) : undefined}
                     >
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger aria-label={t('Vendor')}>
                           <SelectValue placeholder={t('Select vendor')} />
                         </SelectTrigger>
                       </FormControl>
@@ -844,7 +844,11 @@ export function ModelMutateDrawer({
                     v !== null && handleFillEndpointTemplate(v)
                   }
                 >
-                  <SelectTrigger size='sm' className='w-[200px]'>
+                  <SelectTrigger
+                    size='sm'
+                    className='w-[200px]'
+                    aria-label={t('Load template...')}
+                  >
                     <SelectValue placeholder={t('Load template...')} />
                   </SelectTrigger>
                   <SelectContent alignItemWithTrigger={false}>

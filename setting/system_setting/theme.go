@@ -22,7 +22,7 @@ type ThemeSettings struct {
 }
 
 var themeSettings = ThemeSettings{
-	Frontend:              "classic",
+	Frontend:              "default",
 	CustomizationPreset:   "default",
 	CustomizationFont:     "default",
 	CustomizationRadius:   "default",

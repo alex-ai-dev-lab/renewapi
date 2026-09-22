@@ -27,6 +27,7 @@ import {
   verifyJSON,
 } from '../../../../helpers';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
+import { useChannelTestPrompts } from '../../../../hooks/channel/useChannelTestPrompts';
 import { CHANNEL_OPTIONS, MODEL_FETCHABLE_CHANNEL_TYPES } from '../../../../constants';
 import {
   SideSheet,
@@ -173,6 +174,7 @@ const prettyJson = (value) => {
 
 const EditChannelModal = (props) => {
   const { t } = useTranslation();
+  const { prompts: testPrompts, loading: promptsLoading } = useChannelTestPrompts();
   const channelId = props.editingChannel.id;
   const isEdit = channelId !== undefined;
   const [loading, setLoading] = useState(isEdit);
@@ -194,6 +196,7 @@ const EditChannelModal = (props) => {
     models: [],
     auto_ban: 1,
     test_model: '',
+    channel_test_prompt_id: 0,
     groups: ['default'],
     priority: 0,
     weight: 0,
@@ -4069,6 +4072,23 @@ const EditChannelModal = (props) => {
                   />
 
                   {/* Test Model - Core Config */}
+                  <Form.Select
+                    field='channel_test_prompt_id'
+                    label={t('测试提示词')}
+                    loading={promptsLoading}
+                    optionList={[
+                      { value: 0, label: t('默认提示词') },
+                      ...testPrompts.map((prompt) => ({
+                        value: prompt.id,
+                        label: prompt.name,
+                        disabled: !prompt.enabled,
+                      })),
+                    ]}
+                    onSelect={(value) =>
+                      handleInputChange('channel_test_prompt_id', value ?? 0)
+                    }
+                    extraText={t('停用的提示词会回退到默认提示词。')}
+                  />
                   <Form.Input
                     field='test_model'
                     label={t('默认测试模型')}

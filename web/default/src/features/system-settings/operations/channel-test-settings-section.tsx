@@ -41,7 +41,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { PromptManager } from '@/features/channel-test-prompts/prompt-manager'
 import { SettingsForm } from '../components/settings-form-layout'
 import {
   SettingsPageActionsPortal,
@@ -82,11 +84,9 @@ const streamModeOptions = [
 ] as const
 
 const channelTestSchema = z.object({
+  auto_test_only_auto_disabled: z.boolean(),
   prompt: z.string(),
-  max_tokens: z.coerce
-    .number()
-    .int()
-    .min(0, 'MaxTokens must be 0 or greater'),
+  max_tokens: z.coerce.number().int().min(0, 'MaxTokens must be 0 or greater'),
   reasoning_effort: z.string(),
   endpoint_type: z.string(),
   stream_mode: z.enum(['auto', 'on', 'off']),
@@ -100,6 +100,7 @@ type ChannelTestFormValues = z.output<typeof channelTestSchema>
 type ChannelTestFormInput = z.input<typeof channelTestSchema>
 
 const defaultChannelTestSetting: ChannelTestFormValues = {
+  auto_test_only_auto_disabled: false,
   prompt: 'hi',
   max_tokens: 0,
   reasoning_effort: '',
@@ -131,6 +132,7 @@ function normalizeChannelTestSetting(
   values: ChannelTestFormValues
 ): ChannelTestFormValues {
   return {
+    auto_test_only_auto_disabled: values.auto_test_only_auto_disabled,
     prompt: values.prompt.trim() || 'hi',
     max_tokens: values.max_tokens,
     reasoning_effort: values.reasoning_effort.trim(),
@@ -151,11 +153,7 @@ export function ChannelTestSettingsSection({
   )
   const baselineRef = useRef<ChannelTestFormValues>(formDefaults)
 
-  const form = useForm<
-    ChannelTestFormInput,
-    unknown,
-    ChannelTestFormValues
-  >({
+  const form = useForm<ChannelTestFormInput, unknown, ChannelTestFormValues>({
     resolver: zodResolver(channelTestSchema),
     defaultValues: formDefaults,
   })
@@ -181,59 +179,42 @@ export function ChannelTestSettingsSection({
   }
 
   return (
-    <SettingsSection title={t('Channel test probe request')}>
-      <Form {...form}>
-        <SettingsForm onSubmit={form.handleSubmit(onSubmit)}>
-          <SettingsPageActionsPortal>
-            <Button
-              type='button'
-              size='sm'
-              variant='outline'
-              onClick={handleResetDefaults}
-            >
-              {t('Reset defaults')}
-            </Button>
-          </SettingsPageActionsPortal>
-          <SettingsPageFormActions
-            onSave={form.handleSubmit(onSubmit)}
-            isSaving={updateOption.isPending}
-            saveLabel='Save channel test settings'
-          />
+    <>
+      <PromptManager />
+      <SettingsSection title={t('Channel test probe request')}>
+        <Form {...form}>
+          <SettingsForm
+            onSubmit={(event) => void form.handleSubmit(onSubmit)(event)}
+          >
+            <SettingsPageActionsPortal>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                onClick={handleResetDefaults}
+              >
+                {t('Reset defaults')}
+              </Button>
+            </SettingsPageActionsPortal>
+            <SettingsPageFormActions
+              onSave={() => void form.handleSubmit(onSubmit)()}
+              isSaving={updateOption.isPending}
+              saveLabel='Save channel test settings'
+            />
 
-          <FormField
-            control={form.control}
-            name='prompt'
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t('Probe prompt')}</FormLabel>
-                <FormControl>
-                  <Textarea className='min-h-24' {...field} />
-                </FormControl>
-                <FormDescription>
-                  {t('Nonce anti-poison checks override this prompt when needed')}
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <div className='grid gap-6 md:grid-cols-2'>
             <FormField
               control={form.control}
-              name='max_tokens'
+              name='prompt'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t('MaxTokens')}</FormLabel>
+                  <FormLabel>{t('Legacy fallback prompt')}</FormLabel>
                   <FormControl>
-                    <Input
-                      type='number'
-                      min={0}
-                      step={1}
-                      {...safeNumberFieldProps(field)}
-                    />
+                    <Textarea className='min-h-24' {...field} />
                   </FormControl>
                   <FormDescription>
-                    {t('Set 0 to use the model-specific default')}
+                    {t(
+                      'Used when no enabled prompt profile applies. Anti-poison preserves this prompt.'
+                    )}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -242,121 +223,189 @@ export function ChannelTestSettingsSection({
 
             <FormField
               control={form.control}
-              name='timeout_seconds'
+              name='auto_test_only_auto_disabled'
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Timeout seconds')}</FormLabel>
+                <FormItem className='flex items-center justify-between gap-4'>
+                  <div>
+                    <FormLabel>
+                      {t('Automatically test only auto-disabled channels')}
+                    </FormLabel>
+                    <FormDescription>
+                      {t(
+                        'Manual tests are unaffected. Existing recovery schedules still apply.'
+                      )}
+                    </FormDescription>
+                  </div>
                   <FormControl>
-                    <Input
-                      type='number'
-                      min={0}
-                      step={1}
-                      {...safeNumberFieldProps(field)}
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t('Set 0 to use the global relay timeout')}
-                  </FormDescription>
-                  <FormMessage />
                 </FormItem>
               )}
             />
-          </div>
-
-          <div className='grid gap-6 md:grid-cols-3'>
-            <FormField
-              control={form.control}
-              name='reasoning_effort'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Reasoning effort')}</FormLabel>
-                  <Select
-                    value={field.value || 'default'}
-                    onValueChange={(value) =>
-                      field.onChange(value === 'default' ? '' : (value ?? ''))
-                    }
-                  >
+            <div className='grid gap-6 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='max_tokens'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('MaxTokens')}</FormLabel>
                     <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('Provider default')} />
-                      </SelectTrigger>
+                      <Input
+                        type='number'
+                        min={0}
+                        step={1}
+                        {...safeNumberFieldProps(field)}
+                      />
                     </FormControl>
-                    <SelectContent alignItemWithTrigger={false}>
-                      <SelectGroup>
-                        {reasoningEffortOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {t(option.label)}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                    <FormDescription>
+                      {t('Set 0 to use the model-specific default')}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <FormField
-              control={form.control}
-              name='endpoint_type'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Endpoint type')}</FormLabel>
-                  <Select
-                    value={field.value || 'auto'}
-                    onValueChange={(value) =>
-                      field.onChange(value === 'auto' ? '' : (value ?? ''))
-                    }
-                  >
+              <FormField
+                control={form.control}
+                name='timeout_seconds'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Timeout seconds')}</FormLabel>
                     <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('Auto detect')} />
-                      </SelectTrigger>
+                      <Input
+                        type='number'
+                        min={0}
+                        step={1}
+                        {...safeNumberFieldProps(field)}
+                      />
                     </FormControl>
-                    <SelectContent alignItemWithTrigger={false}>
-                      <SelectGroup>
-                        {endpointTypeOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {t(option.label)}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                    <FormDescription>
+                      {t('Set 0 to use the global relay timeout')}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
-            <FormField
-              control={form.control}
-              name='stream_mode'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Stream mode')}</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('Auto')} />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent alignItemWithTrigger={false}>
-                      <SelectGroup>
-                        {streamModeOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {t(option.label)}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-        </SettingsForm>
-      </Form>
-    </SettingsSection>
+            <div className='grid gap-6 md:grid-cols-3'>
+              <FormField
+                control={form.control}
+                name='reasoning_effort'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Reasoning effort')}</FormLabel>
+                    <Select
+                      value={field.value || 'default'}
+                      onValueChange={(value) =>
+                        field.onChange(value === 'default' ? '' : (value ?? ''))
+                      }
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue>
+                            {t(
+                              reasoningEffortOptions.find(
+                                (option) =>
+                                  option.value === (field.value || 'default')
+                              )?.label ?? 'Provider default'
+                            )}
+                          </SelectValue>
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent alignItemWithTrigger={false}>
+                        <SelectGroup>
+                          {reasoningEffortOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {t(option.label)}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='endpoint_type'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Endpoint type')}</FormLabel>
+                    <Select
+                      value={field.value || 'auto'}
+                      onValueChange={(value) =>
+                        field.onChange(value === 'auto' ? '' : (value ?? ''))
+                      }
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue>
+                            {t(
+                              endpointTypeOptions.find(
+                                (option) =>
+                                  option.value === (field.value || 'auto')
+                              )?.label ?? 'Auto detect'
+                            )}
+                          </SelectValue>
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent alignItemWithTrigger={false}>
+                        <SelectGroup>
+                          {endpointTypeOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {t(option.label)}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='stream_mode'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Stream mode')}</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue>
+                            {t(
+                              streamModeOptions.find(
+                                (option) => option.value === field.value
+                              )?.label ?? 'Auto'
+                            )}
+                          </SelectValue>
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent alignItemWithTrigger={false}>
+                        <SelectGroup>
+                          {streamModeOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {t(option.label)}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </SettingsForm>
+        </Form>
+      </SettingsSection>
+    </>
   )
 }

@@ -177,8 +177,8 @@ export function ComboboxInput({
         }}
         onFocus={() => {
           setSearchValue(allowCustomValue && !selectedOption ? value : '')
-          setOpen(true)
         }}
+        onClick={() => setOpen(true)}
         onKeyDown={handleKeyDown}
         className={cn('pr-9', className)}
       />

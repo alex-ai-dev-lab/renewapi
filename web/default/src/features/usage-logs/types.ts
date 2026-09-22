@@ -94,6 +94,8 @@ export interface ChannelAffinityInfo {
 
 export interface LogOtherData {
   admin_info?: {
+    real_error?: string
+    attempts?: ChannelAttempt[]
     is_multi_key?: boolean
     multi_key_index?: number
     use_channel?: number[]
@@ -189,6 +191,19 @@ export interface LogOtherData {
   subscription_consumed?: number
   subscription_remain?: number
   subscription_total?: number
+}
+
+export interface ChannelAttempt {
+  channel_id: number
+  channel_name: string
+  priority: number
+  attempt: number
+  switch_count: number
+  status_code: number
+  real_error?: string
+  timeout_stage?: string
+  elapsed_ms: number
+  upstream_request_id?: string
 }
 
 /**

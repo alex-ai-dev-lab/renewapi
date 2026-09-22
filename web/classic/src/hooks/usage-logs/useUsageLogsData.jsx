@@ -164,7 +164,9 @@ export const useLogsData = () => {
   };
 
   // Column visibility state
-  const [visibleColumns, setVisibleColumns] = useState(getInitialVisibleColumns);
+  const [visibleColumns, setVisibleColumns] = useState(
+    getInitialVisibleColumns,
+  );
   const [showColumnSelector, setShowColumnSelector] = useState(false);
   const [billingDisplayMode, setBillingDisplayMode] = useState(
     getInitialBillingDisplayMode,
@@ -383,7 +385,10 @@ export const useLogsData = () => {
       let other = getLogOther(logs[i].other);
       let expandDataLocal = [];
 
-      if (isAdminUser && (logs[i].type === 0 || logs[i].type === 2 || logs[i].type === 6)) {
+      if (
+        isAdminUser &&
+        (logs[i].type === 0 || logs[i].type === 2 || logs[i].type === 6)
+      ) {
         expandDataLocal.push({
           key: t('渠道信息'),
           value: `${logs[i].channel} - ${logs[i].channel_name || '[未知]'}`,
@@ -430,7 +435,10 @@ export const useLogsData = () => {
           expandDataLocal.push({
             key: t('日志详情'),
             value: other?.claude
-              ? renderClaudeLogContent({ ...other, displayMode: billingDisplayMode })
+              ? renderClaudeLogContent({
+                  ...other,
+                  displayMode: billingDisplayMode,
+                })
               : renderLogContent({ ...other, displayMode: billingDisplayMode }),
           });
         }
@@ -520,7 +528,14 @@ export const useLogsData = () => {
           expandDataLocal.push({
             key: t('失败原因'),
             value: (
-              <div style={{ maxWidth: 600, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.6 }}>
+              <div
+                style={{
+                  maxWidth: 600,
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word',
+                  lineHeight: 1.6,
+                }}
+              >
                 {other.reason}
               </div>
             ),
@@ -537,7 +552,8 @@ export const useLogsData = () => {
         const ss = other.stream_status;
         const isOk = ss.status === 'ok';
         const statusLabel = isOk ? '✓ ' + t('正常') : '✗ ' + t('异常');
-        let streamValue = statusLabel + ' (' + (ss.end_reason || 'unknown') + ')';
+        let streamValue =
+          statusLabel + ' (' + (ss.end_reason || 'unknown') + ')';
         if (ss.error_count > 0) {
           streamValue += ` [${t('软错误')}: ${ss.error_count}]`;
         }
@@ -552,7 +568,14 @@ export const useLogsData = () => {
           expandDataLocal.push({
             key: t('流错误详情'),
             value: (
-              <div style={{ maxWidth: 600, whiteSpace: 'pre-line', wordBreak: 'break-word', lineHeight: 1.6 }}>
+              <div
+                style={{
+                  maxWidth: 600,
+                  whiteSpace: 'pre-line',
+                  wordBreak: 'break-word',
+                  lineHeight: 1.6,
+                }}
+              >
                 {ss.errors.join('\n')}
               </div>
             ),
@@ -639,6 +662,51 @@ export const useLogsData = () => {
         expandDataLocal.push({
           key: t('计费模式'),
           value: localCountMode,
+        });
+      }
+      if (isAdminUser && other?.admin_info?.real_error) {
+        expandDataLocal.push({
+          key: t('真实错误'),
+          value: (
+            <pre className='whitespace-pre-wrap break-all'>
+              {other.admin_info.real_error}
+            </pre>
+          ),
+        });
+      }
+      if (isAdminUser && Array.isArray(other?.admin_info?.attempts)) {
+        expandDataLocal.push({
+          key: t('渠道尝试链'),
+          value: (
+            <ol className='space-y-2'>
+              {other.admin_info.attempts.map((attempt) => (
+                <li key={attempt.attempt} className='rounded border p-2'>
+                  <div>
+                    {attempt.attempt}. {attempt.channel_name} (#
+                    {attempt.channel_id})
+                  </div>
+                  <div>
+                    {t('优先级')}: {attempt.priority} · {t('切换次数')}:{' '}
+                    {attempt.switch_count} · HTTP {attempt.status_code} ·{' '}
+                    {attempt.elapsed_ms} ms
+                  </div>
+                  {attempt.timeout_stage && (
+                    <div>
+                      {t('超时阶段')}: {attempt.timeout_stage}
+                    </div>
+                  )}
+                  {attempt.upstream_request_id && (
+                    <div className='break-all'>
+                      Upstream Request ID: {attempt.upstream_request_id}
+                    </div>
+                  )}
+                  <pre className='whitespace-pre-wrap break-all'>
+                    {attempt.real_error || t('成功')}
+                  </pre>
+                </li>
+              ))}
+            </ol>
+          ),
         });
       }
       if (isAdminUser && logs[i].type === 1) {

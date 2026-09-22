@@ -65,6 +65,7 @@ import {
   isTimingLogType,
 } from '../../lib/utils'
 import type { LogOtherData } from '../../types'
+import { RelayAttemptDetails } from './relay-attempt-details'
 
 function timingTextColorClass(
   variant: 'success' | 'warning' | 'danger'
@@ -119,9 +120,7 @@ function DetailSection(props: {
       <div
         className={cn(
           'min-w-0 space-y-1 overflow-hidden rounded-md border p-2.5 max-sm:p-2',
-          isDanger
-            ? 'border-destructive/25 bg-destructive/10'
-            : 'bg-muted/30'
+          isDanger ? 'border-destructive/25 bg-destructive/10' : 'bg-muted/30'
         )}
       >
         {props.children}
@@ -571,7 +570,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   value={
                     <span className='flex items-center gap-1'>
                       <Globe
-                        className='size-3 text-warning'
+                        className='text-warning size-3'
                         aria-hidden='true'
                       />
                       {props.log.ip}
@@ -631,7 +630,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                     aria-label={t('Copy to clipboard')}
                   >
                     {copiedText === conversionLabel ? (
-                      <Check className='size-3 text-success' />
+                      <Check className='text-success size-3' />
                     ) : (
                       <Copy className='size-3' />
                     )}
@@ -724,7 +723,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   />
                 ))}
                 {showLegacyTopupWarning && (
-                  <div className='flex items-start gap-1.5 text-xs text-warning'>
+                  <div className='text-warning flex items-start gap-1.5 text-xs'>
                     <Info
                       className='mt-0.5 size-3.5 shrink-0'
                       aria-hidden='true'
@@ -880,9 +879,9 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   value={
                     <span className='flex items-center gap-1'>
                       {other.admin_info.local_count_tokens ? (
-                        <Monitor className='size-3 text-chart-1' />
+                        <Monitor className='text-chart-1 size-3' />
                       ) : (
-                        <Cloud className='size-3 text-success' />
+                        <Cloud className='text-success size-3' />
                       )}
                       <span className='text-xs'>
                         {other.admin_info.local_count_tokens
@@ -893,6 +892,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   }
                 />
               )}
+
+            {props.isAdmin && other?.admin_info && (
+              <RelayAttemptDetails info={other.admin_info} />
+            )}
 
             {/* Stream status details (admin only) */}
             {props.isAdmin &&
@@ -1028,7 +1031,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                     aria-label={t('Copy to clipboard')}
                   >
                     {copiedText === details ? (
-                      <Check className='size-3 text-success' />
+                      <Check className='text-success size-3' />
                     ) : (
                       <Copy className='size-3' />
                     )}

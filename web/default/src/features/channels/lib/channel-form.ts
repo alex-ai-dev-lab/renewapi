@@ -139,6 +139,7 @@ export const channelFormSchema = z
     priority: z.number().optional(),
     weight: z.number().optional(),
     test_model: z.string().optional(),
+    channel_test_prompt_id: z.number().int().nonnegative().optional(),
     auto_ban: z.number().optional(),
     status: z.number(),
     status_code_mapping: z
@@ -205,7 +206,9 @@ export const channelFormSchema = z
     responses_compaction_native_stream: z.boolean().optional(),
     responses_compaction_continuation: z.boolean().optional(),
     responses_compaction_route_fingerprint: z.string().optional(),
-    responses_compaction_model_capabilities: z.record(z.string(), z.unknown()).optional(),
+    responses_compaction_model_capabilities: z
+      .record(z.string(), z.unknown())
+      .optional(),
     anti_poison_profile: z
       .enum(['inherit', 'trusted', 'unknown', 'probation', 'quarantine'])
       .optional(),
@@ -360,6 +363,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   priority: 0,
   weight: 0,
   test_model: '',
+  channel_test_prompt_id: 0,
   auto_ban: 1,
   status: CHANNEL_STATUS.ENABLED,
   status_code_mapping: '',
@@ -571,11 +575,14 @@ export function transformChannelToFormDefaults(
           ? parsed.responses_compaction.default_capability.capability
           : 'unknown',
         responses_compaction_native_stream:
-          parsed.responses_compaction?.default_capability?.native_stream === true,
+          parsed.responses_compaction?.default_capability?.native_stream ===
+          true,
         responses_compaction_continuation:
-          parsed.responses_compaction?.default_capability?.continuation === true,
+          parsed.responses_compaction?.default_capability?.continuation ===
+          true,
         responses_compaction_route_fingerprint:
-          parsed.responses_compaction?.default_capability?.route_fingerprint || '',
+          parsed.responses_compaction?.default_capability?.route_fingerprint ||
+          '',
         responses_compaction_model_capabilities:
           parsed.responses_compaction?.model_capabilities &&
           typeof parsed.responses_compaction.model_capabilities === 'object'
@@ -691,6 +698,7 @@ export function transformChannelToFormDefaults(
     priority: channel.priority || 0,
     weight: channel.weight || 0,
     test_model: channel.test_model || '',
+    channel_test_prompt_id: channel.channel_test_prompt_id ?? 0,
     auto_ban: channel.auto_ban ?? 1,
     status: channel.status,
     status_code_mapping: channel.status_code_mapping || '',
@@ -754,8 +762,7 @@ function buildSettingJSON(formData: ChannelFormValues): string {
     responses_compaction: {
       default_capability: {
         capability: formData.responses_compaction_capability || 'unknown',
-        native_stream:
-          formData.responses_compaction_native_stream === true,
+        native_stream: formData.responses_compaction_native_stream === true,
         continuation: formData.responses_compaction_continuation === true,
         route_fingerprint:
           formData.responses_compaction_route_fingerprint?.trim() || undefined,
@@ -991,6 +998,7 @@ export function transformFormDataToCreatePayload(formData: ChannelFormValues): {
     priority: formData.priority || null,
     weight: formData.weight || null,
     test_model: formData.test_model || null,
+    channel_test_prompt_id: formData.channel_test_prompt_id ?? 0,
     auto_ban: formData.auto_ban ?? 1,
     status: formData.status,
     status_code_mapping: formData.status_code_mapping || null,
@@ -1039,6 +1047,7 @@ export function transformFormDataToUpdatePayload(
     priority: formData.priority ?? 0,
     weight: formData.weight ?? 0,
     test_model: formData.test_model || null,
+    channel_test_prompt_id: formData.channel_test_prompt_id ?? 0,
     auto_ban: formData.auto_ban ?? 1,
     status: formData.status,
     status_code_mapping: formData.status_code_mapping || null,

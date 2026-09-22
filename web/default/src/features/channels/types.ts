@@ -41,6 +41,7 @@ export const channelSchema = z.object({
   key: z.string(),
   openai_organization: z.string().nullish(),
   test_model: z.string().nullish(),
+  channel_test_prompt_id: z.number().int().nonnegative().optional(),
   status: z.number(), // 1: enabled, 0: manual disabled, 2: auto disabled
   name: z.string(),
   weight: z.number().nullish(),
@@ -399,6 +400,7 @@ export interface TagOperationParams {
 // ============================================================================
 
 export interface ChannelFormData {
+  channel_test_prompt_id?: number
   name: string
   type: number
   base_url: string

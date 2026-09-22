@@ -42,6 +42,9 @@
 - 第三组：统一客户端 capacity 错误；保留本地用户拒绝；失败日志与历史 self/token 日志脱敏；管理员保存凭证清理后的真实错误和完整尝试链；成功消费日志也保存前序失败。所有可切换失败写入渠道健康记录，禁用资格继续复用现有规则。相关九个 Go package 测试通过。
 - 第三组定向 race 测试通过。
 - Channel Test 后端：独立 Prompt 表与增量迁移、管理员 CRUD、引用计数、并发安全拒删、默认唯一性、渠道配置与审计接入、完整回退链、追加 nonce、自动测试仅 AutoDisabled 开关；修复本地错误误恢复和测试全部读取失败后运行锁未释放。SQLite 与实际 HTTP 行为验证通过；两套 UI 及外部数据库运行验证继续推进。
+- 两套前端：在现有运营设置中增加 Prompt 管理、引用提示、自动恢复筛选及所有测试参数，渠道编辑器保存稳定 Prompt ID，管理员用量详情展示完整错误链。default 仅渠道模型选择器增加不透明背景，移除 Combobox 强制 dark，修复聚焦时自动展开。classic 修复 Prompt 弹窗重复字段 ID，并在选中时同步保存字段，避免关闭动画前提交旧值。
+- 前端验证：default `bun test` 为 68 通过、0 失败，typecheck、改动文件 eslint/Prettier、copyright 通过；两套生产 build 通过。隔离 SQLite 服务和临时浏览器实际验证两套 Prompt CRUD、引用拒删、开关保存、渠道 Prompt ID 0/1 来回保存，以及 8 组 light/dark、1440/390 宽度、新建/编辑模型选择器（已有/自定义模型、hover、selected、dropdown、无自动展开）。
+- 前端全量存量检查：default lint 基线 121 errors / 34 warnings，当前 119 / 34；format 基线 94 个文件，当前 91；classic Prettier 基线 56 个文件，当前 55。未扩大修改无关存量问题。构建产物排除在 classic 格式检查之外。测试日志和截图仅位于忽略目录 `.test/`，没有修改生产数据或浏览器用户配置。
 
 ## 后续执行顺序
 

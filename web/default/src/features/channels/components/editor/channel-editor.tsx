@@ -93,6 +93,7 @@ import {
   SecureVerificationDialog,
   useSecureVerification,
 } from '@/features/auth/secure-verification'
+import { PromptSelector } from '@/features/channel-test-prompts/prompt-selector'
 import { fetchModels, getChannelKey } from '../../api'
 import {
   ADD_MODE_OPTIONS,
@@ -2671,6 +2672,7 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
                                 </div>
                                 <FormControl>
                                   <MultiSelect
+                                    className='bg-background dark:bg-background'
                                     options={modelOptions}
                                     selected={currentModelsArray}
                                     onChange={handleModelsChange}
@@ -3084,6 +3086,23 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
                                 <FormDescription>
                                   {t(FIELD_DESCRIPTIONS.TEST_MODEL)}
                                 </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name='channel_test_prompt_id'
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>{t('Test prompt')}</FormLabel>
+                                <FormControl>
+                                  <PromptSelector
+                                    value={field.value}
+                                    onChange={field.onChange}
+                                  />
+                                </FormControl>
                                 <FormMessage />
                               </FormItem>
                             )}

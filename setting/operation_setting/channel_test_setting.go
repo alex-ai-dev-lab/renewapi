@@ -6,12 +6,13 @@ import (
 )
 
 type ChannelTestSettingT struct {
-	Prompt          string `json:"prompt"`
-	MaxTokens       int    `json:"max_tokens"`
-	ReasoningEffort string `json:"reasoning_effort"`
-	EndpointType    string `json:"endpoint_type"`
-	StreamMode      string `json:"stream_mode"`
-	TimeoutSeconds  int    `json:"timeout_seconds"`
+	Prompt                   string `json:"prompt"`
+	MaxTokens                int    `json:"max_tokens"`
+	ReasoningEffort          string `json:"reasoning_effort"`
+	EndpointType             string `json:"endpoint_type"`
+	StreamMode               string `json:"stream_mode"`
+	TimeoutSeconds           int    `json:"timeout_seconds"`
+	AutoTestOnlyAutoDisabled bool   `json:"auto_test_only_auto_disabled"`
 }
 
 func defaultChannelTestSetting() ChannelTestSettingT {

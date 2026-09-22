@@ -426,6 +426,9 @@ func isClockInTestWindow(nowTime, timeWindowStart, timeWindowEnd string) bool {
 }
 
 func testSingleChannelWithRetries(ctx context.Context, channel *model.Channel, testUserID int, retryCount int, retryThreshold int) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			common.SysError(fmt.Sprintf("recovered panic testing channel %d: %v", channel.Id, r))
@@ -453,6 +456,13 @@ func testSingleChannelWithRetries(ctx context.Context, channel *model.Channel, t
 		lastResult = testChannelContext(ctx, channel, testUserID, "", "", shouldUseStreamForAutomaticChannelTest(channel))
 		elapsed := time.Since(tStart).Milliseconds()
 		lastElapsed = elapsed
+		if ctx.Err() != nil {
+			return
+		}
+		if lastResult.localErr != nil && lastResult.newAPIError == nil {
+			common.SysError(fmt.Sprintf("渠道 %d 自动测试未完成：%v", channel.Id, lastResult.localErr))
+			break
+		}
 
 		if lastResult.newAPIError == nil {
 			succeeded = true
@@ -575,6 +585,9 @@ scheduleLoop:
 		// Skip channels that are disabled (not auto-disabled)
 		if channel.Status != common.ChannelStatusEnabled &&
 			channel.Status != common.ChannelStatusAutoDisabled {
+			continue
+		}
+		if operation_setting.GetChannelTestSetting().AutoTestOnlyAutoDisabled && channel.Status != common.ChannelStatusAutoDisabled {
 			continue
 		}
 

@@ -25,26 +25,27 @@ import (
 )
 
 type Channel struct {
-	Id                 int     `json:"id"`
-	ConfigVersion      int64   `json:"config_version" gorm:"not null;default:1"`
-	Type               int     `json:"type" gorm:"default:0"`
-	Key                string  `json:"key" gorm:"not null"`
-	OpenAIOrganization *string `json:"openai_organization"`
-	TestModel          *string `json:"test_model"`
-	Status             int     `json:"status" gorm:"default:1"`
-	Name               string  `json:"name" gorm:"index"`
-	Weight             *uint   `json:"weight" gorm:"default:0"`
-	CreatedTime        int64   `json:"created_time" gorm:"bigint"`
-	TestTime           int64   `json:"test_time" gorm:"bigint"`
-	ResponseTime       int     `json:"response_time"` // in milliseconds
-	BaseURL            *string `json:"base_url" gorm:"column:base_url;default:''"`
-	Other              string  `json:"other"`
-	Balance            float64 `json:"balance"` // in USD
-	BalanceUpdatedTime int64   `json:"balance_updated_time" gorm:"bigint"`
-	Models             string  `json:"models"`
-	Group              string  `json:"group" gorm:"type:varchar(64);default:'default'"`
-	UsedQuota          int64   `json:"used_quota" gorm:"bigint;default:0"`
-	ModelMapping       *string `json:"model_mapping" gorm:"type:text"`
+	Id                  int     `json:"id"`
+	ConfigVersion       int64   `json:"config_version" gorm:"not null;default:1"`
+	Type                int     `json:"type" gorm:"default:0"`
+	Key                 string  `json:"key" gorm:"not null"`
+	OpenAIOrganization  *string `json:"openai_organization"`
+	TestModel           *string `json:"test_model"`
+	ChannelTestPromptID int     `json:"channel_test_prompt_id" gorm:"not null;default:0;index"`
+	Status              int     `json:"status" gorm:"default:1"`
+	Name                string  `json:"name" gorm:"index"`
+	Weight              *uint   `json:"weight" gorm:"default:0"`
+	CreatedTime         int64   `json:"created_time" gorm:"bigint"`
+	TestTime            int64   `json:"test_time" gorm:"bigint"`
+	ResponseTime        int     `json:"response_time"` // in milliseconds
+	BaseURL             *string `json:"base_url" gorm:"column:base_url;default:''"`
+	Other               string  `json:"other"`
+	Balance             float64 `json:"balance"` // in USD
+	BalanceUpdatedTime  int64   `json:"balance_updated_time" gorm:"bigint"`
+	Models              string  `json:"models"`
+	Group               string  `json:"group" gorm:"type:varchar(64);default:'default'"`
+	UsedQuota           int64   `json:"used_quota" gorm:"bigint;default:0"`
+	ModelMapping        *string `json:"model_mapping" gorm:"type:text"`
 	//MaxInputTokens     *int    `json:"max_input_tokens" gorm:"default:0"`
 	StatusCodeMapping *string `json:"status_code_mapping" gorm:"type:varchar(1024);default:''"`
 	Priority          *int64  `json:"priority" gorm:"bigint;default:0"`
@@ -734,6 +735,9 @@ func (channel *Channel) UpdateConfigTx(tx *gorm.DB, expectedVersion *int64, upda
 	if tx == nil {
 		return 0, errors.New("transaction is required")
 	}
+	if err := validateChannelTestPromptTx(tx, channel.ChannelTestPromptID); err != nil {
+		return 0, err
+	}
 	existing, err := GetChannelByIDTx(tx, channel.Id)
 	if err != nil {
 		return 0, err
@@ -775,31 +779,32 @@ func (channel *Channel) UpdateConfigTx(tx *gorm.DB, expectedVersion *int64, upda
 		}
 	}
 	updates := map[string]interface{}{
-		"type":                 channel.Type,
-		"open_ai_organization": channel.OpenAIOrganization,
-		"test_model":           channel.TestModel,
-		"status":               channel.Status,
-		"name":                 channel.Name,
-		"weight":               channel.Weight,
-		"base_url":             channel.BaseURL,
-		"other":                channel.Other,
-		"balance":              channel.Balance,
-		"balance_updated_time": channel.BalanceUpdatedTime,
-		"models":               channel.Models,
-		"group":                channel.Group,
-		"model_mapping":        channel.ModelMapping,
-		"status_code_mapping":  channel.StatusCodeMapping,
-		"priority":             channel.Priority,
-		"auto_ban":             channel.AutoBan,
-		"other_info":           channel.OtherInfo,
-		"tag":                  channel.Tag,
-		"setting":              channel.Setting,
-		"param_override":       channel.ParamOverride,
-		"header_override":      channel.HeaderOverride,
-		"remark":               channel.Remark,
-		"channel_info":         channel.ChannelInfo,
-		"settings":             channel.OtherSettings,
-		"config_version":       gorm.Expr("config_version + ?", 1),
+		"type":                   channel.Type,
+		"open_ai_organization":   channel.OpenAIOrganization,
+		"test_model":             channel.TestModel,
+		"channel_test_prompt_id": channel.ChannelTestPromptID,
+		"status":                 channel.Status,
+		"name":                   channel.Name,
+		"weight":                 channel.Weight,
+		"base_url":               channel.BaseURL,
+		"other":                  channel.Other,
+		"balance":                channel.Balance,
+		"balance_updated_time":   channel.BalanceUpdatedTime,
+		"models":                 channel.Models,
+		"group":                  channel.Group,
+		"model_mapping":          channel.ModelMapping,
+		"status_code_mapping":    channel.StatusCodeMapping,
+		"priority":               channel.Priority,
+		"auto_ban":               channel.AutoBan,
+		"other_info":             channel.OtherInfo,
+		"tag":                    channel.Tag,
+		"setting":                channel.Setting,
+		"param_override":         channel.ParamOverride,
+		"header_override":        channel.HeaderOverride,
+		"remark":                 channel.Remark,
+		"channel_info":           channel.ChannelInfo,
+		"settings":               channel.OtherSettings,
+		"config_version":         gorm.Expr("config_version + ?", 1),
 	}
 	if updateKey {
 		updates["key"] = channel.Key

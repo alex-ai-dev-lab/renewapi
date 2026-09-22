@@ -75,7 +75,7 @@ func newChannelTestNonce() string {
 }
 
 func channelTestNoncePrompt(nonce string) string {
-	return "Reply with exactly this token and nothing else. Do not add quotes, markdown, spaces, or punctuation:\n" + nonce
+	return "完成上述测试任务，并在回答末尾另起一行原样附加以下校验标记：\n" + nonce
 }
 
 func buildChannelTestHeaders(endpointType string, isStream bool) http.Header {
@@ -444,7 +444,7 @@ func testChannelWithRequestContext(ctx context.Context, channel *model.Channel, 
 	if override != nil {
 		testNonce = ""
 	}
-	request := buildTestRequest(testModel, endpointType, channel, isStream, testNonce)
+	var request dto.Request
 	if override != nil {
 		if override.Request == nil {
 			return testResult{localErr: errors.New("channel test request override is nil")}
@@ -452,6 +452,12 @@ func testChannelWithRequestContext(ctx context.Context, channel *model.Channel, 
 		request = override.Request
 		c.Set(service.ContextKeyResponsesRequestKind, override.Kind)
 		c.Set("responses_client_stream", override.IsStream)
+	} else {
+		prompt, err := model.ResolveChannelTestPrompt(channel, cfg.Prompt)
+		if err != nil {
+			return testResult{context: c, localErr: fmt.Errorf("读取测试提示词失败：%w", err)}
+		}
+		request = buildTestRequest(testModel, endpointType, channel, isStream, testNonce, prompt)
 	}
 
 	info, err := relaycommon.GenRelayInfo(c, relayFormat, request, nil)
@@ -1179,20 +1185,17 @@ func detectErrorMessageFromJSONBytes(jsonBytes []byte) string {
 	return message
 }
 
-func buildTestRequest(model string, endpointType string, channel *model.Channel, isStream bool, nonce string) dto.Request {
-	cfg := operation_setting.GetChannelTestSetting()
-	prompt := strings.TrimSpace(cfg.Prompt)
+func buildTestRequest(model string, endpointType string, channel *model.Channel, isStream bool, nonce, prompt string) dto.Request {
+	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
 		prompt = "hi"
 	}
 	if nonce != "" {
-		prompt = channelTestNoncePrompt(nonce)
+		prompt += "\n\n" + channelTestNoncePrompt(nonce)
 	}
-	// Build the Responses/Codex input from the same prompt (which already carries
-	// the anti-poison nonce when enabled) instead of a hardcoded "hi", so these
-	// endpoints honor the configured probe prompt and pass nonce validation.
+	// 所有协议都复用已解析的管理员提示词，nonce 只追加校验要求。
 	testResponsesInput := json.RawMessage(`[{"role":"user","content":[{"type":"input_text","text":"hi"}]}]`)
-	if b, err := json.Marshal([]map[string]any{{
+	if b, err := common.Marshal([]map[string]any{{
 		"role": "user",
 		"content": []map[string]any{{
 			"type": "input_text",
@@ -1209,18 +1212,18 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 			// 返回 EmbeddingRequest
 			return &dto.EmbeddingRequest{
 				Model: model,
-				Input: []any{"hello world"},
+				Input: []any{prompt},
 			}
 		case constant.EndpointTypeModerations:
 			return &dto.EmbeddingRequest{
 				Model: model,
-				Input: []any{"hello world"},
+				Input: []any{prompt},
 			}
 		case constant.EndpointTypeImageGeneration, constant.EndpointTypeImageEdits:
 			// 返回 ImageRequest
 			return &dto.ImageRequest{
 				Model:  model,
-				Prompt: "a cute cat",
+				Prompt: prompt,
 				N:      lo.ToPtr(uint(1)),
 				Size:   "1024x1024",
 			}
@@ -1228,7 +1231,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 			// 返回 RerankRequest
 			return &dto.RerankRequest{
 				Model:     model,
-				Query:     "What is Deep Learning?",
+				Query:     prompt,
 				Documents: []any{"Deep Learning is a subset of machine learning.", "Machine learning is a field of artificial intelligence."},
 				TopN:      lo.ToPtr(2),
 			}
@@ -1287,7 +1290,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 	if strings.Contains(strings.ToLower(model), "rerank") {
 		return &dto.RerankRequest{
 			Model:     model,
-			Query:     "What is Deep Learning?",
+			Query:     prompt,
 			Documents: []any{"Deep Learning is a subset of machine learning.", "Machine learning is a field of artificial intelligence."},
 			TopN:      lo.ToPtr(2),
 		}
@@ -1300,7 +1303,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 		// 返回 EmbeddingRequest
 		return &dto.EmbeddingRequest{
 			Model: model,
-			Input: []any{"hello world"},
+			Input: []any{prompt},
 		}
 	}
 
@@ -1486,6 +1489,9 @@ func testAllChannels(notify bool) error {
 	testAllChannelsLock.Unlock()
 	channels, getChannelErr := model.GetAllChannels(0, 0, true, false)
 	if getChannelErr != nil {
+		testAllChannelsLock.Lock()
+		testAllChannelsRunning = false
+		testAllChannelsLock.Unlock()
 		return getChannelErr
 	}
 	var disableThreshold = int64(common.ChannelDisableThreshold * 1000)
@@ -1513,6 +1519,11 @@ func testAllChannels(notify bool) error {
 			result := testChannel(channel, testUserID, "", "", shouldUseStreamForAutomaticChannelTest(channel))
 			tok := time.Now()
 			milliseconds := tok.Sub(tik).Milliseconds()
+			if result.localErr != nil && result.newAPIError == nil {
+				common.SysError(fmt.Sprintf("渠道 %d 测试未完成：%v", channel.Id, result.localErr))
+				channel.UpdateResponseTime(milliseconds)
+				continue
+			}
 
 			shouldBanChannel := false
 			newAPIError := result.newAPIError

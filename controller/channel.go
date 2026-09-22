@@ -1062,6 +1062,9 @@ func mergePatchChannelWithOrigin(channel *PatchChannel, origin *model.Channel, p
 	if _, ok := present["test_model"]; ok {
 		merged.TestModel = channel.TestModel
 	}
+	if _, ok := present["channel_test_prompt_id"]; ok {
+		merged.ChannelTestPromptID = channel.ChannelTestPromptID
+	}
 	if _, ok := present["status"]; ok {
 		merged.Status = channel.Status
 	}

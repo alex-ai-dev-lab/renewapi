@@ -147,7 +147,7 @@ func TestBuildTestRequestUsesClaudeRequestForAnthropicEndpoint(t *testing.T) {
 	request := buildTestRequest("claude-opus-4-6", string(constant.EndpointTypeAnthropic), &model.Channel{
 		Id:   71,
 		Type: constant.ChannelTypeAnthropic,
-	}, false, "")
+	}, false, "", "hi")
 
 	claudeRequest, ok := request.(*dto.ClaudeRequest)
 	require.True(t, ok)
@@ -163,7 +163,7 @@ func TestBuildTestRequestUsesCodexShapedResponsesRequest(t *testing.T) {
 	request := buildTestRequest("gpt-5.5", string(constant.EndpointTypeOpenAIResponse), &model.Channel{
 		Id:   106,
 		Type: constant.ChannelTypeOpenAI,
-	}, false, "")
+	}, false, "", "hi")
 
 	responseRequest, ok := request.(*dto.OpenAIResponsesRequest)
 	require.True(t, ok)

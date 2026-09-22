@@ -288,6 +288,12 @@ func SetApiRouter(router *gin.Engine) {
 		errorRulesRoute := apiRouter.Group("/compat/error-rules")
 		errorRulesRoute.Use(middleware.AdminAuth())
 		errornorm.RegisterAdminRoutes(errorRulesRoute, errornorm.GlobalStore())
+		promptRoute := apiRouter.Group("/channel-test-prompts", middleware.AdminAuth())
+		promptRoute.GET("", controller.GetChannelTestPrompts)
+		promptRoute.POST("", controller.CreateChannelTestPrompt)
+		promptRoute.PUT("/:id", controller.UpdateChannelTestPrompt)
+		promptRoute.DELETE("/:id", controller.DeleteChannelTestPrompt)
+
 		channelRoute := apiRouter.Group("/channel")
 		channelRoute.Use(middleware.AdminAuth())
 		{

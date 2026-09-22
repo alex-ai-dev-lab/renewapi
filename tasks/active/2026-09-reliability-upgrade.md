@@ -40,6 +40,8 @@
 - 第二组：跨协议语义分类、响应头/SSE 暂存、15 秒整体首语义期限、结算前有效流校验和提交后不拼流。真实故障注入及 `go test ./controller ./relay/... ./service` 通过；原“仅 response.created 即提交”的测试已改为实际内容后断流。
 - 第二组并发检查：`go test -race ./controller ./relay/helper -run 'TestChannelFailoverUsesSix|TestSemantic|TestStreamStaging|TestStringDataPartial' -count=1` 通过。
 - 第三组：统一客户端 capacity 错误；保留本地用户拒绝；失败日志与历史 self/token 日志脱敏；管理员保存凭证清理后的真实错误和完整尝试链；成功消费日志也保存前序失败。所有可切换失败写入渠道健康记录，禁用资格继续复用现有规则。相关九个 Go package 测试通过。
+- 第三组定向 race 测试通过。
+- Channel Test 后端：独立 Prompt 表与增量迁移、管理员 CRUD、引用计数、并发安全拒删、默认唯一性、渠道配置与审计接入、完整回退链、追加 nonce、自动测试仅 AutoDisabled 开关；修复本地错误误恢复和测试全部读取失败后运行锁未释放。SQLite 与实际 HTTP 行为验证通过；两套 UI 及外部数据库运行验证继续推进。
 
 ## 后续执行顺序
 

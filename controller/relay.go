@@ -575,7 +575,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			relayInfo.ReceivedResponseCount = 0
 			c.Set(common.UpstreamRequestIdKey, "")
 
-			newAPIError = relayDispatchUpstream(c, relayInfo, relayFormat, ws)
+			newAPIError = helper.WithStreamStaging(c, relayInfo, func() *types.NewAPIError {
+				return relayDispatchUpstream(c, relayInfo, relayFormat, ws)
+			})
 
 			if newAPIError == nil {
 				newAPIError = compatStreamRetryError(relayInfo)

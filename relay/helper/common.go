@@ -72,7 +72,7 @@ func requestContextDone(c *gin.Context) bool {
 
 func SetEventStreamHeaders(c *gin.Context) {
 	// 检查是否已经设置过头部
-	if _, exists := c.Get("event_stream_headers_set"); exists {
+	if c.GetBool("event_stream_headers_set") {
 		return
 	}
 
@@ -144,7 +144,8 @@ func writeBusinessStreamData(c *gin.Context, payload string) error {
 	mutex.Lock()
 	defer mutex.Unlock()
 	written, err := c.Writer.Write([]byte(payload))
-	if written > 0 {
+	staged, isStaged := c.Writer.(*streamStagingWriter)
+	if written > 0 && (!isStaged || staged.Written()) {
 		markBusinessStreamCommitted(c)
 	}
 	if err != nil {
@@ -156,7 +157,7 @@ func writeBusinessStreamData(c *gin.Context, payload string) error {
 	if err := FlushWriter(c); err != nil {
 		return err
 	}
-	if value, ok := c.Get(streamStatusContextKey); ok {
+	if value, ok := c.Get(streamStatusContextKey); ok && c.Writer.Written() {
 		if status, ok := value.(*relaycommon.StreamStatus); ok && status != nil {
 			status.MarkForwarded()
 		}

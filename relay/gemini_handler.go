@@ -201,6 +201,9 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		return openaiErr
 	}
 
+	if stagingErr := helper.ValidateStreamStaging(c); stagingErr != nil {
+		return stagingErr
+	}
 	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
 	return nil
 }

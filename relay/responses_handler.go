@@ -275,6 +275,9 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
 	}
+	if stagingErr := helper.ValidateStreamStaging(c); stagingErr != nil {
+		return stagingErr
+	}
 	successChannelID := info.ChannelId
 	if selectedChannelID := common.GetContextKeyInt(c, appconstant.ContextKeyChannelId); selectedChannelID > 0 {
 		successChannelID = selectedChannelID

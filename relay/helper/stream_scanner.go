@@ -3,6 +3,7 @@ package helper
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -106,6 +107,13 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	var cleanupOnce sync.Once
 	var abortOnce sync.Once
 	var firstResponseObserved atomic.Bool
+	recordContextEnd := func() {
+		if errors.Is(context.Cause(c.Request.Context()), errFirstSemanticTimeout) {
+			info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonFirstSemanticTimeout, errFirstSemanticTimeout)
+		} else {
+			info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+		}
+	}
 	pooledBuf := ssepool.Get()
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(pooledBuf[:], getScannerBufferSize())
@@ -151,7 +159,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	}
 
 	logger.LogDebug(c, "streaming timeout seconds: %d", int64(streamingTimeout.Seconds()))
-	logger.LogDebug(c, "first byte timeout seconds: %d", int64(firstByteTimeout.Seconds()))
+	logger.LogDebug(c, "首语义输出超时秒数: %d", int64(firstByteTimeout.Seconds()))
 	logger.LogDebug(c, "ping interval seconds: %d", int64(pingInterval.Seconds()))
 	SetEventStreamHeaders(c)
 	ctx = context.WithValue(ctx, "stop_chan", abortCh)
@@ -226,10 +234,24 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 					return
 				}
 				sr.reset()
+				if _, staged := c.Writer.(*streamStagingWriter); staged && !relaycommon.ClassifyStreamPayload(data).Valid {
+					sr.Invalid(fmt.Errorf("malformed upstream SSE"))
+					sr.Stop(fmt.Errorf("malformed upstream SSE"))
+					abort()
+					return
+				}
 				writeMutex.Lock()
 				ExtendWriteDeadline(c)
 				dataHandler(data, sr)
 				writeMutex.Unlock()
+				semantic := relaycommon.ClassifyStreamPayload(data).Semantic
+				if staged, ok := c.Writer.(*streamStagingWriter); ok {
+					semantic = staged.state.Load() == 1
+				}
+				if semantic && firstResponseObserved.CompareAndSwap(false, true) {
+					firstByteTimer.Stop()
+					info.SetFirstResponseTime()
+				}
 				if sr.IsStopped() {
 					abort()
 					return
@@ -260,7 +282,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			case <-ctx.Done():
 				return
 			case <-c.Request.Context().Done():
-				info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+				recordContextEnd()
 				abort()
 				return
 			default:
@@ -300,15 +322,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			data = applySSEEventTypeFallback(data, pendingEventType)
 			pendingEventType = ""
 			info.StreamStatus.ObserveRawFrame()
-			if firstResponseObserved.CompareAndSwap(false, true) {
-				if !firstByteTimer.Stop() {
-					select {
-					case <-firstByteTimer.C:
-					default:
-					}
-				}
-			}
-			info.SetFirstResponseTime()
 			info.ReceivedResponseCount++
 			select {
 			case dataChan <- data:
@@ -317,7 +330,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			case <-ctx.Done():
 				return
 			case <-c.Request.Context().Done():
-				info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+				recordContextEnd()
 				abort()
 				return
 			}
@@ -341,19 +354,22 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonEOF, nil)
 	})
 
-	select {
-	case <-handlerDone:
-	case <-abortCh:
-	case <-streamTimer.C:
-		info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonTimeout, nil)
-	case <-firstByteTimer.C:
-		if firstResponseObserved.Load() {
+	for {
+		select {
+		case <-handlerDone:
+		case <-abortCh:
+		case <-streamTimer.C:
 			info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonTimeout, nil)
-		} else {
-			info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonFirstByteTimeout, nil)
+		case <-firstByteTimer.C:
+			if firstResponseObserved.Load() {
+				continue
+			} else {
+				info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonFirstByteTimeout, nil)
+			}
+		case <-c.Request.Context().Done():
+			recordContextEnd()
 		}
-	case <-c.Request.Context().Done():
-		info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+		break
 	}
 
 	cleanup()

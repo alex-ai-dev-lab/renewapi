@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"errors"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 )
 
@@ -47,7 +48,14 @@ func (r *StreamResult) StopWrite(err error) {
 	if err != nil {
 		r.status.RecordError(err.Error())
 	}
-	r.status.SetTransportEnd(relaycommon.StreamEndReasonWriteError, err)
+	switch {
+	case errors.Is(err, errFirstSemanticTimeout):
+		r.status.SetTransportEnd(relaycommon.StreamEndReasonFirstSemanticTimeout, err)
+	case errors.Is(err, errStreamStaging):
+		r.status.SetTransportEnd(relaycommon.StreamEndReasonScannerErr, err)
+	default:
+		r.status.SetTransportEnd(relaycommon.StreamEndReasonWriteError, err)
+	}
 	r.status.MarkTerminal(false, err)
 	r.stopped = true
 }

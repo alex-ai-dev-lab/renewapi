@@ -217,6 +217,7 @@ func TestResponsesCommittedIncompleteStreamDoesNotAppendJSONError(t *testing.T) 
 		calls++
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = io.WriteString(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_partial\",\"object\":\"response\",\"status\":\"in_progress\",\"model\":\"recovery-integration-model\"}}\n\n")
+		_, _ = io.WriteString(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n")
 	}))
 	t.Cleanup(server.Close)
 

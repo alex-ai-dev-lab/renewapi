@@ -220,7 +220,7 @@ func aggregateCompactionResponsesStreamRaw(resp *http.Response) ([]byte, *dto.Us
 			if response.IsObject() {
 				completed = append([]byte(nil), response.Raw...)
 			}
-		case "response.failed", "response.error":
+		case "response.failed", "response.error", "error":
 			var streamResponse dto.ResponsesStreamResponse
 			fallback := fmt.Errorf("responses stream failed: %s", typ)
 			if err := common.Unmarshal(data, &streamResponse); err != nil {
@@ -341,13 +341,8 @@ func aggregateResponsesStreamToResponse(c *gin.Context, info *relaycommon.RelayI
 			functionCallMap[callID] = item
 		case "response.completed", "response.incomplete":
 			finalResp = streamResp.Response
-		case "response.error", "response.failed":
-			if streamResp.Response != nil {
-				if oaiErr := streamResp.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
-					return nil, nil, types.WithOpenAIError(*oaiErr, http.StatusInternalServerError)
-				}
-			}
-			return nil, nil, types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusInternalServerError)
+		case "response.error", "response.failed", "error":
+			return nil, nil, responsesStreamFailureError(&streamResp, fmt.Errorf("responses stream error: %s", streamResp.Type))
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -524,7 +519,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		}
 		sr.Accept(streamResponse.Type)
 		usageAccumulator.Observe(data)
-		if streamResponse.Type == "response.failed" || streamResponse.Type == "response.error" {
+		if streamResponse.Type == "response.failed" || streamResponse.Type == "response.error" || streamResponse.Type == "error" {
 			err := fmt.Errorf("responses stream failed: %s", streamResponse.Type)
 			streamErr = responsesStreamFailureError(&streamResponse, err)
 			sr.Stop(err)
@@ -719,18 +714,35 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 }
 
 func responsesStreamFailureError(streamResponse *dto.ResponsesStreamResponse, fallback error) *types.NewAPIError {
-	if streamResponse != nil && streamResponse.Response != nil {
-		if upstream := streamResponse.Response.GetOpenAIError(); upstream != nil {
-			if upstream.Code == nil || strings.TrimSpace(fmt.Sprint(upstream.Code)) == "" {
-				upstream.Code = strings.TrimSpace(upstream.Type)
-			}
-			if strings.TrimSpace(upstream.Message) == "" {
-				upstream.Message = fallback.Error()
-			}
-			return types.WithOpenAIError(*upstream, http.StatusBadGateway)
+	status := http.StatusBadGateway
+	var upstream *types.OpenAIError
+	if streamResponse != nil {
+		if streamResponse.Status != nil && *streamResponse.Status >= 400 && *streamResponse.Status <= 599 {
+			status = *streamResponse.Status
+		}
+		upstream = streamResponse.Error
+		if upstream == nil && streamResponse.Response != nil {
+			upstream = streamResponse.Response.GetOpenAIError()
+		}
+		if upstream == nil && streamResponse.Type == "error" && streamResponse.Message != "" {
+			upstream = &types.OpenAIError{Message: streamResponse.Message, Code: streamResponse.Code, Param: streamResponse.Param}
 		}
 	}
-	return types.NewOpenAIError(fallback, types.ErrorCodeBadResponse, http.StatusBadGateway)
+	if upstream == nil {
+		return types.NewOpenAIError(fallback, types.ErrorCodeBadResponse, status)
+	}
+	// HTTP SSE 的扁平 error 和 WS 的嵌套 error 共用分类；保留真实状态供健康度和管理员排障。
+	normalized := *upstream
+	if strings.TrimSpace(normalized.Type) == "" {
+		normalized.Type = "server_error"
+	}
+	if normalized.Code == nil || strings.TrimSpace(fmt.Sprint(normalized.Code)) == "" {
+		normalized.Code = normalized.Type
+	}
+	if strings.TrimSpace(normalized.Message) == "" {
+		normalized.Message = fallback.Error()
+	}
+	return types.WithOpenAIError(normalized, status)
 }
 
 func responsesStreamOutcomeError(info *relaycommon.RelayInfo) *types.NewAPIError {

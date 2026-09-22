@@ -14,6 +14,7 @@ type ResponsesUsageAccumulator struct {
 	info                *relaycommon.RelayInfo
 	usage               dto.Usage
 	output              strings.Builder
+	terminalOutput      strings.Builder
 	hasInput, hasOutput bool
 	semantic, finished  bool
 	arguments           map[string]string
@@ -46,16 +47,15 @@ func (a *ResponsesUsageAccumulator) Observe(data string) {
 			a.arguments[key] = arguments
 		}
 	case "response.completed", "response.done", "response.incomplete", "response.failed", "response.cancelled", "response.canceled":
-		if a.output.Len() == 0 {
-			for _, item := range event.Get("response.output").Array() {
-				a.output.WriteString(item.Get("arguments").String())
-				for _, part := range item.Get("content").Array() {
-					a.output.WriteString(part.Get("text").String())
-					a.output.WriteString(part.Get("refusal").String())
-				}
-				for _, part := range item.Get("summary").Array() {
-					a.output.WriteString(part.Get("text").String())
-				}
+		a.terminalOutput.Reset()
+		for _, item := range event.Get("response.output").Array() {
+			a.terminalOutput.WriteString(item.Get("arguments").String())
+			for _, part := range item.Get("content").Array() {
+				a.terminalOutput.WriteString(part.Get("text").String())
+				a.terminalOutput.WriteString(part.Get("refusal").String())
+			}
+			for _, part := range item.Get("summary").Array() {
+				a.terminalOutput.WriteString(part.Get("text").String())
 			}
 		}
 	}
@@ -64,11 +64,11 @@ func (a *ResponsesUsageAccumulator) Observe(data string) {
 		if common.UnmarshalJsonStr(raw.Raw, &usage) != nil {
 			return
 		}
-		if raw.Get("input_tokens").Exists() {
+		if raw.Get("input_tokens").Type == gjson.Number {
 			a.hasInput = true
 			a.usage.PromptTokens = usage.InputTokens
 		}
-		if raw.Get("output_tokens").Exists() {
+		if raw.Get("output_tokens").Type == gjson.Number {
 			a.hasOutput = true
 			a.usage.CompletionTokens = usage.OutputTokens
 		}
@@ -89,8 +89,9 @@ func (a *ResponsesUsageAccumulator) Finish() *dto.Usage {
 	}
 	a.finished = true
 	if a.info != nil {
-		if !a.hasOutput && a.output.Len() > 0 {
-			a.usage.CompletionTokens = CountTextToken(a.output.String(), a.info.UpstreamModel())
+		if !a.hasOutput {
+			// terminal 可能补齐未逐帧发送的内容；分别估算后取较大值，不把重复文本相加。
+			a.usage.CompletionTokens = max(CountTextToken(a.output.String(), a.info.UpstreamModel()), CountTextToken(a.terminalOutput.String(), a.info.UpstreamModel()))
 		}
 		// 前导事件没有交付价值，不因 response.created 产生输入估算或收费。
 		if !a.hasInput && (a.semantic || a.usage.CompletionTokens > 0) {

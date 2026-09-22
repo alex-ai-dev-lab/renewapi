@@ -47,3 +47,23 @@ func TestResponsesUsageTerminalOnlyAndNativeDetails(t *testing.T) {
 	require.Equal(t, 5, usage.PromptTokensDetails.CacheWriteTokens)
 	require.Equal(t, 3, usage.CompletionTokenDetails.ReasoningTokens)
 }
+
+func TestResponsesUsageTerminalCompletesPartialDeltasWithoutDuplication(t *testing.T) {
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-4o"}}
+	for _, delta := range []string{"hello", "hello world with more complete content"} {
+		a := NewResponsesUsageAccumulator(info)
+		a.Observe(`{"type":"response.output_text.delta","delta":"` + delta + `"}`)
+		a.Observe(`{"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"hello world with more complete content"}]}]}}`)
+		require.Equal(t, CountTextToken("hello world with more complete content", "gpt-4o"), a.Finish().CompletionTokens)
+	}
+}
+
+func TestResponsesUsageNullCountersAreEstimated(t *testing.T) {
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-4o"}}
+	info.SetEstimatePromptTokens(17)
+	a := NewResponsesUsageAccumulator(info)
+	a.Observe(`{"type":"response.output_text.delta","delta":"hello world"}`)
+	a.Observe(`{"type":"response.completed","response":{"usage":{"input_tokens":null,"output_tokens":null}}}`)
+	require.Equal(t, 17, a.Finish().PromptTokens)
+	require.Equal(t, CountTextToken("hello world", "gpt-4o"), a.Finish().CompletionTokens)
+}

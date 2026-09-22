@@ -32,17 +32,18 @@ type ResponsesWSTransport struct {
 }
 
 type responsesWSUpstream struct {
-	conn      *websocket.Conn
-	scope     [32]byte
-	headers   http.Header
-	mu        sync.Mutex
-	active    *responsesWSUpstreamTurn
-	closed    bool
-	done      chan struct{}
-	closeOnce sync.Once
-	lastID    string
-	lastCount int
-	lastHash  [32]byte
+	conn        *websocket.Conn
+	scope       [32]byte
+	headers     http.Header
+	mu          sync.Mutex
+	active      *responsesWSUpstreamTurn
+	closed      bool
+	done        chan struct{}
+	closeOnce   sync.Once
+	lastID      string
+	lastEventID string
+	lastCount   int
+	lastHash    [32]byte
 }
 
 type responsesWSUpstreamTurn struct {
@@ -236,11 +237,10 @@ func (u *responsesWSUpstream) readLoop() {
 		stream := value.Get("stream_id")
 		errorEvent := event == "error" || event == "response.error"
 		errorID := value.Get("error.event_id").String()
-		if errorID == "" && errorEvent {
-			errorID = value.Get("event_id").String()
-		}
+		// 顶层 event_id 可能由服务端生成；只有已知旧请求 ID 或明确的 error.event_id 才能排除当前轮次。
+		previousError := errorID == "" && value.Get("event_id").String() != "" && value.Get("event_id").String() == u.lastEventID
 		if stream.Exists() && stream.String() != turn.streamID || errorEvent &&
-			(errorID != "" && errorID != turn.eventID || id != "" && turn.responseID != "" && id != turn.responseID) {
+			(previousError || errorID != "" && errorID != turn.eventID || id != "" && (id == u.lastID || turn.responseID != "" && id != turn.responseID)) {
 			u.mu.Unlock()
 			continue
 		}
@@ -291,6 +291,7 @@ func (t *responsesWSUpstreamTurn) Close() error {
 			u.active = nil
 			if keep {
 				u.lastID, u.lastCount, u.lastHash = t.responseID, t.prefixCount, t.prefixHash
+				u.lastEventID = t.eventID
 			}
 		}
 		u.mu.Unlock()

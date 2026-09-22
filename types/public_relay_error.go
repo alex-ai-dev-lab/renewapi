@@ -5,7 +5,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 )
 
 const PublicModelCapacityMessage = "Selected model is at capacity. Please try a different model."
@@ -43,21 +42,41 @@ func PublicRelayError(err *NewAPIError) *NewAPIError {
 	}, http.StatusServiceUnavailable, ErrOptionWithSkipRetry())
 }
 
-// PublicRelayEvent 保留 stream_id、event_id 等关联字段，只替换错误对象。
+// PublicRelayEvent 只保留协议和关联字段，防止上游把真实错误放进额外的 debug/metadata。
 func PublicRelayEvent(data []byte) ([]byte, error) {
+	value := gjson.ParseBytes(data)
+	kind := value.Get("type").String()
+	failed := kind == "error" || kind == "response.failed" || kind == "response.error" || value.Get("response.status").String() == "failed"
 	for _, path := range []string{"error", "response.error", "response.status_details.error"} {
-		value := gjson.GetBytes(data, path)
-		if !value.Exists() || value.Type == gjson.Null {
-			continue
-		}
-		public, err := common.Marshal(OpenAIError{Message: PublicModelCapacityMessage, Type: "server_error", Code: string(ErrorCodeModelCapacity)})
-		if err != nil {
-			return nil, err
-		}
-		data, err = sjson.SetRawBytes(data, path, public)
-		if err != nil {
-			return nil, err
+		field := value.Get(path)
+		failed = failed || field.Exists() && field.Type != gjson.Null
+	}
+	if !failed {
+		return data, nil
+	}
+	public := OpenAIError{Message: PublicModelCapacityMessage, Type: "server_error", Code: string(ErrorCodeModelCapacity)}
+	event := map[string]any{"type": kind}
+	for _, key := range []string{"stream_id", "event_id", "response_id"} {
+		if field := value.Get(key); field.Type == gjson.String {
+			event[key] = field.String()
 		}
 	}
-	return data, nil
+	response := value.Get("response")
+	if kind == "error" || kind == "response.error" || kind == "" || value.Get("error").Exists() || !response.IsObject() {
+		event["type"] = "error"
+		event["error"], event["status"] = public, http.StatusServiceUnavailable
+	}
+	if response.IsObject() {
+		sanitized := map[string]any{"id": response.Get("id").String(), "status": "failed"}
+		if object := response.Get("object").String(); object == "response" || object == "realtime.response" {
+			sanitized["object"] = object
+		}
+		if response.Get("status_details").Exists() {
+			sanitized["status_details"] = map[string]any{"type": "failed", "error": public}
+		} else {
+			sanitized["error"] = public
+		}
+		event["response"] = sanitized
+	}
+	return common.Marshal(event)
 }

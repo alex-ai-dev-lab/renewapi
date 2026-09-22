@@ -107,9 +107,10 @@ func TestResponsesWSNativeReuseContinuationIdleReaderAndScope(t *testing.T) {
 }
 
 func TestResponsesWSNativeFailureBeforeAndAfterCommit(t *testing.T) {
-	for index, failure := range []string{"handshake", "failed", "wrong_lane", "wrong_event", "truncated", "late_terminal"} {
+	for index, failure := range []string{"handshake", "failed", "server_event_error", "wrong_lane", "wrong_event", "truncated", "late_terminal", "late_error"} {
 		t.Run(failure, func(t *testing.T) {
 			db := setupEmptyStreamRecoveryDB(t)
+			common.LogConsumeEnabled = true
 			var fallback atomic.Int32
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if !websocket.IsWebSocketUpgrade(r) {
@@ -131,24 +132,38 @@ func TestResponsesWSNativeFailureBeforeAndAfterCommit(t *testing.T) {
 				if err != nil {
 					return
 				}
-				if failure == "late_terminal" {
+				if failure == "late_terminal" || failure == "late_error" {
 					_ = writeResponsesWSNativeSuccess(conn, "main", "resp_first", "first")
 					_, _, err = conn.ReadMessage()
 					if err == nil {
-						_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.completed","stream_id":"main","response":{"id":"resp_first","status":"completed","output":[]}}`))
+						if failure == "late_error" {
+							payload, _ := common.Marshal(map[string]any{"type": "error", "stream_id": "main", "event_id": gjson.GetBytes(request, "event_id").String(), "error": map[string]string{"message": "private old request error"}})
+							_ = conn.WriteMessage(websocket.TextMessage, payload)
+							_ = writeResponsesWSNativeSuccess(conn, "main", "resp_right", "right")
+							_, _, _ = conn.ReadMessage()
+						} else {
+							_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.completed","stream_id":"main","response":{"id":"resp_first","status":"completed","output":[]}}`))
+						}
 					}
 					return
 				}
 				if failure == "wrong_lane" || failure == "wrong_event" {
-					payload := map[string]any{"type": "error", "stream_id": "main", "event_id": gjson.GetBytes(request, "event_id").String(), "error": map[string]string{"message": "unrelated private error"}}
+					upstreamError := map[string]string{"message": "unrelated private error", "event_id": gjson.GetBytes(request, "event_id").String()}
+					payload := map[string]any{"type": "error", "stream_id": "main", "event_id": "server_event_1", "error": upstreamError}
 					if failure == "wrong_lane" {
 						payload["stream_id"] = "other"
 					} else {
-						payload["event_id"] = "old_event"
+						upstreamError["event_id"] = "old_event"
 					}
 					data, _ := common.Marshal(payload)
 					_ = conn.WriteMessage(websocket.TextMessage, data)
 					_ = writeResponsesWSNativeSuccess(conn, "main", "resp_right", "right")
+					_, _, _ = conn.ReadMessage()
+					return
+				}
+				if failure == "server_event_error" {
+					_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"error","stream_id":"main","event_id":"server_event_1","status":429,"error":{"message":"private native failure"}}`))
+					// 保持连接打开，确保真正处理错误，而不是靠 EOF 或 watchdog 触发切换。
 					_, _, _ = conn.ReadMessage()
 					return
 				}
@@ -170,7 +185,7 @@ func TestResponsesWSNativeFailureBeforeAndAfterCommit(t *testing.T) {
 			event := map[string]any{"type": "response.create", "stream_id": "main", "event_id": "client_event", "model": failoverTestModel, "input": "hi", "store": false}
 			sendResponsesWSTest(t, conn, event)
 			events, terminal := readResponsesWSTerminal(t, conn)
-			if failure == "late_terminal" {
+			if failure == "late_terminal" || failure == "late_error" {
 				require.Equal(t, "resp_first", terminal.Get("response.id").String(), terminal.Raw)
 				event["previous_response_id"] = "resp_first"
 				sendResponsesWSTest(t, conn, event)
@@ -181,7 +196,7 @@ func TestResponsesWSNativeFailureBeforeAndAfterCommit(t *testing.T) {
 				require.NotContains(t, data.Raw, "secret_plugin")
 			}
 			switch failure {
-			case "wrong_lane", "wrong_event":
+			case "wrong_lane", "wrong_event", "late_error":
 				require.Equal(t, "resp_right", terminal.Get("response.id").String(), terminal.Raw)
 				require.Zero(t, fallback.Load())
 			case "truncated":
@@ -192,6 +207,13 @@ func TestResponsesWSNativeFailureBeforeAndAfterCommit(t *testing.T) {
 			default:
 				require.Equal(t, "resp_fallback", terminal.Get("response.id").String(), terminal.Raw)
 				require.EqualValues(t, 1, fallback.Load())
+			}
+			if failure == "server_event_error" {
+				var logs []model.Log
+				require.NoError(t, db.Find(&logs).Error)
+				require.Len(t, logs, 1)
+				require.EqualValues(t, http.StatusTooManyRequests, gjson.Get(logs[0].Other, "admin_info.attempts.0.status_code").Int())
+				require.Contains(t, gjson.Get(logs[0].Other, "admin_info.attempts.0.real_error").String(), "private native failure")
 			}
 		})
 	}

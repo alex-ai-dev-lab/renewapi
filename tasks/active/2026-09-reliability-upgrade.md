@@ -54,6 +54,7 @@
 - WebSocket 故障验证：真实 WS 与 HTTP 服务覆盖六渠道切换、原生握手失败、response.failed、错误 lane/event、迟到 terminal、提交后 EOF、不拼流、密钥轮换、idle ping、warmup、跨连接历史隔离、Token 模型/RPM/concurrency 重新检查、队列/输入/连接容量释放、关闭进程时退款，以及结算失败后隐藏 terminal 并补偿。专项 race 通过。
 - WebSocket 复核补修：客户端在握手阶段取消时不记渠道故障；Anti-Poison 内部探测仍走原有 HTTP，不借用生成会话；正文/历史有上限；终态及限流释放先于客户端 terminal。决策及配置见 ADR-009 和 `docs/responses-websocket.md`。
 - 完整检查第一轮：`go test ./... -count=1 -timeout 5m`、`go vet ./...`、Go 可执行文件构建、双前端生产构建通过；default 类型检查、68 项测试、改动文件 lint 和 copyright 通过。全量存量 lint/format 仍为 default 119 errors / 34 warnings、91 个格式文件，classic 55 个格式文件。独立 diff 复核、最终文档及最终分支数据库 CI 仍在收尾。
+- 独立复核补修：复现并修复 terminal 补齐部分 delta 时低估用量、null 用量误当显式零、失败事件额外 debug/metadata 泄露和无 response 对象时缺公共文案。原生 WS 不再把服务端顶层 event_id 当作请求 ID；明确旧请求错误仍隔离。统一解析 HTTP/WS error 事件，管理员尝试链保留真实 429 等状态。回归先复现失败后修正，`types/dto/service/relay/.../controller` 完整 package 测试及六个 package 的相关定向 race 通过；最终全仓检查继续执行。
 
 ## 后续执行顺序
 

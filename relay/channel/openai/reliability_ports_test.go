@@ -38,6 +38,35 @@ func TestResponsesTruncationRetainsUsageWithoutSettling(t *testing.T) {
 	require.Positive(t, info.ResponsesObservedUsage.CompletionTokens)
 }
 
+func TestResponsesErrorEventsRetainStatusBeforeCommit(t *testing.T) {
+	for name, handler := range map[string]func(*gin.Context, *relaycommon.RelayInfo, *http.Response) (*dto.Usage, *types.NewAPIError){
+		"responses": OaiResponsesStreamHandler,
+		"chat":      OaiResponsesToChatStreamHandler,
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, event := range []struct {
+				payload string
+				status  int
+			}{
+				{`{"type":"error","status":429,"error":{"message":"private native failure","code":"rate_limit_exceeded"}}`, 429},
+				{`{"type":"error","status":503,"message":"private native failure","code":"server_error"}`, 503},
+			} {
+				recorder := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(recorder)
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+				info := &relaycommon.RelayInfo{IsStream: true, DisablePing: true, RelayFormat: types.RelayFormatOpenAIResponses,
+					ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-4o"}}
+				usage, apiErr := handler(c, info, &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("data: " + event.payload + "\n\n"))})
+				require.Nil(t, usage)
+				require.NotNil(t, apiErr)
+				require.Equal(t, event.status, apiErr.StatusCode)
+				require.Equal(t, "private native failure", apiErr.Error())
+				require.Empty(t, recorder.Body.String())
+			}
+		})
+	}
+}
+
 func TestCrossProtocolGeminiRequestsUsageOnlyWhenSupported(t *testing.T) {
 	for _, streaming := range []bool{false, true} {
 		for _, supported := range []bool{false, true} {

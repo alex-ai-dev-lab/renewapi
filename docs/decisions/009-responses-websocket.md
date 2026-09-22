@@ -9,7 +9,7 @@
 - 默认将现有 HTTP/SSE Responses 上游转成 WebSocket 消息。渠道 `setting.responses_websocket=true` 时，仅替换当前 Responses 请求的传输层为原生上游 WebSocket。URL、模型映射、参数/头部覆盖、代理和 TLS 规则仍由原路径产生。
 - 每个客户端连接的每个 lane 拥有独立上游连接，不跨用户、Token 或连接共享。渠道、认证、URL、请求头、代理或 TLS 设置变化时重新握手。常驻 reader 负责闲置期间的 ping/close，异常和取消使连接失效。
 - 复用 ADR-006 的首语义 watchdog、提交前暂存和六渠道预算。已提交当前轮次内容后绝不拼接另一渠道输出。迟到 terminal、response ID 冲突和无法解析的事件不能作为下一轮成功。
-- 每轮创建唯一上游 `event_id`，避免客户端复用标识造成旧错误误关联。上游明确属于其他 lane 或 event 的错误不能终结当前轮次。
+- 每轮创建唯一上游 `event_id`，避免客户端复用标识造成旧错误误关联。按 `stream_id`、`response_id`、明确的 `error.event_id` 和已知旧请求 ID 排除旧错误；不能假设顶层 `event_id` 一定是客户端请求 ID。HTTP SSE 的扁平错误与 WS 的嵌套错误共用解析并保留管理员所需的真实状态。
 - 客户端 terminal 延后到 Relay、账本及限流中间件退出之后。结算失败只返回公共错误；持久化 `reconcile_required` 保留结算意图，管理员日志保留 `billing_error`，补偿器继续恢复。
 - 连接内保存有限的完整 input/output 快照。已知 `previous_response_id` 先展开完整输入供鉴权、校验和预扣估算；原生连接仅在前次实际请求与输出前缀完全一致时发送增量。换渠道、换密钥、表示改变时发送完整上下文，不重放当前轮次已提交内容或工具调用。
 - `store=false` 且快照不可用时返回明确恢复错误，要求客户端发送完整 input。默认/显式 `store=true` 的未知 ID 可交给上游持久化状态处理，但不臆造本地历史。

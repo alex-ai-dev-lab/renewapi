@@ -237,6 +237,7 @@ type RelayInfo struct {
 	FinalRequestRelayFormat types.RelayFormat
 
 	StreamStatus *StreamStatus
+	Failover     *ChannelFailoverState
 
 	ThinkingContentInfo
 	TokenCountMeta

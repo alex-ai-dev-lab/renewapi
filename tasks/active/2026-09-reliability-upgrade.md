@@ -35,7 +35,8 @@
 
 - 已读取根目录 AGENTS、两套前端维护约定、PROJECT_STATE、ARCHITECTURE、维护文档、相关 ADR、active 任务和 UPSTREAM_PORTS。
 - Go 1.25.1、Bun 1.3.14 可用。未发现 Docker、MySQL/PostgreSQL 命令；数据库运行证据待实际建立，不能把 CI 配置当作通过。
-- 基线相关包测试正在运行。
+- 基线 `go test ./controller ./relay/helper ./relay/common ./model ./service` 通过。
+- 第一组：独立 `ChannelFailoverState`，预算跨路由共享；同渠道不再执行已失败的兼容重试；取消停止选择；旧 `RetryTimes=0` 不压缩新预算。真实 HTTP 集成覆盖六次失败、前五次失败第六次成功、两个 priority 100 先于 90、禁用渠道排除、只结算成功请求。`go test ./controller ./service ./relay/common` 通过。
 
 ## 后续执行顺序
 

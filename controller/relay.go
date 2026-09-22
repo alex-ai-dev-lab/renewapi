@@ -395,6 +395,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil
+	relayInfo.Failover = relaycommon.NewChannelFailoverState()
+	c.Set(relaycommon.ChannelFailoverContextKey, relayInfo.Failover)
 	service.SetRelaySemanticSuccess(c, false)
 	maxRetryTimes := compatRelayRetryBudget(relayInfo, relayFormat)
 	streamRecoveryRetries := 0
@@ -484,16 +486,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		relayInfo.BillingModelName = route.BillingModel
 		retryParam.PreferredChannelId = route.PreferredChannelId
 		retryParam.StrictPreferredChannel = route.StrictPreferredChannel
-		retryParam.ExcludedChannelIds = make(map[int]bool)
 		retryParam.SetRetry(0)
 		if route.StrictPreferredChannel {
 			maxRetryTimes = route.RetryBudget
 		} else {
 			maxRetryTimes = compatRelayRetryBudget(relayInfo, relayFormat)
-		}
-		ordinaryRetryLimit := maxRetryTimes
-		if setting := operation_setting.GetStreamRecoverySetting(); relayInfo.IsStream && setting != nil && setting.PreCommitRetryOn() && setting.EmptyStreamRetryLimit > 0 {
-			maxRetryTimes += setting.EmptyStreamRetryLimit
 		}
 		// Compat hook: OnSelectRetryParam (populates excludes/preferences).
 		compat.Hooks().OnSelectRetryParam(c, relayInfo, retryParam)
@@ -503,7 +500,15 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		compactCapabilityUnsupported := false
 		streamRecoveryAdvanceRoute := false
-		for ; retryParam.GetRetry() <= maxRetryTimes; retryParam.IncreaseRetry() {
+		for ; relayInfo.Failover.CanAttempt() && retryParam.GetRetry() <= maxRetryTimes; retryParam.IncreaseRetry() {
+			if c.Request.Context().Err() != nil {
+				newAPIError = types.NewErrorWithStatusCode(c.Request.Context().Err(), types.ErrorCodeBadResponse, 499, types.ErrOptionWithSkipRetry())
+				return
+			}
+			// 兼容钩子和模型路由不能重新加入本请求已经尝试过的渠道。
+			for channelID := range relayInfo.Failover.AttemptedChannelIDs {
+				retryParam.ExcludedChannelIds[channelID] = true
+			}
 			// Retry hooks may adjust affinity, but a planned compaction route is an
 			// exact (channel, model) candidate. Re-pin it before every selection so
 			// a hook cannot escape into the ordinary random routing pool.
@@ -521,7 +526,14 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 					continue
 				}
 				logger.LogError(c, channelErr.Error())
-				newAPIError = channelErr
+				if relayInfo.Failover.LastInternalError != nil {
+					newAPIError = relayInfo.Failover.LastInternalError
+				} else {
+					newAPIError = channelErr
+				}
+				break
+			}
+			if channel == nil || relayInfo.Failover.AttemptedChannelIDs[channel.Id] {
 				break
 			}
 			resetResponsesFunctionCallArgumentsRetryIfChannelChanged(retryParam, channel)
@@ -556,12 +568,26 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				break
 			}
 			c.Request.Body = io.NopCloser(bodyStorage)
+			if !relayInfo.Failover.Begin(channel.Id, channel.Name, channel.GetPriority()) {
+				break
+			}
+			relayInfo.StreamStatus = nil
+			relayInfo.ReceivedResponseCount = 0
+			c.Set(common.UpstreamRequestIdKey, "")
 
 			newAPIError = relayDispatchUpstream(c, relayInfo, relayFormat, ws)
 
 			if newAPIError == nil {
 				newAPIError = compatStreamRetryError(relayInfo)
 			}
+			timeoutStage := ""
+			if relayInfo.StreamStatus != nil {
+				timeoutStage = string(relayInfo.StreamStatus.Outcome().TransportEnd)
+				if !strings.Contains(timeoutStage, "timeout") {
+					timeoutStage = ""
+				}
+			}
+			relayInfo.Failover.Finish(newAPIError, c.GetString(common.UpstreamRequestIdKey), timeoutStage)
 
 			if newAPIError == nil {
 				capabilityOutcome := service.ObserveResponsesCapabilityAttempt(
@@ -609,12 +635,6 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 					relayInfo.StreamStatus.Outcome(), newAPIError, relayInfo.Request,
 					channel.ChannelInfo.IsMultiKey, service.HasUntriedEnabledMultiKey(retryParam, channel),
 				)
-			}
-			if maybeRetryResponsesFunctionCallArgumentsAsObject(c, relayInfo, retryParam, channel, newAPIError) {
-				continue
-			}
-			if retryNextMappedModelCandidate(c, relayInfo, retryParam, channel, newAPIError) {
-				continue
 			}
 			capabilityOutcome := service.ResponsesCapabilityOutcome{}
 			if !streamRecoveryFailure && !streamClientFailure {
@@ -684,7 +704,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				service.ExcludeChannelForRetry(retryParam, channel.Id)
 			}
 
-			remainingRetries := maxRetryTimes - retryParam.GetRetry()
+			service.ExcludeChannelForRetry(retryParam, channel.Id)
+			remainingRetries := relayInfo.Failover.MaxSwitches + 1 - relayInfo.Failover.AttemptCount
 			shouldRetryResult := shouldRetry(c, newAPIError, remainingRetries)
 			if capabilityOutcome.Unsupported && remainingRetries > 0 {
 				shouldRetryResult = true
@@ -692,29 +713,30 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 			// Compat hook: OnRetryDecision (can override shouldRetry, adjust excludes/preferences)
 			finalShouldRetry := compat.Hooks().OnRetryDecision(c, relayInfo, channel, newAPIError, retryParam, shouldRetryResult)
+			if service.IsRelayFailoverError(newAPIError) && remainingRetries > 0 {
+				finalShouldRetry = true
+			}
 			if streamClientFailure {
 				finalShouldRetry = false
 			}
 			if streamRecoveryFailure {
-				finalShouldRetry = finalShouldRetry && sessionRecoveryDecision.RetryCurrentRequest && shouldRetrySessionScopedStream(relayInfo, streamRecoveryRetries)
+				finalShouldRetry = finalShouldRetry && relayInfo.StreamStatus.Outcome().RetryableBeforeCommit
 				if finalShouldRetry {
 					streamRecoveryRetries++
-					if service.HasUntriedEnabledMultiKey(retryParam, channel) {
-						retryParam.PreferredChannelId = channel.Id
-					} else {
-						service.ExcludeChannelForRetry(retryParam, channel.Id)
-						retryParam.PreferredChannelId = 0
-						if routePlan.HasNext() {
-							streamRecoveryAdvanceRoute = true
-							finalShouldRetry = false
-						}
+					retryParam.PreferredChannelId = 0
+					if route.StrictPreferredChannel && routePlan.HasNext() {
+						streamRecoveryAdvanceRoute = true
+						finalShouldRetry = false
 					}
 				}
 			}
 			if relayInfo.ClientResponseCommitted() || c.Writer.Written() {
 				finalShouldRetry = false
 			}
-			if !streamRecoveryFailure && retryParam.GetRetry() >= ordinaryRetryLimit {
+			if !relayInfo.Failover.CanAttempt() || c.Request.Context().Err() != nil {
+				finalShouldRetry = false
+			}
+			if _, pinned := c.Get("specific_channel_id"); pinned {
 				finalShouldRetry = false
 			}
 			if streamRecoveryFailure {
@@ -752,9 +774,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if newAPIError == nil {
 			break
 		}
-		if routePlan.HasNext() && (streamRecoveryAdvanceRoute || compactCapabilityUnsupported || shouldTryNextFallbackModel(c, newAPIError)) {
-			if isSessionScopedStreamFailure(relayInfo) &&
-				!streamRecoveryAdvanceRoute && !shouldRetrySessionScopedStream(relayInfo, streamRecoveryRetries) {
+		if relayInfo.Failover.CanAttempt() && routePlan.HasNext() && (streamRecoveryAdvanceRoute || compactCapabilityUnsupported || shouldTryNextFallbackModel(c, newAPIError)) {
+			if relayInfo.ClientResponseCommitted() || c.Writer.Written() || c.Request.Context().Err() != nil {
 				break
 			}
 			routePlan.Advance()
@@ -1063,6 +1084,11 @@ func prepareEncryptedReasoningRetryBody(c *gin.Context, info *relaycommon.RelayI
 
 func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service.RetryParam) (*model.Channel, *types.NewAPIError) {
 	if info.ChannelMeta == nil {
+		if model.DB != nil {
+			if selected, err := model.CacheGetChannel(c.GetInt("channel_id")); err == nil && selected != nil {
+				return selected, nil
+			}
+		}
 		autoBan := c.GetBool("auto_ban")
 		autoBanInt := 1
 		if !autoBan {
@@ -1128,6 +1154,16 @@ func retryNextMappedModelCandidate(c *gin.Context, info *relaycommon.RelayInfo, 
 func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) bool {
 	if openaiErr == nil {
 		return false
+	}
+	if c != nil && c.Request != nil && c.Request.Context().Err() != nil {
+		return false
+	}
+	if retryTimes <= 0 {
+		return false
+	}
+	if service.IsRelayFailoverError(openaiErr) {
+		_, pinned := c.Get("specific_channel_id")
+		return !pinned
 	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) &&
 		!service.ShouldFallbackEncryptedReasoningError(openaiErr) &&
@@ -1465,11 +1501,8 @@ func isTruncationFallbackError(err *types.NewAPIError) bool {
 }
 
 func compatRelayRetryBudget(info *relaycommon.RelayInfo, relayFormat types.RelayFormat) int {
-	// The retry budget is authoritative from the operator-configured RetryTimes so
-	// that it reflects the configured cross-channel failure tolerance rather than an
-	// implicit per-format floor. RetryTimes counts how many failover attempts are
-	// allowed, not how many times a single channel is retried.
-	return common.RetryTimes
+	// 跨渠道预算独立于通用重试参数，整个请求最多切换五次。
+	return relaycommon.MaxChannelSwitches
 }
 
 func shouldCompatRetryByError(openaiErr *types.NewAPIError) bool {

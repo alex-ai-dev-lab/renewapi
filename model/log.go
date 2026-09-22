@@ -80,6 +80,7 @@ func getLogUserSetting(c *gin.Context, userId int) dto.UserSetting {
 func formatUserLogs(logs []*Log, startIdx int) {
 	for i := range logs {
 		logs[i].ChannelName = ""
+		logs[i].UpstreamRequestId = ""
 		var otherMap map[string]interface{}
 		otherMap, _ = common.StrToMap(logs[i].Other)
 		if otherMap != nil {
@@ -87,6 +88,13 @@ func formatUserLogs(logs []*Log, startIdx int) {
 			delete(otherMap, "admin_info")
 			// delete(otherMap, "reject_reason")
 			delete(otherMap, "stream_status")
+			for _, key := range []string{"channel_name", "channel_id", "channel_type", "risk_reason", "anti_poison_evidence_path", "real_error", "attempts"} {
+				delete(otherMap, key)
+			}
+		}
+		if logs[i].Type == LogTypeError {
+			logs[i].Content = types.PublicModelCapacityMessage
+			otherMap = map[string]interface{}{"error_code": types.ErrorCodeModelCapacity, "error_type": "server_error"}
 		}
 		logs[i].Other = common.MapToJsonStr(otherMap)
 		logs[i].Id = startIdx + i + 1
@@ -171,6 +179,25 @@ func RecordTopupLog(userId int, content string, callerIp string, paymentMethod s
 
 func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string, tokenName string, content string, tokenId int, useTimeSeconds int,
 	isStream bool, group string, other map[string]interface{}) {
+	if other == nil {
+		other = make(map[string]interface{})
+	}
+	adminInfo, ok := other["admin_info"].(map[string]interface{})
+	if !ok {
+		adminInfo = make(map[string]interface{})
+		other["admin_info"] = adminInfo
+	}
+	if _, exists := adminInfo["real_error"]; !exists {
+		adminInfo["real_error"] = common.RedactErrorCredentials(content, common.GetContextKeyString(c, constant.ContextKeyChannelKey))
+	}
+	for _, key := range []string{"error_type", "error_code", "status_code", "channel_name", "channel_id", "channel_type", "risk_reason", "anti_poison_evidence_path"} {
+		if value, exists := other[key]; exists {
+			adminInfo[key] = value
+			delete(other, key)
+		}
+	}
+	content = types.PublicModelCapacityMessage
+	other["error_code"], other["error_type"] = types.ErrorCodeModelCapacity, "server_error"
 	logger.LogInfo(c, fmt.Sprintf("record error log: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", userId, channelId, modelName, tokenName, common.LocalLogPreview(content)))
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)

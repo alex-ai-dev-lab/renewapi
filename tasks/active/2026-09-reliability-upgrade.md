@@ -39,6 +39,7 @@
 - 第一组：独立 `ChannelFailoverState`，预算跨路由共享；同渠道不再执行已失败的兼容重试；取消停止选择；旧 `RetryTimes=0` 不压缩新预算。真实 HTTP 集成覆盖六次失败、前五次失败第六次成功、两个 priority 100 先于 90、禁用渠道排除、只结算成功请求。`go test ./controller ./service ./relay/common` 通过。
 - 第二组：跨协议语义分类、响应头/SSE 暂存、15 秒整体首语义期限、结算前有效流校验和提交后不拼流。真实故障注入及 `go test ./controller ./relay/... ./service` 通过；原“仅 response.created 即提交”的测试已改为实际内容后断流。
 - 第二组并发检查：`go test -race ./controller ./relay/helper -run 'TestChannelFailoverUsesSix|TestSemantic|TestStreamStaging|TestStringDataPartial' -count=1` 通过。
+- 第三组：统一客户端 capacity 错误；保留本地用户拒绝；失败日志与历史 self/token 日志脱敏；管理员保存凭证清理后的真实错误和完整尝试链；成功消费日志也保存前序失败。所有可切换失败写入渠道健康记录，禁用资格继续复用现有规则。相关九个 Go package 测试通过。
 
 ## 后续执行顺序
 

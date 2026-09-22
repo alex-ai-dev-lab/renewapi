@@ -3,6 +3,7 @@ package common
 import (
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/types"
 )
 
@@ -56,7 +57,7 @@ func (s *ChannelFailoverState) Begin(channelID int, name string, priority int64)
 	return true
 }
 
-func (s *ChannelFailoverState) Finish(err *types.NewAPIError, upstreamRequestID, timeoutStage string) {
+func (s *ChannelFailoverState) Finish(err *types.NewAPIError, upstreamRequestID, timeoutStage string, secrets ...string) {
 	if s == nil || len(s.AttemptRecords) == 0 {
 		return
 	}
@@ -68,12 +69,12 @@ func (s *ChannelFailoverState) Finish(err *types.NewAPIError, upstreamRequestID,
 	if err != nil {
 		s.LastInternalError = err
 		record.StatusCode = err.StatusCode
-		record.RealError = err.MaskSensitiveError()
+		record.RealError = common.RedactErrorCredentials(err.Error(), secrets...)
 	}
 }
 
 // SnapshotSuccess 在适配器生成结算日志时补齐本次成功记录，历史失败记录保持独立。
-func (s *ChannelFailoverState) SnapshotSuccess() []ChannelAttemptRecord {
+func (s *ChannelFailoverState) SnapshotSuccess(upstreamRequestID string) []ChannelAttemptRecord {
 	if s == nil {
 		return nil
 	}
@@ -81,6 +82,7 @@ func (s *ChannelFailoverState) SnapshotSuccess() []ChannelAttemptRecord {
 	if len(records) > 0 && records[len(records)-1].StatusCode == 0 {
 		records[len(records)-1].StatusCode = 200
 		records[len(records)-1].ElapsedMS = time.Since(s.startedAt).Milliseconds()
+		records[len(records)-1].UpstreamRequestID = upstreamRequestID
 	}
 	return records
 }

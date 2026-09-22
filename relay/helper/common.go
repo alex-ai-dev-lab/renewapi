@@ -235,6 +235,7 @@ func WssError(c *gin.Context, ws *websocket.Conn, openaiError types.OpenAIError)
 	if ws == nil {
 		return
 	}
+	openaiError = types.PublicRelayError(types.WithOpenAIError(openaiError, 500)).ToOpenAIError()
 	errorObj := &dto.RealtimeEvent{
 		Type:    "error",
 		EventId: GetLocalRealtimeID(c),

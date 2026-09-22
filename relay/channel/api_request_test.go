@@ -150,7 +150,8 @@ func TestDoRequestLeavesNonTLSTransportErrorsUnhinted(t *testing.T) {
 
 	var newAPIErr *types.NewAPIError
 	require.ErrorAs(t, err, &newAPIErr)
-	require.Equal(t, "upstream error: do request failed", newAPIErr.Error())
+	require.Contains(t, newAPIErr.Error(), "upstream error: do request failed")
+	require.Contains(t, newAPIErr.Error(), "127.0.0.1:9")
 	require.NotContains(t, newAPIErr.Error(), "TLS")
 	require.NotContains(t, newAPIErr.Error(), "跳过上游 TLS 证书校验")
 }

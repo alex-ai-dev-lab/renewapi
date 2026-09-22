@@ -59,12 +59,25 @@ func CopyAllowedUpstreamHeaders(c *gin.Context, src http.Header) {
 	if c == nil || c.Writer == nil {
 		return
 	}
+	CaptureUpstreamRequestID(c, src)
 	for k, values := range src {
 		if !ShouldCopyUpstreamHeader(c, k, values) {
 			continue
 		}
 		for _, value := range values {
 			c.Writer.Header().Add(k, value)
+		}
+	}
+}
+
+func CaptureUpstreamRequestID(c *gin.Context, headers http.Header) {
+	if c == nil {
+		return
+	}
+	for _, name := range []string{common.RequestIdKey, "X-Request-Id", "Request-Id", "X-Amzn-Requestid"} {
+		if value := headers.Get(name); value != "" {
+			c.Set(common.UpstreamRequestIdKey, value)
+			return
 		}
 	}
 }

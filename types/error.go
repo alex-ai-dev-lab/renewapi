@@ -231,6 +231,9 @@ func (e *NewAPIError) ToOpenAIError() OpenAIError {
 }
 
 func (e *NewAPIError) ToClaudeError() ClaudeError {
+	if e.GetErrorCode() == ErrorCodeModelCapacity {
+		return ClaudeError{Type: "api_error", Message: PublicModelCapacityMessage}
+	}
 	var result ClaudeError
 	switch e.errorType {
 	case ErrorTypeOpenAIError:

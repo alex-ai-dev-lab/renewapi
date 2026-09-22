@@ -184,7 +184,7 @@ func TestResponsesAllEmptyStreamsRefundExactlyOnce(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(recorder, req)
 
-	require.Equal(t, http.StatusBadGateway, recorder.Code, recorder.Body.String())
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code, recorder.Body.String())
 	require.Equal(t, 1, callsA)
 	require.Equal(t, 1, callsB)
 	require.Equal(t, []string{"197", "201"}, *usedChannels)

@@ -13,14 +13,10 @@ func IsRelayFailoverError(err *types.NewAPIError) bool {
 	if err == nil || errors.Is(err, context.Canceled) || err.StatusCode == 499 {
 		return false
 	}
-	switch err.GetErrorCode() {
-	case types.ErrorCodeInvalidRequest, types.ErrorCodeReadRequestBodyFailed,
-		types.ErrorCodeBadRequestBody, types.ErrorCodeAccessDenied,
-		types.ErrorCodeInsufficientUserQuota, types.ErrorCodePreConsumeTokenQuotaFailed,
-		types.ErrorCodeModelPriceError, types.ErrorCodeRateLimitExceeded,
-		types.ErrorCodeRequestGuardBlocked, types.ErrorCodeRequestGuardUnavailable,
-		types.ErrorCodeSensitiveWordsDetected:
+	if types.IsLocalRelayRejection(err) {
 		return false
+	}
+	switch err.GetErrorCode() {
 	case types.ErrorCodeDoRequestFailed, types.ErrorCodeReadResponseBodyFailed,
 		types.ErrorCodeBadResponse, types.ErrorCodeBadResponseBody, types.ErrorCodeEmptyResponse,
 		types.ErrorCodeTruncatedResponse, types.ErrorCodeChannelResponseTimeExceeded:

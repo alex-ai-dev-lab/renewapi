@@ -188,7 +188,7 @@ func IsChannelModelDisabledForGroup(channelID int, group, modelName string) bool
 		return false
 	}
 	var status ChannelModelStatus
-	err := DB.Where("channel_id = ? AND "+commonGroupCol+" = ? AND model_name = ?", channelID, group, modelName).First(&status).Error
+	err := DB.Where(map[string]interface{}{"channel_id": channelID, "group": group, "model_name": modelName}).First(&status).Error
 	if err != nil {
 		// 注意: 这里把“记录不存在”与“数据库报错”同等对待，均视为未禁用（fail-open）。
 		return false
@@ -229,7 +229,7 @@ func FilterChannelIDsByModelStatus(channelIDs []int, group, modelName string) []
 		}
 	} else if DB != nil {
 		var records []ChannelModelStatus
-		err := DB.Where("channel_id IN ? AND "+commonGroupCol+" = ? AND model_name = ? AND status IN ?", channelIDs, group, modelName, []int{common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled}).Find(&records).Error
+		err := DB.Where("channel_id IN ? AND model_name = ? AND status IN ?", channelIDs, modelName, []int{common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled}).Where(map[string]interface{}{"group": group}).Find(&records).Error
 		if err != nil {
 			return channelIDs
 		}
@@ -366,7 +366,7 @@ func OnChannelEnabled(channelID int) {
 
 func GetChannelModelStatus(channelID int, group, modelName string) (*ChannelModelStatus, error) {
 	status := &ChannelModelStatus{}
-	err := DB.Where("channel_id = ? AND "+commonGroupCol+" = ? AND model_name = ?", channelID, normalizeChannelModelStatusGroup(group), normalizeChannelModelStatusName(modelName)).First(status).Error
+	err := DB.Where(map[string]interface{}{"channel_id": channelID, "group": normalizeChannelModelStatusGroup(group), "model_name": normalizeChannelModelStatusName(modelName)}).First(status).Error
 	if err != nil {
 		return nil, err
 	}
@@ -482,7 +482,7 @@ func RecordChannelModelSuccess(update ChannelModelSuccessUpdate) error {
 	// 注意: 这里只 UPDATE，不插入。RowsAffected==0 说明还没有过失败记录，
 	// 属于正常情况，不需要为每次成功请求都建一行。
 	tx := DB.Model(&ChannelModelStatus{}).
-		Where("channel_id = ? AND "+commonGroupCol+" = ? AND model_name = ?", update.ChannelId, update.Group, update.ModelName).
+		Where(map[string]interface{}{"channel_id": update.ChannelId, "group": update.Group, "model_name": update.ModelName}).
 		Updates(updates)
 	if tx.Error != nil {
 		return tx.Error
@@ -563,7 +563,7 @@ func UpdateChannelModelStatus(channelID int, group, modelName string, status int
 func ClearChannelModelStatus(channelID int, group, modelName string) error {
 	group = normalizeChannelModelStatusGroup(group)
 	modelName = normalizeChannelModelStatusName(modelName)
-	err := DB.Where("channel_id = ? AND "+commonGroupCol+" = ? AND model_name = ?", channelID, group, modelName).Delete(&ChannelModelStatus{}).Error
+	err := DB.Where(map[string]interface{}{"channel_id": channelID, "group": group, "model_name": modelName}).Delete(&ChannelModelStatus{}).Error
 	if err == nil {
 		cacheDeleteChannelModelStatus(channelID, group, modelName)
 	}

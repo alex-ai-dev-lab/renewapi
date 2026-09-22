@@ -227,10 +227,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if newAPIError != nil {
 			logger.LogError(c, fmt.Sprintf("relay error: %s", common.LocalLogPreview(newAPIError.Error())))
 
-			// Compat hook: OnClientResponseError (normalizes error for client)
-			newAPIError = compat.Hooks().OnClientResponseError(c, relayInfo, newAPIError)
 			setRelayErrorModelRouteOutcome(c, newAPIError)
 			recordUnhandledRelayErrorLog(c, newAPIError)
+			newAPIError = types.PublicRelayError(compat.Hooks().OnClientResponseError(c, relayInfo, newAPIError))
 			if relayInfo != nil && relayInfo.ClientResponseCommitted() {
 				return
 			}
@@ -238,7 +237,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				return
 			}
 
-			newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
+			if newAPIError.GetErrorCode() != types.ErrorCodeModelCapacity {
+				newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
+			}
 			switch relayFormat {
 			case types.RelayFormatOpenAIRealtime:
 				helper.WssError(c, ws, newAPIError.ToOpenAIError())
@@ -247,6 +248,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 					"type":  "error",
 					"error": newAPIError.ToClaudeError(),
 				})
+			case types.RelayFormatGemini:
+				c.JSON(newAPIError.StatusCode, gin.H{"error": gin.H{"code": newAPIError.StatusCode, "message": newAPIError.Error(), "status": "UNAVAILABLE"}})
 			default:
 				c.JSON(newAPIError.StatusCode, gin.H{
 					"error": newAPIError.ToOpenAIError(),
@@ -589,7 +592,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 					timeoutStage = ""
 				}
 			}
-			relayInfo.Failover.Finish(newAPIError, c.GetString(common.UpstreamRequestIdKey), timeoutStage)
+			relayInfo.Failover.Finish(newAPIError, c.GetString(common.UpstreamRequestIdKey), timeoutStage, common.GetContextKeyString(c, constant.ContextKeyChannelKey))
 
 			if newAPIError == nil {
 				capabilityOutcome := service.ObserveResponsesCapabilityAttempt(
@@ -656,6 +659,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			if streamClientFailure {
 				service.RecordStreamRecoveryEvent(c, relayInfo, channel.Id, "client_failure")
 			} else if streamRecoveryFailure {
+				if relayInfo.StreamStatus.Outcome().RetryableBeforeCommit {
+					service.RecordRouterCooldownFailure(channel.Id, relayInfo, newAPIError)
+					service.RecordChannelModelFailure(service.ChannelModelFailureParams{ChannelId: channel.Id, Group: relayInfo.UsingGroup, ModelName: relayInfo.OriginModelName, Endpoint: relayModeName(relayInfo.RelayMode), RequestId: relayInfo.RequestId, Error: newAPIError, AutoBan: channel.GetAutoBan()})
+					processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
+				}
 				service.RecordStreamRecoveryEvent(c, relayInfo, channel.Id, "detected")
 				recoveryResult := service.ApplySessionRecovery(c, relayInfo, channel, sessionRecoveryDecision)
 				if recoveryResult.AffinityEvicted {
@@ -1766,7 +1774,8 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		}
 	}
 
-	if shouldRecordRelayErrorLog(c, err, antiPoisonRisk) {
+	_, managedFailover := c.Get(relaycommon.ChannelFailoverContextKey)
+	if !managedFailover && shouldRecordRelayErrorLog(c, err, antiPoisonRisk) {
 		recordRelayErrorLog(c, channelError.ChannelId, err, antiPoisonRisk, antiPoisonEvidencePath)
 	}
 
@@ -1789,6 +1798,9 @@ func shouldRecordRelayErrorLog(c *gin.Context, err *types.NewAPIError, antiPoiso
 	}
 	if common.GetContextKeyBool(c, contextKeyErrorLogged) {
 		return false
+	}
+	if state, ok := c.Get(relaycommon.ChannelFailoverContextKey); ok && state.(*relaycommon.ChannelFailoverState).AttemptCount > 0 {
+		return true
 	}
 	return constant.ErrorLogEnabled || antiPoisonRisk || service.IsChannelFailureError(err) || service.IsModelScopedChannelFailureError(err)
 }
@@ -1837,6 +1849,10 @@ func recordRelayErrorLog(c *gin.Context, riskChannelId int, err *types.NewAPIErr
 	}
 	adminInfo := make(map[string]interface{})
 	adminInfo["use_channel"] = c.GetStringSlice("use_channel")
+	adminInfo["real_error"] = common.RedactErrorCredentials(err.Error(), common.GetContextKeyString(c, constant.ContextKeyChannelKey))
+	if state, ok := c.Get(relaycommon.ChannelFailoverContextKey); ok {
+		adminInfo["attempts"] = state.(*relaycommon.ChannelFailoverState).AttemptRecords
+	}
 	if antiPoisonRisk {
 		adminInfo["anti_poison_risk"] = true
 		adminInfo["risk_channel"] = riskChannelId

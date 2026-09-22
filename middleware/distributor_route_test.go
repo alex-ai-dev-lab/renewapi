@@ -13,6 +13,7 @@ import (
 	appI18n "github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
@@ -118,7 +119,7 @@ func TestDistributeNormalResponsesDoesNotRequireCompactionCapability(t *testing.
 	require.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
 }
 
-func TestDistributeCompaction503ReportsCapabilityRejectionReasons(t *testing.T) {
+func TestDistributeCompaction503HidesCapabilityRejectionReasons(t *testing.T) {
 	require.NoError(t, appI18n.Init())
 	db := setupDistributorFallbackTestDB(t)
 	channel := distributorRouteTestChannel(73, "unknown-compaction", "gpt-5.6-sol", 20)
@@ -138,11 +139,11 @@ func TestDistributeCompaction503ReportsCapabilityRejectionReasons(t *testing.T) 
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
-	require.Contains(t, response.Body.String(), `"code":"responses_compaction_no_eligible_channel"`)
-	require.Contains(t, response.Body.String(), "capability_unknown_strict")
+	require.Contains(t, response.Body.String(), `"code":"model_capacity"`)
+	require.NotContains(t, response.Body.String(), "capability_unknown_strict")
 }
 
-func TestDistributeCompactionRoutePlanDisabledReportsFacetRejectionReasons(t *testing.T) {
+func TestDistributeCompactionRoutePlanDisabledHidesFacetRejectionReasons(t *testing.T) {
 	require.NoError(t, appI18n.Init())
 	db := setupDistributorFallbackTestDB(t)
 	t.Setenv("RESPONSES_COMPACTION_ENFORCEMENT", "strict")
@@ -203,8 +204,8 @@ func TestDistributeCompactionRoutePlanDisabledReportsFacetRejectionReasons(t *te
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
 			require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
-			require.Contains(t, response.Body.String(), `"code":"responses_compaction_no_eligible_channel"`)
-			require.Contains(t, response.Body.String(), tc.reason)
+			require.Contains(t, response.Body.String(), `"code":"model_capacity"`)
+			require.NotContains(t, response.Body.String(), tc.reason)
 		})
 	}
 }
@@ -235,7 +236,7 @@ func TestDistributeCompactionRoutePlanDisabledAllowsVerifiedCandidate(t *testing
 	require.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
 }
 
-func TestDistributeMissingCompactionModelKeepsModelNotFoundSemantics(t *testing.T) {
+func TestDistributeMissingCompactionModelReturnsCapacity(t *testing.T) {
 	require.NoError(t, appI18n.Init())
 	setupDistributorFallbackTestDB(t)
 	model.InitChannelCache()
@@ -252,7 +253,7 @@ func TestDistributeMissingCompactionModelKeepsModelNotFoundSemantics(t *testing.
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
-	require.Contains(t, response.Body.String(), `"code":"model_not_found"`)
+	require.Contains(t, response.Body.String(), `"code":"model_capacity"`)
 	require.NotContains(t, response.Body.String(), "responses_compaction_no_eligible_channel")
 }
 
@@ -273,7 +274,7 @@ func TestDistributeOrdinaryMissingModelDoesNotMasqueradeAsCompactionRejection(t 
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
-	require.Contains(t, response.Body.String(), `"code":"model_not_found"`)
+	require.Contains(t, response.Body.String(), `"code":"model_capacity"`)
 	require.NotContains(t, response.Body.String(), "responses_compaction_no_eligible_channel")
 }
 
@@ -400,8 +401,8 @@ func TestDistributeInitialSelectionUsesOnlyExplicitFallbackModels(t *testing.T) 
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, request)
 		require.Equal(t, http.StatusServiceUnavailable, response.Code)
-		require.Contains(t, response.Body.String(), `"code":"model_not_found"`)
-		require.Contains(t, response.Body.String(), "gpt-primary")
+		require.Contains(t, response.Body.String(), `"code":"model_capacity"`)
+		require.Contains(t, response.Body.String(), types.PublicModelCapacityMessage)
 	})
 
 	t.Run("token whitelist still filters explicit fallback", func(t *testing.T) {

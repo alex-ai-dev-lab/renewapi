@@ -12,7 +12,9 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 const failoverTestModel = "recovery-integration-model"
@@ -33,6 +35,7 @@ func TestChannelFailoverUsesSixDistinctChannelsAndRemainingPriority(t *testing.T
 			}
 			db := setupEmptyStreamRecoveryDB(t)
 			seedRecoveryPrincipal(t, db)
+			common.LogConsumeEnabled = true
 			// 即使旧配置为零，也必须保留请求级的五次渠道切换预算。
 			common.RetryTimes = 0
 			var mu sync.Mutex
@@ -44,6 +47,7 @@ func TestChannelFailoverUsesSixDistinctChannelsAndRemainingPriority(t *testing.T
 				calls = append(calls, id-idBase)
 				attempt := len(calls)
 				mu.Unlock()
+				w.Header().Set("X-Request-Id", fmt.Sprintf("upstream-%d", id))
 				if successAtSix && attempt == 6 {
 					writeFailoverSuccess(w)
 					return
@@ -84,7 +88,34 @@ func TestChannelFailoverUsesSixDistinctChannelsAndRemainingPriority(t *testing.T
 				require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
 				require.Contains(t, recorder.Body.String(), "winner")
 				require.NotContains(t, recorder.Body.String(), "secret-provider")
+			} else {
+				require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+				require.Equal(t, types.PublicModelCapacityMessage, gjson.Get(recorder.Body.String(), "error.message").String())
+				require.Equal(t, "model_capacity", gjson.Get(recorder.Body.String(), "error.code").String())
 			}
+			var logs []model.Log
+			require.NoError(t, db.Where("request_id = ?", fmt.Sprintf("failover-six-%t", successAtSix)).Find(&logs).Error)
+			require.Len(t, logs, 1)
+			attempts := gjson.Get(logs[0].Other, "admin_info.attempts").Array()
+			require.Len(t, attempts, 6)
+			for i, attempt := range attempts {
+				require.EqualValues(t, i+1, attempt.Get("attempt").Int())
+				require.NotEmpty(t, attempt.Get("upstream_request_id").String())
+				if i < 5 || !successAtSix {
+					require.Contains(t, attempt.Get("real_error").String(), "secret-provider-host.internal")
+					health, healthErr := model.GetChannelModelStatus(int(attempt.Get("channel_id").Int()), "default", failoverTestModel)
+					require.NoError(t, healthErr)
+					require.Equal(t, 1, health.FailureCount)
+					require.Equal(t, http.StatusTooManyRequests, health.LastStatusCode)
+				}
+			}
+			selfLogs, err := model.GetLogByTokenId(1)
+			require.NoError(t, err)
+			selfJSON, err := common.Marshal(selfLogs)
+			require.NoError(t, err)
+			require.NotContains(t, string(selfJSON), "secret-provider-host")
+			require.NotContains(t, string(selfJSON), "admin_info")
+			require.NotContains(t, string(selfJSON), "upstream_private")
 			var user model.User
 			require.NoError(t, db.First(&user, 1).Error)
 			if successAtSix {

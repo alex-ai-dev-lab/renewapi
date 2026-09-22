@@ -50,6 +50,10 @@
 - Options：已复现旧唯一索引表无法自动补主键，新增 `options-primary-key:v1`；SQLite 保留外键引用、索引、触发器，歧义数据拒绝无损迁移。配置 key 条件交给 GORM 引用，定价单项写入及失败回滚通过。新增开发分支专用 MySQL 5.7/8.4、PostgreSQL 9.6/16 验证工作流，等待实际运行，不将配置文件记作 PASS。
 - 数据库实际证据：`ea9a4f994` 对应 Actions [35764799379](https://github.com/alex-ai-dev-lab/renewapi/actions/runs/35764799379) 的 MySQL 5.7/8.4、PostgreSQL 9.6/16 全部成功，已检查每个 job 的结果。
 - 上游专项复审：已获取 New API `996adffe`、Sub2API `20a94fbb`，补 Responses 截断用量、Gemini/Responses 跨协议 usage 请求、管理员返回模型记录和 function arguments done 去重。限流最终结果、已有 StreamStatus 与语义输出行为标记 NOOP；不采用上游“仅前导事件即计费”的行为。相关 Go package 测试、default 类型检查、改动文件 lint 与 68 项前端测试通过。WebSocket 仍待独立阶段。
+- WebSocket 阶段：新增独立 Responses WS 入口、逐轮鉴权/限流/账本、32 lane FIFO/并行、错误关联、取消、容量边界与有限历史恢复。默认 HTTP/SSE 桥接，渠道可开启原生 WS；连接按客户端/lane 隔离，带常驻 reader、执行范围校验及安全增量续写。两套前端开关在实际浏览器中均完成 true/false 保存验证。
+- WebSocket 故障验证：真实 WS 与 HTTP 服务覆盖六渠道切换、原生握手失败、response.failed、错误 lane/event、迟到 terminal、提交后 EOF、不拼流、密钥轮换、idle ping、warmup、跨连接历史隔离、Token 模型/RPM/concurrency 重新检查、队列/输入/连接容量释放、关闭进程时退款，以及结算失败后隐藏 terminal 并补偿。专项 race 通过。
+- WebSocket 复核补修：客户端在握手阶段取消时不记渠道故障；Anti-Poison 内部探测仍走原有 HTTP，不借用生成会话；正文/历史有上限；终态及限流释放先于客户端 terminal。决策及配置见 ADR-009 和 `docs/responses-websocket.md`。
+- 完整检查第一轮：`go test ./... -count=1 -timeout 5m`、`go vet ./...`、Go 可执行文件构建、双前端生产构建通过；default 类型检查、68 项测试、改动文件 lint 和 copyright 通过。全量存量 lint/format 仍为 default 119 errors / 34 warnings、91 个格式文件，classic 55 个格式文件。独立 diff 复核、最终文档及最终分支数据库 CI 仍在收尾。
 
 ## 后续执行顺序
 

@@ -203,6 +203,7 @@ const EditChannelModal = (props) => {
     tag: '',
     multi_key_mode: 'random',
     // 渠道额外设置的默认值
+    responses_websocket: false,
     force_format: false,
     thinking_to_content: false,
     allow_model_protocol_override: false,
@@ -542,6 +543,7 @@ const EditChannelModal = (props) => {
 
   // 渠道额外设置状态
   const [channelSettings, setChannelSettings] = useState({
+    responses_websocket: false,
     force_format: false,
     thinking_to_content: false,
     allow_model_protocol_override: false,
@@ -921,6 +923,7 @@ const EditChannelModal = (props) => {
       if (data.setting) {
         try {
           const parsedSettings = JSON.parse(data.setting);
+          data.responses_websocket = parsedSettings.responses_websocket === true;
           data.force_format = parsedSettings.force_format || false;
           data.thinking_to_content =
             parsedSettings.thinking_to_content || false;
@@ -940,6 +943,7 @@ const EditChannelModal = (props) => {
             parsedSettings.system_prompt_override || false;
         } catch (error) {
           console.error('解析渠道设置失败:', error);
+          data.responses_websocket = false;
           data.force_format = false;
           data.thinking_to_content = false;
           data.allow_model_protocol_override = false;
@@ -952,6 +956,7 @@ const EditChannelModal = (props) => {
           data.system_prompt_override = false;
         }
       } else {
+        data.responses_websocket = false;
         data.force_format = false;
         data.thinking_to_content = false;
         data.allow_model_protocol_override = false;
@@ -1069,6 +1074,7 @@ const EditChannelModal = (props) => {
       setBasicModels(getChannelModels(data.type));
       // 同步更新channelSettings状态显示
       setChannelSettings({
+        responses_websocket: data.responses_websocket,
         force_format: data.force_format,
         thinking_to_content: data.thinking_to_content,
         allow_model_protocol_override: data.allow_model_protocol_override,
@@ -1121,6 +1127,7 @@ const EditChannelModal = (props) => {
         data.thinking_to_content ||
         data.allow_model_protocol_override ||
         data.pass_through_body_enabled ||
+        data.responses_websocket ||
         data.force_format ||
         data.claude_beta_query ||
         data.system_prompt_override;
@@ -1567,6 +1574,7 @@ const EditChannelModal = (props) => {
     formApiRef.current?.reset();
     // 重置渠道设置状态
     setChannelSettings({
+      responses_websocket: false,
       force_format: false,
       thinking_to_content: false,
       allow_model_protocol_override: false,
@@ -1956,6 +1964,7 @@ const EditChannelModal = (props) => {
 
     // 生成渠道额外设置JSON
     const channelExtraSettings = {
+      responses_websocket: localInputs.responses_websocket === true,
       force_format: localInputs.force_format || false,
       thinking_to_content: localInputs.thinking_to_content || false,
       allow_model_protocol_override:
@@ -2049,6 +2058,7 @@ const EditChannelModal = (props) => {
     localInputs.settings = JSON.stringify(settings);
 
     // 清理不需要发送到后端的字段
+    delete localInputs.responses_websocket;
     delete localInputs.force_format;
     delete localInputs.thinking_to_content;
     delete localInputs.allow_model_protocol_override;
@@ -2770,6 +2780,7 @@ const EditChannelModal = (props) => {
                       )}
                     </>
                   )}
+                  <Form.Switch field='responses_websocket' label={t('原生 Responses WebSocket')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('responses_websocket', value)} extraText={t('为 Responses WebSocket 客户端复用上游连接，仅在上游支持时开启。')} />
                   <Form.Switch field='tls_insecure_skip_verify' label={t('跳过上游 TLS 证书校验')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('tls_insecure_skip_verify', value)} extraText={t('仅用于兼容 IP:443、自签证书、证书过期、证书不受信任或 SAN 不匹配的上游。开启后会降低中间人攻击防护能力，请只对可信私有上游启用。')} />
                   <Form.Switch field='auto_test_and_recover_enabled' label={t('允许自动测试及恢复')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelOtherSettingsChange('auto_test_and_recover_enabled', value)} extraText={t('开启后，系统会按全局自动测试间隔检测该渠道，并在测试通过后自动启用；关闭后，即使全局自动测试开启，该渠道也会保持禁用，直到你手动启用。')} />
 

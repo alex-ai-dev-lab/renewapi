@@ -305,6 +305,9 @@ func main() {
 			common.SysError(fmt.Sprintf("forced server close failed: %v", closeErr))
 		}
 	}
+	if err := controller.ShutdownResponsesWebSockets(shutdownCtx); err != nil {
+		common.SysError("等待 Responses WebSocket 退出失败: " + err.Error())
+	}
 	if err := workers.Stop(shutdownCtx); err != nil {
 		common.SysError("background worker shutdown failed: " + err.Error())
 	}

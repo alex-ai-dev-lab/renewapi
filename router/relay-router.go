@@ -67,6 +67,8 @@ func SetRelayRouter(router *gin.Engine) {
 		playgroundRouter.POST("/chat/completions", controller.Playground)
 	}
 	relayV1Router := router.Group("/v1")
+	// Responses WebSocket 的限流按每轮执行，握手仅执行认证和连接容量检查。
+	router.GET("/v1/responses", middleware.RouteTag("relay"), middleware.SystemPerformanceCheck(), middleware.TokenAuth(), controller.ResponsesWebSocket)
 	relayV1Router.Use(middleware.RouteTag("relay"))
 	relayV1Router.Use(middleware.SystemPerformanceCheck())
 	relayV1Router.Use(middleware.TokenAuth())

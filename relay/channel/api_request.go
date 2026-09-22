@@ -834,7 +834,14 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	if c != nil && c.Request != nil {
 		req = req.WithContext(c.Request.Context())
 	}
-	resp, err := client.Do(req)
+	var resp *http.Response
+	execution := common.GetResponsesWSExecution(req.Context())
+	if execution != nil && execution.Transport != nil && info.ChannelSetting.ResponsesWebSocket && info.IsStream && !info.IsChannelTest &&
+		info.GetFinalRequestRelayFormat() == types.RelayFormatOpenAIResponses {
+		resp, err = execution.Transport.RoundTrip(req, info, execution)
+	} else {
+		resp, err = client.Do(req)
+	}
 	if err != nil {
 		logger.LogError(c, "do request failed: "+err.Error())
 		msg := "upstream error: do request failed"

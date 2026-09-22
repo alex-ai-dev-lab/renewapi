@@ -88,6 +88,15 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	}
 
 	adminInfo := make(map[string]interface{})
+	if ctx.Request != nil {
+		if execution := relaycommon.GetResponsesWSExecution(ctx.Request.Context()); execution != nil {
+			adminInfo["transport"] = "responses_websocket"
+			adminInfo["stream_id"] = execution.StreamID
+			if execution.SettlementError != nil {
+				adminInfo["billing_error"] = common.RedactErrorCredentials(execution.SettlementError.Error(), relayInfo.ApiKey, relayInfo.TokenKey)
+			}
+		}
+	}
 	adminInfo["use_channel"] = ctx.GetStringSlice("use_channel")
 	if relayInfo.ResponseModel != nil {
 		adminInfo["response_model"] = relayInfo.ResponseModel

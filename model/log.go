@@ -256,6 +256,9 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	if !common.LogConsumeEnabled {
 		return
 	}
+	if adminInfo, ok := params.Other["admin_info"].(map[string]interface{}); ok && adminInfo["billing_error"] != nil {
+		params.Content = types.PublicModelCapacityMessage
+	}
 	logger.LogInfo(c, fmt.Sprintf("record consume log: userId=%d, params=%s", userId, common.GetJsonString(params)))
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)

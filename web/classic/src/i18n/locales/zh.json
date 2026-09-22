@@ -2652,6 +2652,8 @@
     "切换次数": "切换次数",
     "超时阶段": "超时阶段",
     "设为默认": "设为默认",
-    "上游响应模型": "上游响应模型"
+    "上游响应模型": "上游响应模型",
+    "原生 Responses WebSocket": "原生 Responses WebSocket",
+    "为 Responses WebSocket 客户端复用上游连接，仅在上游支持时开启。": "为 Responses WebSocket 客户端复用上游连接，仅在上游支持时开启。"
   }
 }

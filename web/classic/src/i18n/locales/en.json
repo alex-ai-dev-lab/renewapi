@@ -3852,6 +3852,8 @@
     "切换次数": "Switches",
     "超时阶段": "Timeout stage",
     "设为默认": "Set as default",
-    "上游响应模型": "Upstream response model"
+    "上游响应模型": "Upstream response model",
+    "原生 Responses WebSocket": "Native Responses WebSocket",
+    "为 Responses WebSocket 客户端复用上游连接，仅在上游支持时开启。": "Use a persistent upstream WebSocket for Responses WebSocket clients. Enable only when the upstream supports it."
   }
 }

@@ -93,6 +93,7 @@ export interface ChannelUpdateResponse {
 // ============================================================================
 
 export interface ChannelSettings {
+  responses_websocket?: boolean
   force_format?: boolean
   thinking_to_content?: boolean
   proxy?: string

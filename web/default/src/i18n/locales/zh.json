@@ -5005,6 +5005,8 @@
     "Endpoint type": "端点",
     "Provider default": "上游默认",
     "Auto detect": "自动检测",
-    "Upstream response model": "上游响应模型"
+    "Upstream response model": "上游响应模型",
+    "Native Responses WebSocket": "原生 Responses WebSocket",
+    "Use a persistent upstream WebSocket for Responses WebSocket clients. Enable only when the upstream supports it.": "为 Responses WebSocket 客户端复用上游连接，仅在上游支持时开启。"
   }
 }

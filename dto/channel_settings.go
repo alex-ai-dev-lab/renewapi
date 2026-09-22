@@ -82,6 +82,8 @@ type ChannelSettings struct {
 	// retries that require a JSON object.
 	ResponsesFunctionCallArgumentsFormat ResponsesFunctionCallArgumentsFormat `json:"responses_function_call_arguments_format,omitempty"`
 	ResponsesCompaction                  *ResponsesCompactionSettings         `json:"responses_compaction,omitempty"`
+	// 仅 WebSocket 客户端请求使用原生上游连接；默认继续通过 HTTP/SSE 转发。
+	ResponsesWebSocket bool `json:"responses_websocket,omitempty"`
 
 	// Auto-test settings
 	AutoTestInterval        int    `json:"auto_test_interval,omitempty"`          // minutes, 0 = use global

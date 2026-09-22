@@ -638,7 +638,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = service.NormalizeViolationFeeError(newAPIError)
 			relayInfo.LastError = newAPIError
 			streamRecoveryFailure := isSessionScopedStreamFailure(relayInfo)
-			streamClientFailure := isClientScopedStreamFailure(relayInfo)
+			streamClientFailure := isClientScopedStreamFailure(relayInfo) || c.Request.Context().Err() != nil
 			sessionRecoveryDecision := service.SessionRecoveryDecision{}
 			if streamRecoveryFailure {
 				sessionRecoveryDecision = service.DecideSessionRecovery(

@@ -113,7 +113,12 @@ func SettleBillingAndInsertMidjourney(ctx *gin.Context, relayInfo *relaycommon.R
 
 // SettleBilling 执行计费结算。如果 RelayInfo 上有 BillingSession 则通过 session 结算，
 // 否则回退到旧的 PostConsumeQuota 路径（兼容按次计费等场景）。
-func SettleBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuota int) error {
+func SettleBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuota int) (settleErr error) {
+	if ctx != nil && ctx.Request != nil {
+		if execution := relaycommon.GetResponsesWSExecution(ctx.Request.Context()); execution != nil {
+			defer func() { execution.SettlementError = settleErr }()
+		}
+	}
 	if relayInfo.Billing != nil {
 		preConsumed := relayInfo.Billing.GetPreConsumedQuota()
 		delta := actualQuota - preConsumed

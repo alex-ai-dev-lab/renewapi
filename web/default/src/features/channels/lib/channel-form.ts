@@ -177,6 +177,7 @@ export const channelFormSchema = z
     batch_add_set_key_prefix_2_name: z.boolean().optional(),
     key_mode: z.enum(['append', 'replace']).optional(), // For editing multi-key channels
     // Channel extra settings (stored in setting JSON, not sent directly)
+    responses_websocket: z.boolean().optional(),
     force_format: z.boolean().optional(),
     thinking_to_content: z.boolean().optional(),
     proxy: z.string().optional(),
@@ -379,6 +380,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   batch_add_set_key_prefix_2_name: false,
   key_mode: 'append',
   // Channel extra settings
+  responses_websocket: false,
   force_format: false,
   thinking_to_content: false,
   proxy: '',
@@ -451,6 +453,7 @@ export function transformChannelToFormDefaults(
   // Parse channel extra settings from setting field
   let extraSettings: Pick<
     ChannelFormValues,
+    | 'responses_websocket'
     | 'force_format'
     | 'thinking_to_content'
     | 'proxy'
@@ -492,6 +495,7 @@ export function transformChannelToFormDefaults(
     | 'auto_test_time_window_end'
     | 'auto_test_timezone'
   > = {
+    responses_websocket: false,
     force_format: false,
     thinking_to_content: false,
     proxy: '',
@@ -538,6 +542,7 @@ export function transformChannelToFormDefaults(
     try {
       const parsed = JSON.parse(channel.setting)
       extraSettings = {
+        responses_websocket: parsed.responses_websocket === true,
         force_format: parsed.force_format || false,
         thinking_to_content: parsed.thinking_to_content || false,
         proxy: parsed.proxy || '',
@@ -739,6 +744,7 @@ export function transformChannelToFormDefaults(
  */
 function buildSettingJSON(formData: ChannelFormValues): string {
   const settingObj: Record<string, unknown> = {
+    responses_websocket: formData.responses_websocket === true,
     force_format: formData.force_format || false,
     thinking_to_content: formData.thinking_to_content || false,
     proxy: formData.proxy || '',

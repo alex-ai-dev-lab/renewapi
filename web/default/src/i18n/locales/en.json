@@ -4693,6 +4693,8 @@
     "Channel attempt chain": "Channel attempt chain",
     "Switches": "Switches",
     "Timeout stage": "Timeout stage",
-    "Upstream response model": "Upstream response model"
+    "Upstream response model": "Upstream response model",
+    "Native Responses WebSocket": "Native Responses WebSocket",
+    "Use a persistent upstream WebSocket for Responses WebSocket clients. Enable only when the upstream supports it.": "Use a persistent upstream WebSocket for Responses WebSocket clients. Enable only when the upstream supports it."
   }
 }

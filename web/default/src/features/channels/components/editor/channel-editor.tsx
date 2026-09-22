@@ -200,6 +200,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.proxy?.trim() ||
     values.tls_insecure_skip_verify ||
     values.system_prompt?.trim() ||
+    values.responses_websocket ||
     values.force_format ||
     values.thinking_to_content ||
     values.pass_through_body_enabled ||
@@ -4509,6 +4510,31 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
                                   <FormDescription>
                                     {t(
                                       'Pass request body directly to upstream'
+                                    )}
+                                  </FormDescription>
+                                </div>
+                                <FormControl>
+                                  <Switch
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name='responses_websocket'
+                            render={({ field }) => (
+                              <FormItem className='flex items-center justify-between gap-4 px-4 py-3'>
+                                <div className='space-y-0.5'>
+                                  <FormLabel>
+                                    {t('Native Responses WebSocket')}
+                                  </FormLabel>
+                                  <FormDescription>
+                                    {t(
+                                      'Use a persistent upstream WebSocket for Responses WebSocket clients. Enable only when the upstream supports it.'
                                     )}
                                   </FormDescription>
                                 </div>

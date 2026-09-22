@@ -1,6 +1,6 @@
 # Release Unit A — Billing Correctness
 
-Status: active — release blocked
+状态：源码与开发验证已完成；历史发布计划由当前产品状态记录接管。
 
 Created: 2026-08-17
 
@@ -68,23 +68,13 @@ Completed:
   `go build` pass locally.
 - Created the master task and this release-unit task.
 
-Blocked release gates:
+2026-09-23 验证补充：
 
-- MySQL execution: `BLOCKED_RUNTIME`. No Docker, local service, or integration
-  DSN was available. The workflow test was added but has not run for this
-  checkout and is not a pass result.
-- PostgreSQL execution: `BLOCKED_RUNTIME` for the same reason.
-- Process-level crash/restart: `NOT RUN`. Reconciler replay from durable rows
-  passes in-process, but no application-process restart was exercised.
-
-Remaining:
-
-- Run the billing migration, rollback/retry, idempotency, and concurrency suite
-  against real MySQL and PostgreSQL and inspect the results.
-- Run an application-process crash/restart recovery test against a durable
-  database.
-- Only after those gates pass, prepare `v1.0.0-rc.3` and run the release
-  validator. Until then `VERSION` stays `v1.0.0-rc.2`.
+- 先前 MySQL/PostgreSQL 的 `BLOCKED_RUNTIME` 已由真实 [Actions 35764799379](https://github.com/alex-ai-dev-lab/renewapi/actions/runs/35764799379) 补齐；`ea9a4f994` 的 MySQL 5.7/8.4、PostgreSQL 9.6/16 迁移、账本事务、回滚、幂等、并发和渠道配置 job 全部成功。
+- 新增 `TestBillingReconcilerSurvivesProcessRestart`，独立子进程强制退出后在同一 SQLite 文件中验证 settle/refund/orphan/uncommitted 恢复；shadow/enforce 均通过。该测试证明持久化账本恢复，不代表生产重启或部署验收。
+- 本轮继续补齐 off 原子退款、终态状态锁、补充预扣失败边界及最终成功渠道归属；shadow 持久化余额事务本身保持 NOOP，默认仍为 shadow。
+- 最终源码与后续 CI 证据由 [2026 年 9 月升级任务](../archive/2026-09-reliability-upgrade.md) 和 [Billing enforce 说明](../../docs/billing-ledger-enforce.md) 记录。
+- 原 rc.2 → rc.3 发布计划已过时：当前 `VERSION` 为 rc.4，本轮不修改版本、创建 tag、发布或部署。其他 UX/性能任务未自动纳入 Billing 完成状态。
 
 ## Validation plan
 

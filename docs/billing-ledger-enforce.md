@@ -21,6 +21,7 @@
 - `TestBillingReconcilerSurvivesProcessRestart`：独立进程强制退出后，用同一 SQLite 文件启动新进程，验证待结算、待退款、孤儿请求及未提交事务回滚；重复补偿不改变余额。
 - `.github/workflows/reliability-validation.yml`：仅验证开发分支，运行 MySQL 5.7/8.4、PostgreSQL 9.6/16 的迁移和账本行为，不构建发布镜像或部署。
 - 2026-09-23 已检查 [Actions 35764799379](https://github.com/alex-ai-dev-lab/renewapi/actions/runs/35764799379)，提交 `ea9a4f994` 的上述四个数据库 job 全部成功；SQLite 独立进程崩溃/重启测试在本地通过。生产切换仍不属于此次源码任务。
+- 最终源码复核后再次执行 [Actions 35773097071](https://github.com/alex-ai-dev-lab/renewapi/actions/runs/35773097071)，提交 `a2321c2b1dae57a98c4ed18ec3197f97cd76c62d` 的 MySQL 5.7/8.4、PostgreSQL 9.6/16 全部 success。该提交的全仓 Go test/vet/build 与相关定向 race 在本地通过；文档收尾提交不改变已验证源码。
 - 本地外部数据库测试使用 `BILLING_TEST_DRIVER`、`BILLING_TEST_DSN`；迁移使用既有 `REQUEST_GUARD_TEST_DRIVER`、`REQUEST_GUARD_TEST_DSN`。这些用例会创建、清理测试表，必须指向隔离测试库。
 
 ## 上线准备

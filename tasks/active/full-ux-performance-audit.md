@@ -6,9 +6,9 @@ Audit source: `FULL_UX_PERFORMANCE_AUDIT.md`
 
 Audit baseline: `4f3eeeb9c22f53d207b1633addc9e5f37ff013bf`
 
-Current HEAD: `e9c2a5a07` (`docs: refresh README presentation`)
+历史审计 HEAD：`e9c2a5a07`；历史产品版本为 `v1.0.0-rc.2`。2026-09-23 当前源码版本已为 rc.4，最新状态见 `docs/PROJECT_STATE.md`。
 
-Current product version: `v1.0.0-rc.2` (tag `renewapi-v1.0.0-rc.2`)
+本轮仅更新已有证据发生变化的 Billing 项。其余矩阵行保留 2026-08-17 的审计快照，不代表已对 2026-09-23 源码重新确认；不能依据这些旧状态重复修改已修复功能。
 
 Issue status is based only on material inspection of the current checkout, not
 on the absence of a closing commit. Release Unit A rechecked ISSUE-001 and the
@@ -22,7 +22,7 @@ evidence exist.
 
 | Issue | Severity | Audit confidence | Current status | Release unit | Evidence / notes |
 | --- | --- | --- | --- | --- | --- |
-| ISSUE-001 | P0 | Confirmed | PARTIALLY_FIXED | A | Shadow balance writes now use one durable ledger transaction and pass SQLite failure/idempotency/race tests. Real MySQL/PostgreSQL execution and process-level crash/restart remain release blockers. |
+| ISSUE-001 | P0 | Confirmed | VALIDATED_CURRENT | A | 2026-09-23：shadow 已有持久化事务；MySQL 5.7/8.4、PostgreSQL 9.6/16 实际 CI 和 SQLite 独立进程崩溃恢复通过。默认仍为 shadow，详情见 RU-A 与本轮可靠性升级任务。 |
 | ISSUE-002 | P1 | Confirmed | CONFIRMED_CURRENT | C | Rechecked: both token-key reveal routes still omit `SecureVerificationRequired`. |
 | ISSUE-003 | P1 | Confirmed | CONFIRMED_CURRENT | B | Rechecked: unsupported tests still return a nil context which single/batch callers dereference. |
 | ISSUE-004 | P1 | Confirmed | CONFIRMED_CURRENT | B | Rechecked: channel-load failure still returns after setting the global running flag and before the goroutine defer. |
@@ -54,11 +54,7 @@ Release Unit A — Critical Billing Correctness (`ISSUE-001`).
 Goal: make default shadow billing balance transitions atomic, durable,
 idempotent, and recoverable without changing the default mode to `enforce`.
 
-Local implementation and SQLite validation are complete. The unit remains
-`NOT READY`: no actual MySQL or PostgreSQL integration run was available, and
-no process-level crash/restart test was executed. Adding tests to CI does not
-count as passing those gates. No product version bump is permitted until the
-required runtime evidence exists.
+Billing 的源码及开发验证已经补齐，先前缺失的外部数据库与独立进程恢复证据不再作为当前阻塞。最终提交和 CI 链接见 `full-ux-audit-ru-a-billing.md` 与 `../archive/2026-09-reliability-upgrade.md`。生产切换、产品发布及下列其他 release unit 不属于此完成结论。
 
 ## Remaining Release Units
 
@@ -76,11 +72,8 @@ required runtime evidence exists.
 
 - SQLite: focused failure-injection, duplicate delivery, reconciler replay,
   migration, compatibility, and race tests passed on 2026-08-17.
-- MySQL and PostgreSQL: `BLOCKED_RUNTIME`; Docker, local services, integration
-  DSNs, and an available hosted-CI dispatch for the uncommitted checkout were
-  unavailable. Workflow coverage exists but has not run for this change.
-- Process-level crash/restart: `NOT RUN`; in-process reconciler replay passed,
-  but that is not equivalent to restarting the application process.
+- MySQL/PostgreSQL：2026-09-23 实际 hosted CI 已通过；不是以配置文件代替执行证据。
+- 独立进程崩溃/恢复：2026-09-23 SQLite shadow/enforce 测试通过；未执行生产实例重启。
 - Browser/provider/Redis: deferred to the release unit that owns each issue;
   no unavailable runtime is reported as passed.
 

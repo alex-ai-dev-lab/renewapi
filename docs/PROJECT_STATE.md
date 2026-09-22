@@ -1,102 +1,43 @@
-# RenewAPI Project State
+# RenewAPI 当前项目状态
 
-Last updated: 2026-08-17
+更新日期：2026-09-23。源码和验证状态以当前 Git 提交为准，本文不代表生产部署状态。
 
-## Current product version
+## 产品与开发基线
 
-Declared product version in `VERSION`:
-`v1.0.0-rc.2`
+- `VERSION` 当前为 `v1.0.0-rc.4`；本轮未修改版本，未创建或移动 tag，未发布 Release 或部署。
+- 本轮开发分支：`upgrade/2026-09-reliability`。
+- 分支基线：`4def3a8848e336532c55e9c3070cc78ead67e378`。
+- 本轮功能及复核修复提交截至 `a2321c2b1dae57a98c4ed18ec3197f97cd76c62d`；后续文档提交不改变该源码状态。
+- 原 `agent/06-billing` 工作树及其用户未提交修改保持原样。
+- 产品 tag 使用 `renewapi-` 前缀；原上游 `v*` tag 与历史发布保持不变。
 
-The exact product tag for this version is `renewapi-v1.0.0-rc.2`. Raw
-`v1.0.0-rc.21` through `v1.0.0-rc.24` tags present here are imported NewAPI
-upstream tag objects and remain untouched.
+## 本轮升级
 
-Development branch:
-`main`
+- 独立请求级 Failover 状态，最多六个不同 Channel ID；复用已有 priority、weight、模型支持、Enabled 筛选和 route plan。
+- 默认 15 秒首语义输出期限；提交前隔离 SSE 与响应头，空流、错误、超时或畸形响应可切换。内容提交后不拼接另一个渠道的流。
+- 客户端与用户错误日志统一为公共 capacity 文案；管理员在 `Other.admin_info` 查看真实错误、逐渠道尝试链、用量和返回模型。前序失败独立进入渠道健康记录。
+- 独立 Prompt Profile 表、管理员 CRUD、稳定渠道引用、默认回退、引用拒删、Anti-Poison 追加 nonce，以及默认关闭的“自动测试仅 AutoDisabled”模式。
+- default/classic 两套前端同步 Prompt 管理、渠道设置、管理员错误链及原生 WS 开关；修复渠道模型选择器 light/dark 背景与自动展开。
+- 补齐 off 原子退款、终态幂等、enforce 故障恢复和成功渠道用量归属；旧 Options 表增加实际主键迁移，保留定价选项。
+- Responses WebSocket 独立于 Realtime，每轮重做鉴权、限流、路由和计费。支持 HTTP/SSE 桥接、可选原生上游、lane 隔离、取消、有限历史恢复、连接容量和关闭等待。
+- 复核补齐终态用量估算、null 用量回退、HTTP/WS error 解析、错误扩展字段隔离及上游事件关联。
 
-Release commit:
-`f0f8e6ff034906ebb62a4cd752a47f1cca45d55c`
-(`release: prepare RenewAPI v1.0.0-rc.2`)
+验收状态、22 项核心行为映射、命令和 CI 证据记录在 [本轮升级任务](../tasks/archive/2026-09-reliability-upgrade.md)。架构边界见 [ARCHITECTURE](ARCHITECTURE.md)、ADR-006 至 ADR-009。
 
-The published annotated tag `renewapi-v1.0.0-rc.2` resolves to this release
-commit and must not be moved.
+## Billing 与历史任务
 
-## Upstream baseline
+默认继续为 `BILLING_LEDGER_MODE=shadow`。旧审计描述的 shadow 异步退款问题在本轮基线已有持久化事务实现，因此未重复实现。off 仍不提供跨进程补偿保证；shadow/enforce 的切换条件见 [Billing enforce 说明](billing-ledger-enforce.md)。本轮不执行生产模式切换或生产数据库迁移。
 
-Principal upstream: `QuantumNous/new-api`
+历史 RU-A 缺少外部数据库与进程重启证据的状态已由本轮开发验证补齐：实际 MySQL 5.7/8.4、PostgreSQL 9.6/16 Actions，以及 SQLite 独立进程崩溃/恢复。证据以任务及 Billing 文档记录的提交为准。其余旧 UX/性能审计结论未因此自动变成已完成，仍按对应任务的历史证据边界处理。
 
-Audited through:
-- release boundary: `v1.0.0-rc.24` plus post-release `main`
-- commit: `58d4e9bd3bb035df8ea235dd682ccc8a45d0332a`
-- audited at: `2026-08-14`
+## 上游审计边界
 
-See `UPSTREAM.md` and `UPSTREAM_PORTS.md`.
+完整历史审计基线仍为 New API `58d4e9bd3bb035df8ea235dd682ccc8a45d0332a`（2026-08-14）。本轮是针对用户指定可靠性项目的专项复审，引用 New API `996adffe5165bd5e311e33a03a86b8aede1fe376`、Sub2API `20a94fbb567b62208751292ed7786b24a7e7c0fe`；不声称已分类两个上游的所有后续提交。判定与本地实现见 [UPSTREAM_PORTS](../UPSTREAM_PORTS.md)。
 
-## Completed initiative
+## 已知边界
 
-- The complete 0815 correctness and RequestGuard hardening implementation is
-  recorded in `tasks/archive/0815-implementation.md`.
-
-## Published prerelease
-
-- Local release preparation validation passed for
-  `renewapi-v1.0.0-rc.2`.
-- Full Go tests, focused race tests, tracked-package vet/build, both frontend
-  production builds, and the SQLite RequestGuard migration check passed.
-- `CHANGELOG.md`, the upstream ledger, maintenance records, and version
-  identity are synchronized for `v1.0.0-rc.2`.
-- GitHub Actions run `31881289216` passed the quality, MySQL/PostgreSQL
-  migration, multi-arch image, release-asset, and tag-source verification
-  gates.
-- GitHub Release `RenewAPI v1.0.0-rc.2` is published as a prerelease targeting
-  the release commit.
-- GHCR tags `1.0.0-rc.2`, `rc`, and `sha-f0f8e6ff0349` resolve to manifest
-  digest `sha256:9238b7cfcf842e754872fe78f605187038245ab2722ad26deb57f38fd57cf5fd`.
-- Stable `latest` remains on the older `sha-4a0d431e5d58` image at digest
-  `sha256:25796ecdec7a77c501bea1e9a4a6502d3a29d78025c5d975d889b0be9c8ae946`.
-
-## Known high-priority technical debt
-
-- Docker is unavailable in the current environment, so local image runtime was
-  not exercised. The hosted multi-arch build and MySQL/PostgreSQL migration
-  checks passed during publication.
-- Runtime endpoints expose the product version. Git commit, build time, build
-  channel, and audited upstream identity remain build/image metadata rather
-  than application response fields.
-
-## Full UX and performance audit remediation
-
-Master task: `tasks/active/full-ux-performance-audit.md`
-
-Current release unit: `tasks/active/full-ux-audit-ru-a-billing.md`
-
-- Audit status was corrected against current material evidence: ISSUE-002
-  through ISSUE-010 are confirmed current; ISSUE-001 is partially fixed;
-  deferred P2/P3 issues remain unverified; ISSUE-018 remains runtime-blocked at
-  its original `Highly Likely` confidence pending generated SQL/EXPLAIN.
-- Release Unit A implements durable shadow billing balance transitions for
-  ISSUE-001. The default mode remains `shadow`.
-- New additive migration `billing-ledger:v2` stores funding/token/subscription
-  and statistics component state on `BillingLedger`.
-- Focused SQLite rollback/retry, duplicate transition, reconciler replay,
-  concurrency, shadow-session, subscription-extra, and legacy migration tests
-  pass, as do repository-wide Go test/vet/build checks.
-- Release Unit A is `NOT READY`: MySQL and PostgreSQL were not runnable in the
-  local environment and no hosted run for this checkout was inspected.
-  Process-level crash/restart recovery was also not run. Workflow coverage is
-  not counted as a pass until an actual run succeeds.
-- Product version remains `v1.0.0-rc.2`; `v1.0.0-rc.3` preparation and release
-  validation have not started.
-
-## Compatibility invariants
-
-- Keep the Go module path `github.com/QuantumNous/new-api` for upstream
-  compatibility.
-- Support SQLite, MySQL >= 5.7.8, and PostgreSQL >= 9.6 through GORM-safe
-  migrations and queries.
-- Preserve both `web/default` and `web/classic` builds until the documented
-  classic-frontend retirement decision changes.
-- Keep provider/routing behavior and existing API/data-model compatibility
-  unchanged unless a separate feature or bug-fix task explicitly changes it.
-- Preserve fork-owned compatibility, anti-poison, security, billing, and
-  deployment controls when adapting upstream behavior.
+- 两套前端继续维护。全量 lint/format 存量问题在任务中单独记录，不将改动文件检查通过写成全量通过。
+- WS 的 `generate:false` 只预热本地输入，不预热上游模型；不支持 mid-turn steering，不跨客户端共享带会话状态的上游连接。
+- `store=false` 的历史仅在当前连接中有限保存；断线或历史不可用时需要完整 input。已提交工具调用不会自动重放。
+- 当前未运行生产凭证、生产数据库或生产部署验收；本地故障注入和 hosted 数据库验证不代表生产已切换。
+- Go module 路径保持 `github.com/QuantumNous/new-api`，支持 SQLite、MySQL >= 5.7.8、PostgreSQL >= 9.6，保留既有兼容、安全和 Anti-Poison 边界。

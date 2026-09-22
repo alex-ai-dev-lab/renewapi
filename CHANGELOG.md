@@ -2,11 +2,26 @@
 
 ## Unreleased
 
-### Fixed
+### 新增
 
-- Shadow billing balance transitions now use the durable ledger transaction for
-  wallet, token, and subscription legs, so failed settle/refund attempts remain
-  retryable instead of being hidden by an in-memory terminal flag.
+- 请求级渠道 Failover：初始渠道加最多五次备用切换，同一 Channel ID 不重复尝试；继续遵守模型、Enabled、priority 和 weight 规则。
+- Channel Test Prompt Profile 管理、每渠道提示词、默认回退和引用拒删；增加默认关闭的“自动测试仅 AutoDisabled”模式。两套前端均可配置。
+- 独立 Responses WebSocket Relay，支持逐轮鉴权、限流、计费、lane 隔离、取消、有限历史恢复和连接容量限制。默认 HTTP/SSE 桥接，渠道可启用原生 WS 上游。
+
+### 修复
+
+- 原首字节超时升级为默认 15 秒首语义输出期限；keepalive、response.created 和协议前导不解除超时。提交前暂存失败可安全切换，提交后不拼接其他渠道的输出。
+- Relay 客户端和用户错误日志统一 capacity 文案；管理员保留真实错误及完整尝试链，前序失败独立参与健康度判断。清理错误事件额外 debug/metadata，修正 WS 事件关联和真实错误状态记录。
+- Anti-Poison 在管理员测试提示词后追加 nonce，保留原测试语义；修复自动测试读取失败后的运行锁与错误恢复边界。
+- 修复渠道模型选择器 light/dark 背景和 dialog 打开时 dropdown 自动展开。
+- 保留 shadow 已有持久化余额事务；off 退款改为同步原子资金/Token 事务，失败可重试。补齐计费终态幂等、失败补偿、进程恢复和 Failover 成功渠道用量归属。
+- Responses 缺失或 null 的 terminal usage 使用内容估算，完整终态输出不会与 delta 重复相加；保留原生显式零及缓存、推理明细。补齐跨协议 usage 请求、工具参数 done 去重与管理员返回模型诊断。
+
+### 配置与兼容
+
+- 新增 `channel-test-prompts:v1` 和 `options-primary-key:v1` 迁移；旧提示词继续回退，旧 Options 配置保留，已有主键无需重建。
+- `RELAY_FIRST_BYTE_TIMEOUT` 沿用原配置键；`BILLING_LEDGER_MODE` 默认继续为 shadow，enforce 切换条件和真实数据库验证见 `docs/billing-ledger-enforce.md`。
+- 新增 WS 连接容量配置及渠道 `setting.responses_websocket` 开关。`generate:false` 仅预热本地输入；不支持 mid-turn steering，`store=false` 断线后需要完整 input 恢复。详见 `docs/responses-websocket.md`。
 
 ## v1.0.0-rc.2 - 2026-08-15
 

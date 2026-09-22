@@ -53,9 +53,7 @@ Before creating a product tag, validate the prepared identity with
 mode remains the post-tag gate and additionally requires the tag to resolve to
 the checked-out clean HEAD.
 
-The current canonical RenewAPI prerelease is `v1.0.0-rc.3`, using the exact
-Git tag `renewapi-v1.0.0-rc.3`. It advances the independent RenewAPI rc
-sequence established at `rc.1` while leaving upstream raw `v*` tags untouched.
+产品版本以 `VERSION` 和当前发布记录为准，不在维护流程中保存会过期的“最新发布”常量。2026-09-23 当前源码声明 `v1.0.0-rc.4`；开发分支完成验证不等于已创建产品 tag 或完成生产部署。
 
 ## Finish and hand off
 

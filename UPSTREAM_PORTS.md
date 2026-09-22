@@ -63,31 +63,32 @@ The reviewed range contains 133 commits from the previous audit ref `4e570389dd4
 | Dependency-only and Electron updates | Deferred until the normal dependency audit; unrelated to the server update batch. |
 | Upstream dead-file cleanup and launch-history repairs | Rejected as lineage-specific and not applicable to this repository. |
 
-## Next Audit
-
 ## 2026-09-23 可靠性专项复审
 
 本轮按当前实现逐项核对可靠性和 Responses 协议，不声称已分类两个上游的所有无关功能提交。因此顶部完整历史审计基线保持原值；专项引用如下。
 
 - New API：`QuantumNous/new-api main@996adffe5165bd5e311e33a03a86b8aede1fe376`。
 - Sub2API：`Wei-Shaw/sub2api main@20a94fbb567b62208751292ed7786b24a7e7c0fe`。
-- 官方协议：2026-09-23 读取 [Responses WebSocket mode](https://developers.openai.com/api/docs/guides/websocket-mode)。
+- 官方协议：2026-09-23 读取 [Responses WebSocket mode](https://developers.openai.com/api/docs/guides/websocket-mode) 和 [WebSocket events](https://developers.openai.com/api/reference/resources/responses/websocket-events)。
 
 | 来源 / 对应提交 | 判定 | 原因与 RenewAPI 实现 |
 | --- | --- | --- |
-| New API `55a6cd2`，terminal usage 缺失 | IMPLEMENT | 补齐文本、工具参数、推理、拒绝和仅 terminal 输出的估算，保留原生缓存/推理用量和显式零。`service/responses_usage.go`。失败尝试仅记录诊断，继续由既有提交门与账本决定收费。 |
+| New API `55a6cd2`，terminal usage 缺失 | IMPLEMENT | `ada0a55bb`、`a2321c2b1`：补齐文本、工具参数、推理、拒绝、仅 terminal 输出和 null 用量估算；terminal 与 delta 分别估算取较大值，保留原生缓存/推理用量和显式零。失败尝试仅记录诊断，收费由提交门与账本决定。 |
 | New API `55a6cd2`，任意前导事件即计输入 | REJECT | `response.created` 不能证明用户收到有效内容；违反本轮提交前失败不收费的要求。 |
-| New API `610334d`，跨协议 stream usage | IMPLEMENT | Claude 已覆盖；补 Gemini → Chat，以及 Responses → Chat 在关闭全局强制 usage 时的请求。仅对已有支持 stream options 的渠道请求 usage。 |
+| New API `610334d`，跨协议 stream usage | IMPLEMENT | `ada0a55bb`：Claude 已覆盖；补 Gemini → Chat，以及 Responses → Chat 在关闭全局强制 usage 时的请求。仅对已有支持 stream options 的渠道请求 usage。 |
 | New API `6237d9d`，限流槽位最终结果 | NOOP | `ModelRouteOutcome`、`RelaySemanticSuccess` 和内存/Redis reservation 已按最终语义结果提交或归还。已有集成测试继续通过。 |
 | New API `8b2c710`，StreamStatus 协议分类 | NOOP | RenewAPI 已有传输/语义结果分离、取消、空流、畸形、terminal、提交状态与重试边界；本轮 `99703c6ea` 补齐语义提交门。保留有效 max_output_tokens incomplete 的原有兼容行为。 |
-| New API 当前错误输出与内部标识 | IMPLEMENT | `8b8c9e9a7` 提供单一公共 capacity 错误及管理员链；普通日志和流 terminal 均脱敏，不复制上游插件标识。 |
+| New API 当前错误输出与内部标识 | IMPLEMENT | `8b8c9e9a7`、`a2321c2b1` 提供单一公共 capacity 错误及管理员链；普通日志、流 terminal 和错误扩展字段均脱敏，HTTP/WS 错误保留管理员所需真实状态，不复制上游插件标识。 |
 | New API 当前 Combobox / autofocus | IMPLEMENT | `3674bfc78` 已在当前双主题前端最小修复，无需复制已重构的上游前端目录。 |
-| New API `ed7c4e3`、`972aed1`，返回模型记录 | IMPLEMENT | `relay/common/response_model.go` 在转换前收集模型声明，管理员日志展示请求/映射/返回名称；不保存容易过期的 mismatch 标志，不用返回值覆盖路由或计费模型。 |
+| New API `ed7c4e3`、`972aed1`，返回模型记录 | IMPLEMENT | `ada0a55bb`：`relay/common/response_model.go` 在转换前收集模型声明，管理员日志展示请求/映射/返回名称；不保存容易过期的 mismatch 标志，不用返回值覆盖路由或计费模型。 |
 | Options 主键与 pricing 写入 | IMPLEMENT / NOOP | `ea9a4f994` 复现旧表缺少主键并补迁移；定价更新不重置其他配置已验证，NOOP。四个外部数据库版本实际通过。 |
-| Sub2API `51f73840`，工具参数 done | IMPLEMENT | 补 `response.function_call_arguments.done` 的缺失参数及前缀去重；不把完整参数重复追加到已发送 delta。 |
+| Sub2API `51f73840`，工具参数 done | IMPLEMENT | `ada0a55bb`：补 `response.function_call_arguments.done` 的缺失参数及前缀去重；不把完整参数重复追加到已发送 delta。 |
 | Sub2API `13be6ca2`、`e26abaef`，keepalive 与 terminal EOF | NOOP | `99703c6ea` 已将 keepalive / response.created 排除在语义之外，真实 15 秒 stall、terminal 缺失及提交后不拼流回归通过。 |
-| New API `75f3d24`、`ae249f4`；Sub2API 当前 WS reader / execution scope / pool | 待 WebSocket 阶段 | 已核对设计，后续按独立阶段实现并记录本地提交与验收；不机械引入全局跨用户连接池或整套 relaykit。 |
+| New API `75f3d24`、`ae249f4`；Sub2API 当前 WS reader / execution scope / pool | IMPLEMENT | `7c2cf87cd`、`a2321c2b1`：新增独立 Responses WS Relay、逐轮执行与计费、lane FIFO/并行、错误关联、容量限制、常驻 reader、有限历史和安全增量续写。复用现有 HTTP/SSE Relay，原生上游按渠道开启，不机械引入全局跨用户连接池或整套 relaykit。 |
+| 官方 WS error envelope、New API 当前错误关联 | IMPLEMENT | `a2321c2b1`：官方错误按 stream 关联，不要求根 event_id 等于请求 ID。明确 error.event_id、response_id 和已知旧请求用于隔离，服务端自建事件 ID 不再导致错误等待到 timeout。真实 WS 保持连接打开的故障测试及旧错误隔离测试通过。 |
 
-本轮移植提交引用在最终验收文档中补齐；旧的完整历史审计范围不因本专项复审自动扩大。
+本轮代码与行为验收见 `tasks/archive/2026-09-reliability-upgrade.md`。旧的完整历史审计范围不因本专项复审自动扩大。
+
+## 后续完整审计
 
 Run `scripts/check-upstream.ps1` or `scripts/check-upstream.sh`. The scripts read `Audited-Upstream-Ref`, list only later upstream commits, and refuse merge/rebase while histories remain unrelated. After review, add each imported or rejected item here and advance the audited ref only when the complete range has been classified.

@@ -12,6 +12,15 @@ The current checkout contains later RenewAPI commits after the audited fork
 review base. They do not change the audited upstream ref; review new upstream
 commits with the scripts and advance this baseline only after a complete audit.
 
+## 2026-09-23 可靠性专项引用
+
+- New API：`QuantumNous/new-api main@996adffe5165bd5e311e33a03a86b8aede1fe376`。
+- Sub2API：`Wei-Shaw/sub2api main@20a94fbb567b62208751292ed7786b24a7e7c0fe`。
+- 范围：Responses 用量、跨协议 usage、限流最终结果、错误隔离、返回模型、Options、选择器 autofocus，以及 Responses WebSocket。
+- 本地行为移植和复核：`ada0a55bb`、`7c2cf87cd`、`a2321c2b1`；之前已完成的可靠性改动直接复用。
+
+逐项 IMPLEMENT / NOOP / REJECT 及对应本地提交见 `UPSTREAM_PORTS.md`。这是限定范围的专项复审，不扩展上方完整历史审计基线，也不代表已审计全部新增功能。
+
 ## Fork Scope
 
 The main fork-owned surfaces are compatibility bridges, security controls, billing hardening, deployment tooling, and Interface Zero frontend metadata. High-conflict areas include:

@@ -664,6 +664,13 @@ export const useLogsData = () => {
           value: localCountMode,
         });
       }
+      if (isAdminUser && other?.admin_info?.response_model) {
+        const modelInfo = other.admin_info.response_model;
+        expandDataLocal.push({
+          key: t('上游响应模型'),
+          value: `${modelInfo.requested_model} → ${modelInfo.upstream_model} → ${modelInfo.returned_model}`,
+        });
+      }
       if (isAdminUser && other?.admin_info?.real_error) {
         expandDataLocal.push({
           key: t('真实错误'),
@@ -693,6 +700,14 @@ export const useLogsData = () => {
                   {attempt.timeout_stage && (
                     <div>
                       {t('超时阶段')}: {attempt.timeout_stage}
+                    </div>
+                  )}
+                  {attempt.response_model && (
+                    <div className='break-all'>
+                      {t('上游响应模型')}:{' '}
+                      {attempt.response_model.upstream_model}
+                      {' → '}
+                      {attempt.response_model.returned_model}
                     </div>
                   )}
                   {attempt.upstream_request_id && (

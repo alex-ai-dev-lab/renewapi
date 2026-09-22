@@ -221,12 +221,13 @@ type CompletionsStreamResponse struct {
 }
 
 type Usage struct {
-	PromptTokens         int    `json:"prompt_tokens"`
-	CompletionTokens     int    `json:"completion_tokens"`
-	TotalTokens          int    `json:"total_tokens"`
-	PromptCacheHitTokens int    `json:"prompt_cache_hit_tokens,omitempty"`
-	UsageSemantic        string `json:"usage_semantic,omitempty"`
-	UsageSource          string `json:"usage_source,omitempty"`
+	OutputTokensDetails  *OutputTokenDetails `json:"output_tokens_details,omitempty"`
+	PromptTokens         int                 `json:"prompt_tokens"`
+	CompletionTokens     int                 `json:"completion_tokens"`
+	TotalTokens          int                 `json:"total_tokens"`
+	PromptCacheHitTokens int                 `json:"prompt_cache_hit_tokens,omitempty"`
+	UsageSemantic        string              `json:"usage_semantic,omitempty"`
+	UsageSource          string              `json:"usage_source,omitempty"`
 
 	PromptTokensDetails    InputTokenDetails  `json:"prompt_tokens_details"`
 	CompletionTokenDetails OutputTokenDetails `json:"completion_tokens_details"`
@@ -401,10 +402,11 @@ const (
 
 // ResponsesStreamResponse 用于处理 /v1/responses 流式响应
 type ResponsesStreamResponse struct {
-	Type     string                   `json:"type"`
-	Response *OpenAIResponsesResponse `json:"response,omitempty"`
-	Delta    string                   `json:"delta,omitempty"`
-	Item     *ResponsesOutput         `json:"item,omitempty"`
+	Arguments json.RawMessage          `json:"arguments,omitempty"`
+	Type      string                   `json:"type"`
+	Response  *OpenAIResponsesResponse `json:"response,omitempty"`
+	Delta     string                   `json:"delta,omitempty"`
+	Item      *ResponsesOutput         `json:"item,omitempty"`
 	// - response.function_call_arguments.delta
 	// - response.function_call_arguments.done
 	OutputIndex  *int                           `json:"output_index,omitempty"`

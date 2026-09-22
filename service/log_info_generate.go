@@ -89,6 +89,9 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 
 	adminInfo := make(map[string]interface{})
 	adminInfo["use_channel"] = ctx.GetStringSlice("use_channel")
+	if relayInfo.ResponseModel != nil {
+		adminInfo["response_model"] = relayInfo.ResponseModel
+	}
 	if relayInfo.Failover != nil {
 		adminInfo["attempts"] = relayInfo.Failover.SnapshotSuccess(ctx.GetString(common.UpstreamRequestIdKey))
 	}

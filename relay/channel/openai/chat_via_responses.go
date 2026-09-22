@@ -148,6 +148,8 @@ func OaiResponsesStreamToChatHandler(c *gin.Context, info *relaycommon.RelayInfo
 }
 
 func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
+	usageAccumulator := service.NewResponsesUsageAccumulator(info)
+	defer usageAccumulator.Finish()
 	if resp == nil || resp.Body == nil {
 		return nil, types.NewOpenAIError(fmt.Errorf("invalid response"), types.ErrorCodeBadResponse, http.StatusInternalServerError)
 	}
@@ -414,6 +416,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	}
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
+		usageAccumulator.Observe(data)
 		if streamErr != nil {
 			sr.Stop(streamErr)
 			return
@@ -586,6 +589,26 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			}
 
 		case "response.function_call_arguments.done":
+			itemID := strings.TrimSpace(streamResp.ItemID)
+			callID := toolCallCanonicalIDByItemID[itemID]
+			if callID == "" {
+				callID = itemID
+			}
+			arguments := dto.ResponsesArgumentsString(streamResp.Arguments)
+			previous := toolCallArgsByID[callID]
+			if arguments == "" || callID == "" {
+				break
+			}
+			if !strings.HasPrefix(arguments, previous) {
+				streamErr = types.NewOpenAIError(fmt.Errorf("inconsistent completed tool arguments"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+				sr.Stop(streamErr)
+				return
+			}
+			toolCallArgsByID[callID] = arguments
+			if delta := arguments[len(previous):]; delta != "" && !sendToolCallDelta(callID, "", delta) {
+				sr.Stop(streamErr)
+				return
+			}
 
 		case "response.completed", "response.incomplete":
 			if streamResp.Response != nil {
@@ -713,9 +736,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		}
 	}
 
-	if usage.TotalTokens == 0 {
-		usage = service.ResponseText2Usage(c, usageText.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
-	}
+	usage = usageAccumulator.Finish()
 
 	if !sentStart {
 		if !sendChatChunk(helper.GenerateStartEmptyResponse(responseId, createAt, model, nil)) {

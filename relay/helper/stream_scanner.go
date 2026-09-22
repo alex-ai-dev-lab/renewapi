@@ -242,6 +242,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				}
 				writeMutex.Lock()
 				ExtendWriteDeadline(c)
+				info.ObserveResponseModelJSON(data)
 				dataHandler(data, sr)
 				writeMutex.Unlock()
 				semantic := relaycommon.ClassifyStreamPayload(data).Semantic

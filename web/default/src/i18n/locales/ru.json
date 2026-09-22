@@ -4599,6 +4599,7 @@
     "Manual tests are unaffected. Existing recovery schedules still apply.": "Manual tests are unaffected. Existing recovery schedules still apply.",
     "Channel attempt chain": "Channel attempt chain",
     "Switches": "Switches",
-    "Timeout stage": "Timeout stage"
+    "Timeout stage": "Timeout stage",
+    "Upstream response model": "Upstream response model"
   }
 }

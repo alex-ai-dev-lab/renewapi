@@ -63,7 +63,7 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		request.StreamOptions = nil
 	} else {
 		// 如果支持StreamOptions，且请求中没有设置StreamOptions，根据配置文件设置StreamOptions
-		if constant.ForceStreamOption {
+		if constant.ForceStreamOption || info.RelayFormat != types.RelayFormatOpenAI {
 			request.StreamOptions = &dto.StreamOptions{
 				IncludeUsage: true,
 			}

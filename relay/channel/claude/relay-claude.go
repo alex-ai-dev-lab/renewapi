@@ -885,7 +885,7 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		if claudeResponse.Type == "message_start" {
 			// message_start, 获取usage
 			if claudeResponse.Message != nil {
-				info.UpstreamModelName = claudeResponse.Message.Model
+				info.ObserveResponseModel(claudeResponse.Message.Model)
 			}
 		} else if claudeResponse.Type == "message_delta" {
 			// 确保 message_delta 的 usage 包含完整的 input_tokens 和 cache 相关字段
@@ -1325,6 +1325,7 @@ func mustMarshalString(v any) string {
 }
 
 func prepareClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claudeInfo *ClaudeResponseInfo, data []byte) ([]byte, *dto.ClaudeResponse, *types.NewAPIError) {
+	info.ObserveResponseModelJSON(string(data))
 	var claudeResponse dto.ClaudeResponse
 	err := common.Unmarshal(data, &claudeResponse)
 	if err != nil {

@@ -575,6 +575,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				break
 			}
 			relayInfo.StreamStatus = nil
+			relayInfo.ResponseModel = nil
+			relayInfo.ResponsesObservedUsage = nil
 			relayInfo.ReceivedResponseCount = 0
 			c.Set(common.UpstreamRequestIdKey, "")
 
@@ -593,6 +595,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				}
 			}
 			relayInfo.Failover.Finish(newAPIError, c.GetString(common.UpstreamRequestIdKey), timeoutStage, common.GetContextKeyString(c, constant.ContextKeyChannelKey))
+			attempt := &relayInfo.Failover.AttemptRecords[len(relayInfo.Failover.AttemptRecords)-1]
+			attempt.ResponseModel = relayInfo.ResponseModel
+			attempt.ObservedUsage = relayInfo.ResponsesObservedUsage
 
 			if newAPIError == nil {
 				capabilityOutcome := service.ObserveResponsesCapabilityAttempt(

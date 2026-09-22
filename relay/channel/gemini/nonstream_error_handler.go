@@ -64,6 +64,7 @@ func GeminiChatHandlerWithErrorReturn(c *gin.Context, info *relaycommon.RelayInf
 	logger.LogDebug(c, "Gemini response body: %s", responseBody)
 
 	var geminiResponse dto.GeminiChatResponse
+	info.ObserveResponseModelJSON(string(responseBody))
 	if err := common.Unmarshal(responseBody, &geminiResponse); err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}

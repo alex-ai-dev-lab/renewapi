@@ -5004,6 +5004,7 @@
     "Reasoning effort": "推理强度",
     "Endpoint type": "端点",
     "Provider default": "上游默认",
-    "Auto detect": "自动检测"
+    "Auto detect": "自动检测",
+    "Upstream response model": "上游响应模型"
   }
 }

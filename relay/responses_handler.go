@@ -79,6 +79,11 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			return types.NewErrorWithStatusCode(convErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
 		chatInfo := *info
+		defer func() {
+			info.StreamStatus = chatInfo.StreamStatus
+			info.ResponseModel = chatInfo.ResponseModel
+			info.ResponsesObservedUsage = chatInfo.ResponsesObservedUsage
+		}()
 		chatInfo.Request = chatReq
 		chatInfo.RelayMode = relayconstant.RelayModeChatCompletions
 		chatInfo.RequestURLPath = "/v1/chat/completions"

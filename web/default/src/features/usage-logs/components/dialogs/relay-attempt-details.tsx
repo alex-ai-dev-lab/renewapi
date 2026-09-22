@@ -11,10 +11,25 @@ export function RelayAttemptDetails(props: {
   info: NonNullable<LogOtherData['admin_info']>
 }) {
   const { t } = useTranslation()
-  if (!props.info.real_error && !props.info.attempts?.length) return null
+  if (
+    !props.info.real_error &&
+    !props.info.attempts?.length &&
+    !props.info.response_model
+  )
+    return null
   return (
     <section className='space-y-2 border-t pt-3'>
       <h3 className='text-sm font-semibold'>{t('Channel attempt chain')}</h3>
+      {props.info.response_model && (
+        <p className='text-xs break-all'>
+          {t('Upstream response model')}:{' '}
+          {props.info.response_model.requested_model}
+          {' → '}
+          {props.info.response_model.upstream_model}
+          {' → '}
+          {props.info.response_model.returned_model}
+        </p>
+      )}
       {props.info.real_error && (
         <pre className='max-h-40 overflow-auto text-xs break-words whitespace-pre-wrap'>
           {props.info.real_error}
@@ -37,6 +52,14 @@ export function RelayAttemptDetails(props: {
             {attempt.timeout_stage && (
               <p>
                 {t('Timeout stage')}: {attempt.timeout_stage}
+              </p>
+            )}
+            {attempt.response_model && (
+              <p className='break-all'>
+                {t('Upstream response model')}:{' '}
+                {attempt.response_model.upstream_model}
+                {' → '}
+                {attempt.response_model.returned_model}
               </p>
             )}
             {attempt.upstream_request_id && (

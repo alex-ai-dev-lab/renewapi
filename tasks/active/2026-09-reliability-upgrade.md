@@ -48,6 +48,8 @@
 - Billing：off 退款改为同步资金/Token 事务，失败保留重试状态；补齐退款/结算终态锁、终态后预扣拒绝及补充预扣失败不提前结算。修复 enforce 在 Failover 后将用量记入最初渠道的问题，补偿也保留成功渠道。shadow 的持久化余额路径保持 NOOP，默认模式不变。
 - Billing 验证：钱包/订阅 × off/shadow/enforce 的故障回滚、重复终态与并发验证通过；独立进程强制退出和重启覆盖待结算、待退款、孤儿预扣及未提交事务回滚。相关 model/service/controller/channelconfig 完整 package 测试及定向 race 通过；新增成功渠道补偿、六渠道真实 Failover 的账本归属回归及 race 通过。零额度 reservation 失败后也立即完成退款终态。
 - Options：已复现旧唯一索引表无法自动补主键，新增 `options-primary-key:v1`；SQLite 保留外键引用、索引、触发器，歧义数据拒绝无损迁移。配置 key 条件交给 GORM 引用，定价单项写入及失败回滚通过。新增开发分支专用 MySQL 5.7/8.4、PostgreSQL 9.6/16 验证工作流，等待实际运行，不将配置文件记作 PASS。
+- 数据库实际证据：`ea9a4f994` 对应 Actions [35764799379](https://github.com/alex-ai-dev-lab/renewapi/actions/runs/35764799379) 的 MySQL 5.7/8.4、PostgreSQL 9.6/16 全部成功，已检查每个 job 的结果。
+- 上游专项复审：已获取 New API `996adffe`、Sub2API `20a94fbb`，补 Responses 截断用量、Gemini/Responses 跨协议 usage 请求、管理员返回模型记录和 function arguments done 去重。限流最终结果、已有 StreamStatus 与语义输出行为标记 NOOP；不采用上游“仅前导事件即计费”的行为。相关 Go package 测试、default 类型检查、改动文件 lint 与 68 项前端测试通过。WebSocket 仍待独立阶段。
 
 ## 后续执行顺序
 

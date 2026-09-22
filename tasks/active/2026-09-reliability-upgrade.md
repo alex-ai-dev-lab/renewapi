@@ -45,6 +45,9 @@
 - 两套前端：在现有运营设置中增加 Prompt 管理、引用提示、自动恢复筛选及所有测试参数，渠道编辑器保存稳定 Prompt ID，管理员用量详情展示完整错误链。default 仅渠道模型选择器增加不透明背景，移除 Combobox 强制 dark，修复聚焦时自动展开。classic 修复 Prompt 弹窗重复字段 ID，并在选中时同步保存字段，避免关闭动画前提交旧值。
 - 前端验证：default `bun test` 为 68 通过、0 失败，typecheck、改动文件 eslint/Prettier、copyright 通过；两套生产 build 通过。隔离 SQLite 服务和临时浏览器实际验证两套 Prompt CRUD、引用拒删、开关保存、渠道 Prompt ID 0/1 来回保存，以及 8 组 light/dark、1440/390 宽度、新建/编辑模型选择器（已有/自定义模型、hover、selected、dropdown、无自动展开）。
 - 前端全量存量检查：default lint 基线 121 errors / 34 warnings，当前 119 / 34；format 基线 94 个文件，当前 91；classic Prettier 基线 56 个文件，当前 55。未扩大修改无关存量问题。构建产物排除在 classic 格式检查之外。测试日志和截图仅位于忽略目录 `.test/`，没有修改生产数据或浏览器用户配置。
+- Billing：off 退款改为同步资金/Token 事务，失败保留重试状态；补齐退款/结算终态锁、终态后预扣拒绝及补充预扣失败不提前结算。修复 enforce 在 Failover 后将用量记入最初渠道的问题，补偿也保留成功渠道。shadow 的持久化余额路径保持 NOOP，默认模式不变。
+- Billing 验证：钱包/订阅 × off/shadow/enforce 的故障回滚、重复终态与并发验证通过；独立进程强制退出和重启覆盖待结算、待退款、孤儿预扣及未提交事务回滚。相关 model/service/controller/channelconfig 完整 package 测试及定向 race 通过；新增成功渠道补偿、六渠道真实 Failover 的账本归属回归及 race 通过。零额度 reservation 失败后也立即完成退款终态。
+- Options：已复现旧唯一索引表无法自动补主键，新增 `options-primary-key:v1`；SQLite 保留外键引用、索引、触发器，歧义数据拒绝无损迁移。配置 key 条件交给 GORM 引用，定价单项写入及失败回滚通过。新增开发分支专用 MySQL 5.7/8.4、PostgreSQL 9.6/16 验证工作流，等待实际运行，不将配置文件记作 PASS。
 
 ## 后续执行顺序
 

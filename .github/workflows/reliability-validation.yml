@@ -1,0 +1,85 @@
+name: 可靠性与数据库兼容验证
+
+on:
+  push:
+    branches:
+      - 'upgrade/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reliability-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  database:
+    name: 数据库 ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - driver: mysql
+            image: mysql:5.7
+            health: mysqladmin ping -h 127.0.0.1 -proot
+            dsn: root:root@tcp(127.0.0.1:3306)/renewapi_test?charset=utf8mb4&parseTime=True&loc=UTC
+          - driver: mysql
+            image: mysql:8.4
+            health: mysqladmin ping -h 127.0.0.1 -proot
+            dsn: root:root@tcp(127.0.0.1:3306)/renewapi_test?charset=utf8mb4&parseTime=True&loc=UTC
+          - driver: postgres
+            image: postgres:9.6
+            health: pg_isready -U postgres -d renewapi_test
+            dsn: postgres://postgres:postgres@127.0.0.1:5432/renewapi_test?sslmode=disable
+          - driver: postgres
+            image: postgres:16
+            health: pg_isready -U postgres -d renewapi_test
+            dsn: postgres://postgres:postgres@127.0.0.1:5432/renewapi_test?sslmode=disable
+    services:
+      database:
+        image: ${{ matrix.image }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: renewapi_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: renewapi_test
+        ports:
+          - 3306:3306
+          - 5432:5432
+        options: >-
+          --health-cmd="${{ matrix.health }}"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: 配置 MySQL 测试库字符集
+        if: matrix.driver == 'mysql'
+        run: docker exec '${{ job.services.database.id }}' mysql -uroot -proot -e 'ALTER DATABASE renewapi_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
+      - name: 验证旧结构迁移与提示词生命周期
+        env:
+          REQUEST_GUARD_TEST_DRIVER: ${{ matrix.driver }}
+          REQUEST_GUARD_TEST_DSN: ${{ matrix.dsn }}
+        run: go test -v -count=1 -run 'TestMigrate(RequestGuardEvents|BillingLedgerV2)ExternalDatabase|TestChannelTestPromptExternalDatabase|TestOptionsPrimaryKeyExternalDatabase' ./model
+      - name: 验证账本事务和并发幂等
+        env:
+          BILLING_TEST_DRIVER: ${{ matrix.driver }}
+          BILLING_TEST_DSN: ${{ matrix.dsn }}
+        run: go test -v -count=1 -run 'BillingLedger|BillingOutbox|ShadowLedger|ShadowSubscription|LegacyBilling|SubscriptionPreConsume|StaleReserved|PreparedTaskAcknowledgement' ./model
+      - name: 验证计费会话和恢复流程
+        env:
+          BILLING_TEST_DRIVER: ${{ matrix.driver }}
+          BILLING_TEST_DSN: ${{ matrix.dsn }}
+        run: go test -v -count=1 -run 'TestBillingSession|TestBillingReconciler' ./service
+      - name: 验证渠道配置事务
+        env:
+          CHANNELCONFIG_TEST_DRIVER: ${{ matrix.driver }}
+          CHANNELCONFIG_TEST_DSN: ${{ matrix.dsn }}
+        run: go test -v -count=1 -run TestUpdateTransactionOnExternalDatabase ./service/channelconfig

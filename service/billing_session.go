@@ -14,7 +14,6 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
 
-	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 )
 
@@ -36,7 +35,7 @@ type BillingSession struct {
 	trusted          bool // 是否命中信任额度旁路
 	fundingSettled   bool // 资金来源与令牌的最终结算已提交
 	settled          bool // Settle 全部完成（资金 + 令牌）
-	refunded         bool // Refund 已调用
+	refunded         bool // 退款事务已提交
 	mu               sync.Mutex
 }
 
@@ -49,10 +48,20 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	if s.settled {
 		return nil
 	}
+	if s.refunded {
+		return errors.New("refunded billing session cannot be settled")
+	}
+	if actualQuota < 0 {
+		return errors.New("billing quota cannot be negative")
+	}
 	delta := actualQuota - s.preConsumedQuota
 	if s.usesPersistentBalanceLedger() {
-		if _, err := model.SettleBillingLedger(s.ledgerID, int64(actualQuota)); err != nil {
-			_ = model.MarkBillingLedgerForReconcile(s.ledgerID, model.BillingLedgerDesiredSettle, int64(actualQuota), err)
+		channelID := 0
+		if s.relayInfo.ChannelMeta != nil {
+			channelID = s.relayInfo.ChannelMeta.ChannelId
+		}
+		if _, err := model.SettleBillingLedger(s.ledgerID, int64(actualQuota), channelID); err != nil {
+			_ = model.MarkBillingLedgerForReconcile(s.ledgerID, model.BillingLedgerDesiredSettle, int64(actualQuota), err, channelID)
 			return err
 		}
 		if s.funding.Source() == BillingSourceSubscription {
@@ -90,14 +99,13 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	return nil
 }
 
-// Refund 退还所有预扣费，幂等安全，异步执行。
+// Refund 在同一事务内退还资金与令牌；失败时保留可重试状态。
 func (s *BillingSession) Refund(c *gin.Context) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.settled || s.refunded || !s.needsRefundLocked() {
-		s.mu.Unlock()
 		return
 	}
-	s.mu.Unlock()
 
 	logger.LogInfo(c, fmt.Sprintf("用户 %d 请求失败, 返还预扣费（token_quota=%s, funding=%s）",
 		s.relayInfo.UserId,
@@ -105,12 +113,6 @@ func (s *BillingSession) Refund(c *gin.Context) {
 		s.funding.Source(),
 	))
 
-	// 复制需要的值到闭包中
-	tokenId := s.relayInfo.TokenId
-	tokenKey := s.relayInfo.TokenKey
-	isPlayground := s.relayInfo.IsPlayground
-	tokenConsumed := s.tokenConsumed
-	funding := s.funding
 	if s.usesPersistentBalanceLedger() {
 		_, err := model.RefundBillingLedger(s.ledgerID, "request failed before settlement")
 		if err != nil {
@@ -118,31 +120,24 @@ func (s *BillingSession) Refund(c *gin.Context) {
 			common.SysLog("error refunding billing ledger: " + err.Error())
 			return
 		}
-		s.mu.Lock()
 		s.refunded = true
-		s.mu.Unlock()
 		model.InvalidateBillingBalanceCaches(s.relayInfo.UserId, s.relayInfo.TokenId)
 		return
 	}
 
-	// Explicit off mode retains the legacy asynchronous refund path. It is not
-	// the default and has no durable ledger to coordinate with.
-	s.mu.Lock()
+	refund := model.LegacyBillingRefund{
+		FundingSource: s.funding.Source(), RequestID: s.relayInfo.RequestId,
+		UserID: s.relayInfo.UserId, TokenID: s.relayInfo.TokenId,
+		TokenQuota: int64(s.tokenConsumed), Playground: s.relayInfo.IsPlayground,
+	}
+	if wallet, ok := s.funding.(*WalletFunding); ok {
+		refund.FundingQuota = int64(wallet.consumed)
+	}
+	if err := model.RefundLegacyBillingBalances(refund); err != nil {
+		common.SysLog("error refunding legacy billing balances: " + err.Error())
+		return
+	}
 	s.refunded = true
-	s.mu.Unlock()
-	gopool.Go(func() {
-		// 1) 退还资金来源。订阅资金源的 request-id 预扣记录包含 fallback 的额外预扣，
-		// 因此 RefundSubscriptionPreConsume 会一次性、幂等地退还完整 reservation。
-		if err := funding.Refund(); err != nil {
-			common.SysLog("error refunding billing source: " + err.Error())
-		}
-		// 2) 退还令牌额度
-		if tokenConsumed > 0 && !isPlayground {
-			if err := model.IncreaseTokenQuota(tokenId, tokenKey, tokenConsumed); err != nil {
-				common.SysLog("error refunding token quota: " + err.Error())
-			}
-		}
-	})
 }
 
 // NeedsRefund 返回是否存在需要退还的预扣状态。
@@ -157,7 +152,13 @@ func (s *BillingSession) needsRefundLocked() bool {
 		// fundingSettled 时资金来源已提交结算，不能再退预扣费
 		return false
 	}
+	if s.usesPersistentBalanceLedger() {
+		return true
+	}
 	if s.tokenConsumed > 0 {
+		return true
+	}
+	if wallet, ok := s.funding.(*WalletFunding); ok && wallet.consumed > 0 {
 		return true
 	}
 	// 订阅可能在 tokenConsumed=0 时仍预扣了额度
@@ -169,6 +170,8 @@ func (s *BillingSession) needsRefundLocked() bool {
 
 // GetPreConsumedQuota 返回实际预扣的额度。
 func (s *BillingSession) GetPreConsumedQuota() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.preConsumedQuota
 }
 
@@ -176,7 +179,10 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.settled || s.refunded || s.trusted || targetQuota <= s.preConsumedQuota {
+	if s.settled || s.refunded {
+		return errors.New("finalized billing session cannot reserve quota")
+	}
+	if s.trusted || targetQuota <= s.preConsumedQuota {
 		return nil
 	}
 
@@ -187,7 +193,7 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 
 	if s.usesPersistentBalanceLedger() {
 		if _, err := model.ReserveMoreBillingLedger(s.ledgerID, int64(targetQuota)); err != nil {
-			_ = model.MarkBillingLedgerForReconcile(s.ledgerID, model.BillingLedgerDesiredSettle, int64(s.preConsumedQuota), err)
+			// 补充预扣失败会原子回滚，不能将仍在执行的请求提前标记为待结算。
 			return err
 		}
 		s.preConsumedQuota += delta
@@ -305,7 +311,7 @@ func (s *BillingSession) usesPersistentBalanceLedger() bool {
 func (s *BillingSession) settleWithTask(task *model.Task, actualQuota int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.settled {
+	if s.settled || s.refunded {
 		return errors.New("billing session is already settled before task insertion")
 	}
 	if !s.usesPersistentBalanceLedger() {
@@ -343,6 +349,9 @@ func (s *BillingSession) settleWithTask(task *model.Task, actualQuota int) error
 func (s *BillingSession) prepareTask(task *model.Task) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.settled || s.refunded {
+		return errors.New("finalized billing session cannot prepare a task")
+	}
 	if !s.usesPersistentBalanceLedger() {
 		return nil
 	}
@@ -360,7 +369,7 @@ func (s *BillingSession) prepareTask(task *model.Task) error {
 func (s *BillingSession) settleWithMidjourney(task *model.Midjourney, actualQuota int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.settled {
+	if s.settled || s.refunded {
 		return errors.New("billing session is already settled before midjourney task insertion")
 	}
 	if !s.usesPersistentBalanceLedger() {

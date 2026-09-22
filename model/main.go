@@ -328,6 +328,7 @@ func mainSchemaMigrationDefinitions() []schemaMigrationDefinition {
 		{Key: "billing-ledger:v2", Revision: "2026-08-17.1", Apply: migrateBillingLedgerV2},
 		{Key: "channel-config:v1", Revision: "2026-07-28.1", Apply: migrateChannelConfigV1},
 		{Key: "channel-test-prompts:v1", Revision: "2026-09-23.1", Apply: migrateChannelTestPromptsV1},
+		{Key: "options-primary-key:v1", Revision: "2026-09-23.1", Apply: migrateOptionsPrimaryKeyV1},
 		{Key: "responses-capability:v1", Revision: "2026-07-28.1", Apply: migrateResponsesCapabilityV1},
 		{Key: "request-guard-events:v1", Revision: "2026-08-14.1", Apply: migrateRequestGuardEventsV1},
 		{Key: "manual:subscription_plans.price_amount_decimal:v1", Revision: "2026-07-28.1", Apply: migrateSubscriptionPlanPriceAmount},

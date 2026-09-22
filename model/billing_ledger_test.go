@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -10,6 +11,8 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -23,29 +26,69 @@ func setupBillingLedgerTest(t *testing.T) billingLedgerFixture {
 	t.Helper()
 	oldDB, oldLogDB := DB, LOG_DB
 	oldSQLite := common.UsingSQLite
+	oldMySQL, oldPostgres := common.UsingMySQL, common.UsingPostgreSQL
 	oldRedis := common.RedisEnabled
 	oldBatch := common.BatchUpdateEnabled
 	t.Cleanup(func() {
 		DB, LOG_DB = oldDB, oldLogDB
 		common.UsingSQLite = oldSQLite
+		common.UsingMySQL, common.UsingPostgreSQL = oldMySQL, oldPostgres
+		initCol()
 		common.RedisEnabled = oldRedis
 		common.BatchUpdateEnabled = oldBatch
 	})
 
-	dsn := fmt.Sprintf("file:billing-ledger-%d?mode=memory&cache=shared&_pragma=busy_timeout(5000)", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	dialect := func(name string) gorm.Dialector {
+		driver, dsn := os.Getenv("BILLING_TEST_DRIVER"), os.Getenv("BILLING_TEST_DSN")
+		if driver != "" && dsn == "" {
+			t.Fatal("计费测试必须指定独立数据库 DSN")
+		}
+		switch driver {
+		case "mysql":
+			return mysql.Open(dsn)
+		case "postgres":
+			return postgres.Open(dsn)
+		case "":
+			return sqlite.Open(fmt.Sprintf("file:%s-%d?mode=memory&cache=shared&_pragma=busy_timeout(5000)", name, time.Now().UnixNano()))
+		default:
+			t.Fatalf("不支持的计费测试数据库类型 %q", driver)
+			return nil
+		}
+	}
+	db, err := gorm.Open(dialect("billing-ledger"), &gorm.Config{})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
-	logDB, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:billing-log-%d?mode=memory&cache=shared", time.Now().UnixNano())), &gorm.Config{})
+	if db.Dialector.Name() == "sqlite" {
+		sqlDB.SetMaxOpenConns(1)
+	} else {
+		sqlDB.SetMaxOpenConns(8)
+	}
+	logDB, err := gorm.Open(dialect("billing-log"), &gorm.Config{})
 	require.NoError(t, err)
 
 	DB, LOG_DB = db, logDB
-	common.UsingSQLite = true
+	common.UsingSQLite = db.Dialector.Name() == "sqlite"
+	common.UsingMySQL = db.Dialector.Name() == "mysql"
+	common.UsingPostgreSQL = db.Dialector.Name() == "postgres"
+	initCol()
 	common.RedisEnabled = false
 	common.BatchUpdateEnabled = false
-	require.NoError(t, DB.AutoMigrate(&User{}, &Token{}, &Channel{}, &Task{}, &Midjourney{}, &UserSubscription{}, &SubscriptionPreConsumeRecord{}, &BillingLedger{}, &BillingOutbox{}))
+	models := []any{&User{}, &Token{}, &Channel{}, &Task{}, &Midjourney{}, &UserSubscription{}, &SubscriptionPreConsumeRecord{}, &BillingLedger{}, &BillingOutbox{}}
+	if !common.UsingSQLite {
+		require.NoError(t, db.Migrator().DropTable(models...))
+		require.NoError(t, logDB.Migrator().DropTable(&BillingAuditEvent{}))
+	}
+	t.Cleanup(func() {
+		if db.Dialector.Name() != "sqlite" {
+			_ = db.Migrator().DropTable(models...)
+			_ = logDB.Migrator().DropTable(&BillingAuditEvent{})
+		}
+		_ = sqlDB.Close()
+		logSQL, _ := logDB.DB()
+		_ = logSQL.Close()
+	})
+	require.NoError(t, DB.AutoMigrate(models...))
 	require.NoError(t, LOG_DB.AutoMigrate(&BillingAuditEvent{}))
 
 	fixture := billingLedgerFixture{

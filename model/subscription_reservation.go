@@ -79,41 +79,46 @@ func RefundSubscriptionPreConsumeReservation(requestId string) error {
 	}
 
 	return DB.Transaction(func(tx *gorm.DB) error {
-		var record SubscriptionPreConsumeRecord
-		if err := lockForUpdate(tx).
-			Where("request_id = ?", requestId).
-			First(&record).Error; err != nil {
-			return err
-		}
-		if record.Status == "refunded" {
-			return nil
-		}
-		if record.Status != "consumed" {
-			return fmt.Errorf("invalid subscription pre-consume status: %s", record.Status)
-		}
-		if record.PreConsumed <= 0 {
-			record.Status = "refunded"
-			return tx.Save(&record).Error
-		}
-		if record.UserSubscriptionId <= 0 {
-			return errors.New("subscription pre-consume subscription id is missing")
-		}
+		return refundSubscriptionPreConsumeReservationTx(tx, requestId)
+	})
+}
 
-		var sub UserSubscription
-		if err := lockForUpdate(tx).
-			Where("id = ?", record.UserSubscriptionId).
-			First(&sub).Error; err != nil {
-			return err
-		}
-		next := sub.AmountUsed - record.PreConsumed
-		if next < 0 {
-			return fmt.Errorf("subscription refund would become negative: used=%d refund=%d", sub.AmountUsed, record.PreConsumed)
-		}
-		sub.AmountUsed = next
-		if err := tx.Save(&sub).Error; err != nil {
-			return err
-		}
+// refundSubscriptionPreConsumeReservationTx 复用调用方事务，确保资金与令牌一起回滚。
+func refundSubscriptionPreConsumeReservationTx(tx *gorm.DB, requestId string) error {
+	var record SubscriptionPreConsumeRecord
+	if err := lockForUpdate(tx).
+		Where("request_id = ?", requestId).
+		First(&record).Error; err != nil {
+		return err
+	}
+	if record.Status == "refunded" {
+		return nil
+	}
+	if record.Status != "consumed" {
+		return fmt.Errorf("invalid subscription pre-consume status: %s", record.Status)
+	}
+	if record.PreConsumed <= 0 {
 		record.Status = "refunded"
 		return tx.Save(&record).Error
-	})
+	}
+	if record.UserSubscriptionId <= 0 {
+		return errors.New("subscription pre-consume subscription id is missing")
+	}
+
+	var sub UserSubscription
+	if err := lockForUpdate(tx).
+		Where("id = ?", record.UserSubscriptionId).
+		First(&sub).Error; err != nil {
+		return err
+	}
+	next := sub.AmountUsed - record.PreConsumed
+	if next < 0 {
+		return fmt.Errorf("subscription refund would become negative: used=%d refund=%d", sub.AmountUsed, record.PreConsumed)
+	}
+	sub.AmountUsed = next
+	if err := tx.Save(&sub).Error; err != nil {
+		return err
+	}
+	record.Status = "refunded"
+	return tx.Save(&record).Error
 }

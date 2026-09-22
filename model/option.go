@@ -20,7 +20,7 @@ import (
 )
 
 type Option struct {
-	Key   string `json:"key" gorm:"primaryKey"`
+	Key   string `json:"key" gorm:"primaryKey;size:191;not null"`
 	Value string `json:"value"`
 }
 
@@ -268,7 +268,7 @@ func persistOptionValues(values map[string]string) error {
 
 	previous := make(map[string]string, len(keys))
 	var existing []*Option
-	if err := DB.Where("key IN ?", keys).Find(&existing).Error; err != nil {
+	if err := DB.Where(map[string]any{"key": keys}).Find(&existing).Error; err != nil {
 		return err
 	}
 	for _, option := range existing {
@@ -317,12 +317,12 @@ func rollbackOptionValues(keys []string, previous, previousOptionMap map[string]
 		for _, key := range keys {
 			value, existed := previous[key]
 			if existed {
-				if err := tx.Model(&Option{}).Where("key = ?", key).Update("value", value).Error; err != nil {
+				if err := tx.Model(&Option{}).Where(map[string]any{"key": key}).Update("value", value).Error; err != nil {
 					return err
 				}
 				continue
 			}
-			if err := tx.Where("key = ?", key).Delete(&Option{}).Error; err != nil {
+			if err := tx.Where(map[string]any{"key": key}).Delete(&Option{}).Error; err != nil {
 				return err
 			}
 		}

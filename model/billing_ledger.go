@@ -225,11 +225,26 @@ func InvalidateBillingBalanceCaches(userID int, tokenID int) {
 	}
 }
 
-func SettleBillingLedger(id uint64, targetQuota int64) (*BillingLedger, error) {
+func SettleBillingLedger(id uint64, targetQuota int64, selectedChannelID ...int) (*BillingLedger, error) {
 	if targetQuota < 0 {
 		return nil, errors.New("billing target quota cannot be negative")
 	}
-	return mutateBillingLedger(id, BillingLedgerDesiredSettle, targetQuota, nil)
+	return mutateBillingLedger(id, BillingLedgerDesiredSettle, targetQuota, func(_ *gorm.DB, ledger *BillingLedger) error {
+		return assignBillingSettlementChannel(ledger, selectedChannelID)
+	})
+}
+
+// assignBillingSettlementChannel 在首次结算前绑定真正产出响应的渠道。
+// 已计入统计的账本禁止换渠道，防止后续退款扣减另一渠道的用量。
+func assignBillingSettlementChannel(ledger *BillingLedger, selected []int) error {
+	if len(selected) == 0 || selected[0] <= 0 || ledger.ChannelID == selected[0] {
+		return nil
+	}
+	if ledger.RequestCounted || ledger.CountedQuota != 0 {
+		return errors.New("counted billing ledger cannot change channel")
+	}
+	ledger.ChannelID = selected[0]
+	return nil
 }
 
 func SettleBillingLedgerWithTask(id uint64, targetQuota int64, task *Task) (*BillingLedger, error) {
@@ -713,7 +728,10 @@ func ReserveMoreBillingLedger(id uint64, targetQuota int64) (*BillingLedger, err
 		if err != nil {
 			return err
 		}
-		if ledger.State != BillingLedgerStateReserved || targetQuota <= ledger.AppliedQuota {
+		if ledger.State != BillingLedgerStateReserved {
+			return errors.New("only reserved billing ledgers can reserve more quota")
+		}
+		if targetQuota <= ledger.AppliedQuota {
 			result = *ledger
 			return nil
 		}
@@ -1021,7 +1039,7 @@ func UpdateMidjourneyWithBilling(task *Midjourney, fromStatus string, desired st
 	return won, result, err
 }
 
-func MarkBillingLedgerForReconcile(id uint64, desired string, quota int64, cause error) error {
+func MarkBillingLedgerForReconcile(id uint64, desired string, quota int64, cause error, selectedChannelID ...int) error {
 	if id == 0 {
 		return nil
 	}
@@ -1037,6 +1055,11 @@ func MarkBillingLedgerForReconcile(id uint64, desired string, quota int64, cause
 		}
 		if ledger.State == BillingLedgerStateRefunded || (ledger.State == BillingLedgerStateSettled && desired == BillingLedgerDesiredSettle && ledger.AppliedQuota == quota) {
 			return nil
+		}
+		if desired == BillingLedgerDesiredSettle {
+			if err := assignBillingSettlementChannel(ledger, selectedChannelID); err != nil {
+				return err
+			}
 		}
 		ledger.State = BillingLedgerStateReconcileRequired
 		ledger.DesiredState = desired

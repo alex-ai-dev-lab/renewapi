@@ -120,6 +120,18 @@ func TestChannelFailoverUsesSixDistinctChannelsAndRemainingPriority(t *testing.T
 			require.NoError(t, db.First(&user, 1).Error)
 			if successAtSix {
 				require.Equal(t, 1, user.RequestCount)
+				var ledger model.BillingLedger
+				require.NoError(t, db.Where("request_id = ?", fmt.Sprintf("failover-six-%t", successAtSix)).First(&ledger).Error)
+				require.Equal(t, idBase+6, ledger.ChannelID)
+				var channels []model.Channel
+				require.NoError(t, db.Find(&channels).Error)
+				for _, channel := range channels {
+					if channel.Id == ledger.ChannelID {
+						require.EqualValues(t, ledger.ActualQuota, channel.UsedQuota)
+					} else {
+						require.Zero(t, channel.UsedQuota)
+					}
+				}
 			} else {
 				require.Zero(t, user.RequestCount)
 				require.Equal(t, 1_000_000, user.Quota)

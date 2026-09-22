@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -12,32 +13,64 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 func TestMain(m *testing.M) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
+	driver, dsn := os.Getenv("BILLING_TEST_DRIVER"), os.Getenv("BILLING_TEST_DSN")
+	if driver != "" && dsn == "" {
+		panic("计费测试必须指定独立数据库 DSN")
+	}
+	previousDSN, hadDSN := os.LookupEnv("SQL_DSN")
+	switch driver {
+	case "mysql":
+		_ = os.Setenv("SQL_DSN", dsn)
+	case "postgres":
+		if !strings.HasPrefix(dsn, "postgres://") && !strings.HasPrefix(dsn, "postgresql://") {
+			panic("计费测试 PostgreSQL DSN 必须为 URL")
+		}
+		_ = os.Setenv("SQL_DSN", dsn)
+	case "", "sqlite":
+		_ = os.Setenv("SQL_DSN", "local")
+		common.SQLitePath = dsn
+		if dsn == "" {
+			common.SQLitePath = ":memory:"
+		}
+	default:
+		panic("不支持的计费测试数据库类型")
+	}
+	// 使用正式初始化入口，保留方言列名与连接参数的一致性。
+	if err := model.InitDBForMigration(); err != nil {
 		panic("failed to open test db: " + err.Error())
 	}
+	if hadDSN {
+		_ = os.Setenv("SQL_DSN", previousDSN)
+	} else {
+		_ = os.Unsetenv("SQL_DSN")
+	}
+	db := model.DB
 	sqlDB, err := db.DB()
 	if err != nil {
 		panic("failed to get sql.DB: " + err.Error())
 	}
-	sqlDB.SetMaxOpenConns(1)
+	if db.Dialector.Name() == "sqlite" {
+		sqlDB.SetMaxOpenConns(1)
+	} else {
+		sqlDB.SetMaxOpenConns(8)
+	}
 
 	model.DB = db
 	model.LOG_DB = db
 
-	common.UsingSQLite = true
+	common.UsingSQLite = db.Dialector.Name() == "sqlite"
+	common.UsingMySQL = db.Dialector.Name() == "mysql"
+	common.UsingPostgreSQL = db.Dialector.Name() == "postgres"
 	common.RedisEnabled = false
 	common.BatchUpdateEnabled = false
 	common.LogConsumeEnabled = true
 
-	if err := db.AutoMigrate(
+	models := []any{
 		&model.Task{},
 		&model.User{},
 		&model.Token{},
@@ -51,7 +84,15 @@ func TestMain(m *testing.M) {
 		&model.BillingLedger{},
 		&model.BillingOutbox{},
 		&model.BillingAuditEvent{},
-	); err != nil {
+	}
+	if os.Getenv("RENEWAPI_RESTART_PHASE") == "recover" {
+		// 正式启动只检查已迁移结构；重启验证不重新创建测试数据或执行 DDL。
+		for _, value := range models {
+			if !db.Migrator().HasTable(value) {
+				panic("重启后缺少计费测试表")
+			}
+		}
+	} else if err := db.AutoMigrate(models...); err != nil {
 		panic("failed to migrate: " + err.Error())
 	}
 

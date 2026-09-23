@@ -190,7 +190,7 @@ jobs:
           mapfile -t lint_files < <(printf '%s\n' "${changed[@]}" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' || true)
           mapfile -t format_files < <(printf '%s\n' "${changed[@]}" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs|css|scss|json)$' || true)
           if ((${#lint_files[@]})); then
-            bunx eslint "${lint_files[@]}"
+            bunx eslint --no-ignore "${lint_files[@]}"
             bun run copyright:check -- "${lint_files[@]}"
           fi
           if ((${#format_files[@]})); then
@@ -358,6 +358,8 @@ jobs:
           首次配置可复制 default.env.example 为 .env 并设置 SESSION_SECRET，再使用随附 Compose 文件。已有安装应保留原数据库和配置，单独更新 NEWAPI_IMAGE。
           镜像仅通过 Releases 分发，不需要登录或拉取 GHCR。两个 QA 包和数据库证据包保存本次检查结果。
           EOF
-          (cd release-assets && find . -maxdepth 1 -type f ! -name CHECKSUMS.txt -print0 | sort -z | xargs -0 sha256sum > CHECKSUMS.txt)
+          checksums="$RUNNER_TEMP/renewapi-release-checksums.txt"
+          (cd release-assets && find . -maxdepth 1 -type f ! -name CHECKSUMS.txt -print0 | sort -z | xargs -0 sha256sum) > "$checksums"
+          cp "$checksums" release-assets/CHECKSUMS.txt
       - name: 上传草稿、下载校验后正式发布
         run: bash scripts/publish-release.sh

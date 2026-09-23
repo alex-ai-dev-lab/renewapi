@@ -21,6 +21,7 @@
 
 ## 当前证据
 
+- 已将修复、维护和 Billing 工作分支的独有提交合入 `main`；升级分支此前已经合入。New API 的 `upstream/main` 只作参考，不合并其独立历史。原 Billing 工作树 14 项用户删除保持不变。
 - 已保存失败运行日志、浏览器附件和 SHA256；88 项检查中 6 项失败均来自渠道列表 404 及其暗色错误提示对比度。
 - 完整 API、Dashboard、Relay、Video 路由树下复现 GET/POST `/api/channel` 返回 404；新增显式集合路径后，GET/POST/PUT 均直接经过管理员鉴权。
 - `go test ./router -count=1`、前端 typecheck、Sonner 的实际 eslint/Prettier 检查和 default 构建通过。本地 Node 驱动原 88 项浏览器检查全部通过，console/page errors 均为 0；Windows Bun 驱动 Chromium 管道超时不计为通过。

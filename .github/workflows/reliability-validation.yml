@@ -1,41 +1,43 @@
 name: 可靠性与数据库兼容验证
 
 on:
-  push:
-    branches:
-      - 'upgrade/**'
-  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
-
-concurrency:
-  group: reliability-validation-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   database:
     name: 数据库 ${{ matrix.image }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    env:
+      DATABASE_EVIDENCE_DIR: database-evidence
     strategy:
       fail-fast: false
       matrix:
         include:
           - driver: mysql
             image: mysql:5.7
+            name: mysql-5.7
             health: mysqladmin ping -h 127.0.0.1 -proot
             dsn: root:root@tcp(127.0.0.1:3306)/renewapi_test?charset=utf8mb4&parseTime=True&loc=UTC
           - driver: mysql
             image: mysql:8.4
+            name: mysql-8.4
             health: mysqladmin ping -h 127.0.0.1 -proot
             dsn: root:root@tcp(127.0.0.1:3306)/renewapi_test?charset=utf8mb4&parseTime=True&loc=UTC
           - driver: postgres
             image: postgres:9.6
+            name: postgres-9.6
             health: pg_isready -U postgres -d renewapi_test
             dsn: postgres://postgres:postgres@127.0.0.1:5432/renewapi_test?sslmode=disable
           - driver: postgres
             image: postgres:16
+            name: postgres-16
             health: pg_isready -U postgres -d renewapi_test
             dsn: postgres://postgres:postgres@127.0.0.1:5432/renewapi_test?sslmode=disable
     services:
@@ -60,6 +62,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: 准备数据库验证证据目录
+        run: mkdir -p "$DATABASE_EVIDENCE_DIR"
       - name: 配置 MySQL 测试库字符集
         if: matrix.driver == 'mysql'
         run: docker exec '${{ job.services.database.id }}' mysql -uroot -proot -e 'ALTER DATABASE renewapi_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
@@ -67,19 +71,27 @@ jobs:
         env:
           REQUEST_GUARD_TEST_DRIVER: ${{ matrix.driver }}
           REQUEST_GUARD_TEST_DSN: ${{ matrix.dsn }}
-        run: go test -v -count=1 -run 'TestMigrate(RequestGuardEvents|BillingLedgerV2)ExternalDatabase|TestChannelTestPromptExternalDatabase|TestOptionsPrimaryKeyExternalDatabase' ./model
+        run: go test -v -count=1 -run 'TestMigrate(RequestGuardEvents|BillingLedgerV2)ExternalDatabase|TestChannelTestPromptExternalDatabase|TestOptionsPrimaryKeyExternalDatabase' ./model 2>&1 | tee -a "$DATABASE_EVIDENCE_DIR/tests.log"
       - name: 验证账本事务和并发幂等
         env:
           BILLING_TEST_DRIVER: ${{ matrix.driver }}
           BILLING_TEST_DSN: ${{ matrix.dsn }}
-        run: go test -v -count=1 -run 'BillingLedger|BillingOutbox|ShadowLedger|ShadowSubscription|LegacyBilling|SubscriptionPreConsume|StaleReserved|PreparedTaskAcknowledgement' ./model
+        run: go test -v -count=1 -run 'BillingLedger|BillingOutbox|ShadowLedger|ShadowSubscription|LegacyBilling|SubscriptionPreConsume|StaleReserved|PreparedTaskAcknowledgement' ./model 2>&1 | tee -a "$DATABASE_EVIDENCE_DIR/tests.log"
       - name: 验证计费会话和恢复流程
         env:
           BILLING_TEST_DRIVER: ${{ matrix.driver }}
           BILLING_TEST_DSN: ${{ matrix.dsn }}
-        run: go test -v -count=1 -run 'TestBillingSession|TestBillingReconciler' ./service
+        run: go test -v -count=1 -run 'TestBillingSession|TestBillingReconciler' ./service 2>&1 | tee -a "$DATABASE_EVIDENCE_DIR/tests.log"
       - name: 验证渠道配置事务
         env:
           CHANNELCONFIG_TEST_DRIVER: ${{ matrix.driver }}
           CHANNELCONFIG_TEST_DSN: ${{ matrix.dsn }}
-        run: go test -v -count=1 -run TestUpdateTransactionOnExternalDatabase ./service/channelconfig
+        run: go test -v -count=1 -run TestUpdateTransactionOnExternalDatabase ./service/channelconfig 2>&1 | tee -a "$DATABASE_EVIDENCE_DIR/tests.log"
+      - name: 保存数据库验证证据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-${{ matrix.name }}
+          path: ${{ env.DATABASE_EVIDENCE_DIR }}
+          if-no-files-found: error
+          retention-days: 7

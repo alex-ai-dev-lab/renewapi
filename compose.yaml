@@ -1,6 +1,7 @@
 services:
   new-api:
-    image: ${NEWAPI_IMAGE:-ghcr.io/alex-ai-dev-lab/renewapi:latest}
+    image: ${NEWAPI_IMAGE:-renewapi:edge}
+    pull_policy: never
     container_name: ${COMPOSE_PROJECT_NAME:-newapi}-new-api
     restart: unless-stopped
     init: true

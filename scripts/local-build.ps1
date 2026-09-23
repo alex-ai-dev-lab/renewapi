@@ -7,10 +7,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ($Push) { throw '镜像仅通过 Releases 分发；本地构建请使用 -Load，发布请运行统一工作流。' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 if (-not $Version) { $Version = (Get-Content -Raw -LiteralPath (Join-Path $root 'VERSION')).Trim() }
 $dockerVersion = $Version -replace '^v', ''
-if (-not $Image) { $Image = "ghcr.io/alex-ai-dev-lab/renewapi:$dockerVersion" }
+if (-not $Image) { $Image = "renewapi:$dockerVersion" }
 $commit = (git -C $root rev-parse --short=12 HEAD)
 $date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 $upstream = if ($env:UPSTREAM_REF) { $env:UPSTREAM_REF } else { '58d4e9bd3bb035df8ea235dd682ccc8a45d0332a' }
@@ -25,6 +26,6 @@ $args = @(
   "--build-arg","UPSTREAM_REF=$upstream",
   "-t",$Image
 )
-if ($Push) { $args += "--push" } elseif ($Load) { $args += "--load" }
+if ($Load) { $args += "--load" }
 $args += $root
 docker @args

@@ -1,38 +1,30 @@
-name: Build and release RenewAPI images
+name: 检查并发布 RenewAPI Releases
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - 'renewapi-v*'
+    branches: [main]
+    tags: ['renewapi-v*']
   workflow_dispatch:
     inputs:
       expected_sha:
-        description: "Exact source SHA authorized for this release."
+        description: 本次发布授权的完整源码 SHA
         required: false
         type: string
       image_tag:
-        description: "Optional image tag. Defaults to the short source SHA."
+        description: 可选源码镜像标签，默认使用源码 SHA
         required: false
         type: string
-      create_release:
-        description: "Create a GitHub Release with the image tarball."
-        required: false
-        type: boolean
-        default: false
       release_tag:
-        description: "Optional source-package release tag. Product tags use renewapi-v<version>."
+        description: 可选源码包标签，必须使用 renewapi-source- 或 renewapi-build- 前缀
         required: false
         type: string
       base_sha:
-        description: "Optional base SHA used by changed-file quality checks."
+        description: 可选改动检查基线 SHA
         required: false
         type: string
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 concurrency:
   group: renewapi-release-${{ github.ref }}
@@ -42,64 +34,36 @@ env:
   UPSTREAM_REF: 58d4e9bd3bb035df8ea235dd682ccc8a45d0332a
 
 jobs:
-  database-quality:
+  release-info:
     runs-on: ubuntu-latest
-    services:
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: renewapi_test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: renewapi_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres -d renewapi_test"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      image: ${{ steps.meta.outputs.image }}
+      product_version: ${{ steps.meta.outputs.product_version }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      release_name: ${{ steps.meta.outputs.release_name }}
+      build_channel: ${{ steps.meta.outputs.build_channel }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      make_latest: ${{ steps.meta.outputs.make_latest }}
+      created: ${{ steps.meta.outputs.created }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Verify channel transaction on MySQL
+      - name: 生成可追溯发布身份
+        id: meta
         env:
-          CHANNELCONFIG_TEST_DRIVER: mysql
-          CHANNELCONFIG_TEST_DSN: root:root@tcp(127.0.0.1:3306)/renewapi_test?charset=utf8mb4&parseTime=True&loc=UTC
-        run: go test -count=1 -run TestUpdateTransactionOnExternalDatabase ./service/channelconfig
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: node scripts/release-metadata.mjs
 
-      - name: Verify billing and RequestGuard migrations on MySQL
-        env:
-          REQUEST_GUARD_TEST_DRIVER: mysql
-          REQUEST_GUARD_TEST_DSN: root:root@tcp(127.0.0.1:3306)/renewapi_test?charset=utf8mb4&parseTime=True&loc=UTC
-        run: go test -count=1 -run 'TestMigrate(RequestGuardEvents|BillingLedgerV2)ExternalDatabase' ./model
+  database-quality:
+    uses: ./.github/workflows/reliability-validation.yml
 
-      - name: Verify channel transaction on PostgreSQL
-        env:
-          CHANNELCONFIG_TEST_DRIVER: postgres
-          CHANNELCONFIG_TEST_DSN: host=127.0.0.1 user=postgres password=postgres dbname=renewapi_test port=5432 sslmode=disable TimeZone=UTC
-        run: go test -count=1 -run TestUpdateTransactionOnExternalDatabase ./service/channelconfig
+  secondary-surfaces:
+    uses: ./.github/workflows/aurora-secondary-surfaces.yml
 
-      - name: Verify billing and RequestGuard migrations on PostgreSQL
-        env:
-          REQUEST_GUARD_TEST_DRIVER: postgres
-          REQUEST_GUARD_TEST_DSN: host=127.0.0.1 user=postgres password=postgres dbname=renewapi_test port=5432 sslmode=disable TimeZone=UTC
-        run: go test -count=1 -run 'TestMigrate(RequestGuardEvents|BillingLedgerV2)ExternalDatabase' ./model
+  settings-wave2:
+    uses: ./.github/workflows/settings-advanced-phase-e-wave2.yml
 
   quality:
     runs-on: ubuntu-latest
@@ -108,6 +72,9 @@ jobs:
         with:
           # Changed-file checks below compare against the base commit.
           fetch-depth: 0
+
+      - name: 验证发布身份边界
+        run: node --test scripts/release-metadata.test.mjs
 
       - name: Verify immutable release source
         env:
@@ -127,6 +94,11 @@ jobs:
         with:
           bun-version: 1.3.14
 
+      - name: 验证工作流定义
+        env:
+          GOTOOLCHAIN: go1.25.1
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
       - name: Verify Compose templates
         env:
           SESSION_SECRET: compose-config-validation-only
@@ -137,10 +109,11 @@ jobs:
       - name: Verify Go formatting
         shell: bash
         env:
-          INPUT_BASE_SHA: ${{ inputs.base_sha }}
+          INPUT_BASE_SHA: ${{ inputs.base_sha || github.event.before }}
         run: |
           set -euo pipefail
           base="${INPUT_BASE_SHA:-$GITHUB_SHA^}"
+          if [[ "$base" =~ ^0+$ ]]; then base="$GITHUB_SHA^"; fi
           mapfile -t changed_go < <(git diff --name-only --diff-filter=ACMR "$base" "$GITHUB_SHA" -- '*.go')
           if ((${#changed_go[@]})); then
             unformatted="$(gofmt -l "${changed_go[@]}")"
@@ -153,10 +126,11 @@ jobs:
       - name: Verify changed JSON boundary
         shell: bash
         env:
-          INPUT_BASE_SHA: ${{ inputs.base_sha }}
+          INPUT_BASE_SHA: ${{ inputs.base_sha || github.event.before }}
         run: |
           set -euo pipefail
           base="${INPUT_BASE_SHA:-$GITHUB_SHA^}"
+          if [[ "$base" =~ ^0+$ ]]; then base="$GITHUB_SHA^"; fi
           added="$(git diff --unified=0 "$base" "$GITHUB_SHA" -- '*.go' ':(exclude)common/json.go' | grep '^+' | grep -v '^+++' || true)"
           violations="$(printf '%s\n' "$added" | grep -E '("encoding/json"|json\.(Marshal|Unmarshal|NewEncoder|NewDecoder)\()' || true)"
           if [[ -n "$violations" ]]; then
@@ -204,10 +178,11 @@ jobs:
         shell: bash
         working-directory: web/default
         env:
-          INPUT_BASE_SHA: ${{ inputs.base_sha }}
+          INPUT_BASE_SHA: ${{ inputs.base_sha || github.event.before }}
         run: |
           set -euo pipefail
           base="${INPUT_BASE_SHA:-$GITHUB_SHA^}"
+          if [[ "$base" =~ ^0+$ ]]; then base="$GITHUB_SHA^"; fi
           mapfile -t changed < <(
             git -C ../.. diff --name-only --diff-filter=ACMR "$base" "$GITHUB_SHA" -- web/default/src web/default/scripts |
               sed 's#^web/default/##'
@@ -247,254 +222,142 @@ jobs:
       - name: Verify commit diff
         shell: bash
         env:
-          INPUT_BASE_SHA: ${{ inputs.base_sha }}
-        run: git diff --check "${INPUT_BASE_SHA:-$GITHUB_SHA^}" "$GITHUB_SHA"
+          INPUT_BASE_SHA: ${{ inputs.base_sha || github.event.before }}
+        run: |
+          base="${INPUT_BASE_SHA:-$GITHUB_SHA^}"
+          if [[ "$base" =~ ^0+$ ]]; then base="$GITHUB_SHA^"; fi
+          git diff --check "$base" "$GITHUB_SHA"
+
   build:
-    needs: [quality, database-quality]
-    runs-on: ubuntu-latest
-    outputs:
-      image: ${{ steps.meta.outputs.image }}
-      tag: ${{ steps.meta.outputs.tag }}
-      image_tags: ${{ steps.meta.outputs.image_tags }}
-      release_tag: ${{ steps.meta.outputs.release_tag }}
-      create_release: ${{ steps.meta.outputs.create_release }}
-      prerelease: ${{ steps.meta.outputs.prerelease }}
-      release_type: ${{ steps.meta.outputs.release_type }}
-      product_version: ${{ steps.meta.outputs.product_version }}
-      build_channel: ${{ steps.meta.outputs.build_channel }}
-      tarball: ${{ steps.meta.outputs.tarball }}
+    needs: [release-info, quality, database-quality, secondary-surfaces, settings-wave2]
+    name: 离线镜像 ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      DOCKER_BUILD_RECORD_UPLOAD: 'false'
+      IMAGE: ${{ needs.release-info.outputs.image }}
+      IMAGE_TAG: ${{ needs.release-info.outputs.tag }}
+      BUILD_CHANNEL: ${{ needs.release-info.outputs.build_channel }}
+      ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          # The release build only needs the checked-out source tree.
-          fetch-depth: 1
-
-      - uses: docker/setup-qemu-action@v3
-
       - uses: docker/setup-buildx-action@v3
-
-      - name: Metadata
-        id: meta
-        shell: bash
-        env:
-          INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
-          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
-          INPUT_CREATE_RELEASE: ${{ inputs.create_release }}
-        run: |
-          set -euo pipefail
-          short="${GITHUB_SHA::12}"
-          product_version="$(tr -d '\r\n' < VERSION)"
-          image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/renewapi"
-          ref="${GITHUB_REF_NAME:-detached}"
-          tag=""
-          release_tag=""
-          release_name="RenewAPI edge $short"
-          release_type="edge"
-          build_channel="edge"
-          create_release="false"
-          prerelease="false"
-          tags=()
-
-          if [[ "$GITHUB_EVENT_NAME" == "push" && "$ref" == "main" ]]; then
-            tag="edge"
-            tags=("$image:edge" "$image:sha-$short")
-            build_channel="edge"
-          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$ref" == renewapi-v* ]]; then
-            product_version_from_tag="${ref#renewapi-}"
-            if [[ "$product_version" != "$product_version_from_tag" ]]; then
-              echo "VERSION ($product_version) does not match product tag version ($product_version_from_tag)" >&2
-              exit 1
-            fi
-            tag="${product_version_from_tag#v}"
-            if [[ "$product_version_from_tag" == *-* ]]; then
-              prerelease="true"
-              tags=("$image:$tag" "$image:rc" "$image:sha-$short")
-            else
-              minor="${tag%.*}"
-              major="${tag%%.*}"
-              tags=("$image:$tag" "$image:$minor" "$image:$major" "$image:latest" "$image:sha-$short")
-            fi
-            release_tag="$ref"
-            release_type="product"
-            release_name="RenewAPI $product_version"
-            build_channel="release"
-            create_release="true"
-          else
-            raw_tag="${INPUT_IMAGE_TAG:-sha-$short}"
-            tag="$(printf '%s' "$raw_tag" | tr -c 'A-Za-z0-9_.-' '-')"
-            tag="${tag%-}"
-            if [ -z "$tag" ]; then
-              tag="sha-$short"
-            fi
-            case "$tag" in
-              latest|rc|edge)
-                echo "manual source builds may not publish reserved alias: $tag" >&2
-                exit 1
-                ;;
-            esac
-            tags=("$image:$tag" "$image:sha-$short")
-            release_tag="${INPUT_RELEASE_TAG:-renewapi-source-$tag}"
-            if [[ "$release_tag" == renewapi-v* ]]; then
-              echo "manual source releases may not use the product tag namespace: $release_tag" >&2
-              exit 1
-            fi
-            release_type="source"
-            release_name="RenewAPI source image $tag"
-            build_channel="manual"
-            if [[ "$INPUT_CREATE_RELEASE" == "true" ]]; then
-              create_release="true"
-            fi
-          fi
-
-          tarball="renewapi-${tag}-linux-amd64.tar.gz"
-          {
-            echo "short=$short"
-            echo "tag=$tag"
-            echo "product_version=$product_version"
-            echo "release_tag=$release_tag"
-            echo "release_name=$release_name"
-            echo "create_release=$create_release"
-            echo "prerelease=$prerelease"
-            echo "release_type=$release_type"
-            echo "build_channel=$build_channel"
-            echo "image=$image"
-            echo "tarball=$tarball"
-            cache_ref="$(printf '%s' "$ref" | tr -c 'A-Za-z0-9_.-' '-')"
-            cache_ref="${cache_ref%-}"
-            if [ -z "$cache_ref" ]; then
-              cache_ref="detached"
-            fi
-            echo "cache_scope=renewapi-${GITHUB_EVENT_NAME}-${cache_ref}"
-            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo 'image_tags<<EOF'
-            printf '%s\n' "${tags[@]}"
-            echo EOF
-          } >> "$GITHUB_OUTPUT"
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push multi-arch image
+      - name: 构建并加载本地镜像
         uses: docker/build-push-action@v6
-        id: build
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
+          platforms: linux/${{ matrix.arch }}
+          push: false
+          load: true
+          tags: ${{ needs.release-info.outputs.image }}
           build-args: |
-            VERSION=${{ steps.meta.outputs.product_version }}
+            VERSION=${{ needs.release-info.outputs.product_version }}
             COMMIT_SHA=${{ github.sha }}
-            BUILD_DATE=${{ steps.meta.outputs.created }}
-            BUILD_CHANNEL=${{ steps.meta.outputs.build_channel }}
+            BUILD_DATE=${{ needs.release-info.outputs.created }}
+            BUILD_CHANNEL=${{ needs.release-info.outputs.build_channel }}
             UPSTREAM_REF=${{ env.UPSTREAM_REF }}
-          tags: |
-            ${{ steps.meta.outputs.image_tags }}
-          cache-from: type=gha,scope=${{ steps.meta.outputs.cache_scope }}
-          # Frontend builders are intermediate stages; mode=max is required to
-          # restore Bun/Vite/Rsbuild layers on the next run. Move to mode=min
-          # only after the prebuilt-dist artifact flow removes those stages.
-          cache-to: type=gha,scope=${{ steps.meta.outputs.cache_scope }},mode=max
-          provenance: true
-          sbom: true
-
-      - name: Export linux/amd64 image tarball
+          cache-from: type=gha,scope=renewapi-release-${{ matrix.arch }}
+          cache-to: type=gha,scope=renewapi-release-${{ matrix.arch }},mode=max
+          # Docker 离线归档不支持内嵌 OCI 证明，另附镜像元数据和完整校验和。
+          provenance: false
+          sbom: false
+      - name: 验证镜像身份、架构与迁移
         shell: bash
-        env:
-          IMAGE: ${{ steps.meta.outputs.image }}
-          TAG: ${{ steps.meta.outputs.tag }}
-          TARBALL: ${{ steps.meta.outputs.tarball }}
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          # Reuse the exact amd64 image just pushed by the multi-arch build;
-          # do not parse or execute the Dockerfile a second time.
-          docker pull --platform linux/amd64 "$IMAGE:$TAG"
-          test "$(docker image inspect "$IMAGE:$TAG" --format '{{.Architecture}}')" = amd64
-          docker save "$IMAGE:$TAG" | gzip -9 > "release-assets/$TARBALL"
-          cp compose.yaml docker-compose.yml release-assets/
-          cp .env.example release-assets/default.env.example
-          (
-            cd release-assets
-            sha256sum "$TARBALL" compose.yaml docker-compose.yml default.env.example > CHECKSUMS.txt
-          )
-
-      - name: Prepare release notes
-        shell: bash
-        env:
-          IMAGE: ${{ steps.meta.outputs.image }}
-          TAG: ${{ steps.meta.outputs.tag }}
-          PRODUCT_VERSION: ${{ steps.meta.outputs.product_version }}
-          BUILD_CHANNEL: ${{ steps.meta.outputs.build_channel }}
-          DIGEST: ${{ steps.build.outputs.digest }}
-        run: |
-          cat > release-assets/RELEASE_NOTES.md <<EOF
-          Image: ${IMAGE}:${TAG}
-          Product version: ${PRODUCT_VERSION}
-          Build channel: ${BUILD_CHANNEL}
-          Digest: ${DIGEST}
-          Source commit: ${GITHUB_SHA}
-          Audited upstream ref: ${UPSTREAM_REF}
-
-          This package is built directly from the source fork.
-          EOF
-
-      - uses: actions/upload-artifact@v4
+          docker image inspect "$IMAGE" > "release-assets/image-linux-$ARCH.json"
+          jq -e --arg arch "$ARCH" --arg sha "$GITHUB_SHA" '.[0].Architecture == $arch and .[0].Config.Labels["org.opencontainers.image.revision"] == $sha' "release-assets/image-linux-$ARCH.json"
+          docker run --rm --entrypoint /bin/sh \
+            -e SESSION_SECRET=release-image-validation-only \
+            -e SQLITE_PATH=/tmp/release-validation.db -e NODE_TYPE=slave \
+            -e UPDATE_TASK=false -e OFFICIAL_PRICE_SYNC_ENABLED=false \
+            "$IMAGE" -ec '/app/new-api migrate --up && /app/new-api migrate --check'
+          images=("$IMAGE")
+          if [[ "$BUILD_CHANNEL" == 'edge' ]]; then
+            docker tag "$IMAGE" renewapi:edge
+            images+=(renewapi:edge)
+          fi
+          docker save "${images[@]}" | gzip -n -9 > "release-assets/renewapi-$IMAGE_TAG-linux-$ARCH.tar.gz"
+      - name: 暂存已验证镜像供统一发布
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.meta.outputs.tarball }}
+          name: image-linux-${{ matrix.arch }}
           path: release-assets/
+          compression-level: 0
+          if-no-files-found: error
           retention-days: 7
 
-      - name: Download uploaded release artifact
+  release:
+    needs: [release-info, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      IMAGE: ${{ needs.release-info.outputs.image }}
+      PRODUCT_VERSION: ${{ needs.release-info.outputs.product_version }}
+      RELEASE_TAG: ${{ needs.release-info.outputs.release_tag }}
+      RELEASE_NAME: ${{ needs.release-info.outputs.release_name }}
+      PRERELEASE: ${{ needs.release-info.outputs.prerelease }}
+      MAKE_LATEST: ${{ needs.release-info.outputs.make_latest }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 汇总两个架构的镜像
         uses: actions/download-artifact@v4
         with:
-          name: ${{ steps.meta.outputs.tarball }}
-          path: uploaded-release-assets
-
-      - name: Verify uploaded release artifact
+          pattern: image-linux-*
+          path: release-assets
+          merge-multiple: true
+      - name: 下载页面检查证据
+        uses: actions/download-artifact@v4
+        with:
+          name: aurora-secondary-surfaces
+          path: qa-evidence/secondary-surfaces
+      - name: 下载设置检查证据
+        uses: actions/download-artifact@v4
+        with:
+          name: settings-advanced-phase-e-wave2
+          path: qa-evidence/settings-wave2
+      - name: 下载四版本数据库验证证据
+        uses: actions/download-artifact@v4
+        with:
+          pattern: database-*
+          path: qa-evidence/databases
+      - name: 打包配置、验证证据与校验和
         shell: bash
         run: |
           set -euo pipefail
-          test -f uploaded-release-assets/${{ steps.meta.outputs.tarball }}
-          test -f uploaded-release-assets/compose.yaml
-          test -f uploaded-release-assets/docker-compose.yml
-          test -f uploaded-release-assets/default.env.example
-          test -f uploaded-release-assets/CHECKSUMS.txt
-          (
-            cd uploaded-release-assets
-            sha256sum -c CHECKSUMS.txt
-          )
+          cp compose.yaml docker-compose.yml release-assets/
+          cp .env.example release-assets/default.env.example
+          sed -i "s|^# NEWAPI_IMAGE=.*|NEWAPI_IMAGE=$IMAGE|" release-assets/default.env.example
+          tar -czf release-assets/qa-secondary-surfaces.tar.gz -C qa-evidence/secondary-surfaces .
+          tar -czf release-assets/qa-settings-wave2.tar.gz -C qa-evidence/settings-wave2 .
+          tar -czf release-assets/qa-databases.tar.gz -C qa-evidence/databases .
+          jq -n --arg sha "$GITHUB_SHA" --arg image "$IMAGE" --arg version "$PRODUCT_VERSION" --arg run "$GITHUB_RUN_ID" \
+            '{source_commit: $sha, image: $image, product_version: $version, actions_run: $run, distribution: "github-releases", architectures: ["amd64", "arm64"]}' > release-assets/build-info.json
+          cat > release-assets/RELEASE_NOTES.md <<EOF
+          本次构建已通过后端、双前端、四版本数据库和实际浏览器检查。
 
-      - name: Create GitHub Release
-        if: steps.meta.outputs.create_release == 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.meta.outputs.release_tag }}
-          target_commitish: ${{ github.sha }}
-          name: ${{ steps.meta.outputs.release_name }}
-          body_path: release-assets/RELEASE_NOTES.md
-          draft: false
-          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
-          files: |
-            release-assets/${{ steps.meta.outputs.tarball }}
-            release-assets/compose.yaml
-            release-assets/docker-compose.yml
-            release-assets/default.env.example
-            release-assets/CHECKSUMS.txt
+          产品版本：$PRODUCT_VERSION
+          源码提交：$GITHUB_SHA
+          本地镜像：$IMAGE
+          检查记录：https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
 
-      - name: Verify release tag source commit
-        if: steps.meta.outputs.create_release == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
-        run: |
-          set -euo pipefail
-          object_type="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.type')"
-          actual="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')"
-          while [[ "$object_type" == "tag" ]]; do
-            object_type="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${actual}" --jq '.object.type')"
-            actual="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${actual}" --jq '.object.sha')"
-          done
-          test "$actual" = "$GITHUB_SHA"
+          按主机架构下载 linux-amd64 或 linux-arm64 镜像归档。下载 CHECKSUMS.txt 后运行 sha256sum --ignore-missing -c CHECKSUMS.txt，再用 docker load -i 对应归档 导入镜像。
+          首次配置可复制 default.env.example 为 .env 并设置 SESSION_SECRET，再使用随附 Compose 文件。已有安装应保留原数据库和配置，单独更新 NEWAPI_IMAGE。
+          镜像仅通过 Releases 分发，不需要登录或拉取 GHCR。两个 QA 包和数据库证据包保存本次检查结果。
+          EOF
+          (cd release-assets && find . -maxdepth 1 -type f ! -name CHECKSUMS.txt -print0 | sort -z | xargs -0 sha256sum > CHECKSUMS.txt)
+      - name: 上传草稿、下载校验后正式发布
+        run: bash scripts/publish-release.sh

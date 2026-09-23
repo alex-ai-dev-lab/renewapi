@@ -1,12 +1,13 @@
 param(
   [string]$Image = $env:NEWAPI_IMAGE,
-  [ValidateSet('pull','tar')]
-  [string]$Mode = 'pull',
+  [ValidateSet('local','pull','tar')]
+  [string]$Mode = 'local',
   [switch]$DryRun,
   [switch]$AllowPasswordAuth
 )
 
 $ErrorActionPreference = 'Stop'
+if ($Mode -eq 'pull') { throw '镜像改由 Releases 分发，请先在服务器 docker load，再使用 local 模式。' }
 . (Join-Path $PSScriptRoot 'load-local-secrets.ps1') -Kind server
 
 function Require-Env([string]$Name) {
@@ -69,8 +70,8 @@ stamp=`$(date +%Y%m%d%H%M%S)
 [ -d logs ] && tar -czf "backups/logs.`$stamp.tgz" logs 2>/dev/null || true
 old_image=`$(docker compose -f "`$compose_file" images -q "`$service" 2>/dev/null | head -n1 || true)
 [ -n "`$old_image" ] && printf '%s\n' "`$old_image" > backups/previous-image.txt || true
-NEWAPI_IMAGE="`$image" docker compose -f "`$compose_file" pull "`$service"
-NEWAPI_IMAGE="`$image" docker compose -f "`$compose_file" up -d --no-deps "`$service"
+docker image inspect "`$image" >/dev/null
+NEWAPI_IMAGE="`$image" docker compose -f "`$compose_file" up -d --pull never --no-deps "`$service"
 for i in `$(seq 1 30); do
   if curl -fsS "`$health_url" >/dev/null; then
     docker compose -f "`$compose_file" ps "`$service"

@@ -15,3 +15,4 @@ Current decisions:
 - [ADR-007：渠道测试提示词与自动恢复筛选](007-channel-test-prompt-profiles.md)
 - [ADR-008：Options 实际主键迁移](008-options-primary-key-migration.md)
 - [ADR-009：Responses WebSocket 与逐轮隔离](009-responses-websocket.md)
+- [ADR-010：统一检查与 Releases 离线镜像分发](010-releases-only-distribution.md)

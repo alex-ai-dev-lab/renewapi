@@ -63,25 +63,11 @@ Configured provider channels
 The default Compose path uses SQLite and persists data, logs, and public assets
 under the current directory.
 
-```bash
-git clone https://github.com/alex-ai-dev-lab/renewapi.git
-cd renewapi
-cp .env.example .env
-openssl rand -hex 32   # put the result in .env as SESSION_SECRET
-docker compose -f compose.yaml up -d
-```
-
-Check the service:
-
-```bash
-curl -fsS http://127.0.0.1:3002/api/status
-```
-
-The container image is published at
-`ghcr.io/alex-ai-dev-lab/renewapi`. Select a different image or host port in
-`.env` with `NEWAPI_IMAGE` and `NEWAPI_HOST_PORT`. See the
-[deployment guide](docs/deploy.md) for MySQL, PostgreSQL, proxy, permission,
-and rollback details.
+从 [GitHub Releases](https://github.com/alex-ai-dev-lab/renewapi/releases) 下载与服务器
+架构对应的镜像归档、校验和与配置文件，校验后使用 `docker load` 导入。首次
+安装使用随附 `default.env.example`，设置 `SESSION_SECRET` 后运行 Compose。
+已有安装保留原配置及数据库。详细步骤见 [Releases 分发](docs/release-distribution.md)
+和 [部署说明](docs/deploy.md)。Compose 只使用已导入的本地镜像，不会拉取 GHCR。
 
 ## Build From Source
 
@@ -90,7 +76,7 @@ build is enough for development:
 
 ```powershell
 .\scripts\local-build.ps1 `
-  -Image ghcr.io/alex-ai-dev-lab/renewapi:dev `
+  -Image renewapi:dev `
   -Load
 ```
 
@@ -134,21 +120,11 @@ changes.
 
 ## Releases
 
-RenewAPI product tags use the `renewapi-v<version>` namespace so imported
-upstream tags remain untouched. The current product prerelease is
-[`v1.0.0-rc.3`](https://github.com/alex-ai-dev-lab/renewapi/releases/tag/renewapi-v1.0.0-rc.3).
-
-Prerelease images use three identities:
-
-```text
-ghcr.io/alex-ai-dev-lab/renewapi:<version>
-ghcr.io/alex-ai-dev-lab/renewapi:rc
-ghcr.io/alex-ai-dev-lab/renewapi:sha-<source-commit>
-```
-
-The stable `latest` alias is reserved for stable product releases. See
-[`docs/decisions/003-build-metadata-release-channels.md`](docs/decisions/003-build-metadata-release-channels.md)
-for the release-channel contract.
+所有成功构建均发布到 [GitHub Releases](https://github.com/alex-ai-dev-lab/renewapi/releases)，
+包含 amd64/arm64 Docker 离线镜像、配置、校验和及 QA 证据，不再发布到 GHCR。
+当前 `VERSION` 为 `v1.0.0-rc.4`；源码构建使用 `renewapi-build-<sha>-<run>`
+预发行标签，产品标签继续使用 `renewapi-v<version>`。只有正式产品版本可以
+成为最新正式发布。规则见 [ADR-010](docs/decisions/010-releases-only-distribution.md)。
 
 ## License
 

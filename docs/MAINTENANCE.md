@@ -35,13 +35,15 @@ reference and reason.
 - RenewAPI product Git tags use `renewapi-v<version>`, such as
   `renewapi-v1.0.0-rc.1`. Raw upstream `v*` tags never trigger product
   releases.
-- `main` builds publish `edge` and immutable `sha-<short-sha>` images without
-  creating a product Release.
-- `renewapi-vX.Y.Z-rc.N` tags create prereleases and must not update stable
-  `latest`.
-- `renewapi-vX.Y.Z` tags create stable Releases and may update `latest`,
-  `major`, and `minor` aliases after validation.
-- Historical tags and Releases are never rewritten.
+- `main` 和手动构建全部通过统一检查后自动发布到 GitHub Releases；不再向
+  GHCR 登录或推送。源码构建使用 `renewapi-build-<sha>-<run>` 预发行标签。
+- `renewapi-vX.Y.Z-rc.N` 标签保持产品预发行语义；只有正式产品标签
+  `renewapi-vX.Y.Z` 可以成为最新正式 Release。
+- 两个架构的 Docker 离线镜像、镜像元数据、配置、QA 证据和 SHA256 校验和
+  一并上传草稿；重新下载校验成功后才公开。已公开附件不因重跑而覆盖。
+- Git tags 不得重写或删除。历史 Releases、GHCR 镜像和 Actions 记录的删除
+  需要用户明确授权；此次用户已授权清理，清单与执行结果单独保存。
+- 具体下载和导入方式见 [Releases 分发](release-distribution.md) 与 ADR-010。
 - Product-tag validation requires
   `stripPrefix(gitTag, "renewapi-") == VERSION`, source checkout integrity,
   relevant tests, build checks, and migration checks. See

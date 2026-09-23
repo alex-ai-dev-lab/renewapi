@@ -42,4 +42,5 @@ and the existing Go/frontend/database quality jobs.
 
 ## Supersedes / Superseded by
 
-- None
+- 2026-09-23：分发渠道与自动发布部分由 [ADR-010](010-releases-only-distribution.md)
+  替代；产品版本独立性和标签对应源码的规则继续有效。

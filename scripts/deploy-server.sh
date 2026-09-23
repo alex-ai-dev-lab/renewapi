@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-mode="pull"
+mode="local"
 dry_run="false"
 allow_password="false"
 image="${NEWAPI_IMAGE:-}"
@@ -15,6 +15,11 @@ while [ $# -gt 0 ]; do
     *) echo "Unknown arg: $1" >&2; exit 2 ;;
   esac
 done
+
+case "$mode" in
+  local|tar) ;;
+  *) echo '镜像改由 Releases 分发，请先在服务器 docker load，再使用 local 模式。' >&2; exit 2 ;;
+esac
 
 # shellcheck source=/dev/null
 source "$root/scripts/load-local-secrets.sh" server >/dev/null
@@ -61,8 +66,8 @@ stamp=\$(date +%Y%m%d%H%M%S)
 [ -d logs ] && tar -czf "backups/logs.\$stamp.tgz" logs 2>/dev/null || true
 old_image=\$(docker compose -f "\$compose_file" images -q "\$service" 2>/dev/null | head -n1 || true)
 [ -n "\$old_image" ] && printf '%s\n' "\$old_image" > backups/previous-image.txt || true
-NEWAPI_IMAGE="\$image" docker compose -f "\$compose_file" pull "\$service"
-NEWAPI_IMAGE="\$image" docker compose -f "\$compose_file" up -d --no-deps "\$service"
+docker image inspect "\$image" >/dev/null
+NEWAPI_IMAGE="\$image" docker compose -f "\$compose_file" up -d --pull never --no-deps "\$service"
 for i in \$(seq 1 30); do
   if curl -fsS "\$health_url" >/dev/null; then
     docker compose -f "\$compose_file" ps "\$service"

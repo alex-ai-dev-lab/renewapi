@@ -106,9 +106,14 @@ changelog when those facts changed.
 use the `renewapi-` prefix (for example, `renewapi-v1.0.0-rc.1`) so raw
 `v*` upstream NewAPI tags remain in the shared Git namespace untouched. Keep
 product version, upstream baseline, Git commit, build time, and build channel
-separate. Historical tags and releases are immutable. Main builds are `edge`
-plus `sha-*`; product tags are the only path to prerelease/stable product
-releases; never make a SHA build the stable `latest` alias.
+separate.
+
+镜像仅通过 GitHub Releases 分发，不再登录或推送 GHCR。主分支和手动构建
+必须通过统一的后端、前端、数据库及浏览器检查，再发布对应 SHA 的离线镜像。
+源码构建使用 `renewapi-build-<sha>-<run>` 预发行标签；产品标签仍使用
+`renewapi-v<version>`，只有正式产品版本可以成为最新正式发布。Git tags
+不可重指向或删除，已发布附件不可覆盖；历史 Releases、镜像包和 Actions
+记录只有在用户明确授权清理时才能删除。详见 ADR-010。
 
 ### Rule 0.2: Upstream synchronization
 

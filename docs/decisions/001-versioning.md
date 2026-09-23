@@ -75,4 +75,5 @@ Validate `stripPrefix(gitTag, "renewapi-") == VERSION` with
 
 ## Supersedes / Superseded by
 
-- None
+- 2026-09-23：[ADR-010](010-releases-only-distribution.md) 补充用户明确授权下
+  清理历史 Release 的例外；Git tags 不变性和产品版本规则继续有效。

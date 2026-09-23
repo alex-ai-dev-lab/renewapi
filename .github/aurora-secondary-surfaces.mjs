@@ -24,6 +24,7 @@ if (!binary || !dbPath) {
 }
 
 const publicCases = [
+  ['home', '/'],
   ['sign-in', '/sign-in'],
   ['sign-up', '/sign-up'],
   ['forgot-password', '/forgot-password'],
@@ -40,6 +41,10 @@ const publicCases = [
 ]
 
 const authenticatedCases = [
+  ['dashboard', '/dashboard/overview'],
+  ['keys', '/keys'],
+  ['models', '/models/metadata'],
+  ['users', '/users'],
   ['profile', '/profile'],
   ['wallet', '/wallet'],
   ['subscriptions', '/subscriptions'],
@@ -358,6 +363,14 @@ async function auditPage(context, testCase, theme, viewportName, authRequired) {
       waitUntil: 'domcontentloaded',
     })
     await waitForSurface(page)
+    if (id === 'home') {
+      for (const section of await page.locator('main section').all()) {
+        await section.scrollIntoViewIfNeeded()
+        await sleep(150)
+      }
+      await page.evaluate(() => window.scrollTo(0, 0))
+      await sleep(400)
+    }
 
     const currentURL = page.url()
     const currentPathname = normalizePathname(new URL(currentURL).pathname)
@@ -557,12 +570,207 @@ function artifactText() {
   return chunks.join('\n')
 }
 
+async function auditRecoveryCases(browser) {
+  let passed = 0
+  const requireState = (condition, message) => {
+    if (!condition) throw new Error(message)
+  }
+  const run = async (name, authenticated, test) => {
+    const context = await createContext(browser, 'light', {
+      width: 1440,
+      height: 1000
+    })
+    const label = `functional-${name}`
+    try {
+      const user = authenticated ? await loginContext(context) : null
+      await seedClientState(context, 'light', user)
+      const page = await context.newPage()
+      page.on('pageerror', (error) =>
+        failures.push({ label, type: 'page-error', message: error.message })
+      )
+      // 下列 HTTP 故障是测试主动注入；页面不得因此丢失会话、编辑上下文或伪造状态。
+      await test(context, page, requireState)
+      await page.screenshot({
+        path: path.join(outDir, 'screenshots', `${label}.png`)
+      })
+      observations.push({ label, passed: true })
+      passed += 1
+    } catch (error) {
+      failures.push({
+        label,
+        type: 'recovery-contract',
+        message: error.message
+      })
+    } finally {
+      await context.close()
+    }
+  }
+
+  await run('session-503-retry', true, async (context, page, check) => {
+    let attempts = 0
+    await context.route(/\/api\/user\/self(?:[/?].*)?$/, async (route) => {
+      attempts += 1
+      if (attempts === 1) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: false,
+            message: 'Temporary session check failure'
+          })
+        })
+      } else await route.continue()
+    })
+    await page.goto(`${baseURL}/channels`, { waitUntil: 'domcontentloaded' })
+    const retry = page.getByRole('button', { name: 'Retry', exact: true })
+    await retry.waitFor({ state: 'visible', timeout: 20000 })
+    check(
+      new URL(page.url()).pathname === '/channels',
+      '会话校验故障不应跳回登录'
+    )
+    await retry.click()
+    await page
+      .locator('[data-ui="data-table-page"]')
+      .waitFor({ state: 'visible', timeout: 20000 })
+    check(
+      attempts >= 2 && !page.url().includes('/sign-in'),
+      '重试后应恢复原页面及登录状态'
+    )
+  })
+
+  await run('query-500-keeps-page', true, async (context, page, check) => {
+    let attempts = 0
+    await context.route(/\/api\/channel(?:[/?].*)?$/, async (route) => {
+      attempts += 1
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: false,
+          message: 'Temporary channel list failure'
+        })
+      })
+    })
+    await page.goto(`${baseURL}/channels`, { waitUntil: 'domcontentloaded' })
+    const deadline = Date.now() + 30000
+    while (attempts < 5 && Date.now() < deadline) await sleep(100)
+    await sleep(500)
+    check(attempts >= 5, '没有覆盖查询重试耗尽后的状态')
+    check(
+      new URL(page.url()).pathname === '/channels',
+      '列表错误不应替换为全局错误页'
+    )
+  })
+
+  await run(
+    'setup-check-retries-after-reload',
+    false,
+    async (context, page, check) => {
+      let attempts = 0
+      await context.route(/\/api\/setup(?:[/?].*)?$/, async (route) => {
+        attempts += 1
+        if (attempts === 1)
+          await route.fulfill({
+            status: 503,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              success: false,
+              message: 'Temporary setup check failure'
+            })
+          })
+        else await route.continue()
+      })
+      await page.goto(`${baseURL}/about`, { waitUntil: 'domcontentloaded' })
+      await waitForSurface(page)
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      await waitForSurface(page)
+      check(attempts >= 2, '初始化检查失败不能永久缓存为已完成')
+    }
+  )
+
+  await run(
+    'home-status-and-entry-contract',
+    false,
+    async (context, page, check) => {
+      let unavailable = false
+      await context.route(/\/api\/status(?:[/?].*)?$/, async (route) => {
+        await route.fulfill({
+          status: unavailable ? 503 : 200,
+          contentType: 'application/json',
+          body: JSON.stringify(
+            unavailable
+              ? { success: false }
+              : {
+                  success: true,
+                  data: {
+                    system_name: 'QA Gateway',
+                    version: 'qa-current',
+                    start_time: Math.floor(Date.now() / 1000) - 60,
+                    register_enabled: false,
+                    password_login_enabled: true
+                  }
+                }
+          )
+        })
+      })
+      await page.goto(`${baseURL}/`, { waitUntil: 'domcontentloaded' })
+      await page
+        .locator('[data-gateway-state="online"]')
+        .waitFor({ state: 'visible', timeout: 20000 })
+      check(
+        (await page.locator('a[href="/sign-up"]').count()) === 0,
+        '关闭注册时不应显示注册入口'
+      )
+      check(
+        (await page.locator('a[href="/pricing"]').count()) > 0,
+        '浏览模型应进入实际模型广场'
+      )
+      check(
+        (await page.locator('.iz-site-brand').first().innerText()).includes(
+          'QA Gateway'
+        ),
+        '首页应使用配置的站点名称'
+      )
+      const live = await page.locator('#live').innerText()
+      check(
+        live.includes('qa-current') &&
+          !/184 QPS|99\.91%|fallback stream/.test(live),
+        '首页只能展示实际返回的状态信息'
+      )
+      await page.getByRole('tab', { name: 'cURL', exact: true }).focus()
+      await page.keyboard.press('ArrowRight')
+      check(
+        (await page
+          .getByRole('tab', { name: 'Python', exact: true })
+          .getAttribute('aria-selected')) === 'true',
+        '代码标签页应支持方向键'
+      )
+      check(
+        (await page.getByRole('tabpanel').innerText()).includes('YOUR_MODEL'),
+        '示例不应假设站点启用了固定模型'
+      )
+      unavailable = true
+      await page
+        .getByRole('button', { name: 'Refresh status', exact: true })
+        .click()
+      await page
+        .locator('[data-gateway-state="unavailable"]')
+        .waitFor({ state: 'visible', timeout: 20000 })
+      check(
+        new URL(page.url()).pathname === '/',
+        '状态接口故障应保留首页并明确显示不可用'
+      )
+    }
+  )
+  return passed
+}
+
 async function main() {
   let server = null
   let browser = null
   try {
     server = await startBackend('secondary-surfaces')
-    browser = await chromium.launch({ headless: true })
+    browser = await chromium.launch({ headless: true, executablePath: process.env.QA_BROWSER_EXECUTABLE || undefined })
     await setupRoot(browser)
 
     for (const theme of themes) {
@@ -584,7 +792,11 @@ async function main() {
       }
     }
 
+    const recoveryCasesPassed = await auditRecoveryCases(browser)
+
     const summary = {
+      recoveryCases: 4,
+      recoveryCasesPassed,
       passed: failures.length === 0,
       publicCases: publicCases.length,
       authenticatedCases: authenticatedCases.length,
@@ -619,6 +831,7 @@ async function main() {
         `themes=${summary.themes}`,
         `viewports=${summary.viewports}`,
         `totalAudits=${summary.totalAudits}`,
+        `recoveryCasesPassed=${summary.recoveryCasesPassed}/${summary.recoveryCases}`,
         `failures=${summary.failures}`,
         `consoleErrors=${summary.consoleErrors}`,
         `pageErrors=${summary.pageErrors}`,

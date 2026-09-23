@@ -24,6 +24,7 @@ import { AnimateInView } from '@/components/animate-in-view'
 
 interface IzClosingProps {
   isAuthenticated?: boolean
+  registrationEnabled: boolean
 }
 
 export function IzClosing(props: IzClosingProps) {
@@ -37,7 +38,7 @@ export function IzClosing(props: IzClosingProps) {
           <h2>{t('Swap the Base URL, keep everything else.')}</h2>
           <p>
             {t(
-              'Issue an API key in under a minute. Bring your own models, your SDK, your workflow.'
+              'Sign in to manage your API keys and use the models available to your account.'
             )}
           </p>
           <div className='iz-final-actions'>
@@ -53,15 +54,21 @@ export function IzClosing(props: IzClosingProps) {
               <>
                 <Button
                   className='iz-button iz-button-light iz-button-lg group'
-                  render={<Link to='/sign-up' />}
+                  render={
+                    <Link
+                      to={props.registrationEnabled ? '/sign-up' : '/sign-in'}
+                    />
+                  }
                 >
-                  {t('Create your key')}
+                  {props.registrationEnabled
+                    ? t('Create your key')
+                    : t('Sign in')}
                   <ArrowRight className='ml-1 size-3.5 transition-transform duration-200 group-hover:translate-x-0.5' />
                 </Button>
                 <Button
                   variant='link'
                   className='iz-text-link iz-text-link-light'
-                  render={<a href='#models' />}
+                  render={<Link to='/pricing' />}
                 >
                   {t('Browse models')}
                 </Button>

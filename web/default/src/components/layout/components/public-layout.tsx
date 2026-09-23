@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useTranslation } from 'react-i18next'
 import type { TopNavLink } from '../types'
 import { PublicHeader, type PublicHeaderProps } from './public-header'
 
@@ -31,16 +32,18 @@ type PublicLayoutProps = {
   showHeader?: boolean
   logo?: React.ReactNode
   siteName?: string
+  skipLinkTarget?: string
 }
 
 export function PublicLayout(props: PublicLayoutProps) {
+  const { t } = useTranslation()
   return (
     <div className='bg-background/70 text-foreground relative min-h-svh overflow-x-clip'>
       <a
-        href='#main-content'
+        href={props.skipLinkTarget ?? '#main-content'}
         className='bg-foreground text-background fixed top-3 left-3 z-[200] -translate-y-16 px-4 py-2 font-mono text-xs tracking-[0.08em] uppercase transition-transform focus:translate-y-0'
       >
-        Skip to content
+        {t('Skip to content')}
       </a>
       {props.showHeader !== false && (
         <PublicHeader

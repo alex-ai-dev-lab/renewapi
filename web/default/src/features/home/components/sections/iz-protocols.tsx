@@ -36,7 +36,7 @@ const ROWS = [
     provider: 'Anthropic',
   },
   {
-    endpoint: '/v1beta/models',
+    endpoint: '/v1beta/models/{model}:generateContent',
     capability: 'Gemini generateContent passthrough',
     provider: 'Gemini',
   },
@@ -62,14 +62,14 @@ export function IzProtocols() {
           <header className='iz-section-head'>
             <span className='iz-watermark'>04</span>
             <div className='iz-section-left'>
-              <span className='iz-index'>04 - Protocols</span>
+              <span className='iz-index'>04 - {t('Protocols')}</span>
               <span className='iz-section-tag'>{t('One Base URL')}</span>
             </div>
             <div>
               <h2>{t('Every protocol you already use, supported as-is.')}</h2>
               <p className='iz-section-desc'>
                 {t(
-                  'Point your existing SDK at the gateway and leave your code untouched. We unify streaming, tool calls, image generation and embeddings across every upstream.'
+                  'Use the endpoint for your protocol. Available models and capabilities depend on the configured channels; see the model catalog for details.'
                 )}
               </p>
             </div>
@@ -79,22 +79,22 @@ export function IzProtocols() {
         <AnimateInView animation='fade-up' delay={100}>
           <div className='iz-matrix'>
             <div className='iz-matrix-head' aria-hidden>
-              <span>Endpoint</span>
-              <span>Capability</span>
-              <span>Provider</span>
-              <span>Status</span>
+              <span>{t('Endpoint')}</span>
+              <span>{t('Capability')}</span>
+              <span>{t('Provider')}</span>
+              <span>{t('Status')}</span>
             </div>
             {ROWS.map((row) => (
               <div className='iz-matrix-row' key={row.endpoint}>
                 <div className='iz-matrix-endpoint'>
                   <b>POST</b>
-                  {row.endpoint}
+                  <code className='iz-protocol-path'>{row.endpoint}</code>
                 </div>
                 <div className='iz-matrix-desc'>{t(row.capability)}</div>
                 <div className='iz-matrix-provider'>{row.provider}</div>
                 <div className='iz-matrix-status'>
                   <span aria-hidden />
-                  {t('Operational')}
+                  {t('Supported')}
                 </div>
               </div>
             ))}

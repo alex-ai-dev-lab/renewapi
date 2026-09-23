@@ -19,6 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
+import { useStatus } from '@/hooks/use-status'
+import { useSystemConfig } from '@/hooks/use-system-config'
 import { Markdown } from '@/components/ui/markdown'
 import { PublicLayout } from '@/components/layout'
 import { IzClosing } from './components/sections/iz-closing'
@@ -35,7 +37,6 @@ import { IzRouting } from './components/sections/iz-routing'
 import { useHomePageContent } from './hooks'
 
 const HOME_SEO = {
-  title: 'Interface Zero - Unified AI Gateway',
   description:
     'A unified, reliable, high-speed AI API gateway for OpenAI, Claude, Gemini, images, embeddings, routing, failover, and retries.',
   themeColor: '#0D0D10',
@@ -96,25 +97,28 @@ function upsertCanonical(href: string) {
   }
 }
 
-function useInterfaceZeroSeo(enabled: boolean) {
+function useInterfaceZeroSeo(enabled: boolean, systemName: string) {
+  const { t } = useTranslation()
   useEffect(() => {
     if (!enabled) return
 
+    const title = `${systemName} - ${t('Unified AI Gateway')}`
+    const description = t(HOME_SEO.description)
     const previousTitle = document.title
     const canonical = window.location.origin + window.location.pathname
-    document.title = HOME_SEO.title
+    document.title = title
 
     const cleanup = [
-      upsertMeta('name', 'title', HOME_SEO.title),
-      upsertMeta('name', 'description', HOME_SEO.description),
+      upsertMeta('name', 'title', title),
+      upsertMeta('name', 'description', description),
       upsertMeta('name', 'theme-color', HOME_SEO.themeColor),
-      upsertMeta('property', 'og:title', HOME_SEO.title),
-      upsertMeta('property', 'og:description', HOME_SEO.description),
+      upsertMeta('property', 'og:title', title),
+      upsertMeta('property', 'og:description', description),
       upsertMeta('property', 'og:type', 'website'),
       upsertMeta('property', 'og:url', canonical),
       upsertMeta('name', 'twitter:card', 'summary_large_image'),
-      upsertMeta('name', 'twitter:title', HOME_SEO.title),
-      upsertMeta('name', 'twitter:description', HOME_SEO.description),
+      upsertMeta('name', 'twitter:title', title),
+      upsertMeta('name', 'twitter:description', description),
       upsertCanonical(canonical),
     ]
 
@@ -122,17 +126,41 @@ function useInterfaceZeroSeo(enabled: boolean) {
       document.title = previousTitle
       cleanup.forEach((restore) => restore())
     }
-  }, [enabled])
+  }, [enabled, systemName, t])
+}
+
+function documentationLink(value: unknown): string {
+  const fallback = 'https://github.com/alex-ai-dev-lab/renewapi#readme'
+  if (typeof value !== 'string' || !value.trim()) return fallback
+  try {
+    const url = new URL(
+      value,
+      typeof window === 'undefined' ? fallback : window.location.origin
+    )
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      url.username ||
+      url.password
+    )
+      return fallback
+    return url.href
+  } catch {
+    return fallback
+  }
 }
 
 export function Home() {
   const { t } = useTranslation()
   const { auth } = useAuthStore()
+  const { status } = useStatus()
+  const { systemName } = useSystemConfig()
+  const registrationEnabled = status?.register_enabled === true
+  const docsLink = documentationLink(status?.docs_link)
   const isAuthenticated = !!auth.user
   const { content, isLoaded, isUrl } = useHomePageContent({
     showErrorToast: false,
   })
-  useInterfaceZeroSeo(isLoaded && !content)
+  useInterfaceZeroSeo(isLoaded && !content, systemName)
 
   if (!isLoaded) {
     return (
@@ -167,20 +195,44 @@ export function Home() {
   }
 
   return (
-    <PublicLayout showMainContainer={false} showHeader={false}>
-      <IzHeader isAuthenticated={isAuthenticated} />
-      <main id='main-content' className='iz-root'>
-        <IzHero isAuthenticated={isAuthenticated} />
+    <PublicLayout
+      showMainContainer={false}
+      showHeader={false}
+      skipLinkTarget='#home-main-content'
+    >
+      <IzHeader
+        isAuthenticated={isAuthenticated}
+        registrationEnabled={registrationEnabled}
+        systemName={systemName}
+        docsLink={docsLink}
+      />
+      <main
+        id='home-main-content'
+        tabIndex={-1}
+        className='iz-root outline-none'
+      >
+        <IzHero
+          isAuthenticated={isAuthenticated}
+          registrationEnabled={registrationEnabled}
+        />
         <IzModels />
         <IzPillars />
-        <IzRouting />
+        <IzRouting systemName={systemName} />
         <IzLive />
         <IzProtocols />
         <IzQuickstart />
         <IzFaq />
-        <IzClosing isAuthenticated={isAuthenticated} />
+        <IzClosing
+          isAuthenticated={isAuthenticated}
+          registrationEnabled={registrationEnabled}
+        />
       </main>
-      <IzFooter />
+      <IzFooter
+        systemName={systemName}
+        docsLink={docsLink}
+        termsEnabled={status?.user_agreement_enabled === true}
+        privacyEnabled={status?.privacy_policy_enabled === true}
+      />
     </PublicLayout>
   )
 }

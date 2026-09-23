@@ -28,12 +28,12 @@ const FAQS = [
   {
     question: 'How does failover work?',
     answer:
-      'Every upstream channel is continuously health-checked at both the channel and channel-model level. When a provider degrades or hits a quota, requests reroute automatically to a healthy channel.',
+      'Eligible channels are selected using the configured priority, weight and health rules. Failed requests can switch channels before a response is committed.',
   },
   {
     question: 'Which providers are supported?',
     answer:
-      '50+ upstreams including OpenAI, Anthropic, Google Gemini, DeepSeek, Qwen, Mistral, Meta Llama, xAI, Doubao, Kimi and more through one Base URL and one key.',
+      'The gateway supports multiple providers. The model catalog shows the models currently enabled for this site.',
   },
   {
     question: 'How are usage and cost tracked?',
@@ -52,8 +52,10 @@ export function IzFaq() {
           <header className='iz-section-head'>
             <span className='iz-watermark'>06</span>
             <div className='iz-section-left'>
-              <span className='iz-index'>06 - FAQ</span>
-              <span className='iz-section-tag'>{t('Things you might be wondering')}</span>
+              <span className='iz-index'>06 - {t('FAQ')}</span>
+              <span className='iz-section-tag'>
+                {t('Things you might be wondering')}
+              </span>
             </div>
             <div>
               <h2>{t('A few honest answers.')}</h2>

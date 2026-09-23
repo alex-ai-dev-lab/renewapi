@@ -22,10 +22,13 @@ import { useTranslation } from 'react-i18next'
 
 type IzHeaderProps = {
   isAuthenticated?: boolean
+  registrationEnabled: boolean
+  systemName: string
+  docsLink: string
 }
 
 const NAV_LINKS = [
-  ['Models', '#models'],
+  ['Models', '/pricing'],
   ['Routing', '#routing'],
   ['Live', '#live'],
   ['Protocols', '#protocols'],
@@ -57,19 +60,20 @@ export function IzHeader(props: IzHeaderProps) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [mobileOpen])
 
-  const actionHref = props.isAuthenticated ? '/dashboard' : '/sign-up'
-  const actionLabel = props.isAuthenticated ? t('Console') : t('Get a key')
+  let actionHref: '/dashboard' | '/sign-up' | '/sign-in' =
+    props.registrationEnabled ? '/sign-up' : '/sign-in'
+  if (props.isAuthenticated) actionHref = '/dashboard'
+  let actionLabel = t('Sign in')
+  if (props.isAuthenticated) actionLabel = t('Console')
+  else if (props.registrationEnabled) actionLabel = t('Get a key')
 
   return (
     <>
-      <a href='#main-content' className='iz-skip'>
-        {t('Skip to content')}
-      </a>
       <header className={`iz-site-header ${scrolled ? 'is-scrolled' : ''}`}>
         <div className='iz-wrap'>
           <nav className='iz-site-nav' aria-label={t('Primary')}>
             <a className='iz-site-brand' href='#top'>
-              Interface Zero <span>v1</span>
+              {props.systemName}
             </a>
             <div className='iz-site-links'>
               {NAV_LINKS.map(([label, href]) => (
@@ -77,12 +81,8 @@ export function IzHeader(props: IzHeaderProps) {
                   {t(label)}
                 </a>
               ))}
-              <a
-                href='https://router.108848.xyz:1445/'
-                target='_blank'
-                rel='noreferrer'
-              >
-                Docs
+              <a href={props.docsLink} target='_blank' rel='noreferrer'>
+                {t('Docs')}
               </a>
             </div>
             <div className='iz-site-actions'>
@@ -127,12 +127,12 @@ export function IzHeader(props: IzHeaderProps) {
             </a>
           ))}
           <a
-            href='https://router.108848.xyz:1445/'
+            href={props.docsLink}
             target='_blank'
             rel='noreferrer'
             onClick={() => setMobileOpen(false)}
           >
-            Docs
+            {t('Docs')}
           </a>
           <div className='iz-mobile-actions'>
             <Link

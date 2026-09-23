@@ -34,9 +34,9 @@ export function IzPillars() {
       number: '01',
       title: t('Low latency, by design'),
       desc: t(
-        'Anycast edge ingress, upstream connection reuse and zero-copy streaming — built for long-running agent loops.'
+        'Upstream connection reuse and streamed responses reduce unnecessary waiting during model requests.'
       ),
-      meta: 'P50 · 240ms',
+      meta: t('Streaming responses'),
     },
     {
       number: '02',
@@ -44,7 +44,7 @@ export function IzPillars() {
       desc: t(
         'Channel-level health checks, automatic failover and quota-aware retries — your client always faces one stable endpoint.'
       ),
-      meta: 'SLO · 99.9%',
+      meta: t('Channel failover'),
     },
     {
       number: '03',
@@ -52,7 +52,7 @@ export function IzPillars() {
       desc: t(
         'First-class support for OpenAI Chat & Responses, Claude Messages, Gemini and the Image API — keep the SDK, change the Base URL.'
       ),
-      meta: '6 Protocols',
+      meta: t('Multiple protocols'),
     },
     {
       number: '04',
@@ -60,7 +60,7 @@ export function IzPillars() {
       desc: t(
         'Per-request tracing, token accounting, model-level usage and cost — every byte through the gateway is auditable.'
       ),
-      meta: 'Real-time',
+      meta: t('Request logs'),
     },
   ]
 
@@ -71,8 +71,10 @@ export function IzPillars() {
           <header className='iz-section-head'>
             <span className='iz-watermark'>01</span>
             <div className='iz-section-left'>
-              <span className='iz-index'>01 - Principles</span>
-              <span className='iz-section-tag'>{t('Built for serious workloads')}</span>
+              <span className='iz-index'>01 - {t('Principles')}</span>
+              <span className='iz-section-tag'>
+                {t('Built for serious workloads')}
+              </span>
             </div>
             <div>
               <h2>{t('Tuned for AI workloads that run for hours.')}</h2>
@@ -87,11 +89,7 @@ export function IzPillars() {
 
         <div className='iz-principles'>
           {pillars.map((p, i) => (
-            <AnimateInView
-              key={i}
-              animation='fade-up'
-              delay={i * 80}
-            >
+            <AnimateInView key={i} animation='fade-up' delay={i * 80}>
               <article className='iz-principle'>
                 <span className='iz-principle-number'>{p.number}</span>
                 <div className='iz-principle-body'>

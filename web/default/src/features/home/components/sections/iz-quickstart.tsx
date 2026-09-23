@@ -19,6 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 import { useMemo, useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { AnimateInView } from '@/components/animate-in-view'
 
 type Lang = 'curl' | 'python' | 'node'
@@ -29,6 +31,11 @@ const baseUrlAtRender = () =>
     : 'https://your.gateway'
 
 const LANGS = ['curl', 'python', 'node'] as const
+const LANG_LABELS: Record<Lang, string> = {
+  curl: 'cURL',
+  python: 'Python',
+  node: 'Node.js',
+}
 
 export function IzQuickstart() {
   const { t } = useTranslation()
@@ -42,7 +49,7 @@ export function IzQuickstart() {
   -H "Authorization: Bearer $YOUR_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "gpt-4o-mini",
+    "model": "YOUR_MODEL",
     "stream": true,
     "messages": [
       { "role": "user", "content": "Ping" }
@@ -56,13 +63,14 @@ client = OpenAI(
 )
 
 stream = client.chat.completions.create(
-    model="gpt-4o-mini",
+    model="YOUR_MODEL",
     stream=True,
     messages=[{"role": "user", "content": "Ping"}],
 )
 
 for chunk in stream:
-    print(chunk.choices[0].delta.content or "", end="")`,
+    if chunk.choices:
+        print(chunk.choices[0].delta.content or "", end="")`,
       node: `import OpenAI from "openai";
 
 const client = new OpenAI({
@@ -71,7 +79,7 @@ const client = new OpenAI({
 });
 
 const stream = await client.chat.completions.create({
-  model: "gpt-4o-mini",
+  model: "YOUR_MODEL",
   stream: true,
   messages: [{ role: "user", content: "Ping" }],
 });
@@ -84,12 +92,11 @@ for await (const chunk of stream) {
   )
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(snippets[lang])
+    if (await copyToClipboard(snippets[lang])) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1600)
-    } catch {
-      /* noop */
+    } else {
+      toast.error(t('Copy failed. Please select and copy the text manually.'))
     }
   }
 
@@ -101,11 +108,16 @@ for await (const chunk of stream) {
         <div className='iz-integrate-grid'>
           <AnimateInView animation='fade-up'>
             <header className='iz-integrate-head'>
-              <span className='iz-index'>05 - Integrate</span>
+              <span className='iz-index'>05 - {t('Integration')}</span>
               <h2>{t('Three lines apart, nothing more to learn.')}</h2>
               <p className='iz-section-desc'>
                 {t(
                   'Use any SDK you already trust. Point the Base URL at the gateway, drop in your key, and ship. Streaming, tool calls and the Image API work exactly the same.'
+                )}
+              </p>
+              <p className='iz-section-desc'>
+                {t(
+                  'Replace YOUR_KEY with your API key and YOUR_MODEL with a model available to your account.'
                 )}
               </p>
             </header>
@@ -114,7 +126,11 @@ for await (const chunk of stream) {
           <AnimateInView animation='fade-up' delay={120}>
             <div className='iz-code'>
               <div className='iz-code-bar'>
-                <div className='iz-code-tabs' role='tablist'>
+                <div
+                  className='iz-code-tabs'
+                  role='tablist'
+                  aria-label={t('Code examples')}
+                >
                   {LANGS.map((l) => (
                     <button
                       key={l}
@@ -124,14 +140,26 @@ for await (const chunk of stream) {
                       aria-selected={lang === l}
                       tabIndex={lang === l ? 0 : -1}
                       onClick={() => setLang(l)}
+                      onKeyDown={(event) => {
+                        let next = LANGS.indexOf(l)
+                        if (event.key === 'ArrowRight')
+                          next = (next + 1) % LANGS.length
+                        else if (event.key === 'ArrowLeft')
+                          next = (next + LANGS.length - 1) % LANGS.length
+                        else if (event.key === 'Home') next = 0
+                        else if (event.key === 'End') next = LANGS.length - 1
+                        else return
+                        event.preventDefault()
+                        const nextLang = LANGS[next]
+                        setLang(nextLang)
+                        document
+                          .getElementById(`iz-code-tab-${nextLang}`)
+                          ?.focus()
+                      }}
                       className={`iz-code-tab ${lang === l ? 'is-active' : ''}`}
                       type='button'
                     >
-                      {l === 'curl'
-                        ? 'cURL'
-                        : l === 'python'
-                          ? 'Python'
-                          : 'Node.js'}
+                      {LANG_LABELS[l]}
                     </button>
                   ))}
                 </div>
@@ -139,7 +167,7 @@ for await (const chunk of stream) {
                   type='button'
                   onClick={handleCopy}
                   className='iz-code-copy'
-                  aria-label='Copy snippet'
+                  aria-label={t('Copy snippet')}
                 >
                   {copied ? (
                     <>

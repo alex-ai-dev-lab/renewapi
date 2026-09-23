@@ -16,13 +16,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { isAxiosError } from 'axios'
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { useAuthStore } from '@/stores/auth-store'
+import { useAuthStore, type AuthUser } from '@/stores/auth-store'
 import { getSelf } from '@/lib/api'
 import { AuthenticatedLayout } from '@/components/layout'
+import { GeneralError } from '@/features/errors/general-error'
 
-// 内存中的验证标记，避免同一会话中重复验证
-let sessionVerified = false
+// 只复用当前用户快照的校验；重新登录或切换账户后必须重新验证。
+let verifiedUser: AuthUser | null = null
 
 export const Route = createFileRoute('/_authenticated')({
   beforeLoad: async ({ location }) => {
@@ -30,28 +32,35 @@ export const Route = createFileRoute('/_authenticated')({
 
     // 如果本地没有用户信息，直接跳转登录页
     if (!auth.user) {
+      verifiedUser = null
       throw redirect({
         to: '/sign-in',
         search: { redirect: location.href },
       })
     }
 
-    // 本地有用户信息，但需要验证 session 是否有效（每个会话只验证一次）
-    if (!sessionVerified) {
-      const res = await getSelf().catch(() => null)
-      if (res?.success && res.data) {
-        // 验证成功，更新用户信息（可能有变化）
+    if (auth.user !== verifiedUser) {
+      try {
+        const res = await getSelf()
+        if (!res?.success || !res.data) {
+          throw new Error('Unable to verify the current session')
+        }
         auth.setUser(res.data)
-        sessionVerified = true
-      } else {
-        // 验证失败或 API 调用失败，清除本地缓存并跳转登录页
-        auth.reset()
-        throw redirect({
-          to: '/sign-in',
-          search: { redirect: location.href },
-        })
+        verifiedUser = useAuthStore.getState().auth.user
+      } catch (error) {
+        // 只有明确的认证失效才退出；网络或服务故障保留登录状态并允许重试。
+        if (isAxiosError(error) && error.response?.status === 401) {
+          verifiedUser = null
+          auth.reset()
+          throw redirect({
+            to: '/sign-in',
+            search: { redirect: location.href },
+          })
+        }
+        throw error
       }
     }
   },
   component: AuthenticatedLayout,
+  errorComponent: GeneralError,
 })

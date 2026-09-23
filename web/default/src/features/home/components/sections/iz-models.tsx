@@ -36,13 +36,22 @@ export function IzModels() {
   const items = [...PROVIDERS, ...PROVIDERS]
 
   return (
-    <section className='iz-model-strip' id='models' aria-label={t('Supported providers')}>
+    <section
+      className='iz-model-strip'
+      id='models'
+      aria-label={t('Supported providers')}
+    >
       <div className='iz-wrap iz-model-strip-inner'>
         <span className='iz-label'>{t('Works with')}</span>
         <div className='iz-marquee'>
           <div className='iz-marquee-track'>
             {items.map((provider, index) => (
-              <span key={`${provider}-${index}`}>{provider}</span>
+              <span
+                key={`${provider}-${index}`}
+                aria-hidden={index >= PROVIDERS.length}
+              >
+                {provider}
+              </span>
             ))}
           </div>
         </div>

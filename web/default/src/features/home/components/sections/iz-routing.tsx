@@ -24,10 +24,10 @@ const PROVIDERS = [
   { name: 'OpenAI', y: 76, detail: 'chat · responses · images' },
   { name: 'Claude', y: 142, detail: 'messages · tools · stream' },
   { name: 'Gemini', y: 208, detail: 'generateContent · models' },
-  { name: 'More', y: 274, detail: '50+ upstream channels' },
+  { name: 'More', y: 274, detail: 'Configured channels' },
 ]
 
-export function IzRouting() {
+export function IzRouting(props: { systemName: string }) {
   const { t } = useTranslation()
 
   return (
@@ -37,7 +37,7 @@ export function IzRouting() {
           <header className='iz-section-head'>
             <span className='iz-watermark'>02</span>
             <div className='iz-section-left'>
-              <span className='iz-index'>02 - Routing</span>
+              <span className='iz-index'>02 - {t('Routing')}</span>
               <span className='iz-section-tag'>
                 {t('One contract, many upstreams')}
               </span>
@@ -54,7 +54,12 @@ export function IzRouting() {
         </AnimateInView>
 
         <AnimateInView animation='fade-up' delay={120}>
-          <div className='iz-routing-board' aria-label={t('Routing diagram')}>
+          <div
+            className='iz-routing-board'
+            role='region'
+            tabIndex={0}
+            aria-label={t('Routing diagram')}
+          >
             <div className='iz-routing-scroll'>
               <svg
                 className='iz-routing-svg'
@@ -62,12 +67,10 @@ export function IzRouting() {
                 role='img'
                 aria-labelledby='iz-routing-title iz-routing-desc'
               >
-                <title id='iz-routing-title'>
-                  {t('Interface Zero routing flow')}
-                </title>
+                <title id='iz-routing-title'>{t('Gateway routing flow')}</title>
                 <desc id='iz-routing-desc'>
                   {t(
-                    'Your application sends one request to Interface Zero, which routes to OpenAI, Claude, Gemini, or other upstream providers with health checks, failover, and retry controls.'
+                    'Your application sends a request to the gateway, which selects a configured provider using routing and retry rules.'
                   )}
                 </desc>
                 <defs>
@@ -96,10 +99,10 @@ export function IzRouting() {
                   className='iz-routing-node'
                 />
                 <text x='64' y='174' className='iz-routing-node-title'>
-                  Your App
+                  {t('Your App')}
                 </text>
                 <text x='64' y='202' className='iz-routing-node-sub'>
-                  SDK unchanged
+                  {t('SDK unchanged')}
                 </text>
 
                 <rect
@@ -111,13 +114,13 @@ export function IzRouting() {
                   className='iz-routing-gateway'
                 />
                 <text x='454' y='158' className='iz-routing-gateway-title'>
-                  Interface Zero
+                  {props.systemName}
                 </text>
                 <text x='454' y='190' className='iz-routing-gateway-sub'>
-                  one base URL
+                  {t('one base URL')}
                 </text>
                 <text x='454' y='224' className='iz-routing-gateway-meta'>
-                  health · failover · retry
+                  {t('health · failover · retry')}
                 </text>
 
                 <path
@@ -126,7 +129,7 @@ export function IzRouting() {
                   markerEnd='url(#iz-arrow)'
                 />
                 {ROUTING_LABELS.map((label, index) => (
-                  <g key={label}>
+                  <g key={t(label)}>
                     <rect
                       x={216 + index * 70}
                       y='142'
@@ -140,13 +143,13 @@ export function IzRouting() {
                       y='157'
                       className='iz-routing-chip-text'
                     >
-                      {label}
+                      {t(label)}
                     </text>
                   </g>
                 ))}
 
                 {PROVIDERS.map((provider) => (
-                  <g key={provider.name}>
+                  <g key={t(provider.name)}>
                     <path
                       d={`M 630 180 C 700 180, 700 ${provider.y}, 752 ${provider.y}`}
                       className='iz-routing-line iz-routing-line-active'
@@ -165,14 +168,14 @@ export function IzRouting() {
                       y={provider.y - 4}
                       className='iz-routing-provider-title'
                     >
-                      {provider.name}
+                      {t(provider.name)}
                     </text>
                     <text
                       x='774'
                       y={provider.y + 16}
                       className='iz-routing-provider-sub'
                     >
-                      {provider.detail}
+                      {t(provider.detail)}
                     </text>
                   </g>
                 ))}

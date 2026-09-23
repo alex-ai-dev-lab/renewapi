@@ -16,12 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useState } from 'react'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
-const FEEDBACK_URL = 'https://github.com/QuantumNous/new-api/issues'
+const FEEDBACK_URL = 'https://github.com/alex-ai-dev-lab/renewapi/issues'
 
 type GeneralErrorProps = React.HTMLAttributes<HTMLDivElement> & {
   minimal?: boolean
@@ -43,7 +44,19 @@ export function GeneralError({
 }: GeneralErrorProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { history } = useRouter()
+  const router = useRouter()
+  const { history } = router
+  const [retrying, setRetrying] = useState(false)
+  const retry = async () => {
+    setRetrying(true)
+    try {
+      await router.invalidate()
+    } catch {
+      // 路由错误仍保留在页面，用户可以继续重试或返回。
+    } finally {
+      setRetrying(false)
+    }
+  }
   const status = getHttpStatus(error)
   const isRateLimited = status === 429
   const title = isRateLimited
@@ -82,6 +95,11 @@ export function GeneralError({
         )}
         {!minimal && (
           <div className='mt-6 flex flex-wrap justify-center gap-3 sm:gap-4'>
+            {error != null && (
+              <Button onClick={() => void retry()} disabled={retrying}>
+                {t('Retry')}
+              </Button>
+            )}
             <Button variant='outline' onClick={() => history.go(-1)}>
               {t('Go Back')}
             </Button>

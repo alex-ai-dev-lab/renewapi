@@ -18,46 +18,46 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 
-const COLUMNS = [
-  {
-    title: 'Product',
-    links: [
-      ['Models', '#models'],
-      ['Routing', '#routing'],
-      ['Live status', '#live'],
-      ['Protocols', '#protocols'],
-    ],
-  },
-  {
-    title: 'Developers',
-    links: [
-      ['Docs', 'https://router.108848.xyz:1445/'],
-      ['API reference', '#protocols'],
-      ['Status page', '#live'],
-      ['Changelog', 'https://github.com/alex-ai-dev-lab/renewapi/releases'],
-    ],
-  },
-  {
-    title: 'Company',
-    links: [
-      ['About', '/about'],
-      ['Terms', '/user-agreement'],
-      ['Privacy', '/privacy-policy'],
-    ],
-  },
-]
+type IzFooterProps = {
+  systemName: string
+  docsLink: string
+  termsEnabled: boolean
+  privacyEnabled: boolean
+}
 
-export function IzFooter() {
+export function IzFooter(props: IzFooterProps) {
   const { t } = useTranslation()
-  const year = new Date().getFullYear()
-
+  const siteLinks: [string, string][] = [['About', '/about']]
+  if (props.termsEnabled) siteLinks.push(['Terms', '/user-agreement'])
+  if (props.privacyEnabled) siteLinks.push(['Privacy', '/privacy-policy'])
+  const columns: { title: string; links: [string, string][] }[] = [
+    {
+      title: 'Product',
+      links: [
+        ['Models', '/pricing'],
+        ['Routing', '#routing'],
+        ['Live status', '#live'],
+        ['Protocols', '#protocols'],
+      ],
+    },
+    {
+      title: 'Developers',
+      links: [
+        ['Docs', props.docsLink],
+        ['API reference', '#protocols'],
+        ['Status page', '#live'],
+        ['Changelog', 'https://github.com/alex-ai-dev-lab/renewapi/releases'],
+      ],
+    },
+    { title: 'Site', links: siteLinks },
+  ]
   return (
     <footer className='iz-footer'>
       <div className='iz-wrap'>
         <div className='iz-footer-grid'>
           <div>
             <div className='iz-site-brand iz-footer-brand'>
-              Interface Zero <span>v1</span>
+              {props.systemName}
             </div>
             <p>
               {t(
@@ -65,7 +65,7 @@ export function IzFooter() {
               )}
             </p>
           </div>
-          {COLUMNS.map((column) => (
+          {columns.map((column) => (
             <div className='iz-footer-column' key={column.title}>
               <h4>{t(column.title)}</h4>
               {column.links.map(([label, href]) => (
@@ -81,9 +81,21 @@ export function IzFooter() {
             </div>
           ))}
         </div>
+        <p className='iz-footer-attribution'>
+          Frontend design and development by{' '}
+          <a
+            href='https://github.com/QuantumNous/new-api'
+            target='_blank'
+            rel='noreferrer'
+          >
+            New API contributors.
+          </a>
+        </p>
         <div className='iz-footer-bottom'>
-          <span>© {year} INTERFACE ZERO</span>
-          <span>{t('All systems operational')}</span>
+          <span>
+            © {new Date().getFullYear()} {props.systemName}
+          </span>
+          <a href='#live'>{t('View service status')}</a>
         </div>
       </div>
     </footer>

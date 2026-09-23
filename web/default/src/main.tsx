@@ -96,10 +96,7 @@ const queryClient = new QueryClient({
           const redirect = `${router.history.location.href}`
           router.navigate({ to: '/sign-in', search: { redirect } })
         }
-        if (error.response?.status === 500) {
-          toast.error(i18next.t('Internal Server Error!'))
-          router.navigate({ to: '/500' })
-        }
+        // 数据查询失败由当前页面和请求提示处理，不打断正在编辑的内容。
       }
     },
   }),

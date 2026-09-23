@@ -109,7 +109,7 @@ For commercial licensing, please contact support@quantumnous.com
 .iz-site-brand span {
   border: 1px solid var(--line);
   padding: 2px 6px;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 400;
@@ -623,7 +623,7 @@ body.menu-open {
 }
 
 .iz-marquee-track span {
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--display);
   font-size: 21px;
   font-weight: 600;
@@ -674,7 +674,7 @@ body.menu-open {
 }
 
 .iz-section-tag {
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-size: 14px;
 }
 
@@ -743,7 +743,7 @@ body.menu-open {
 }
 
 .iz-principle-number {
-  color: var(--ink-4);
+  color: var(--ink-3);
   font-family: var(--display);
   font-size: 40px;
   font-weight: 700;
@@ -767,7 +767,7 @@ body.menu-open {
 }
 
 .iz-principle-meta {
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--mono);
   font-size: 12px;
   text-align: right;
@@ -897,7 +897,7 @@ body.menu-open {
 
 .iz-live-panel-head span,
 .iz-live-panel-foot {
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.1em;
@@ -991,7 +991,7 @@ body.menu-open {
 
 .iz-matrix-head {
   padding: 0 4px 14px;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.12em;
@@ -1013,7 +1013,7 @@ body.menu-open {
 }
 
 .iz-matrix-endpoint b {
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-weight: 500;
 }
 
@@ -1122,7 +1122,7 @@ body.menu-open {
   gap: 8px;
   padding: 13px 18px;
   border-top: 1px solid var(--line);
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.08em;
@@ -1164,7 +1164,7 @@ body.menu-open {
 }
 
 .iz-faq summary span {
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--mono);
   font-size: 20px;
   line-height: 1;
@@ -1247,7 +1247,7 @@ body.menu-open {
 .iz-footer p {
   max-width: 34ch;
   margin: 16px 0 0;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-size: 14px;
 }
 
@@ -1283,7 +1283,7 @@ body.menu-open {
   gap: 20px;
   padding: 18px 0 28px;
   border-top: 1px solid var(--line-soft);
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.12em;
@@ -1510,4 +1510,96 @@ section[id] {
     scroll-behavior: auto !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* 首页只呈现实际服务状态，运行信息在窄屏下保持可读。 */
+.iz-service-description {
+  margin: 32px 0 24px;
+  color: var(--ink-2);
+  line-height: 1.8;
+}
+
+.iz-service-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.iz-service-details {
+  display: grid;
+  gap: 22px;
+  margin: 28px 0 0;
+}
+
+.iz-service-details dt {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.iz-service-details dd {
+  margin: 6px 0 0;
+  font-family: var(--mono);
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.iz-protocol-path {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.iz-footer-attribution {
+  margin-top: 28px;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.iz-footer-attribution a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.iz-live-panel-head strong[data-gateway-state] {
+  font-size: clamp(28px, 4vw, 46px);
+  overflow-wrap: anywhere;
+}
+
+.iz-model-strip .iz-label {
+  color: var(--ink-2);
+}
+
+.iz-routing-board:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 4px;
+}
+
+/* 导航和代码面板跟随站点主题，避免深色底上继续使用浅色页面的墨色。 */
+.iz-site-header,
+.iz-mobile-menu {
+  --ink: var(--foreground);
+  --ink-2: var(--muted-foreground);
+  --white: var(--background);
+  --paper: var(--background);
+  --line: var(--border);
+}
+
+.iz-site-header {
+  background: var(--background);
+}
+
+.iz-site-header.is-scrolled {
+  background: color-mix(in srgb, var(--background) 92%, transparent);
+}
+
+.iz-code {
+  --ink: var(--card-foreground);
+  --ink-2: var(--muted-foreground);
+  --white: var(--card);
+  --line: var(--border);
+}
+
+.iz-matrix-endpoint b {
+  flex-shrink: 0;
 }

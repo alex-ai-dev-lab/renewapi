@@ -20,6 +20,8 @@ import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowRight, Copy, Check } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { Button } from '@/components/ui/button'
 
 const ENDPOINT_CYCLE = [
@@ -32,6 +34,7 @@ const ENDPOINT_CYCLE = [
 
 interface IzHeroProps {
   isAuthenticated?: boolean
+  registrationEnabled: boolean
 }
 
 export function IzHero(props: IzHeroProps) {
@@ -41,7 +44,7 @@ export function IzHero(props: IzHeroProps) {
   const baseUrl =
     typeof window !== 'undefined'
       ? `${window.location.origin}/v1`
-      : 'https://router.108848.xyz:1443/v1'
+      : 'https://your.gateway/v1'
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -53,12 +56,11 @@ export function IzHero(props: IzHeroProps) {
   }, [])
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(baseUrl)
+    if (await copyToClipboard(baseUrl)) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1600)
-    } catch {
-      /* noop */
+    } else {
+      toast.error(t('Copy failed. Please select and copy the text manually.'))
     }
   }
 
@@ -110,14 +112,23 @@ export function IzHero(props: IzHeroProps) {
                 <>
                   <Button
                     className='iz-button iz-button-light iz-button-lg group'
-                    render={<Link to='/sign-up' />}
+                    render={
+                      <Link
+                        to={props.registrationEnabled ? '/sign-up' : '/sign-in'}
+                      />
+                    }
                   >
-                    {t('Get Started')}
+                    {props.registrationEnabled
+                      ? t('Get Started')
+                      : t('Sign in')}
                     <ArrowRight className='ml-1 size-3.5 transition-transform duration-200 group-hover:translate-x-0.5' />
                   </Button>
-                  <a className='iz-text-link iz-text-link-light' href='#models'>
+                  <Link
+                    className='iz-text-link iz-text-link-light'
+                    to='/pricing'
+                  >
                     {t('Browse all models')}
-                  </a>
+                  </Link>
                 </>
               )}
             </div>
@@ -127,14 +138,14 @@ export function IzHero(props: IzHeroProps) {
             <div className='iz-baseurl-label'>BASE URL</div>
             <div className='iz-baseurl-row'>
               <span className='iz-baseurl-value' title={baseUrl}>
-                {baseUrl.replace('/v1', '')}
+                {baseUrl.slice(0, -3)}
                 <span>/v1</span>
               </span>
               <button
                 type='button'
                 onClick={handleCopy}
                 className='iz-copy-button'
-                aria-label='Copy base URL'
+                aria-label={t('Copy base URL')}
               >
                 {copied ? (
                   <Check className='size-4' />
@@ -148,26 +159,20 @@ export function IzHero(props: IzHeroProps) {
 
         <div className='iz-ledger'>
           <div className='iz-ledger-item'>
-            <div className='iz-ledger-value'>
-              240<small>ms</small>
-            </div>
-            <div className='iz-ledger-key'>{t('P50 Latency')}</div>
+            <div className='iz-ledger-value'>Chat</div>
+            <div className='iz-ledger-key'>{t('Conversation API')}</div>
           </div>
           <div className='iz-ledger-item'>
-            <div className='iz-ledger-value'>
-              99.9<small>%</small>
-            </div>
-            <div className='iz-ledger-key'>{t('Uptime')}</div>
+            <div className='iz-ledger-value'>Responses</div>
+            <div className='iz-ledger-key'>{t('Reasoning and tools')}</div>
           </div>
           <div className='iz-ledger-item'>
-            <div className='iz-ledger-value'>
-              50<small>+</small>
-            </div>
-            <div className='iz-ledger-key'>{t('Upstream Providers')}</div>
+            <div className='iz-ledger-value'>Claude</div>
+            <div className='iz-ledger-key'>{t('Claude-compatible API')}</div>
           </div>
           <div className='iz-ledger-item'>
-            <div className='iz-ledger-value'>6</div>
-            <div className='iz-ledger-key'>{t('Native Protocols')}</div>
+            <div className='iz-ledger-value'>SSE</div>
+            <div className='iz-ledger-key'>{t('Streaming responses')}</div>
           </div>
         </div>
       </div>

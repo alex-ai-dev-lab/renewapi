@@ -459,9 +459,10 @@ func testSingleChannelWithRetries(ctx context.Context, channel *model.Channel, t
 		if ctx.Err() != nil {
 			return
 		}
-		if lastResult.localErr != nil && lastResult.newAPIError == nil {
+		if lastResult.localErr != nil && (lastResult.context == nil || lastResult.newAPIError == nil) {
 			common.SysError(fmt.Sprintf("渠道 %d 自动测试未完成：%v", channel.Id, lastResult.localErr))
-			break
+			// 未真正请求上游的预检失败不覆盖已有延迟或触发自动停用。
+			return
 		}
 
 		if lastResult.newAPIError == nil {

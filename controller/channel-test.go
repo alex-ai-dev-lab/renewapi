@@ -1384,21 +1384,27 @@ func TestChannel(c *gin.Context) {
 		return
 	}
 	tik := time.Now()
-	result := testChannel(channel, testUserID, testModel, endpointType, isStream)
+	result := testChannelContext(c.Request.Context(), channel, testUserID, testModel, endpointType, isStream)
+	// 用户取消检查不代表渠道故障，也不应覆盖已有健康与延迟记录。
+	if c.Request.Context().Err() != nil {
+		return
+	}
 	resultEndpoint := endpointType
 	if result.endpoint != "" {
 		resultEndpoint = result.endpoint
 	}
 	if result.localErr != nil {
-		service.RecordChannelModelFailure(service.ChannelModelFailureParams{
-			ChannelId: channel.Id,
-			Group:     common.GetContextKeyString(result.context, constant.ContextKeyUsingGroup),
-			ModelName: common.GetContextKeyString(result.context, constant.ContextKeyOriginalModel),
-			Endpoint:  resultEndpoint,
-			RequestId: common.GetContextKeyString(result.context, common.RequestIdKey),
-			Error:     result.newAPIError,
-			AutoBan:   channel.GetAutoBan(),
-		})
+		if result.context != nil && result.newAPIError != nil {
+			service.RecordChannelModelFailure(service.ChannelModelFailureParams{
+				ChannelId: channel.Id,
+				Group:     common.GetContextKeyString(result.context, constant.ContextKeyUsingGroup),
+				ModelName: common.GetContextKeyString(result.context, constant.ContextKeyOriginalModel),
+				Endpoint:  resultEndpoint,
+				RequestId: common.GetContextKeyString(result.context, common.RequestIdKey),
+				Error:     result.newAPIError,
+				AutoBan:   channel.GetAutoBan(),
+			})
+		}
 		resp := gin.H{
 			"success": false,
 			"message": result.localErr.Error(),
@@ -1519,9 +1525,9 @@ func testAllChannels(notify bool) error {
 			result := testChannel(channel, testUserID, "", "", shouldUseStreamForAutomaticChannelTest(channel))
 			tok := time.Now()
 			milliseconds := tok.Sub(tik).Milliseconds()
-			if result.localErr != nil && result.newAPIError == nil {
+			if result.localErr != nil && (result.context == nil || result.newAPIError == nil) {
 				common.SysError(fmt.Sprintf("渠道 %d 测试未完成：%v", channel.Id, result.localErr))
-				channel.UpdateResponseTime(milliseconds)
+				// 本地预检未发出请求，保留上一次真实上游测量。
 				continue
 			}
 

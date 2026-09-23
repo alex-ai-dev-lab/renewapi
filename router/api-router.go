@@ -297,6 +297,8 @@ func SetApiRouter(router *gin.Engine) {
 		channelRoute := apiRouter.Group("/channel")
 		channelRoute.Use(middleware.AdminAuth())
 		{
+			// 完整 Relay 路由树中自动补尾斜杠可能失效，显式兼容现有前端的集合路径。
+			channelRoute.GET("", controller.GetAllChannels)
 			channelRoute.GET("/", controller.GetAllChannels)
 			channelRoute.GET("/search", controller.SearchChannels)
 			channelRoute.GET("/models", controller.ChannelListModels)
@@ -316,7 +318,9 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/test/:id", controller.TestChannel)
 			channelRoute.GET("/update_balance", controller.UpdateAllChannelsBalance)
 			channelRoute.GET("/update_balance/:id", controller.UpdateChannelBalance)
+			channelRoute.POST("", controller.AddChannel)
 			channelRoute.POST("/", controller.AddChannel)
+			channelRoute.PUT("", controller.UpdateChannel)
 			channelRoute.PUT("/", controller.UpdateChannel)
 			channelRoute.PUT("/:id/config", controller.UpdateChannelConfig)
 			channelRoute.DELETE("/disabled", controller.DeleteDisabledChannel)

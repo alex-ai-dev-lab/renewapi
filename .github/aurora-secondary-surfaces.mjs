@@ -300,7 +300,9 @@ async function loginContext(context) {
 function attachDiagnostics(page, label) {
   page.on('console', (message) => {
     if (message.type() === 'error') {
-      consoleErrors.push({ label, text: message.text() })
+      const location = message.location().url
+      const url = location ? new URL(location, baseURL).pathname : null
+      consoleErrors.push({ label, text: message.text(), url })
     }
   })
   page.on('pageerror', (error) => {

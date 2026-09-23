@@ -96,7 +96,10 @@ const Toaster = (props: ToasterProps) => {
             'color-mix(in oklch, var(--destructive) 16%, var(--popover))',
           '--error-border':
             'color-mix(in oklch, var(--destructive) 35%, var(--border))',
-          '--error-text': 'var(--destructive)',
+          '--error-text':
+            resolvedTheme === 'dark'
+              ? 'color-mix(in oklch, var(--destructive) 80%, var(--popover-foreground))'
+              : 'var(--destructive)',
           '--border-radius': 'var(--radius)',
         } as React.CSSProperties
       }

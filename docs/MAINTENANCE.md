@@ -55,7 +55,7 @@ Before creating a product tag, validate the prepared identity with
 mode remains the post-tag gate and additionally requires the tag to resolve to
 the checked-out clean HEAD.
 
-产品版本以 `VERSION` 和当前发布记录为准，不在维护流程中保存会过期的“最新发布”常量。2026-09-23 当前源码声明 `v1.0.0-rc.4`；开发分支完成验证不等于已创建产品 tag 或完成生产部署。
+产品版本以 `VERSION` 和当前发布记录为准，不在维护流程中保存会过期的“最新发布”常量。2026-09-23 当前源码声明 `v1.0.0-rc.4`；主分支检查和源码包发布分别记录证据，产品版本发布与生产部署仍需对应的独立操作。
 
 ## Finish and hand off
 

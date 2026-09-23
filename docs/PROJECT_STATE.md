@@ -5,21 +5,22 @@
 ## 当前发布维护
 
 可靠性升级已合并至主分支。随后实际浏览器 CI 暴露渠道集合路径缺少显式无尾斜杠
-注册的问题；`347398928` 已修复并通过本地完整 88 项浏览器复测，控制台错误为 0。
+注册的问题；`347398928` 已修复，本地和 GitHub runner 的完整 88 项浏览器复测均通过，控制台错误为 0。
 
-用户要求今后所有成功构建直接发布到 GitHub Releases，清理旧 Releases、Actions
-运行与 GHCR 历史镜像，停止 GHCR 发布。已有工作分支已合并到 `main`，后续修改直接在主分支进行，不再新建分支。统一流程、离线镜像分发和清理的当前进度见
-[发布维护任务](../tasks/active/2026-09-release-pipeline.md)、[分发说明](release-distribution.md)
-和 ADR-010。历史 Git tags、用户工作树及生产数据保持不变。
+统一发布已经启用：成功构建只向 GitHub Releases 发布经过校验的 amd64、arm64 离线镜像、配置和 QA 证据，不再发布 GHCR。
+已清理 74 个旧 Releases、366 个附件、702 条旧 Actions 运行和 GHCR 的 685 个历史版本，重新查询确认无旧记录遗漏。
+已有工作分支已合并到 `main`，后续直接在主分支维护。验证与清理证据见
+[发布维护归档](../tasks/archive/2026-09-release-pipeline.md)、[分发说明](release-distribution.md)
+和 ADR-010。历史 Git tags、用户原有修改及生产数据保持不变。
 
 ## 产品与开发基线
 
-- `VERSION` 当前为 `v1.0.0-rc.4`；本轮未修改版本，未创建或移动 tag，未发布 Release 或部署。
-- 本轮开发分支：`upgrade/2026-09-reliability`。
+- `VERSION` 当前为 `v1.0.0-rc.4`；发布维护已创建独立源码构建标签和 Releases，未修改产品版本、移动历史 tag 或部署生产。
+- 可靠性升级原开发分支：`upgrade/2026-09-reliability`，已合入 `main`；后续直接在主分支维护。
 - 分支基线：`4def3a8848e336532c55e9c3070cc78ead67e378`。
-- 本轮功能及复核修复提交截至 `a2321c2b1dae57a98c4ed18ec3197f97cd76c62d`；后续文档提交不改变该源码状态。
+- 可靠性升级功能及复核修复提交截至 `a2321c2b1dae57a98c4ed18ec3197f97cd76c62d`；本次发布维护的路由修复和构建验证另见上方归档。
 - 原 `agent/06-billing` 工作树及其用户未提交修改保持原样。
-- 产品 tag 使用 `renewapi-` 前缀；原上游 `v*` tag 与历史发布保持不变。
+- 产品 tag 使用 `renewapi-` 前缀；原上游 `v*` tag 保持不变，历史 Releases、Actions 与 GHCR 已按本次明确授权清理。
 
 ## 本轮升级
 

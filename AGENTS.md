@@ -39,6 +39,10 @@ Do not rely on prior Codex conversation as an authoritative project record.
 
 Unknown state must be recorded as unknown or verified, never guessed.
 
+当前仓库按用户要求直接在 `main` 维护，不再为新任务创建工作分支。
+已有工作分支先检查独有提交再合并，保留其他工作树的用户未提交修改；
+NewAPI 上游参考历史仍按 Rule 0.2 处理，不直接合并。
+
 ## Tech Stack
 
 - **Backend**: Go 1.22+, Gin web framework, GORM v2 ORM

@@ -70,7 +70,7 @@ Completed:
 
 2026-09-23 验证补充：
 
-- 先前 MySQL/PostgreSQL 的 `BLOCKED_RUNTIME` 已由真实 [Actions 35764799379](https://github.com/alex-ai-dev-lab/renewapi/actions/runs/35764799379) 补齐；`ea9a4f994` 的 MySQL 5.7/8.4、PostgreSQL 9.6/16 迁移、账本事务、回滚、幂等、并发和渠道配置 job 全部成功。
+- 先前 MySQL/PostgreSQL 的 `BLOCKED_RUNTIME` 已由历史运行 `35764799379` 补齐；`ea9a4f994` 的 MySQL 5.7/8.4、PostgreSQL 9.6/16 迁移、账本事务、回滚、幂等、并发和渠道配置 job 全部成功。旧运行按后续授权清理，最新统一验证与可下载数据库证据见 [Billing enforce 说明](../../docs/billing-ledger-enforce.md)。
 - 新增 `TestBillingReconcilerSurvivesProcessRestart`，独立子进程强制退出后在同一 SQLite 文件中验证 settle/refund/orphan/uncommitted 恢复；shadow/enforce 均通过。该测试证明持久化账本恢复，不代表生产重启或部署验收。
 - 本轮继续补齐 off 原子退款、终态状态锁、补充预扣失败边界及最终成功渠道归属；shadow 持久化余额事务本身保持 NOOP，默认仍为 shadow。
 - 最终源码与后续 CI 证据由 [2026 年 9 月升级任务](../archive/2026-09-reliability-upgrade.md) 和 [Billing enforce 说明](../../docs/billing-ledger-enforce.md) 记录。

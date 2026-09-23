@@ -1,5 +1,8 @@
 # Migration From Patch Repo
 
+本文保留从补丁构建迁移到源码仓库的历史和补丁恢复标识。
+当前安装与发布以 [Releases 分发说明](release-distribution.md)为准。
+
 Previous build path:
 
 1. Download `QuantumNous/new-api` upstream zip.
@@ -10,7 +13,7 @@ Previous build path:
 New build path:
 
 1. Build directly from this source fork.
-2. Publish multi-arch GHCR image.
+2. 将 amd64、arm64 离线镜像发布到 GitHub Releases。
 3. Release compose examples and checksums.
 
 Legacy patches were removed from the runtime source tree after the source fork became authoritative. They remain recoverable from Git history and the release/audit archive.

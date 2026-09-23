@@ -28,6 +28,21 @@ For every candidate change: identify intent, inspect the RenewAPI equivalent,
 classify it, adapt only the required behavior, test it, and record the local
 reference and reason.
 
+在仓库根目录运行以下任一命令，拉取上游并列出审计基线之后的待审提交：
+
+```bash
+bash scripts/check-upstream.sh
+```
+
+```powershell
+.\scripts\check-upstream.ps1
+```
+
+基线取自 `UPSTREAM_PORTS.md` 的 `Audited-Upstream-Ref`。
+现有 `sync-upstream.sh --port` / `sync-upstream.ps1 -Mode port` 仍保留为手动
+审计入口；它们不会自动移植代码。当前规则禁止直接合并或变基上游历史。
+选取行为后小步移植、补充验证并登记台账；发布前构建两套前端。
+
 ## Version and release policy
 
 - `VERSION` contains only the pure RenewAPI product version, such as

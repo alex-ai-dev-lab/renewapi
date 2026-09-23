@@ -34,7 +34,6 @@ plans
 .cursor
 
 data/
-.gomodcache/
 .gocache-temp
 .gopath
 .test

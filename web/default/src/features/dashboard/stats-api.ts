@@ -25,6 +25,10 @@ import type {
 } from '@/lib/dashboard-defaults'
 import { computeTimeRange } from '@/lib/time'
 import { getUserQuotaDates } from './api'
+import {
+  normalizeOverviewStats,
+  type OverviewStatsPayload,
+} from './lib/overview-stats'
 import type { QuotaDataItem } from './types'
 
 export type TimeRange = DashboardTimeRange
@@ -252,11 +256,14 @@ export function useOverviewStats(
     queryKey: ['overview-stats', timeRange],
     enabled,
     queryFn: async ({ signal }) => {
-      const res = await api.get<{ success: boolean; data: OverviewStats }>(
-        `/api/stats/overview?time_range=${timeRange}`,
-        { signal, timeoutClass: 'background' }
-      )
-      return res.data.data
+      const res = await api.get<{
+        success: boolean
+        data: OverviewStatsPayload
+      }>(`/api/stats/overview?time_range=${timeRange}`, {
+        signal,
+        timeoutClass: 'background',
+      })
+      return normalizeOverviewStats(res.data.data)
     },
     refetchInterval: enabled && autoRefresh ? refreshIntervalMs : false,
   })

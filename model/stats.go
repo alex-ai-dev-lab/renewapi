@@ -240,7 +240,7 @@ func GetChannelUserStatsWithContext(ctx context.Context, startTime time.Time, ch
 	}
 	queryDB := newStatsQuery(ctx)
 
-	var stats []ChannelUserStat
+	stats := make([]ChannelUserStat, 0)
 	query := `
 		SELECT
 			channel_id,
@@ -351,7 +351,7 @@ func GetUserTrendStatsWithContext(ctx context.Context, startTime time.Time, user
 }
 
 func getUsersBy(queryDB statsQuery, startTime time.Time, limit int, orderBy string) ([]UserStat, error) {
-	var stats []UserStat
+	stats := make([]UserStat, 0)
 	query := `
 		SELECT
 			user_id,
@@ -450,7 +450,7 @@ func getTrendData(queryDB statsQuery, startTime time.Time) ([]TrendPoint, error)
 }
 
 func getTrendDataFiltered(queryDB statsQuery, startTime time.Time, channelID int, modelName string, userID int) ([]TrendPoint, error) {
-	var trend []TrendPoint
+	trend := make([]TrendPoint, 0)
 	interval := trendIntervalSeconds(startTime)
 	query := `
 		SELECT
@@ -531,7 +531,7 @@ func getTopChannels(queryDB statsQuery, startTime time.Time, limit int) ([]Chann
 }
 
 func getChannelsBy(queryDB statsQuery, startTime time.Time, limit int, orderBy string) ([]ChannelStat, error) {
-	var stats []ChannelStat
+	stats := make([]ChannelStat, 0)
 	query := `
 		SELECT
 			channel_id,
@@ -611,7 +611,7 @@ func getChannelsBy(queryDB statsQuery, startTime time.Time, limit int, orderBy s
 }
 
 func getTopModels(queryDB statsQuery, startTime time.Time, limit int) ([]ModelStat, error) {
-	var stats []ModelStat
+	stats := make([]ModelStat, 0)
 	query := `
 		SELECT
 			model_name,

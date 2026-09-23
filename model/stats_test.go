@@ -83,6 +83,13 @@ func TestGetOverviewStatsHandlesEmptyLogSet(t *testing.T) {
 	require.Zero(t, stats.AvgUseTime)
 	require.Zero(t, stats.ActiveChannels)
 	require.Zero(t, stats.ActiveUsers)
+	// 空统计集合必须编码为数组，不能让客户端收到 null 后遍历崩溃。
+	require.NotNil(t, stats.Trend)
+	require.NotNil(t, stats.TopChannels)
+	require.NotNil(t, stats.TopFailChannels)
+	require.NotNil(t, stats.SlowestChannels)
+	require.NotNil(t, stats.TopModels)
+	require.NotNil(t, stats.TopCostUsers)
 }
 
 func TestStatsQueryErrorsArePropagated(t *testing.T) {

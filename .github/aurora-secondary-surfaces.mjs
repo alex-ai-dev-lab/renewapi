@@ -359,9 +359,20 @@ async function auditPage(context, testCase, theme, viewportName, authRequired) {
   const beforeConsole = consoleErrors.length
   const beforePageErrors = pageErrors.length
   try {
+    // 等待真实统计响应，避免在慢请求的加载态截图后漏掉空数据渲染错误。
+    const overviewResponse = id === 'dashboard'
+      ? page.waitForResponse((response) => new URL(response.url()).pathname === '/api/stats/overview', { timeout: 20000 }).catch(() => null)
+      : null
     const response = await page.goto(`${baseURL}${route}`, {
       waitUntil: 'domcontentloaded',
     })
+    if (overviewResponse) {
+      const overview = await overviewResponse
+      const payload = overview ? await readJson(overview) : null
+      if (!payload?.success || !Array.isArray(payload.data?.trend)) {
+        failures.push({ label, type: 'overview-array-contract', status: overview?.status() ?? null })
+      }
+    }
     await waitForSurface(page)
     if (id === 'home') {
       for (const section of await page.locator('main section').all()) {

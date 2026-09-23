@@ -25,7 +25,8 @@ function Table({ className, ...props }: React.ComponentProps<'table'>) {
   return (
     <div
       data-slot='table-container'
-      className='relative w-full overflow-x-auto overflow-y-hidden'
+      tabIndex={0}
+      className='focus-visible:outline-primary relative w-full overflow-x-auto overflow-y-hidden focus-visible:outline-2 focus-visible:-outline-offset-2'
     >
       <table
         data-slot='table'

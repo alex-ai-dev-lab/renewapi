@@ -1,0 +1,79 @@
+name: GHCR 一次性维护
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 读取清单或清理已核对的历史镜像
+        type: choice
+        options: [inventory, cleanup]
+        default: inventory
+        required: true
+      release_tag:
+        description: 清理前已经验证的 Releases 标签
+        type: string
+        required: false
+      catalog_sha256:
+        description: 已核对镜像清单的 SHA256，防止删除并发新增镜像
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: renewapi-registry-maintenance
+  cancel-in-progress: false
+
+jobs:
+  registry:
+    if: github.repository == 'alex-ai-dev-lab/renewapi' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      OPERATION: ${{ inputs.operation }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      EXPECTED_CATALOG_SHA256: ${{ inputs.catalog_sha256 }}
+    steps:
+      - name: 保存历史镜像清单
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = 'alex-ai-dev-lab/renewapi'
+          mkdir registry-evidence
+          package='orgs/alex-ai-dev-lab/packages/container/renewapi'
+          gh api "$package" > registry-evidence/package.json
+          jq -e '.name == "renewapi" and .package_type == "container" and .repository.id == 1234291482' registry-evidence/package.json
+          gh api --paginate --slurp "$package/versions?per_page=100" | jq 'add' > registry-evidence/versions.json
+          jq -c '[.[] | {id, name, tags: (.metadata.container.tags | sort)}] | sort_by(.id)' registry-evidence/versions.json > registry-evidence/catalog.json
+          sha256sum registry-evidence/catalog.json | cut -d ' ' -f 1 > registry-evidence/catalog.sha256
+          jq 'length' registry-evidence/versions.json
+          cat registry-evidence/catalog.sha256
+      - name: 核对替代 Release 后清理旧仓库镜像
+        if: inputs.operation == 'cleanup'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^renewapi-build-[a-f0-9]{12}-[0-9]+$ ]]
+          [[ "$EXPECTED_CATALOG_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          test "$(cat registry-evidence/catalog.sha256)" = "$EXPECTED_CATALOG_SHA256"
+          gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" > registry-evidence/replacement-release.json
+          jq -e '.draft == false and ([.assets[].name | select(endswith("linux-amd64.tar.gz") or endswith("linux-arm64.tar.gz"))] | length) == 2 and ([.assets[].name | select(. == "CHECKSUMS.txt")] | length) == 1' registry-evidence/replacement-release.json
+          gh api --method DELETE 'orgs/alex-ai-dev-lab/packages/container/renewapi'
+          if gh api 'orgs/alex-ai-dev-lab/packages/container/renewapi' > /dev/null 2> registry-evidence/verify.txt; then
+            echo '镜像包仍然存在，清理验证失败'
+            exit 1
+          fi
+          grep -q 'HTTP 404' registry-evidence/verify.txt
+          printf '%s\n' '历史 GHCR 镜像清理完成；未修改 Git tags 或服务器容器。' > registry-evidence/result.txt
+      - name: 保存本次维护证据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: registry-maintenance-${{ github.run_id }}
+          path: registry-evidence/
+          if-no-files-found: error
+          retention-days: 7

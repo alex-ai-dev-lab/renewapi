@@ -5,7 +5,7 @@
 ## 基线与边界
 
 - 基线：`61185489a653f9f96a31ce2793c133d6308ceb57`，已合并到 `main`。
-- 开发分支：`fix/2026-09-release-pipeline`；原 `agent/06-billing` 工作树及未提交修改保持不变。
+- 按用户最新要求，已有工作分支合并到 `main`，后续直接在主分支修改，不再新建分支；原 `agent/06-billing` 工作树及未提交修改保持不变。
 - 失败运行：`35802758510`，失败步骤为 Secondary Surfaces 实际浏览器检查。
 - 先保存失败证据及旧发布清单，修复、验证新的自动发布，再清理旧 Releases 与已结束运行。
 - 不删除 Git tags、不修改生产数据库、不部署生产；用户已明确要求清理 GHCR 历史镜像，后续仅通过 Releases 分发。
@@ -26,6 +26,6 @@
 - `go test ./router -count=1`、前端 typecheck、Sonner 的实际 eslint/Prettier 检查和 default 构建通过。本地 Node 驱动原 88 项浏览器检查全部通过，console/page errors 均为 0；Windows Bun 驱动 Chromium 管道超时不计为通过。
 - 清理前清单：74 个 Releases、366 个附件，合计 2,674,118,239 字节；700 次 Actions 运行，均已结束。
 - 本地 GitHub 凭据只有 repo/workflow 等权限，Packages API 明确返回缺少 read:packages；一次性维护工作流将使用仓库自身授权，先盘点并校验替代 Release 后再清理。
-- 一次性维护分支 `maintenance/2026-09-ghcr-cleanup` 的运行 `35804583924` 已成功读取仓库所属镜像：685 个版本，其中 131 个带标签。清单摘要为 `d0a8c531399c075d38500692b3a0358790c6c35893a9a359d2625e4dd0c36d8a`。该维护入口不合并到主线。
+- 一次性维护分支 `maintenance/2026-09-ghcr-cleanup` 的运行 `35804583924` 已成功读取仓库所属镜像：685 个版本，其中 131 个带标签。清单摘要为 `d0a8c531399c075d38500692b3a0358790c6c35893a9a359d2625e4dd0c36d8a`。按最新要求合并时保留数据库验证工作流，将维护入口放入独立的 `registry-maintenance.yml`，仅允许主分支手动执行，完成后移除。
 - 统一发布已接入可复用浏览器和四数据库工作流；去除独立触发、重复提交状态及过时自改写工作流。镜像在原生 amd64/arm64 runner 构建，离线归档只进入 Releases；草稿下载验证后公开，禁止覆盖已发布附件。
 - 本地发布身份测试 4 组通过，覆盖每次构建独立身份、源码锁定、非法输入、正式/候选版本和自定义源码包。Actionlint 1.7.12、4 个 Bash 脚本及 3 个 PowerShell 脚本语法检查通过；没有运行生产部署脚本。

@@ -8,7 +8,7 @@
 注册的问题；`347398928` 已修复并通过本地完整 88 项浏览器复测，控制台错误为 0。
 
 用户要求今后所有成功构建直接发布到 GitHub Releases，清理旧 Releases、Actions
-运行与 GHCR 历史镜像，停止 GHCR 发布。统一流程、离线镜像分发和清理的当前进度见
+运行与 GHCR 历史镜像，停止 GHCR 发布。已有工作分支正在合并到 `main`，后续修改直接在主分支进行，不再新建分支。统一流程、离线镜像分发和清理的当前进度见
 [发布维护任务](../tasks/active/2026-09-release-pipeline.md)、[分发说明](release-distribution.md)
 和 ADR-010。历史 Git tags、用户工作树及生产数据保持不变。
 

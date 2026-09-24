@@ -53,3 +53,18 @@ func TestUpdateOptionsBulkRollsBackDatabaseAndOptionMapOnApplyError(t *testing.T
 	require.Equal(t, "old-about", gotAbout)
 	require.Equal(t, `{"default":[10,5]}`, gotRateLimitGroup)
 }
+
+func TestRelayTimeoutPersistsAndReloads(t *testing.T) {
+	oldDB, oldMap := DB, common.OptionMap
+	t.Cleanup(func() { DB, common.OptionMap = oldDB, oldMap })
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&Option{}))
+	DB = db
+	common.OptionMap = map[string]string{}
+	require.NoError(t, UpdateOption("RelayFirstByteTimeout", "90"))
+	require.Equal(t, 90, common.GetRelayFirstByteTimeout())
+	common.OptionMap = map[string]string{}
+	loadOptionsFromDatabase()
+	require.Equal(t, 90, common.GetRelayFirstByteTimeout())
+}

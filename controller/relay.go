@@ -1236,7 +1236,7 @@ func compatStreamRetryError(info *relaycommon.RelayInfo) *types.NewAPIError {
 		case relaycommon.StreamAttemptTimeout:
 			if outcome.TransportEnd == relaycommon.StreamEndReasonFirstByteTimeout {
 				return types.NewOpenAIError(
-					fmt.Errorf("first byte timeout after %ds", common.RelayFirstByteTimeout),
+					fmt.Errorf("first byte timeout after %ds", common.GetRelayFirstByteTimeout()),
 					types.ErrorCodeChannelResponseTimeExceeded,
 					http.StatusGatewayTimeout,
 				)

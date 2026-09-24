@@ -805,7 +805,10 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const log = row.original
         const other = parseLogOther(log.other)
 
-        const segments = buildDetailSegments(log, other, t)
+        const segments =
+          isAdmin && log.type === 5 && other?.admin_info?.real_error
+            ? [{ text: other.admin_info.real_error, danger: true }]
+            : buildDetailSegments(log, other, t)
         const primary = segments[0]
         const hasMore = segments.length > 1
 

@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { InternalAxiosRequestConfig } from 'axios'
 import {
@@ -144,12 +145,16 @@ async function renderMutation(
     | undefined
 
   function Harness() {
+    const [version, setVersion] = useState(params.configVersion)
     mutation = useChannelMutateForm({
       currentRow: baseChannel(),
       isEditing: true,
       isMultiKeyChannel: false,
-      configVersion: params.configVersion,
-      onSuccess: params.onSuccess ?? (() => {}),
+      configVersion: version,
+      onSuccess: (channel) => {
+        if (channel) setVersion(channel.config_version)
+        params.onSuccess?.()
+      },
       onConflict: params.onConflict ?? (() => {}),
     }) as UseMutationResult<string, Error, ChannelFormValues, unknown>
     return null
@@ -204,5 +209,27 @@ describe('useChannelMutateForm', () => {
     await expect(mutation.mutateAsync(formValues())).rejects.toBeDefined()
 
     expect(onConflict).toHaveBeenCalledTimes(1)
+  })
+  test('success adopts the returned version for the next save', async () => {
+    const versions: unknown[] = []
+    let version = 109
+    api.defaults.adapter = async (config) => {
+      versions.push(config.headers.get('If-Match'))
+      return {
+        data: {
+          success: true,
+          data: { ...baseChannel(), config_version: ++version },
+        },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      }
+    }
+    const mutation = await renderMutation({ configVersion: 109 })
+    await mutation.mutateAsync(formValues())
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    await mutation.mutateAsync(formValues())
+    expect(versions).toEqual(['"channel-109"', '"channel-110"'])
   })
 })

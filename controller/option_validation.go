@@ -67,6 +67,9 @@ func normalizeOptionValues(values map[string]string) (map[string]string, error) 
 				return nil, err
 			}
 		}
+		if key == "RelayFirstByteTimeout" {
+			value = strings.TrimSpace(value)
+		}
 		normalized[key] = value
 	}
 	return normalized, nil
@@ -360,6 +363,11 @@ func validateOptionValues(values map[string]string) error {
 		}
 
 		switch key {
+		case "RelayFirstByteTimeout":
+			seconds, err := strconv.Atoi(strings.TrimSpace(value))
+			if err != nil || seconds < 1 || seconds > 86400 {
+				return invalidOptionValue("首字节超时必须是 1 到 86400 秒之间的整数")
+			}
 		case "QuotaForInviter", "QuotaForInvitee":
 			if isPositiveOptionValue(value) && !operation_setting.IsPaymentComplianceConfirmed() {
 				return errPaymentComplianceRequired

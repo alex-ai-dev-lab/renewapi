@@ -4810,6 +4810,8 @@
     "Gemini generateContent passthrough": "Gemini generateContent passthrough",
     "Embeddings for any supported model": "Embeddings for any supported model",
     "Image generation across multiple providers": "Image generation across multiple providers",
-    "Skip to content": "Skip to content"
+    "Skip to content": "Skip to content",
+    "First Byte Timeout": "First semantic output timeout (seconds)",
+    "Seconds to wait for the upstream first byte before switching channels (1-86400)": "Seconds to wait for the first meaningful output, including response headers (1-86400). Applies to new requests; stream idle timeout starts after output."
   }
 }

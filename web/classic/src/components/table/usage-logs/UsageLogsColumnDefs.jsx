@@ -905,6 +905,12 @@ export const getLogsColumns = ({
       fixed: 'right',
       width: 200,
       render: (text, record, index) => {
+        if (isAdminUser && record.type === 5) {
+          try {
+            const other = JSON.parse(record.other || "{}");
+            text = other?.admin_info?.real_error || text;
+          } catch { /* Historical rows may contain invalid metadata. */ }
+        }
         const detailSummary = getUsageLogDetailSummary(
           record,
           text,

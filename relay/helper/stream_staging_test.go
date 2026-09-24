@@ -84,3 +84,22 @@ func TestSemanticDeltaDisarmsWatchdog(t *testing.T) {
 	})
 	require.Nil(t, err, fmt.Sprint(err))
 }
+
+func TestStagingUsesSavedTimeoutWhileWaitingForHeaders(t *testing.T) {
+	old := common.OptionMap
+	t.Cleanup(func() { common.OptionMap = old })
+	common.OptionMap = map[string]string{"RelayFirstByteTimeout": "1"}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/responses", nil)
+	started := time.Now()
+	err := WithStreamStaging(c, &relaycommon.RelayInfo{IsStream: true}, func() *types.NewAPIError {
+		select {
+		case <-c.Request.Context().Done():
+		case <-time.After(3 * time.Second):
+			t.Fatal("saved timeout ignored")
+		}
+		return nil
+	})
+	require.NotNil(t, err)
+	require.Less(t, time.Since(started), 2*time.Second)
+}

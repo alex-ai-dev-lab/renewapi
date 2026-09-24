@@ -1023,16 +1023,26 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
   )
 
   // Handle successful submission
-  const handleSuccess = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-    if (channelId) {
-      queryClient.invalidateQueries({
-        queryKey: channelsQueryKeys.detail(channelId),
-      })
-    }
-    form.reset(form.getValues())
-    if (!isEditing) onClose()
-  }, [channelId, queryClient, form, isEditing, onClose])
+  const handleSuccess = useCallback(
+    async (savedChannel?: Channel) => {
+      if (savedChannel) {
+        initializeEditForm(savedChannel)
+        queryClient.setQueryData(channelsQueryKeys.detail(savedChannel.id), {
+          success: true,
+          data: savedChannel,
+        })
+      }
+      queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
+      if (channelId) {
+        queryClient.invalidateQueries({
+          queryKey: channelsQueryKeys.detail(channelId),
+        })
+      }
+      if (!savedChannel) form.reset(form.getValues())
+      if (!isEditing) onClose()
+    },
+    [channelId, queryClient, form, isEditing, onClose, initializeEditForm]
+  )
 
   const reloadChannelConfiguration = useCallback(async () => {
     if (!channelId) return

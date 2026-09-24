@@ -179,7 +179,10 @@ func WithStreamStaging(c *gin.Context, info *relaycommon.RelayInfo, call func() 
 	c.Set("event_stream_headers_set", false)
 	ctx, cancel := context.WithCancelCause(originalRequest.Context())
 	c.Request = originalRequest.WithContext(ctx)
-	timeout := time.Duration(common.RelayFirstByteTimeout) * time.Second
+	if info.FirstSemanticTimeoutSeconds <= 0 {
+		info.FirstSemanticTimeoutSeconds = common.GetRelayFirstByteTimeout()
+	}
+	timeout := time.Duration(info.FirstSemanticTimeoutSeconds) * time.Second
 	if timeout <= 0 {
 		timeout = 15 * time.Second
 	}

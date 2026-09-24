@@ -5122,6 +5122,8 @@
     "Gemini generateContent passthrough": "Gemini 内容生成接口",
     "Embeddings for any supported model": "受支持模型的嵌入向量接口",
     "Image generation across multiple providers": "多服务商图像生成接口",
-    "Skip to content": "跳到主内容"
+    "Skip to content": "跳到主内容",
+    "First Byte Timeout": "\u9996\u8bed\u4e49\u8f93\u51fa\u8d85\u65f6\uff08\u79d2\uff09",
+    "Seconds to wait for the upstream first byte before switching channels (1-86400)": "\u7b49\u5f85\u4e0a\u6e38\u9996\u6b21\u6709\u6548\u8f93\u51fa\u7684\u65f6\u95f4\uff081\u201386400 \u79d2\uff0c\u542b\u54cd\u5e94\u5934\u7b49\u5f85\uff09\u3002\u4fdd\u5b58\u540e\u5bf9\u65b0\u8bf7\u6c42\u751f\u6548\uff1b\u8f93\u51fa\u5f00\u59cb\u540e\u4f7f\u7528\u6d41\u7a7a\u95f2\u8d85\u65f6\u3002"
   }
 }

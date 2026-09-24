@@ -605,7 +605,7 @@ func TestStreamScannerHandler_StreamStatus_Timeout(t *testing.T) {
 
 	pr, pw := io.Pipe()
 	go func() {
-		fmt.Fprint(pw, "data: {\"id\":1}\n")
+		fmt.Fprint(pw, "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n")
 		time.Sleep(10 * time.Second)
 		pw.Close()
 	}()
@@ -843,4 +843,20 @@ func TestStreamScannerHandler_PingInterleavesWithSlowUpstream(t *testing.T) {
 	t.Logf("received %d pings interleaved with 10 chunks over 5s", pingCount)
 	assert.GreaterOrEqual(t, pingCount, 3,
 		"expected at least 3 pings during 5s stream with 1s ping interval; got %d", pingCount)
+}
+
+func TestSavedSemanticTimeoutOutlastsIdleTimeout(t *testing.T) {
+	oldOptions, oldIdle := common.OptionMap, constant.StreamingTimeout
+	t.Cleanup(func() { common.OptionMap, constant.StreamingTimeout = oldOptions, oldIdle })
+	common.OptionMap = map[string]string{"RelayFirstByteTimeout": "2"}
+	constant.StreamingTimeout = 1
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{IsStream: true}
+	started := time.Now()
+	StreamScannerHandler(c, &http.Response{Body: pr}, info, func(string, *StreamResult) {})
+	require.GreaterOrEqual(t, time.Since(started), 1900*time.Millisecond)
+	require.Equal(t, relaycommon.StreamEndReasonFirstByteTimeout, info.StreamStatus.EndReason)
 }

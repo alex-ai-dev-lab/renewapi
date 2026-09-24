@@ -35,7 +35,7 @@ type UseChannelMutateFormParams = {
   isEditing: boolean
   isMultiKeyChannel: boolean
   configVersion?: number
-  onSuccess: () => void
+  onSuccess: (channel?: Channel) => void | Promise<void>
   onConflict: (message: string) => void
 }
 
@@ -68,6 +68,7 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
         if (!response.success) {
           throw new Error(response.message || t(ERROR_MESSAGES.UPDATE_FAILED))
         }
+        await props.onSuccess(response.data)
         return SUCCESS_MESSAGES.UPDATED
       }
 
@@ -76,11 +77,11 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
       if (!response.success) {
         throw new Error(response.message || t(ERROR_MESSAGES.CREATE_FAILED))
       }
+      await props.onSuccess()
       return SUCCESS_MESSAGES.CREATED
     },
     onSuccess: (messageKey) => {
       toast.success(t(messageKey))
-      props.onSuccess()
     },
     onError: (error: unknown) => {
       if (props.isEditing && isChannelConfigConflict(error)) {

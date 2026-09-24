@@ -61,6 +61,7 @@ import { safeNumberFieldProps } from '../utils/numeric-field'
 
 const behaviorSchema = z.object({
   RetryTimes: z.coerce.number().min(0).max(10),
+  RelayFirstByteTimeout: z.coerce.number().int().min(1).max(86400),
   DefaultCollapseSidebar: z.boolean(),
   DemoSiteEnabled: z.boolean(),
   SelfUseModeEnabled: z.boolean(),
@@ -215,6 +216,30 @@ export function SystemBehaviorSection({
                 </FormControl>
                 <FormDescription>
                   {t('Number of times to retry failed requests (0-10)')}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='RelayFirstByteTimeout'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('First Byte Timeout')}</FormLabel>
+                <FormControl>
+                  <Input
+                    type='number'
+                    min='1'
+                    max='86400'
+                    {...safeNumberFieldProps(field)}
+                  />
+                </FormControl>
+                <FormDescription>
+                  {t(
+                    'Seconds to wait for the upstream first byte before switching channels (1-86400)'
+                  )}
                 </FormDescription>
                 <FormMessage />
               </FormItem>

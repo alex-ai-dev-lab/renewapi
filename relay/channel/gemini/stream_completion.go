@@ -122,7 +122,7 @@ func geminiStreamOutcomeError(info *relaycommon.RelayInfo, tracker *geminiStream
 	case relaycommon.StreamAttemptTimeout:
 		if outcome.TransportEnd == relaycommon.StreamEndReasonFirstByteTimeout {
 			return types.NewOpenAIError(
-				fmt.Errorf("Gemini stream first byte timeout after %ds", common.RelayFirstByteTimeout),
+				fmt.Errorf("Gemini stream first byte timeout after %ds", common.GetRelayFirstByteTimeout()),
 				types.ErrorCodeChannelResponseTimeExceeded,
 				http.StatusGatewayTimeout,
 			)

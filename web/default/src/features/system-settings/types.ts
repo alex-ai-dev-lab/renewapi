@@ -303,6 +303,7 @@ export type BillingSettings = {
 
 export type OperationsSettings = {
   RetryTimes: number
+  RelayFirstByteTimeout: number
   DefaultCollapseSidebar: boolean
   DemoSiteEnabled: boolean
   SelfUseModeEnabled: boolean

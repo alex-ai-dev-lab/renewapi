@@ -90,7 +90,10 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	if streamingTimeout <= 0 {
 		streamingTimeout = 30 * time.Second
 	}
-	firstByteTimeout := time.Duration(common.RelayFirstByteTimeout) * time.Second
+	if info.FirstSemanticTimeoutSeconds <= 0 {
+		info.FirstSemanticTimeoutSeconds = common.GetRelayFirstByteTimeout()
+	}
+	firstByteTimeout := time.Duration(info.FirstSemanticTimeoutSeconds) * time.Second
 	if firstByteTimeout <= 0 {
 		firstByteTimeout = 15 * time.Second
 	}
@@ -100,6 +103,14 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	handlerDone := make(chan struct{})
 	dataChan := make(chan string, 10)
 	streamTimer := time.NewTimer(streamingTimeout)
+	streamTimer.Stop()
+	streamActivity := make(chan struct{}, 1)
+	notifyActivity := func() {
+		select {
+		case streamActivity <- struct{}{}:
+		default:
+		}
+	}
 	firstByteTimer := time.NewTimer(firstByteTimeout)
 	var pingTicker *time.Ticker
 	var writeMutex sync.Mutex
@@ -251,6 +262,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				}
 				if semantic && firstResponseObserved.CompareAndSwap(false, true) {
 					firstByteTimer.Stop()
+					notifyActivity()
 					info.SetFirstResponseTime()
 				}
 				if sr.IsStopped() {
@@ -289,13 +301,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			default:
 			}
 
-			if !streamTimer.Stop() {
-				select {
-				case <-streamTimer.C:
-				default:
-				}
-			}
-			streamTimer.Reset(streamingTimeout)
+			notifyActivity()
 			line := scanner.Text()
 			logger.LogDebug(c, "stream scanner data: %s", line)
 			if strings.HasPrefix(line, "[DONE]") {
@@ -359,6 +365,17 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		select {
 		case <-handlerDone:
 		case <-abortCh:
+		case <-streamActivity:
+			if firstResponseObserved.Load() {
+				if !streamTimer.Stop() {
+					select {
+					case <-streamTimer.C:
+					default:
+					}
+				}
+				streamTimer.Reset(streamingTimeout)
+			}
+			continue
 		case <-streamTimer.C:
 			info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonTimeout, nil)
 		case <-firstByteTimer.C:

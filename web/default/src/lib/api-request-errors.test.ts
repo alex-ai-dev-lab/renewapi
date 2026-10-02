@@ -17,13 +17,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import axios from 'axios'
-import { afterEach, describe, expect, mock, test } from 'bun:test'
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  spyOn,
+  test,
+  type Mock,
+} from 'bun:test'
+import { toast } from 'sonner'
 
-const toastError = mock()
+let toastError: Mock<typeof toast.error>
 
-mock.module('sonner', () => ({
-  toast: { error: toastError },
-}))
+// Module mocks survive across Bun test files. Spy on the one method under
+// test so a different discovery order cannot remove toast.success elsewhere.
+beforeEach(() => {
+  toastError = spyOn(toast, 'error').mockImplementation(() => 'test-toast')
+})
 
 const { api } = await import('./api')
 const { handleServerError } = await import('./handle-server-error')
@@ -33,7 +44,7 @@ const rejectAdapter = (error: unknown) => async () => {
 }
 
 afterEach(() => {
-  toastError.mockClear()
+  toastError.mockRestore()
 })
 
 describe('request cancellation error handling', () => {

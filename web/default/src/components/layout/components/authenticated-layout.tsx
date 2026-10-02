@@ -33,7 +33,8 @@ type AuthenticatedLayoutProps = {
 }
 
 const shellStyle = {
-  '--sidebar-width': '224px',
+  '--sidebar-width': '232px',
+  '--sidebar-width-icon': '56px',
 } as CSSProperties
 
 export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {

@@ -147,13 +147,57 @@ async function audit(ctx, role, mode, width, route) {
         await dialog.waitFor({ state: 'hidden' })
       } finally { await page.close() }
     })
-    await check('fresh browser defaults to Obsidian dark', async () => {
-      const ctx = await browser.newContext({ baseURL, colorScheme: 'light', reducedMotion: 'reduce' })
+    await check('fresh browser defaults to light even on a dark operating system', async () => {
+      const ctx = await browser.newContext({ baseURL, colorScheme: 'dark', reducedMotion: 'reduce' })
       try {
         const page = await ctx.newPage(); await page.goto('/', { waitUntil: 'networkidle' })
-        assert(await page.locator('html').evaluate(element => element.classList.contains('dark')), 'Fresh browser did not use dark default')
+        assert(await page.locator('html').evaluate(element => element.classList.contains('light')), 'Fresh browser did not use light default')
         const animated = await page.locator('.obsidian-home').evaluate(element => [...element.querySelectorAll('*')].filter(node => getComputedStyle(node).animationName !== 'none').length)
         assert(animated === 0, 'Reduced-motion still animates homepage')
+      } finally { await ctx.close() }
+    })
+    await check('sidebar collapse keeps navigation usable and mobile links close the drawer', async () => {
+      const page = await rootContext.newPage()
+      try {
+        await page.setViewportSize({ width: 1440, height: 1000 })
+        await page.goto('/dashboard/overview', { waitUntil: 'networkidle' })
+        const sidebar = page.locator('[data-slot="sidebar"][data-state]')
+        assert(await sidebar.locator('[data-nav-group="overview"] [data-slot="sidebar-group-label"]').count() === 0, 'Overview label is duplicated')
+        const activeStyle = await sidebar.locator('a[aria-current="page"]').first().evaluate(element => {
+          const style = getComputedStyle(element)
+          const reference = document.createElement('span')
+          reference.style.color = 'var(--sidebar-accent)'
+          element.append(reference)
+          const expectedBackground = getComputedStyle(reference).color
+          reference.remove()
+          return { background: style.backgroundColor, expectedBackground, shadow: style.boxShadow }
+        })
+        assert(activeStyle.background === activeStyle.expectedBackground && activeStyle.shadow !== 'none', 'Selected item must use the neutral surface and narrow marker')
+        await page.locator('[data-slot="sidebar-trigger"]').click()
+        await page.waitForFunction(() => document.querySelector('[data-slot="sidebar"][data-state]')?.getAttribute('data-state') === 'collapsed')
+        await sidebar.locator('a[href="/keys"]').click()
+        await page.waitForURL('**/keys')
+        assert(await sidebar.getAttribute('data-state') === 'collapsed', 'Navigation reset the collapsed sidebar')
+        await page.locator('[data-slot="sidebar-trigger"]').click()
+        await page.waitForFunction(() => document.querySelector('[data-slot="sidebar"][data-state]')?.getAttribute('data-state') === 'expanded')
+        await page.setViewportSize({ width: 390, height: 900 })
+        await sidebar.waitFor({ state: 'detached' })
+        await page.locator('[data-slot="sidebar-trigger"]').click()
+        const mobile = page.locator('[data-slot="sidebar"][data-mobile="true"]')
+        await mobile.waitFor({ state: 'visible' })
+        await mobile.locator('a[href="/profile"]').click()
+        await page.waitForURL('**/profile')
+        await mobile.waitFor({ state: 'hidden' })
+        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), 'Mobile sidebar navigation overflows')
+      } finally { await page.close() }
+    })
+    await check('saved dark preference and browser theme color remain consistent', async () => {
+      const ctx = await browser.newContext({ baseURL, colorScheme: 'light' })
+      await ctx.addCookies([{ name: 'vite-ui-theme', value: 'dark', url: baseURL }])
+      try {
+        const page = await ctx.newPage(); await page.goto('/', { waitUntil: 'networkidle' })
+        assert(await page.locator('html').evaluate(element => element.classList.contains('dark')), 'Explicit dark preference was lost')
+        assert(await page.evaluate(() => document.querySelector('meta[name="theme-color"]')?.getAttribute('content') === getComputedStyle(document.documentElement).getPropertyValue('--background').trim()), 'Browser theme color differs from the page')
       } finally { await ctx.close() }
     })
     await check('saved system preference follows operating-system changes', async () => {

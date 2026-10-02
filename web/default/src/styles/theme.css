@@ -121,7 +121,7 @@ For commercial licensing, please contact support@quantumnous.com
   --radius: 0.25rem;
   --app-header-height: 3.5rem;
   --font-size-base: 13px;
-  --overlay-backdrop: rgb(10 18 16 / 45%);
+  --overlay-backdrop: rgb(24 30 39 / 38%);
   --z-sticky-header: 200;
   --z-floating: 400;
   --z-overlay-backdrop: 500;
@@ -132,21 +132,21 @@ For commercial licensing, please contact support@quantumnous.com
   --app-rev: 'obsidian-20261001';
   --font-body: var(--font-sans);
 
-  /* Obsidian's light counterpart keeps the same hierarchy and density. */
-  --background: #f2f4f3;
-  --foreground: #202925;
+  /* Bright neutral surfaces; color is reserved for actions and status. */
+  --background: #f7f8fa;
+  --foreground: #252b34;
   --card: #ffffff;
-  --card-foreground: #202925;
+  --card-foreground: #252b34;
   --popover: #ffffff;
-  --popover-foreground: #202925;
-  --primary: #286444;
+  --popover-foreground: #252b34;
+  --primary: #252b34;
   --primary-foreground: #ffffff;
-  --secondary: #e8eeea;
-  --secondary-foreground: #293d33;
-  --muted: #edf1ee;
-  --muted-foreground: #53645c;
-  --accent: #e0ece4;
-  --accent-foreground: #245b3e;
+  --secondary: #eef1f5;
+  --secondary-foreground: #394351;
+  --muted: #f1f3f6;
+  --muted-foreground: #5d6878;
+  --accent: #e9edf2;
+  --accent-foreground: #252b34;
   --destructive: #b44040;
   --destructive-foreground: #ffffff;
   --success: #286444;
@@ -155,26 +155,26 @@ For commercial licensing, please contact support@quantumnous.com
   --warning-foreground: #ffffff;
   --info: #315e9b;
   --info-foreground: #ffffff;
-  --neutral: #53645c;
+  --neutral: #5d6878;
   --neutral-foreground: #ffffff;
-  --border: #cfd8d2;
-  --input: #a4b3aa;
-  --ring: #286444;
+  --border: #dce1e8;
+  --input: #a4aebb;
+  --ring: #58677b;
   --chart-1: #2a78d6;
   --chart-2: #eb6834;
   --chart-3: #1baf7a;
   --chart-4: #eda100;
   --chart-5: #e87ba4;
-  --sidebar: #e9eeeb;
-  --sidebar-foreground: #293d33;
-  --sidebar-primary: #286444;
+  --sidebar: #f0f2f5;
+  --sidebar-foreground: #46505e;
+  --sidebar-primary: #252b34;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #dce8df;
-  --sidebar-accent-foreground: #245b3e;
-  --sidebar-border: #cbd5ce;
-  --sidebar-ring: #286444;
-  --skeleton-base: #e5ebe7;
-  --skeleton-highlight: #f6f8f6;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #252b34;
+  --sidebar-border: #d8dee7;
+  --sidebar-ring: #58677b;
+  --skeleton-base: #e9edf2;
+  --skeleton-highlight: #f8f9fb;
 }
 
 .dark {
@@ -215,7 +215,7 @@ For commercial licensing, please contact support@quantumnous.com
   --sidebar-foreground: #c2cecb;
   --sidebar-primary: #8cd6b5;
   --sidebar-primary-foreground: #10271d;
-  --sidebar-accent: #1d2924;
+  --sidebar-accent: #1d2225;
   --sidebar-accent-foreground: #a4e3c5;
   --sidebar-border: #30383b;
   --sidebar-ring: #8cd6b5;

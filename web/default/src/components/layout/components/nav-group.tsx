@@ -58,15 +58,17 @@ import { ChatPresetsItem } from './chat-presets-item'
  * Sidebar navigation group component
  * Renders a group of navigation items, supporting regular links and collapsible submenus
  */
-export function NavGroup({ title, items }: NavGroupProps) {
+export function NavGroup({ id, title, items }: NavGroupProps) {
   const { state, isMobile } = useSidebar()
   const href = useLocation({ select: (location) => location.href })
 
   return (
-    <SidebarGroup className='px-2 py-1'>
-      <SidebarGroupLabel className='text-muted-foreground/70 px-2 text-[11px] font-medium tracking-wider uppercase'>
-        {title}
-      </SidebarGroupLabel>
+    <SidebarGroup className='obsidian-nav-group' data-nav-group={id}>
+      {id !== 'overview' && (
+        <SidebarGroupLabel className='text-muted-foreground px-3 text-[11px] font-medium'>
+          {title}
+        </SidebarGroupLabel>
+      )}
       <SidebarMenu>
         {items.map((item) => {
           const key = item.id ?? `${item.url || item.type || item.title}`

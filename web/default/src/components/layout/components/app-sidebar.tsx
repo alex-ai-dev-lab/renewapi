@@ -42,7 +42,7 @@ export function AppSidebar() {
   const { isMobile, setOpenMobile } = useSidebar()
   const { view, navGroups } = useSidebarView()
   const user = useAuthStore((state) => state.auth.user)
-  const { displayName, roleLabel } = useUserDisplay(user)
+  const { displayName, roleLabel, initials } = useUserDisplay(user)
 
   return (
     <Sidebar
@@ -50,7 +50,7 @@ export function AppSidebar() {
       variant='sidebar'
       className='obsidian-sidebar top-0 h-svh'
     >
-      <SidebarHeader className='obsidian-sidebar-brand border-sidebar-border h-14 shrink-0 justify-center border-b px-3 py-0'>
+      <SidebarHeader className='obsidian-sidebar-brand border-sidebar-border h-16 shrink-0 justify-center border-b px-3 py-0'>
         <div className='flex min-w-0 items-center gap-2'>
           <div className='min-w-0 flex-1'>
             <SystemBrand />
@@ -69,7 +69,7 @@ export function AppSidebar() {
       </SidebarHeader>
       {view && <SidebarViewHeader view={view} />}
 
-      <SidebarContent className='obsidian-sidebar-nav py-2'>
+      <SidebarContent className='obsidian-sidebar-nav'>
         <nav aria-label={t('Main navigation')} className='min-w-0'>
           {navGroups.map((group) => (
             <NavGroup key={group.id || group.title} {...group} />
@@ -78,15 +78,20 @@ export function AppSidebar() {
       </SidebarContent>
 
       {user && (
-        <SidebarFooter className='border-sidebar-border min-w-0 border-t px-4 py-3 group-data-[collapsible=icon]:hidden'>
-          <span className='truncate text-[13px] font-medium'>
-            {displayName}
+        <SidebarFooter className='obsidian-sidebar-account border-sidebar-border min-w-0 flex-row items-center gap-3 border-t px-3 py-3'>
+          <span className='obsidian-sidebar-avatar' aria-hidden='true'>
+            {initials}
           </span>
-          <div className='text-muted-foreground flex min-w-0 items-center gap-2 text-[11px]'>
-            <span className='shrink-0'>{roleLabel}</span>
-            {user.group && (
-              <span className='truncate'>{String(user.group)}</span>
-            )}
+          <div className='min-w-0 flex-1 space-y-1 group-data-[collapsible=icon]:hidden'>
+            <div className='truncate text-[13px] font-medium'>
+              {displayName}
+            </div>
+            <div className='text-muted-foreground flex min-w-0 items-center gap-2 text-[11px]'>
+              <span className='shrink-0'>{roleLabel}</span>
+              {user.group && (
+                <span className='truncate'>{String(user.group)}</span>
+              )}
+            </div>
           </div>
         </SidebarFooter>
       )}

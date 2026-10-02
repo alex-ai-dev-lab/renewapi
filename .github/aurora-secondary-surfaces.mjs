@@ -255,6 +255,7 @@ function createContext(browser, theme, viewport) {
 }
 
 async function seedClientState(context, theme, user = null) {
+  await context.addCookies([{ name: 'vite-ui-theme', value: theme, url: baseURL }])
   await context.addInitScript(
     ({ selectedTheme, seedUser }) => {
       localStorage.setItem('i18nextLng', 'en-US')
@@ -379,6 +380,9 @@ async function auditPage(context, testCase, theme, viewportName, authRequired) {
       }
     }
     await waitForSurface(page)
+    if (!(await page.locator('html').evaluate((element, expected) => element.classList.contains(expected), theme))) {
+      failures.push({ label, type: 'theme-preference-not-applied', expected: theme })
+    }
     if (id === 'home') {
       for (const section of await page.locator('main section').all()) {
         await section.scrollIntoViewIfNeeded()

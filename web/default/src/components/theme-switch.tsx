@@ -31,7 +31,7 @@ import {
 
 export function ThemeSwitch() {
   const { t } = useTranslation()
-  const { theme, setTheme } = useTheme()
+  const { theme, resolvedTheme, setTheme } = useTheme()
 
   /* Update theme-color meta tag
    * when theme is updated */
@@ -40,7 +40,7 @@ export function ThemeSwitch() {
     const themeColor = styles.getPropertyValue('--background').trim()
     const metaThemeColor = document.querySelector("meta[name='theme-color']")
     if (metaThemeColor) metaThemeColor.setAttribute('content', themeColor)
-  }, [theme])
+  }, [theme, resolvedTheme])
 
   return (
     <DropdownMenu modal={false}>

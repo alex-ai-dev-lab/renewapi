@@ -32,7 +32,6 @@ import { resolveApiBase } from './lib/request-example'
 const HOME_SEO = {
   description:
     'A unified, reliable, high-speed AI API gateway for OpenAI, Claude, Gemini, images, embeddings, routing, failover, and retries.',
-  themeColor: '#101213',
 }
 
 function upsertMeta(
@@ -104,7 +103,6 @@ function useHomeSeo(enabled: boolean, systemName: string) {
     const cleanup = [
       upsertMeta('name', 'title', title),
       upsertMeta('name', 'description', description),
-      upsertMeta('name', 'theme-color', HOME_SEO.themeColor),
       upsertMeta('property', 'og:title', title),
       upsertMeta('property', 'og:description', description),
       upsertMeta('property', 'og:type', 'website'),

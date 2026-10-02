@@ -33,11 +33,39 @@ For commercial licensing, please contact support@quantumnous.com
   flex-shrink: 0;
 }
 
+.obsidian-sidebar-brand {
+  background: var(--sidebar);
+}
+
+.obsidian-sidebar-nav {
+  padding: 12px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sidebar-border) transparent;
+}
+
+.obsidian-sidebar-nav .obsidian-nav-group {
+  padding: 8px 0;
+}
+
+.obsidian-sidebar-nav .obsidian-nav-group:first-child {
+  padding-top: 0;
+}
+
+.obsidian-sidebar-nav .obsidian-nav-group + .obsidian-nav-group {
+  border-top: 1px solid var(--sidebar-border);
+}
+
 .obsidian-sidebar-nav [data-slot='sidebar-group-label'] {
-  height: 1.75rem;
+  height: 1.5rem;
+  margin-bottom: 4px;
   color: var(--muted-foreground);
   font-size: 0.6875rem;
   letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.obsidian-sidebar-nav [data-slot='sidebar-menu'] {
+  gap: 2px;
 }
 
 .obsidian-sidebar-nav
@@ -47,12 +75,82 @@ For commercial licensing, please contact support@quantumnous.com
   ) {
   border-radius: var(--radius);
   font-size: 0.8125rem;
+  min-height: 34px;
+  padding-inline: 12px;
+  gap: 10px;
+  color: var(--sidebar-foreground);
 }
 
-.obsidian-sidebar-nav [data-active='true'] {
+.obsidian-sidebar-nav [data-slot='sidebar-menu-button'] > svg,
+.obsidian-sidebar-nav [data-slot='sidebar-menu-sub-button'] > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--muted-foreground);
+}
+
+.obsidian-sidebar-nav [data-slot='sidebar-menu-button']:hover,
+.obsidian-sidebar-nav [data-slot='sidebar-menu-sub-button']:hover {
+  background: var(--accent);
+  color: var(--sidebar-accent-foreground);
+}
+
+.obsidian-sidebar-nav [data-active]:not([data-active='false']) {
   background: var(--sidebar-accent);
   color: var(--sidebar-primary);
   font-weight: 600;
+  box-shadow: inset 2px 0 var(--sidebar-primary);
+}
+
+.obsidian-sidebar-nav [data-active]:not([data-active='false']) > svg {
+  color: currentColor;
+}
+
+.obsidian-sidebar-nav [data-slot='sidebar-menu-sub'] {
+  margin-inline-start: 20px;
+  padding-inline-start: 8px;
+  border-color: var(--sidebar-border);
+}
+
+.obsidian-sidebar-avatar {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--sidebar-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+[data-collapsible='icon'] .obsidian-sidebar-nav {
+  padding-inline: 8px;
+}
+
+[data-collapsible='icon'] .obsidian-sidebar-brand a {
+  justify-content: center;
+}
+
+[data-collapsible='icon']
+  .obsidian-sidebar-nav
+  [data-slot='sidebar-group-label'] {
+  display: none;
+}
+
+[data-collapsible='icon']
+  .obsidian-sidebar-nav
+  [data-slot='sidebar-menu-button'] {
+  justify-content: center;
+  width: 40px;
+  height: 36px;
+  padding: 8px;
+  margin-inline: auto;
+}
+
+[data-collapsible='icon'] .obsidian-sidebar-account {
+  padding-inline: 12px;
 }
 
 .obsidian-shell > a[href='#content'] {

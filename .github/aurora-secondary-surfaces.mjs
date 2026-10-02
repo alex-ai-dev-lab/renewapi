@@ -269,18 +269,18 @@ async function seedClientState(context, theme, user = null) {
   )
 }
 
-async function loginContext(context) {
+async function loginContext(context, credentials = { username, password }) {
   const page = await context.newPage()
   try {
     await page.goto(`${baseURL}/sign-in`, {waitUntil:'domcontentloaded'})
     await page.getByRole('button', {name:'Continue with password', exact:true}).click()
-    await page.locator('input[name="username"]').fill(username)
-    await page.locator('input[name="password"]').fill(password)
+    await page.locator('input[name="username"]').fill(credentials.username)
+    await page.locator('input[name="password"]').fill(credentials.password)
     const loginResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/user/login' && response.request().method() === 'POST')
     await page.locator('form button[type="submit"]').click()
     const response = await loginResponse
     const result = await readJson(response)
-    if (!response.ok() || !result.success || !result.data?.id) throw new Error('Root login failed through the sign-in form')
+    if (!response.ok() || !result.success || !result.data?.id) throw new Error('Login failed through the sign-in form')
     await page.waitForURL(/\/dashboard(?:\/|$)/, {timeout:30000})
     return result.data
   } finally {
@@ -715,9 +715,9 @@ async function auditUserRoles(browser) {
     const readerPassword = 'QaReader123!'
     const created = await readJson(await rootContext.request.post(`${baseURL}/api/user/`, {headers, data:{username:readerName,password:readerPassword,role:1,group:'default'}}))
     if (!created.success) throw new Error('Unable to create isolated role-check account')
-    const login = await readJson(await userContext.request.post(`${baseURL}/api/user/login`, {data:{username:readerName,password:readerPassword}}))
-    if (!login.success || login.data?.role !== 1) throw new Error('Role-check login failed')
-    await seedClientState(userContext, 'light', login.data)
+    const reader = await loginContext(userContext, {username:readerName,password:readerPassword})
+    if (reader.role !== 1) throw new Error('Role-check login failed')
+    await seedClientState(userContext, 'light', reader)
     const page = await userContext.newPage()
     attachDiagnostics(page, 'ordinary-user-roles')
     await page.goto(`${baseURL}/wallet`, {waitUntil:'domcontentloaded'})

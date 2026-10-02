@@ -18,6 +18,10 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
@@ -81,7 +85,7 @@ jobs:
           QA_OUT: ../../qa-artifacts/settings-advanced-phase-e-wave2
           QA_PORT: '4173'
           QA_SCREENSHOTS: 'false'
-        run: bun .settings-advanced-phase-e-wave2.mjs
+        run: node .settings-advanced-phase-e-wave2.mjs
 
       - name: Verify Wave 2 evidence redaction
         if: always()

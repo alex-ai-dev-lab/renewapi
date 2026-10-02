@@ -23,6 +23,10 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
@@ -90,7 +94,7 @@ jobs:
           # limiter smoke remains active without contaminating the UI audit.
           GLOBAL_WEB_RATE_LIMIT: '600'
           GLOBAL_API_RATE_LIMIT: '2000'
-        run: bun .aurora-secondary-surfaces.mjs
+        run: node .aurora-secondary-surfaces.mjs
 
       - name: Verify Secondary evidence redaction
         if: always()

@@ -1,6 +1,6 @@
 # SnowAPI 全界面迁移
 
-状态：进行中。用户明确推翻此前 UI，指定 https://github.com/Ooxygen7/SnowAPI 与 https://demo.unsnow.online/ 为唯一视觉/交互基准，并确认“页面和菜单一致，保留现有业务规则”。
+状态：完成。用户明确推翻此前 UI，指定 https://github.com/Ooxygen7/SnowAPI 与 https://demo.unsnow.online/ 为唯一视觉/交互基准，并确认“页面和菜单一致，保留现有业务规则”。
 
 ## 范围和来源
 
@@ -53,3 +53,7 @@
 - 首次 Actions 运行 37036899785 的四版本数据库检查通过，文件检查暴露 SnowAPI 的全局 brace-expansion 2.x 覆盖与 ESLint 10 不兼容；已移除该覆盖并更新锁文件。完整 675 文件 ESLint 重新通过，后续 Actions 使用迁移前基线重验整个改动范围。
 
 - Actions 37037476431 的完整质量门禁、双前端、后端/race/vet/build、四数据库及高级设置均通过；普通用户测试在 Bun 的 Playwright Cookie 处理中失败。浏览器工作流改用 Node 24（Bun 继续安装/构建），普通用户通过实际登录页登录；本地 8 项权限与 4 项恢复定向复验通过。
+
+## 完成记录
+
+正式发布与线上源码均为 `0d83a1f8fbf607eb00f7a3270fc325003d1e88f7`；[v1.1.0](https://github.com/alex-ai-dev-lab/renewapi/releases/tag/renewapi-v1.1.0) 已通过服务器代理下载和热切换上线。完整验收与回退记录见 [部署归档](2026-10-deploy-v1.1.0.md)。

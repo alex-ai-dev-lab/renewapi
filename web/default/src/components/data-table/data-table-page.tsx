@@ -402,7 +402,7 @@ function renderDesktop<TData>(
     <div
       data-ui='data-table-card'
       className={cn(
-        'border-border bg-card shadow-[0_1px_0_0_theme(colors.border)] max-w-full min-w-0 overflow-hidden rounded-lg border transition-opacity duration-150',
+        'border-border bg-card max-w-full min-w-0 overflow-hidden rounded-lg border shadow-none transition-opacity duration-150',
         isFetchingOnly && 'pointer-events-none opacity-60',
         props.tableClassName
       )}

@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import '@/styles/obsidian-user.css'
 import { useAuthStore } from '@/stores/auth-store'
 import { useStatus } from '@/hooks/use-status'
 import { Main } from '@/components/layout'
@@ -47,15 +48,15 @@ export function Profile() {
 
   return (
     <Main>
-      <div className='min-h-0 flex-1 overflow-auto px-3 py-3 sm:px-4 sm:py-6'>
-        <CardStaggerContainer className='mx-auto flex w-full max-w-[1180px] flex-col gap-4 sm:gap-6'>
+      <div className='min-h-0 min-w-0 flex-1 overflow-auto px-3 py-4 sm:px-4'>
+        <CardStaggerContainer className='mx-auto flex w-full max-w-[1600px] min-w-0 flex-col gap-4'>
           <CardStaggerItem>
             <ProfileHeader profile={profile} loading={loading} />
           </CardStaggerItem>
 
           <CardStaggerItem>
-            <div className='grid gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.46fr)] xl:items-start'>
-              <div className='space-y-4 sm:space-y-6'>
+            <div className='grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.65fr)] xl:items-start'>
+              <div className='min-w-0 space-y-4'>
                 <ProfileSettingsCard
                   profile={profile}
                   loading={loading}
@@ -68,7 +69,7 @@ export function Profile() {
                 <ProfileSecurityCard profile={profile} loading={loading} />
               </div>
 
-              <div className='space-y-4 sm:space-y-6 xl:sticky xl:top-6'>
+              <div className='min-w-0 space-y-4'>
                 {checkinEnabled && (
                   <CheckinCalendarCard
                     checkinEnabled={checkinEnabled}

@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import '@/styles/obsidian-user.css'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { getSelf } from '@/lib/api'
@@ -68,7 +69,16 @@ export function Wallet(props: WalletProps) {
   const [paymentLoading, setPaymentLoading] = useState<string | null>(null)
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [transferDialogOpen, setTransferDialogOpen] = useState(false)
-  const [billingDialogOpen, setBillingDialogOpen] = useState(false)
+  const [billingDialogOpen, setBillingDialogOpen] = useState(
+    Boolean(props.initialShowHistory)
+  )
+  const [previousShowHistory, setPreviousShowHistory] = useState(
+    props.initialShowHistory
+  )
+  if (previousShowHistory !== props.initialShowHistory) {
+    setPreviousShowHistory(props.initialShowHistory)
+    if (props.initialShowHistory) setBillingDialogOpen(true)
+  }
   const [redemptionCode, setRedemptionCode] = useState('')
   const [creemDialogOpen, setCreemDialogOpen] = useState(false)
   const [selectedCreemProduct, setSelectedCreemProduct] =
@@ -115,28 +125,35 @@ export function Wallet(props: WalletProps) {
     useWaffoPancakePayment()
 
   // Fetch and refresh user data
-  const fetchUser = useCallback(async () => {
-    try {
-      setUserLoading(true)
-      const response = await getSelf()
-      if (response.success && response.data) {
-        setUser(response.data as UserWalletData)
-      }
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to fetch user data:', error)
-    } finally {
-      setUserLoading(false)
-    }
-  }, [])
+  const loadUser = useCallback(
+    () =>
+      getSelf()
+        .then((response) => {
+          if (response.success && response.data) {
+            setUser(response.data as UserWalletData)
+          }
+        })
+        .catch((error) => {
+          // eslint-disable-next-line no-console
+          console.error('Failed to fetch user data:', error)
+        })
+        .finally(() => {
+          setUserLoading(false)
+        }),
+    []
+  )
+
+  const fetchUser = useCallback(() => {
+    setUserLoading(true)
+    return loadUser()
+  }, [loadUser])
 
   useEffect(() => {
-    fetchUser()
-  }, [fetchUser])
+    void loadUser()
+  }, [loadUser])
 
   useEffect(() => {
     if (props.initialShowHistory) {
-      setBillingDialogOpen(true)
       window.history.replaceState({}, '', window.location.pathname)
     }
   }, [props.initialShowHistory])
@@ -291,7 +308,7 @@ export function Wallet(props: WalletProps) {
       <SectionPageLayout>
         <SectionPageLayout.Title>{t('Wallet')}</SectionPageLayout.Title>
         <SectionPageLayout.Content>
-          <div className='mx-auto flex w-full max-w-[1180px] flex-col gap-4 sm:gap-5'>
+          <div className='flex w-full min-w-0 flex-col gap-4'>
             <WalletStatsCard user={user} loading={userLoading} />
 
             <div

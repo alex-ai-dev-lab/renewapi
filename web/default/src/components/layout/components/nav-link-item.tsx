@@ -17,42 +17,50 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import type { TopNavLink } from '../types'
 
 interface NavLinkItemProps {
   link: TopNavLink
   className?: string
+  isActive?: boolean
+  onClick?: React.MouseEventHandler<HTMLAnchorElement>
 }
 
-/**
- * Renders a single navigation link (internal or external)
- * Handles routing and proper link attributes
- */
-export function NavLinkItem({ link, className }: NavLinkItemProps) {
+/** Shared internal, external and hash link semantics for both navigation sizes. */
+export function NavLinkItem(props: NavLinkItemProps) {
+  const { t } = useTranslation()
   const linkClassName = cn(
     'text-muted-foreground hover:text-foreground transition-colors',
-    link.disabled && 'pointer-events-none opacity-50',
-    className
+    props.isActive && 'bg-accent text-accent-foreground',
+    props.link.disabled && 'pointer-events-none opacity-50',
+    props.className
   )
+  const linkProps = {
+    className: linkClassName,
+    onClick: props.onClick,
+    'aria-disabled': props.link.disabled,
+    'aria-current': props.isActive ? ('page' as const) : undefined,
+    tabIndex: props.link.disabled ? -1 : undefined,
+  }
 
-  if (link.external) {
+  if (props.link.external || props.link.href.startsWith('#')) {
     return (
       <a
-        href={link.href}
-        target='_blank'
-        rel='noopener noreferrer'
-        className={linkClassName}
-        aria-disabled={link.disabled}
+        href={props.link.href}
+        target={props.link.external ? '_blank' : undefined}
+        rel={props.link.external ? 'noopener noreferrer' : undefined}
+        {...linkProps}
       >
-        {link.title}
+        {t(props.link.title)}
       </a>
     )
   }
 
   return (
-    <Link to={link.href} className={linkClassName} disabled={link.disabled}>
-      {link.title}
+    <Link to={props.link.href} disabled={props.link.disabled} {...linkProps}>
+      {t(props.link.title)}
     </Link>
   )
 }

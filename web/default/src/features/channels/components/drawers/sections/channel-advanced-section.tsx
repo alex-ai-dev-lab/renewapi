@@ -41,7 +41,7 @@ export function ChannelAdvancedSection(props: ChannelAdvancedSectionProps) {
         render={
           <button
             type='button'
-            className='hover:bg-muted/40 border-border/60 flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left transition-colors'
+            className='hover:bg-secondary border-border bg-card flex w-full items-center justify-between gap-3 rounded border px-4 py-3 text-left transition-colors'
             aria-expanded={props.open}
           />
         }
@@ -70,7 +70,7 @@ export function ChannelAdvancedSection(props: ChannelAdvancedSectionProps) {
         />
       </CollapsibleTrigger>
 
-      <CollapsibleContent className='mt-5 flex flex-col gap-5'>
+      <CollapsibleContent className='mt-4 flex min-w-0 flex-col gap-4'>
         {props.children}
       </CollapsibleContent>
     </Collapsible>

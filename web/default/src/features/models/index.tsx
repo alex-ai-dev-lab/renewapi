@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useCallback, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
+import '@/styles/obsidian-admin.css'
 import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -133,7 +134,7 @@ function ModelsContent() {
           </SectionPageLayout.Actions>
         ) : null}
         <SectionPageLayout.Content>
-          <div className='space-y-4'>
+          <div className='obsidian-admin space-y-4'>
             {activeSection === 'deployments' ? (
               <Tabs value={activeSection} onValueChange={handleSectionChange}>
                 <TabsList className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'>

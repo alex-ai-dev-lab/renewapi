@@ -165,6 +165,7 @@ export type ContentSettings = {
   HeaderNavModules: string
   SidebarModulesAdmin: string
   SidebarSectionOrder: string
+  SidebarTaskSectionOrder?: string
   SystemSettingsNavigation: string
   'general_setting.docs_link': string
 }

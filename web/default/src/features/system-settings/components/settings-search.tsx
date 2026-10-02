@@ -17,8 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { ArrowRight, Search } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import {
@@ -101,11 +101,11 @@ export function SettingsSearch() {
             ? '搜索设置，例如 OAuth、额度、模型同步、SSRF、SMTP…'
             : 'Search settings, e.g. OAuth, quota, model sync, SSRF, SMTP…',
         })}
-        className='border-border/60 bg-card/55 h-12 w-full rounded-2xl ps-11 text-sm backdrop-blur-md'
+        className='border-border bg-card h-9 w-full rounded ps-11 text-sm'
       />
 
       {showResults && (
-        <div className='border-border/60 bg-card/95 mt-2 overflow-hidden rounded-2xl border shadow-lg backdrop-blur-md'>
+        <div className='border-border bg-card mt-2 overflow-hidden rounded border'>
           {results.length === 0 ? (
             <p className='text-muted-foreground px-4 py-6 text-center text-sm'>
               {t('aurora.settings.search.empty', {
@@ -115,7 +115,11 @@ export function SettingsSearch() {
               })}
             </p>
           ) : (
-            <ul id={RESULTS_LIST_ID} role='listbox' className='max-h-80 overflow-y-auto py-1'>
+            <ul
+              id={RESULTS_LIST_ID}
+              role='listbox'
+              className='max-h-80 overflow-y-auto py-1'
+            >
               {results.map((result, index) => (
                 <li key={result.url} role='presentation'>
                   <a

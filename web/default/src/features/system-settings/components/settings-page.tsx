@@ -24,6 +24,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useParams, useSearch } from '@tanstack/react-router'
+import '@/styles/obsidian-admin.css'
 import { getApiErrorMessage } from '@/lib/api-errors'
 import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout'
@@ -96,7 +97,7 @@ function SettingsPageFrame(props: SettingsPageFrameProps) {
       <SectionPageLayout>
         <SectionPageLayout.Title>
           <span className='inline-flex max-w-full min-w-0 items-center gap-2 align-middle'>
-            <span className='truncate font-extrabold tracking-[-0.02em]'>
+            <span className='truncate font-semibold tracking-tight'>
               {props.title}
             </span>
             <span
@@ -113,14 +114,14 @@ function SettingsPageFrame(props: SettingsPageFrameProps) {
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
           {props.nav ? (
-            <div className='mx-auto flex w-full max-w-6xl flex-col gap-4 sm:gap-5 lg:flex-row lg:items-start'>
+            <div className='obsidian-admin obsidian-settings-page flex w-full min-w-0 flex-col gap-4 lg:flex-row lg:items-start'>
               {props.nav}
-              <div className='flex w-full min-w-0 flex-1 flex-col gap-4 sm:gap-5'>
+              <div className='flex w-full min-w-0 flex-1 flex-col gap-4'>
                 {props.children}
               </div>
             </div>
           ) : (
-            <div className='mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-5'>
+            <div className='obsidian-admin obsidian-settings-page flex w-full min-w-0 flex-col gap-4'>
               {props.children}
             </div>
           )}
@@ -179,7 +180,7 @@ export function SettingsPage<
   if (isLoading) {
     return (
       <SettingsPageFrame title={t(sectionMeta.titleKey)} nav={sectionNav}>
-        <div className='border-border/60 bg-card/55 text-muted-foreground flex min-h-40 items-center justify-center rounded-[calc(var(--radius)*1.125)] border text-sm'>
+        <div className='border-border bg-card text-muted-foreground flex min-h-32 items-center justify-center rounded border text-sm'>
           {ts('settings.common.loading', {
             defaultValue: loadingMessage,
           })}

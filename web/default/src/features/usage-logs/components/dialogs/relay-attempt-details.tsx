@@ -31,7 +31,12 @@ export function RelayAttemptDetails(props: {
         </p>
       )}
       {props.info.real_error && (
-        <pre className='max-h-40 overflow-auto text-xs break-words whitespace-pre-wrap'>
+        <pre
+          role='region'
+          tabIndex={0}
+          aria-label={t('Upstream error')}
+          className='max-h-40 overflow-auto text-xs break-words whitespace-pre-wrap'
+        >
           {props.info.real_error}
         </pre>
       )}
@@ -45,10 +50,20 @@ export function RelayAttemptDetails(props: {
               {attempt.attempt}. {attempt.channel_name} (#{attempt.channel_id})
             </p>
             <p>
-              {t('Priority')}: {attempt.priority} · {t('Switches')}:{' '}
+              {t('Channel priority')}: {attempt.priority} · {t('Switches')}:{' '}
               {attempt.switch_count} · HTTP {attempt.status_code} ·{' '}
               {attempt.elapsed_ms} ms
             </p>
+            {attempt.upstream_model && (
+              <p className='break-all'>
+                {t('Upstream target')}: <code>{attempt.upstream_model}</code>
+              </p>
+            )}
+            {attempt.mapping_rule_id && (
+              <p className='text-muted-foreground break-all'>
+                {t('Mapping rule')}: <code>{attempt.mapping_rule_id}</code>
+              </p>
+            )}
             {attempt.timeout_stage && (
               <p>
                 {t('Timeout stage')}: {attempt.timeout_stage}
@@ -67,7 +82,12 @@ export function RelayAttemptDetails(props: {
                 {t('Upstream Request ID')}: {attempt.upstream_request_id}
               </p>
             )}
-            <pre className='max-h-40 overflow-auto break-words whitespace-pre-wrap'>
+            <pre
+              role='region'
+              tabIndex={0}
+              aria-label={`${t('Attempt result')} ${attempt.attempt}`}
+              className='max-h-40 overflow-auto break-words whitespace-pre-wrap'
+            >
               {attempt.real_error || t('Success')}
             </pre>
           </li>

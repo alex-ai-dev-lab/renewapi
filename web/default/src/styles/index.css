@@ -29,11 +29,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 @import './theme.css';
 @import './theme-presets.css';
-@import './interface-zero.css';
-
-/* Aurora Bento v2 视觉层：作为 import 区最后一个样式层加载，通过 design token
- * 与 data-slot 选择器覆盖基础观感，不改组件逻辑。详见 aurora-bento.css。 */
-@import './aurora-bento.css';
+@import './obsidian.css';
 
 /* Shiki dual themes: token colors follow dark theme (pre background stays `bg-background` on the block) */
 @layer components {

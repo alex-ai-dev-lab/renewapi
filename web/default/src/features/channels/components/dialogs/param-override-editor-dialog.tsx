@@ -20,7 +20,6 @@ import {
   type DragEvent,
   type KeyboardEvent,
   useCallback,
-  useEffect,
   useMemo,
   useState,
 } from 'react'
@@ -1093,20 +1092,33 @@ const buildOperationsJson = (
 export function ParamOverrideEditorDialog(
   props: ParamOverrideEditorDialogProps
 ) {
-  const { t } = useTranslation()
+  if (!props.open) return null
+  return <ParamOverrideEditorContent key={props.value} {...props} />
+}
 
-  const [editMode, setEditMode] = useState<'visual' | 'json'>('visual')
+function ParamOverrideEditorContent(props: ParamOverrideEditorDialogProps) {
+  const { t } = useTranslation()
+  const [initial] = useState(() => parseInitialState(props.value))
+
+  const [editMode, setEditMode] = useState<'visual' | 'json'>(initial.editMode)
   const [visualMode, setVisualMode] = useState<'operations' | 'legacy'>(
-    'operations'
+    initial.visualMode
   )
-  const [legacyValue, setLegacyValue] = useState('')
-  const [operations, setOperations] = useState<ParamOverrideOperation[]>([
-    createDefaultOperation(),
-  ])
-  const [jsonText, setJsonText] = useState('')
-  const [jsonError, setJsonError] = useState('')
+  const [legacyValue, setLegacyValue] = useState(initial.legacyValue)
+  const [operations, setOperations] = useState<ParamOverrideOperation[]>(
+    initial.operations
+  )
+  const [jsonText, setJsonText] = useState(initial.jsonText)
+  const [jsonError, setJsonError] = useState(initial.jsonError)
   const [operationSearch, setOperationSearch] = useState('')
-  const [selectedOperationId, setSelectedOperationId] = useState('')
+  const [requestedOperationId, setSelectedOperationId] = useState(
+    initial.operations[0]?.id || ''
+  )
+  const selectedOperationId = operations.some(
+    (operation) => operation.id === requestedOperationId
+  )
+    ? requestedOperationId
+    : operations[0]?.id || ''
   const [expandedConditions, setExpandedConditions] = useState<
     Record<string, boolean>
   >({})
@@ -1115,42 +1127,9 @@ export function ParamOverrideEditorDialog(
   const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after'>(
     'before'
   )
-  const [templatePresetKey, setTemplatePresetKey] =
-    useState('operations_default')
-
-  // Initialize state when dialog opens
-  useEffect(() => {
-    if (!props.open) return
-    const state = parseInitialState(props.value)
-    setEditMode(state.editMode)
-    setVisualMode(state.visualMode)
-    setLegacyValue(state.legacyValue)
-    setOperations(state.operations)
-    setJsonText(state.jsonText)
-    setJsonError(state.jsonError)
-    setOperationSearch('')
-    setSelectedOperationId(state.operations[0]?.id || '')
-    setExpandedConditions({})
-    setDraggedOperationId('')
-    setDragOverOperationId('')
-    setDragOverPosition('before')
-    if (state.visualMode === 'legacy') {
-      setTemplatePresetKey('legacy_default')
-    } else {
-      setTemplatePresetKey('operations_default')
-    }
-  }, [props.open, props.value])
-
-  // Keep selectedOperationId valid
-  useEffect(() => {
-    if (operations.length === 0) {
-      setSelectedOperationId('')
-      return
-    }
-    if (!operations.some((o) => o.id === selectedOperationId)) {
-      setSelectedOperationId(operations[0].id)
-    }
-  }, [operations, selectedOperationId])
+  const [templatePresetKey, setTemplatePresetKey] = useState(
+    initial.visualMode === 'legacy' ? 'legacy_default' : 'operations_default'
+  )
 
   // Template preset options filtered by group
   const templatePresetOptions = useMemo(
@@ -1702,7 +1681,7 @@ export function ParamOverrideEditorDialog(
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className='flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-5xl'>
+      <DialogContent className='obsidian-admin obsidian-admin-rule-editor flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-5xl'>
         <DialogHeader className='border-b px-6 py-4'>
           <DialogTitle>{t('Parameter Override')}</DialogTitle>
           <DialogDescription>

@@ -42,3 +42,5 @@ skills-lock.json
 
 tmp-*.patch
 codex_newapi_fork_mirror_optimization_prompt.md
+/qa-artifacts/obsidian/
+/qa-artifacts/model-mapping/

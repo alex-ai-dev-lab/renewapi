@@ -83,6 +83,7 @@ jobs:
           QA_DB: ${{ runner.temp }}/renewapi-secondary-surfaces.db
           QA_OUT: ../../qa-artifacts/aurora-secondary-surfaces
           QA_PORT: '4173'
+          QA_SCREENSHOTS: 'false'
           # The 72-case matrix deliberately concentrates document and API traffic
           # onto one loopback IP. Keep both production limiters enabled, but give
           # this isolated QA process budgets above the synthetic burst so a

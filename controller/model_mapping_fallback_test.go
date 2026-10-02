@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -31,10 +32,12 @@ func (s *recordingBillingSettler) Reserve(targetQuota int) error {
 	return nil
 }
 
-func TestRetryNextMappedModelCandidatePinsSameChannel(t *testing.T) {
+func TestRetryNextMappedModelCandidatePreservesExclusionsAndBudget(t *testing.T) {
 	writer := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(writer)
+	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
 	info := &relaycommon.RelayInfo{
+		RelayMode:         relayconstant.RelayModeChatCompletions,
 		StartTime:         time.Now(),
 		FirstResponseTime: time.Now().Add(-time.Second),
 		ChannelMeta:       &relaycommon.ChannelMeta{ChannelId: 91},
@@ -46,12 +49,12 @@ func TestRetryNextMappedModelCandidatePinsSameChannel(t *testing.T) {
 	}
 	retry := &service.RetryParam{ExcludedChannelIds: map[int]bool{91: true}}
 	channel := &model.Channel{Id: 91}
-	relayErr := types.NewOpenAIError(errors.New("upstream failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+	relayErr := types.NewOpenAIError(errors.New("model not found"), types.ErrorCodeModelNotFound, http.StatusNotFound)
 
 	require.True(t, retryNextMappedModelCandidate(c, info, retry, channel, relayErr))
 	require.Equal(t, 1, info.ModelMappingRoute.Index)
-	require.Equal(t, 91, retry.ModelMappingFallbackChannelId)
-	require.False(t, retry.ExcludedChannelIds[91])
+	require.Zero(t, retry.ModelMappingFallbackChannelId)
+	require.True(t, retry.ExcludedChannelIds[91])
 }
 
 func TestSwitchRelayFallbackModelRespectsTokenModelLimit(t *testing.T) {

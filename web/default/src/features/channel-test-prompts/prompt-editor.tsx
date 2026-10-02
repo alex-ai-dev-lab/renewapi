@@ -51,7 +51,7 @@ export function PromptEditor(props: {
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(props.onSave)}
-        className='space-y-4 rounded-lg border p-4'
+        className='bg-card min-w-0 space-y-3 rounded border p-3'
       >
         <FormField
           control={form.control}
@@ -73,7 +73,7 @@ export function PromptEditor(props: {
             <FormItem>
               <FormLabel>{t('Test prompt')}</FormLabel>
               <FormControl>
-                <Textarea {...field} className='min-h-32' />
+                <Textarea {...field} className='min-h-32 font-mono text-xs' />
               </FormControl>
               <FormMessage />
             </FormItem>

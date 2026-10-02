@@ -36,7 +36,7 @@ function CompactStat(props: {
   accent: string
 }) {
   return (
-    <span className='border-border/60 bg-muted/25 inline-flex h-7 items-center gap-2 rounded-md border px-2.5 text-xs shadow-xs'>
+    <span className='border-border bg-card inline-flex h-7 items-center gap-2 rounded-md border px-2.5 text-xs'>
       <span className={cn('h-3.5 w-0.5 rounded-full', props.accent)} />
       <span className='text-muted-foreground'>{props.label}</span>
       <span className='text-foreground/85 font-mono font-semibold tabular-nums'>
@@ -47,8 +47,7 @@ function CompactStat(props: {
 }
 
 export function CommonLogsStats(props: { variant?: 'compact' | 'bento' }) {
-  const { t, i18n } = useTranslation()
-  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
+  const { t } = useTranslation()
   const isAdmin = useIsAdmin()
   const searchParams = route.useSearch()
   const { sensitiveVisible } = useUsageLogsContext()
@@ -110,94 +109,47 @@ export function CommonLogsStats(props: { variant?: 'compact' | 'bento' }) {
 
   if (isLoading) {
     return (
-      <div className='space-y-4'>
-        <div className='grid gap-4 sm:grid-cols-3'>
-          {Array.from({ length: 3 }).map((_, index) => (
-            <Skeleton key={index} className='h-[118px] rounded-[22px]' />
-          ))}
-        </div>
-        <LiveHeading />
+      <div className='obsidian-user-metrics' aria-busy='true'>
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className='obsidian-user-metric'>
+            <Skeleton className='h-4 w-20' />
+            <Skeleton className='mt-2 h-9 w-28' />
+          </div>
+        ))}
       </div>
     )
   }
 
   const items = [
     {
-      label: t('aurora.logs.usage.title', {
-        defaultValue: isChinese ? '当前消耗' : 'Usage',
-      }),
+      label: t('Usage'),
       value: values.usage,
-      detail: t('aurora.logs.usage.detail', {
-        defaultValue: isChinese
-          ? '当前筛选时间窗内累计额度消耗'
-          : 'Quota consumed in the current filter window',
-      }),
-      tone: 'text-success',
+      detail: t('Quota consumed in the current filter window'),
     },
     {
       label: t('RPM'),
       value: values.rpm,
-      detail: t('aurora.logs.rpm.detail', {
-        defaultValue: isChinese ? '每分钟请求数' : 'Requests per minute',
-      }),
-      tone: 'text-destructive',
+      detail: t('Requests per minute'),
     },
     {
       label: t('TPM'),
       value: values.tpm,
-      detail: t('aurora.logs.tpm.detail', {
-        defaultValue: isChinese ? '每分钟 Token 数' : 'Tokens per minute',
-      }),
-      tone: 'text-warning',
+      detail: t('Tokens per minute'),
     },
   ]
 
   return (
     <div className='space-y-4'>
-      <div className='grid gap-4 sm:grid-cols-3'>
+      <dl className='obsidian-user-metrics'>
         {items.map((item) => (
-          <div key={item.label} className='glass-tile min-h-[118px] p-5'>
-            <div className='flex h-full flex-col justify-between gap-3'>
-              <span className='text-muted-foreground text-[10px] font-bold tracking-[1.35px] uppercase'>
-                {item.label}
-              </span>
-              <div>
-                <div
-                  className={cn(
-                    'text-[28px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
-                    item.tone
-                  )}
-                >
-                  {item.value}
-                </div>
-                <div className='text-muted-foreground mt-1 text-[10px]'>
-                  {item.detail}
-                </div>
-              </div>
-            </div>
+          <div key={item.label} className='obsidian-user-metric'>
+            <dt className='obsidian-user-metric-label'>{item.label}</dt>
+            <dd className='obsidian-user-metric-value'>{item.value}</dd>
+            <dd className='obsidian-user-metric-detail'>{item.detail}</dd>
           </div>
         ))}
-      </div>
-      <LiveHeading />
-    </div>
-  )
-}
-
-function LiveHeading() {
-  const { t, i18n } = useTranslation()
-  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
-
-  return (
-    <div className='flex items-center justify-between px-1 pt-1'>
-      <h2 className='text-[15px] font-extrabold tracking-[-0.01em]'>
-        {t('aurora.logs.live.title', {
-          defaultValue: isChinese ? '实时调用流' : 'Live request stream',
-        })}
-      </h2>
-      <span className='border-success/15 bg-success/8 text-success inline-flex h-6 items-center gap-1.5 rounded-full border px-2.5 text-[10px] font-bold tracking-[0.8px]'>
-        <span className='bg-success size-1.5 rounded-full' />
-        {t('aurora.logs.live.badge', { defaultValue: 'LIVE' })}
-      </span>
+      </dl>
+      <h2 className='obsidian-user-section-heading'>{t('Usage Logs')}</h2>
     </div>
   )
 }

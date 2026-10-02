@@ -43,13 +43,15 @@ function EmptyAboutState() {
   const currentYear = new Date().getFullYear()
 
   return (
-    <div className='flex min-h-[60vh] items-center justify-center p-8'>
-      <div className='max-w-2xl space-y-6 text-center'>
-        <div className='flex justify-center'>
-          <Construction className='text-muted-foreground h-24 w-24' />
+    <div className='mx-auto flex max-w-4xl items-start py-8'>
+      <div className='bg-card w-full space-y-4 rounded-md border p-4 sm:p-6'>
+        <div className='flex'>
+          <Construction className='text-muted-foreground size-6' />
         </div>
         <div className='space-y-2'>
-          <h2 className='text-2xl font-bold'>{t('No About Content Set')}</h2>
+          <h2 className='text-[26px] font-semibold'>
+            {t('No About Content Set')}
+          </h2>
           <p className='text-muted-foreground'>
             {t(
               'The administrator has not configured any about content yet. You can set it in the settings page, supporting HTML or URL.'
@@ -63,7 +65,7 @@ function EmptyAboutState() {
               href='https://github.com/QuantumNous/new-api'
               target='_blank'
               rel='noopener noreferrer'
-              className='text-primary hover:underline'
+              className='text-primary underline underline-offset-4'
             >
               {t('https://github.com/QuantumNous/new-api')}
             </a>
@@ -73,7 +75,7 @@ function EmptyAboutState() {
               href='https://github.com/QuantumNous/new-api'
               target='_blank'
               rel='noopener noreferrer'
-              className='text-primary hover:underline'
+              className='text-primary underline underline-offset-4'
             >
               {t('NewAPI')}
             </a>{' '}
@@ -82,7 +84,7 @@ function EmptyAboutState() {
               href='https://github.com/QuantumNous'
               target='_blank'
               rel='noopener noreferrer'
-              className='text-primary hover:underline'
+              className='text-primary underline underline-offset-4'
             >
               {t('QuantumNous')}
             </a>{' '}
@@ -91,7 +93,7 @@ function EmptyAboutState() {
               href='https://github.com/songquanpeng/one-api'
               target='_blank'
               rel='noopener noreferrer'
-              className='text-primary hover:underline'
+              className='text-primary underline underline-offset-4'
             >
               {t('One API')}
             </a>{' '}
@@ -100,7 +102,7 @@ function EmptyAboutState() {
               href='https://github.com/songquanpeng'
               target='_blank'
               rel='noopener noreferrer'
-              className='text-primary hover:underline'
+              className='text-primary underline underline-offset-4'
             >
               {t('JustSong')}
             </a>
@@ -111,7 +113,7 @@ function EmptyAboutState() {
               href='https://github.com/QuantumNous/new-api/blob/main/LICENSE'
               target='_blank'
               rel='noopener noreferrer'
-              className='text-primary hover:underline'
+              className='text-primary underline underline-offset-4'
             >
               {t('AGPL v3.0 License')}
             </a>
@@ -139,7 +141,7 @@ export function About() {
   if (isLoading) {
     return (
       <PublicLayout>
-        <div className='mx-auto flex max-w-4xl flex-col gap-4 py-12'>
+        <div className='mx-auto flex max-w-4xl flex-col gap-4 py-8'>
           <Skeleton className='h-8 w-[45%]' />
           <Skeleton className='h-4 w-full' />
           <Skeleton className='h-4 w-[90%]' />

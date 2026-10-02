@@ -95,6 +95,7 @@ type ModelMappingRouteCursor struct {
 	ChannelId  int
 	Source     string
 	Candidates []string
+	RuleIDs    []string
 	Index      int
 }
 
@@ -187,6 +188,10 @@ type RelayInfo struct {
 	ClaudeThinkingSanitizedFallback           bool
 	ForceResponsesFunctionCallArgumentsObject bool
 	ModelMappingRoute                         ModelMappingRouteCursor
+	// UpstreamWireModel describes the final JSON body without changing provider
+	// URL/conversion or billing model semantics. Nil means not observed here.
+	UpstreamWireModel        *string
+	ModelMappingRetryBlocked bool
 
 	// AntiPoisonGuardPrefix is retained for older patch compatibility. The
 	// current upstream-error normalization path does not inject guard prompts.
@@ -256,6 +261,8 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	// that the previous handler has already closed.
 	info.UpstreamRequestBodySize = 0
 	info.UpstreamRequestGetBody = nil
+	info.UpstreamWireModel = nil
+	info.ModelMappingRetryBlocked = false
 
 	info.AntiPoisonConfigCache = nil
 
@@ -317,6 +324,27 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	// 重置某些字段，例如模型名称等
 	if info.Request != nil {
 		info.Request.SetModelName(info.OriginModelName)
+	}
+}
+
+// RecordUpstreamJSONModel is called after conversion and parameter overrides.
+// Keep the final wire identity separate from the adapter's model/URL identity.
+func (info *RelayInfo) RecordUpstreamJSONModel(body []byte) {
+	model := gjson.GetBytes(body, "model").String()
+	info.UpstreamWireModel = &model
+	if model != info.UpstreamModelName {
+		info.ModelMappingRetryBlocked = true
+	}
+	for key := range info.ParamOverride {
+		// A fixed model equal to the first candidate still fixes every later
+		// candidate to that same target. Dynamic operations are fail-closed:
+		// this boundary does not attempt to prove their model invariance.
+		if key == "model" || strings.EqualFold(strings.TrimSpace(key), "operations") {
+			info.ModelMappingRetryBlocked = true
+		}
+	}
+	if info.Failover != nil && len(info.Failover.AttemptRecords) > 0 {
+		info.Failover.AttemptRecords[len(info.Failover.AttemptRecords)-1].UpstreamModel = model
 	}
 }
 

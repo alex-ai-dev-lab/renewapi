@@ -83,6 +83,8 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			info.StreamStatus = chatInfo.StreamStatus
 			info.ResponseModel = chatInfo.ResponseModel
 			info.ResponsesObservedUsage = chatInfo.ResponsesObservedUsage
+			info.UpstreamWireModel = chatInfo.UpstreamWireModel
+			info.ModelMappingRetryBlocked = chatInfo.ModelMappingRetryBlocked
 		}()
 		chatInfo.Request = chatReq
 		chatInfo.RelayMode = relayconstant.RelayModeChatCompletions
@@ -184,7 +186,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
 		}
-		if strings.TrimSpace(request.Model) != "" && request.Model != info.UpstreamModelName && strings.TrimSpace(info.UpstreamModelName) != "" {
+		if strings.TrimSpace(info.UpstreamModelName) != "" {
 			rawBody, err := storage.Bytes()
 			if err != nil {
 				return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
@@ -233,6 +235,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			}
 		}
 
+		info.RecordUpstreamJSONModel(jsonData)
 		logger.LogDebug(c, "requestBody: %s", jsonData)
 		body, size, getBody, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
 		if err != nil {

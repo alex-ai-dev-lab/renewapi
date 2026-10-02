@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -80,6 +81,7 @@ export function PlaygroundChat({
   onCancelEdit,
   onSaveEditAndSubmit,
 }: PlaygroundChatProps) {
+  const { t } = useTranslation()
   const [editText, setEditText] = useState('')
   const [originalText, setOriginalText] = useState('')
 
@@ -101,8 +103,8 @@ export function PlaygroundChat({
 
   return (
     <Conversation>
-      <ConversationContent className='bg-card/20 p-0'>
-        <div className='mx-auto w-full max-w-5xl px-4 py-6 sm:px-6'>
+      <ConversationContent className='bg-background p-0'>
+        <div className='mx-auto w-full max-w-5xl min-w-0 px-4 py-4 sm:px-6'>
           {messages.map((message, messageIndex) => {
             const { versions = [] } = message
             const isLastAssistantMessage =
@@ -121,12 +123,12 @@ export function PlaygroundChat({
                         className={cn(
                           'w-full min-w-0 flex-1 basis-full',
                           message.from === MESSAGE_ROLES.USER
-                            ? 'border-border/60 bg-card/70 rounded-[calc(var(--radius)*1.125)] border px-4 py-3 shadow-sm'
+                            ? 'border-border bg-card rounded-md border px-3 py-3'
                             : 'py-2'
                         )}
                       >
                         {isEditing(message.key) ? (
-                          <div className='border-border/60 bg-card/70 space-y-3 rounded-[calc(var(--radius)*1.125)] border p-3 shadow-sm'>
+                          <div className='border-border bg-background space-y-3 rounded-md border p-3'>
                             <Textarea
                               value={editText}
                               onChange={(e) => setEditText(e.target.value)}
@@ -142,7 +144,7 @@ export function PlaygroundChat({
                                   }
                                   disabled={isEmpty || !isChanged}
                                 >
-                                  Save & Submit
+                                  {t('Save & Submit')}
                                 </Button>
                               )}
                               <Button
@@ -150,14 +152,14 @@ export function PlaygroundChat({
                                 onClick={() => onSaveEdit?.(editText)}
                                 disabled={isEmpty || !isChanged}
                               >
-                                Save
+                                {t('Save')}
                               </Button>
                               <Button
                                 size='sm'
                                 variant='outline'
                                 onClick={() => onCancelEdit?.(false)}
                               >
-                                Cancel
+                                {t('Cancel')}
                               </Button>
                             </div>
                           </div>
@@ -233,7 +235,7 @@ export function PlaygroundChat({
                                     <div className='flex items-center gap-2 py-2'>
                                       <Loader />
                                       <Shimmer className='text-sm' duration={1}>
-                                        Responding...
+                                        {t('Responding...')}
                                       </Shimmer>
                                     </div>
                                   )}

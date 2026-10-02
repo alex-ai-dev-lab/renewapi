@@ -408,19 +408,20 @@ func (channel *Channel) GetModels() []string {
 // sources. Target-only fallback candidates are not exposed implicitly.
 func (channel *Channel) GetRoutingModels() []string {
 	models := channel.GetModels()
-	mapping, err := common.ParseModelMapping(channel.GetModelMapping())
-	if err != nil || len(mapping) == 0 {
+	mapping, err := common.ParseModelMappingConfig(channel.GetModelMapping())
+	if err != nil {
 		return models
 	}
-	result := make([]string, 0, len(models)+len(mapping))
-	seen := make(map[string]struct{}, len(models)+len(mapping))
+	sources := mapping.Sources()
+	result := make([]string, 0, len(models)+len(sources))
+	seen := make(map[string]struct{}, len(models)+len(sources))
 	for _, modelName := range models {
 		if _, exists := seen[modelName]; !exists {
 			seen[modelName] = struct{}{}
 			result = append(result, modelName)
 		}
 	}
-	for source := range mapping {
+	for _, source := range sources {
 		if _, exists := seen[source]; !exists {
 			seen[source] = struct{}{}
 			result = append(result, source)
@@ -1222,59 +1223,72 @@ func DisableChannelByTag(tag string) error {
 }
 
 func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *string, group *string, priority *int64, weight *uint, paramOverride *string, headerOverride *string) error {
-	updateData := Channel{}
-	shouldReCreateAbilities := false
-	updatedTag := tag
-	// 如果 newTag 不为空且不等于 tag，则更新 tag
+	updates := make(map[string]interface{})
 	if newTag != nil && *newTag != tag {
-		updateData.Tag = newTag
-		updatedTag = *newTag
+		updates["tag"] = *newTag
 	}
-	if modelMapping != nil {
-		updateData.ModelMapping = modelMapping
+	// Empty batch fields mean no change. Clearing rules is explicit v2 rules:[].
+	mappingProvided := modelMapping != nil && strings.TrimSpace(*modelMapping) != ""
+	if mappingProvided {
+		updates["model_mapping"] = *modelMapping
 	}
 	if models != nil && *models != "" {
-		shouldReCreateAbilities = true
-		updateData.Models = *models
+		if len((&Channel{Models: *models}).GetModels()) == 0 {
+			return errors.New("模型不能为空")
+		}
+		updates["models"] = *models
 	}
 	if group != nil && *group != "" {
-		shouldReCreateAbilities = true
-		updateData.Group = *group
+		updates["group"] = *group
 	}
 	if priority != nil {
-		updateData.Priority = priority
+		updates["priority"] = *priority
 	}
 	if weight != nil {
-		updateData.Weight = weight
+		updates["weight"] = *weight
 	}
 	if paramOverride != nil {
-		updateData.ParamOverride = paramOverride
+		updates["param_override"] = *paramOverride
 	}
 	if headerOverride != nil {
-		updateData.HeaderOverride = headerOverride
+		updates["header_override"] = *headerOverride
 	}
+	if len(updates) == 0 {
+		return nil
+	}
+	updates["config_version"] = gorm.Expr("config_version + ?", 1)
 
-	err := DB.Model(&Channel{}).Where("tag = ?", tag).Updates(updateData).Error
-	if err != nil {
-		return err
-	}
-	if shouldReCreateAbilities {
-		channels, err := GetChannelsByTag(updatedTag, false, false)
-		if err == nil {
-			for _, channel := range channels {
-				err = channel.UpdateAbilities(nil)
-				if err != nil {
-					common.SysLog(fmt.Sprintf("failed to update abilities: channel_id=%d, tag=%s, error=%v", channel.Id, channel.GetTag(), err))
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var channels []*Channel
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("tag = ?", tag).Find(&channels).Error; err != nil {
+			return err
+		}
+		// Validate every selected channel before any write, including downgrade
+		// checks in mixed legacy/v2 batches.
+		for _, channel := range channels {
+			if mappingProvided {
+				if err := common.ValidateModelMappingChange(channel.GetModelMapping(), *modelMapping); err != nil {
+					return fmt.Errorf("模型映射格式错误: channel_id=%d: %w", channel.Id, err)
 				}
 			}
 		}
-	} else {
-		err := UpdateAbilityByTag(tag, newTag, priority, weight)
-		if err != nil {
-			return err
+		for _, channel := range channels {
+			result := tx.Model(&Channel{}).Where("id = ? AND config_version = ?", channel.Id, channel.ConfigVersion).Updates(updates)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return ErrChannelConfigConflict
+			}
+			if err := tx.First(channel, channel.Id).Error; err != nil {
+				return err
+			}
+			if err := channel.UpdateAbilities(tx); err != nil {
+				return err
+			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func UpdateChannelUsedQuota(id int, quota int) {

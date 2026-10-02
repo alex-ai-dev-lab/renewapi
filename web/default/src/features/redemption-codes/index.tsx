@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import '@/styles/obsidian-admin.css'
 import { useTranslation } from 'react-i18next'
 import { SectionPageLayout } from '@/components/layout'
 import { RedemptionsDialogs } from './components/redemptions-dialogs'
@@ -38,7 +39,9 @@ export function Redemptions() {
           <RedemptionsPrimaryButtons />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <RedemptionsTable />
+          <div className='obsidian-admin'>
+            <RedemptionsTable />
+          </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

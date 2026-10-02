@@ -70,7 +70,7 @@ export function LegalDocument({
   if (isLoading) {
     return (
       <PublicLayout>
-        <div className='mx-auto flex max-w-4xl flex-col gap-4 py-12'>
+        <div className='mx-auto flex max-w-4xl flex-col gap-4 py-8'>
           <Skeleton className='h-8 w-[45%]' />
           <Skeleton className='h-4 w-full' />
           <Skeleton className='h-4 w-[90%]' />
@@ -83,8 +83,8 @@ export function LegalDocument({
   if (!success || !hasContent) {
     return (
       <PublicLayout>
-        <div className='mx-auto max-w-2xl py-12'>
-          <Card className='border-dashed'>
+        <div className='mx-auto max-w-2xl py-8'>
+          <Card className='rounded-md'>
             <CardHeader className='flex flex-row items-center gap-4'>
               <div className='bg-muted rounded-lg p-2'>
                 <FileWarning className='text-muted-foreground h-5 w-5' />
@@ -105,7 +105,7 @@ export function LegalDocument({
   if (isUrl) {
     return (
       <PublicLayout>
-        <div className='mx-auto max-w-2xl py-12'>
+        <div className='mx-auto max-w-2xl py-8'>
           <Card>
             <CardHeader>
               <CardTitle>{title}</CardTitle>
@@ -136,9 +136,9 @@ export function LegalDocument({
 
   return (
     <PublicLayout>
-      <div className='mx-auto max-w-4xl space-y-6 py-12'>
+      <div className='mx-auto max-w-4xl space-y-6 py-8'>
         <div className='space-y-2'>
-          <h1 className='text-3xl font-semibold tracking-tight'>{title}</h1>
+          <h1 className='text-[26px] font-semibold'>{title}</h1>
         </div>
 
         {isHtml ? (

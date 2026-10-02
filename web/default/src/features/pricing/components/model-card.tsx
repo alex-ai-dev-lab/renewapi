@@ -90,14 +90,14 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   return (
     <div
       className={cn(
-        'group relative flex flex-col rounded-xl border p-3 transition-colors sm:p-5',
-        'hover:bg-muted/20'
+        'group bg-card relative flex min-w-0 flex-col p-3 transition-colors',
+        'hover:bg-secondary'
       )}
     >
       {/* Header: icon + name + price + actions */}
       <div className='flex items-start justify-between gap-2.5 sm:gap-3'>
         <div className='flex min-w-0 items-start gap-2.5 sm:gap-3'>
-          <div className='bg-muted/40 border-border flex size-9 shrink-0 items-center justify-center rounded-lg border sm:size-10 sm:rounded-xl'>
+          <div className='bg-secondary flex size-8 shrink-0 items-center justify-center rounded-md'>
             {vendorIcon || (
               <span className='text-muted-foreground text-sm font-bold'>
                 {initial}
@@ -107,7 +107,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           <div className='min-w-0 flex-1'>
             <h3
               title={props.model.model_name}
-              className='text-foreground line-clamp-2 font-mono text-[15px] leading-tight font-bold break-all'
+              className='text-foreground line-clamp-2 font-mono text-[13px] leading-tight font-semibold break-all'
             >
               {props.model.model_name}
             </h3>
@@ -118,7 +118,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
                     <span className='text-chart-1'>
                       {t('Special billing expression')}
                     </span>
-                    <code className='text-muted-foreground/70 mt-0.5 line-clamp-1 block font-mono text-[11px] break-all'>
+                    <code className='text-muted-foreground mt-0.5 line-clamp-1 block font-mono text-[11px] break-all'>
                       {dynamicSummary.rawExpression}
                     </code>
                   </span>
@@ -173,7 +173,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
                     /{tokenUnitLabel}
                   </span>
                   {hasCachedPrice && (
-                    <span className='text-muted-foreground/60 whitespace-nowrap'>
+                    <span className='text-muted-foreground whitespace-nowrap'>
                       {t('Cached')}{' '}
                       <span className='font-mono'>
                         {formatPrice(
@@ -209,7 +209,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           <button
             type='button'
             onClick={props.onClick}
-            className='text-muted-foreground hover:text-foreground hover:bg-muted border-border inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition-colors sm:px-2.5 sm:py-1.5'
+            className='text-muted-foreground hover:text-foreground hover:bg-muted border-border inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors'
           >
             {t('Details')}
             <ChevronRight className='size-3.5' />
@@ -217,7 +217,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           <button
             type='button'
             onClick={handleCopy}
-            className='text-muted-foreground hover:text-foreground hover:bg-muted border-border rounded-lg border p-1.5 transition-colors'
+            className='text-muted-foreground hover:text-foreground hover:bg-muted border-border rounded-md border p-1.5 transition-colors'
             title={t('Copy')}
           >
             <Copy className='size-3.5' />
@@ -226,12 +226,12 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
       </div>
 
       {/* Description */}
-      <p className='text-muted-foreground mt-2 line-clamp-1 flex-1 text-[13px] leading-relaxed sm:mt-4 sm:line-clamp-2 sm:min-h-[2.5rem]'>
+      <p className='text-muted-foreground mt-2 line-clamp-2 text-xs leading-relaxed'>
         {modelDescription}
       </p>
 
       {/* Footer: metadata and performance summary wrap without squeezing labels */}
-      <div className='mt-2 flex flex-wrap items-start justify-between gap-x-3 gap-y-2 sm:mt-4'>
+      <div className='mt-3 flex flex-wrap items-start justify-between gap-x-3 gap-y-2 border-t pt-2'>
         <div className='flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1'>
           {primaryGroup && (
             <span className='text-muted-foreground text-xs font-medium whitespace-nowrap'>
@@ -256,12 +256,12 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           {bottomTags.map((item) => (
             <span
               key={item}
-              className='text-muted-foreground/70 text-xs whitespace-nowrap'
+              className='text-muted-foreground text-xs whitespace-nowrap'
             >
               {item}
             </span>
           ))}
-          <span className='text-muted-foreground/50 text-xs whitespace-nowrap'>
+          <span className='text-muted-foreground text-xs whitespace-nowrap'>
             {tokenUnitLabel}
           </span>
           {hiddenCount > 0 && (

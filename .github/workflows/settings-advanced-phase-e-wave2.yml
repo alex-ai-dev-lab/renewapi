@@ -80,6 +80,7 @@ jobs:
           QA_DB: ${{ runner.temp }}/renewapi-settings-phase-e-wave2.db
           QA_OUT: ../../qa-artifacts/settings-advanced-phase-e-wave2
           QA_PORT: '4173'
+          QA_SCREENSHOTS: 'false'
         run: bun .settings-advanced-phase-e-wave2.mjs
 
       - name: Verify Wave 2 evidence redaction

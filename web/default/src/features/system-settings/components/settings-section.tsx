@@ -37,7 +37,7 @@ export function SettingsSection({
 
   return (
     <SectionCard
-      className={className}
+      className={cn('obsidian-settings-section', className)}
       title={
         suppressHeader ? undefined : (
           <span {...titleProps} className={cn(titleProps?.className)}>
@@ -45,7 +45,7 @@ export function SettingsSection({
           </span>
         )
       }
-      contentClassName='space-y-4 sm:space-y-5'
+      contentClassName='min-w-0 space-y-4'
     >
       {children}
     </SectionCard>

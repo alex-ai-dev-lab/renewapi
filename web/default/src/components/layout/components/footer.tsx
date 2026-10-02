@@ -16,8 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Fragment, useMemo } from 'react'
+import { Fragment, useCallback, useMemo } from 'react'
 import { Link } from '@tanstack/react-router'
+import '@/styles/obsidian-shell.css'
 import { useTranslation } from 'react-i18next'
 import { sanitizeHtml } from '@/lib/sanitize-html'
 import { cn } from '@/lib/utils'
@@ -132,13 +133,13 @@ function LegalLinks(props: { leadingSeparator?: boolean }) {
 function ProjectAttribution(props: { currentYear: number; inline?: boolean }) {
   const { t } = useTranslation()
   const content = (
-    <span className='text-muted-foreground/45'>
+    <span className='text-muted-foreground'>
       &copy; {props.currentYear}{' '}
       <a
         href='https://github.com/QuantumNous/new-api'
         target='_blank'
         rel='noopener noreferrer'
-        className='text-foreground/70 hover:text-foreground font-medium transition-colors'
+        className='text-foreground hover:text-foreground font-medium transition-colors'
       >
         {t('New API')}
       </a>
@@ -149,7 +150,7 @@ function ProjectAttribution(props: { currentYear: number; inline?: boolean }) {
     return content
   }
   return (
-    <div className='text-muted-foreground/45 text-center text-xs sm:text-right'>
+    <div className='text-muted-foreground text-center text-xs sm:text-right'>
       {content}
     </div>
   )
@@ -175,8 +176,11 @@ export function Footer(props: FooterProps) {
   const currentYear = new Date().getFullYear()
   const configuredDocsLink = (status?.docs_link as string | undefined)?.trim()
   const docsBase = trimTrailingSlash(configuredDocsLink || DEFAULT_DOCS_BASE)
-  const docsHref = (defaultPath: string) =>
-    configuredDocsLink ? docsBase : `${docsBase}${defaultPath}`
+  const docsHref = useCallback(
+    (defaultPath: string) =>
+      configuredDocsLink ? docsBase : `${docsBase}${defaultPath}`,
+    [configuredDocsLink, docsBase]
+  )
 
   const fallbackColumns = useMemo<FooterColumnProps[]>(
     () => [
@@ -232,7 +236,7 @@ export function Footer(props: FooterProps) {
         ],
       },
     ],
-    [docsBase, configuredDocsLink, t]
+    [docsHref, t]
   )
 
   const displayColumns = props.columns ?? fallbackColumns
@@ -241,17 +245,17 @@ export function Footer(props: FooterProps) {
     return (
       <footer
         className={cn(
-          'border-border/40 relative z-10 border-t',
+          'obsidian-footer bg-background border-border relative z-10 border-t',
           props.className
         )}
       >
-        <div className='mx-auto w-full max-w-6xl px-6 py-5'>
-          <div className='bg-muted/20 border-border/50 flex flex-col items-center justify-between gap-4 rounded-2xl border px-4 py-4 backdrop-blur-sm sm:flex-row sm:px-5'>
+        <div className='mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-6'>
+          <div className='flex min-w-0 flex-col items-start justify-between gap-4 sm:flex-row sm:items-center'>
             <div
               className='custom-footer text-muted-foreground min-w-0 text-center text-sm sm:text-left'
               dangerouslySetInnerHTML={{ __html: safeFooterHtml }}
             />
-            <div className='border-border/60 text-muted-foreground/45 flex w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t pt-4 text-xs sm:w-auto sm:justify-end sm:border-t-0 sm:border-l sm:pt-0 sm:pl-5'>
+            <div className='border-border/60 text-muted-foreground flex w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t pt-4 text-xs sm:w-auto sm:justify-end sm:border-t-0 sm:border-l sm:pt-0 sm:pl-5'>
               <LegalLinks />
               <ProjectAttribution currentYear={currentYear} inline />
             </div>
@@ -263,33 +267,36 @@ export function Footer(props: FooterProps) {
 
   return (
     <footer
-      className={cn('border-border/40 relative z-10 border-t', props.className)}
+      className={cn(
+        'obsidian-footer bg-background border-border relative z-10 border-t',
+        props.className
+      )}
     >
-      <div className='mx-auto max-w-6xl px-6 py-12 md:py-16'>
-        <div className='flex flex-col justify-between gap-10 md:flex-row md:gap-16'>
+      <div className='mx-auto max-w-[1600px] px-4 py-6 sm:px-6'>
+        <div className='flex min-w-0 flex-col justify-between gap-6 md:flex-row md:gap-8'>
           {/* Brand column */}
           <div className='shrink-0'>
             <Link to='/' className='group flex items-center gap-2.5'>
               <img
                 src={displayLogo}
                 alt={displayName}
-                className='size-7 rounded-lg object-contain'
+                className='size-6 rounded-sm object-contain'
               />
               <span className='text-sm font-semibold tracking-tight'>
                 {displayName}
               </span>
             </Link>
-            <p className='text-muted-foreground/60 mt-3 max-w-[200px] text-xs leading-relaxed'>
+            <p className='text-muted-foreground mt-3 max-w-[200px] text-xs leading-relaxed'>
               {t('Powerful API Management Platform')}
             </p>
           </div>
 
           {/* Links columns */}
           {isDemoSiteMode && (
-            <div className='grid grid-cols-3 gap-8 md:gap-16'>
+            <div className='grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3 md:gap-8'>
               {displayColumns.map((column, index) => (
                 <div key={index}>
-                  <p className='text-muted-foreground/50 mb-3 text-xs font-medium tracking-wider uppercase'>
+                  <p className='text-muted-foreground mb-3 text-xs font-medium tracking-wider uppercase'>
                     {t(column.title)}
                   </p>
                   <ul className='space-y-2.5'>
@@ -307,8 +314,8 @@ export function Footer(props: FooterProps) {
 
         {/* Copyright + optional legal links inline on the left, project
             attribution on the right; wraps on narrow screens. */}
-        <div className='border-border/30 mt-12 flex flex-col items-center justify-between gap-x-3 gap-y-2 border-t pt-6 sm:flex-row'>
-          <div className='text-muted-foreground/40 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs sm:justify-start'>
+        <div className='border-border mt-6 flex flex-col items-start justify-between gap-x-3 gap-y-2 border-t pt-4 sm:flex-row sm:items-center'>
+          <div className='text-muted-foreground flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs sm:justify-start'>
             <span>
               &copy; {currentYear} {displayName}.{' '}
               {props.copyright ?? t('footer.defaultCopyright')}

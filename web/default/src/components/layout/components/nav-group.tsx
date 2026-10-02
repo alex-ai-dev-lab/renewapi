@@ -69,7 +69,7 @@ export function NavGroup({ title, items }: NavGroupProps) {
       </SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
-          const key = `${item.title}-${item.url || item.type}`
+          const key = item.id ?? `${item.url || item.type || item.title}`
 
           // Special handling: dynamic chat presets list
           if (item.type === 'chat-presets') {
@@ -125,7 +125,13 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
       <SidebarMenuButton
         isActive={checkIsActive(href, item)}
         tooltip={item.title}
-        render={<Link to={item.url} onClick={() => setOpenMobile(false)} />}
+        render={
+          <Link
+            to={item.url}
+            aria-current={checkIsActive(href, item) ? 'page' : undefined}
+            onClick={() => setOpenMobile(false)}
+          />
+        }
       >
         {item.icon && <item.icon className='shrink-0' />}
         <span className='min-w-0 flex-1 truncate'>{item.title}</span>
@@ -182,7 +188,13 @@ function SidebarMenuCollapsible({
               <SidebarMenuSubButton
                 isActive={checkIsActive(href, subItem)}
                 render={
-                  <Link to={subItem.url} onClick={() => setOpenMobile(false)} />
+                  <Link
+                    to={subItem.url}
+                    aria-current={
+                      checkIsActive(href, subItem) ? 'page' : undefined
+                    }
+                    onClick={() => setOpenMobile(false)}
+                  />
                 }
               >
                 {subItem.icon && <subItem.icon className='shrink-0' />}
@@ -236,6 +248,7 @@ function SidebarMenuCollapsedDropdown({
                 render={
                   <Link
                     to={sub.url}
+                    aria-current={checkIsActive(href, sub) ? 'page' : undefined}
                     className={`${checkIsActive(href, sub) ? 'bg-secondary' : ''}`}
                   />
                 }

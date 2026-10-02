@@ -16,8 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 export type SettingsSectionNavItem = {
@@ -34,7 +34,7 @@ export type SettingsSectionNavProps = {
 const MOBILE_SELECT_ID = 'settings-section-nav-select'
 
 /**
- * Sibling-section navigation for settings detail pages: a sticky glass
+ * Sibling-section navigation for settings detail pages: a sticky bordered
  * rail on desktop (>= lg) and a compact selector on smaller viewports.
  * Items come from the category's section registry (single source of
  * truth), never from a hand-maintained list.
@@ -59,9 +59,9 @@ export function SettingsSectionNav({
       <nav
         aria-label={navLabel}
         data-ui='settings-section-nav'
-        className='hidden w-56 shrink-0 lg:block'
+        className='hidden w-48 shrink-0 lg:block'
       >
-        <div className='border-border/60 bg-card/55 sticky top-20 rounded-[22px] border p-3 backdrop-blur-md'>
+        <div className='obsidian-settings-nav-panel border-border bg-card sticky top-20 rounded border p-2'>
           <a
             href='/system-settings'
             className='text-muted-foreground hover:text-foreground mb-1 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors'
@@ -81,10 +81,10 @@ export function SettingsSectionNav({
                     href={item.url}
                     aria-current={isActive ? 'page' : undefined}
                     className={cn(
-                      'block rounded-xl px-3 py-2 text-[13px] transition-colors',
+                      'block rounded border border-transparent px-3 py-2 text-xs transition-colors',
                       isActive
-                        ? 'bg-gradient-to-r from-[rgba(79,124,255,0.14)] to-[rgba(34,184,207,0.12)] font-semibold'
-                        : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                        ? 'border-border bg-secondary text-foreground font-semibold'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     )}
                   >
                     {item.title}
@@ -107,7 +107,7 @@ export function SettingsSectionNav({
         <select
           id={MOBILE_SELECT_ID}
           aria-label={navLabel}
-          className='border-border/60 bg-card/55 h-10 w-full rounded-xl border px-3 text-sm backdrop-blur-md'
+          className='border-border bg-card focus-visible:outline-ring h-9 w-full rounded border px-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2'
           value={activeUrl}
           onChange={(event) => {
             window.location.href = event.target.value

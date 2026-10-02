@@ -23,6 +23,12 @@ import { type TFunction } from 'i18next'
  * Base navigation item type
  */
 type BaseNavItem = {
+  /** Stable feature identity, independent of title, route and display group. */
+  id?: string
+  minimumRole?: number
+  rootOnly?: boolean
+  taskSection?: string
+  permissions?: { section: string; module: string }[]
   title: string
   badge?: string
   icon?: React.ElementType

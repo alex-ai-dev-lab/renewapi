@@ -116,8 +116,8 @@ separate.
 必须通过统一的后端、前端、数据库及浏览器检查，再发布对应 SHA 的离线镜像。
 源码构建使用 `renewapi-build-<sha>-<run>` 预发行标签；产品标签仍使用
 `renewapi-v<version>`，只有正式产品版本可以成为最新正式发布。Git tags
-不可重指向或删除，已发布附件不可覆盖；历史 Releases、镜像包和 Actions
-记录只有在用户明确授权清理时才能删除。详见 ADR-010。
+不可重指向，已发布附件不可覆盖；历史 Git tags、Releases、镜像包和 Actions
+记录只有在用户明确授权对应清理范围时才能删除。详见 ADR-010、ADR-013。
 
 ### Rule 0.2: Upstream synchronization
 

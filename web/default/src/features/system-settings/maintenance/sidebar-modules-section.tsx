@@ -16,8 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState } from 'react'
-import { useForm, useWatch } from 'react-hook-form'
+import { useState } from 'react'
 import { ArrowDown, ArrowUp, Download, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -29,233 +28,95 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormLabel,
-} from '@/components/ui/form'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  SettingsControlChildren,
-  SettingsForm,
-  SettingsSwitchContent,
-  SettingsControlGroup,
-  SettingsSwitchItem,
-} from '../components/settings-form-layout'
+  TASK_SECTIONS,
+  moduleAllowed,
+  resolveTaskSectionOrder,
+  setTaskSectionEnabled,
+  taskModuleRefs,
+} from '@/components/layout/lib/sidebar-navigation'
 import { SettingsPageFormActions } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 import {
-  SIDEBAR_MODULES_DEFAULT,
-  SIDEBAR_SECTION_ORDER_DEFAULT,
-  type SidebarModulesAdminConfig,
   getSidebarSectionOrder,
   parseSidebarModulesAdmin,
-  parseSidebarSectionOrder,
   serializeSidebarModulesAdmin,
-  serializeSidebarSectionOrder,
+  type SidebarModulesAdminConfig,
 } from './config'
 
-type SidebarModulesSectionProps = {
+type Props = {
   config: SidebarModulesAdminConfig
   initialSerialized: string
   sectionOrder: string[]
   initialSectionOrderSerialized: string
+  classicSectionOrder?: string
 }
 
-type SidebarFormValues = SidebarModulesAdminConfig
-
-type SidebarImportExportPayload = {
-  SidebarModulesAdmin?: SidebarModulesAdminConfig | string
-  SidebarSectionOrder?: string | string[]
+export function SidebarModulesSection(props: Props) {
+  // Only persisted changes replace the draft, not parent object identity changes.
+  return (
+    <SidebarModulesEditor
+      key={`${props.initialSerialized}:${props.initialSectionOrderSerialized}`}
+      {...props}
+    />
+  )
 }
 
-const toTitleCase = (value: string) =>
-  value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
-
-export function SidebarModulesSection({
-  config,
-  initialSerialized,
-  sectionOrder,
-  initialSectionOrderSerialized,
-}: SidebarModulesSectionProps) {
+function SidebarModulesEditor(props: Props) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
-
-  const sectionMeta: Record<string, { title: string; description: string }> = {
-    chat: {
-      title: t('Chat area'),
-      description: t('Playground experiments and live conversations.'),
-    },
-    console: {
-      title: t('Console area'),
-      description: t('Dashboards, tokens, and usage analytics.'),
-    },
-    personal: {
-      title: t('Personal area'),
-      description: t('Wallet management and personal preferences.'),
-    },
-    admin: {
-      title: t('Admin area'),
-      description: t('Global configuration and administrative tools.'),
-    },
-  }
-
-  const moduleMeta: Record<
-    string,
-    Record<string, { title: string; description: string }>
-  > = {
-    chat: {
-      playground: {
-        title: t('Playground'),
-        description: t('Experiment with prompts and models in real time.'),
-      },
-      chat: {
-        title: t('Chat'),
-        description: t('Access previous conversations and start new ones.'),
-      },
-    },
-    console: {
-      detail: {
-        title: t('Dashboard'),
-        description: t('Aggregated usage metrics and trend charts.'),
-      },
-      token: {
-        title: t('Token management'),
-        description: t('Create, revoke, and audit API tokens.'),
-      },
-      log: {
-        title: t('Usage logs'),
-        description: t('Detailed request logs for investigations.'),
-      },
-      midjourney: {
-        title: t('Drawing logs'),
-        description: t('History of Midjourney-style image tasks.'),
-      },
-      task: {
-        title: t('Task logs'),
-        description: t('Background job tracker for queued work.'),
-      },
-    },
-    personal: {
-      topup: {
-        title: t('Wallet'),
-        description: t('Top up balance and view billing history.'),
-      },
-      personal: {
-        title: t('Profile'),
-        description: t('Personal settings and profile management.'),
-      },
-    },
-    admin: {
-      channel: {
-        title: t('Channels'),
-        description: t('Configure upstream providers and routing.'),
-      },
-      models: {
-        title: t('Models'),
-        description: t('Manage catalog visibility and pricing.'),
-      },
-      redemption: {
-        title: t('Redeem codes'),
-        description: t('Create and review invite or credit codes.'),
-      },
-      user: {
-        title: t('Users'),
-        description: t('Administer user accounts and roles.'),
-      },
-      setting: {
-        title: t('System settings'),
-        description: t('Advanced platform configuration.'),
-      },
-      subscription: {
-        title: t('Subscription Management'),
-        description: t('Manage subscription plans and pricing.'),
-      },
-    },
-  }
-  const formDefaults = useMemo(() => config, [config])
-  const [currentSectionOrder, setCurrentSectionOrder] =
-    useState<string[]>(sectionOrder)
+  const [config, setConfig] = useState(props.config)
+  const [order, setOrder] = useState(props.sectionOrder)
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
-
-  const form = useForm<SidebarFormValues>({
-    defaultValues: formDefaults,
-  })
-  const watchedConfig = useWatch({ control: form.control }) as
-    | SidebarFormValues
-    | undefined
-
-  useEffect(() => {
-    form.reset(formDefaults)
-  }, [formDefaults, form])
-
-  useEffect(() => {
-    setCurrentSectionOrder(sectionOrder)
-  }, [sectionOrder])
-
-  const onSubmit = async (values: SidebarFormValues) => {
-    const serialized = serializeSidebarModulesAdmin(values)
-    const sectionOrderSerialized = serializeSidebarSectionOrder(
-      currentSectionOrder,
-      Object.keys(values)
-    )
-
-    if (
-      serialized === initialSerialized &&
-      sectionOrderSerialized === initialSectionOrderSerialized
-    ) {
-      return
-    }
-
-    if (serialized !== initialSerialized) {
+  const save = async () => {
+    const serialized = serializeSidebarModulesAdmin(config)
+    const sectionOrder = resolveTaskSectionOrder(order.join(',')).join(',')
+    if (serialized !== props.initialSerialized)
       await updateOption.mutateAsync({
         key: 'SidebarModulesAdmin',
         value: serialized,
       })
-    }
-
-    if (sectionOrderSerialized !== initialSectionOrderSerialized) {
+    if (sectionOrder !== props.initialSectionOrderSerialized)
       await updateOption.mutateAsync({
-        key: 'SidebarSectionOrder',
-        value: sectionOrderSerialized,
+        key: 'SidebarTaskSectionOrder',
+        value: sectionOrder,
       })
-    }
   }
-
-  const resetToDefault = () => {
-    form.reset(SIDEBAR_MODULES_DEFAULT)
-    setCurrentSectionOrder(SIDEBAR_SECTION_ORDER_DEFAULT)
+  const reset = () => {
+    setConfig(parseSidebarModulesAdmin(''))
+    setOrder(resolveTaskSectionOrder())
   }
-
-  const buildExportPayload = () => {
-    const currentConfig = form.getValues()
-    const serialized = serializeSidebarModulesAdmin(currentConfig)
-    const availableSections = Object.keys(currentConfig)
-    return {
-      SidebarModulesAdmin: JSON.parse(serialized) as SidebarModulesAdminConfig,
-      SidebarSectionOrder: serializeSidebarSectionOrder(
-        currentSectionOrder,
-        availableSections
-      ),
-    }
+  const moveSection = (index: number, delta: number) => {
+    const next = [...order]
+    ;[next[index], next[index + delta]] = [next[index + delta], next[index]]
+    setOrder(next)
   }
-
+  const moveModule = (section: string, module: string, other: string) => {
+    const next = getSidebarSectionOrder(config[section])
+    const a = next.indexOf(module),
+      b = next.indexOf(other)
+    ;[next[a], next[b]] = [next[b], next[a]]
+    setConfig({ ...config, [section]: { ...config[section], order: next } })
+  }
   const exportConfig = async () => {
-    const payload = buildExportPayload()
+    const payload = {
+      SidebarModulesAdmin: JSON.parse(serializeSidebarModulesAdmin(config)),
+      SidebarTaskSectionOrder: order.join(','),
+      SidebarSectionOrder: props.classicSectionOrder ?? '',
+    }
     const text = JSON.stringify(payload, null, 2)
     try {
       await navigator.clipboard?.writeText(text)
     } catch {
-      /* Clipboard can be unavailable on non-secure origins. */
+      /* Clipboard may be unavailable. */
     }
-
-    const blob = new Blob([text], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
+    const url = URL.createObjectURL(
+      new Blob([text], { type: 'application/json' })
+    )
     const link = document.createElement('a')
     link.href = url
     link.download = 'renewapi-sidebar-modules.json'
@@ -263,28 +124,28 @@ export function SidebarModulesSection({
     URL.revokeObjectURL(url)
     toast.success(t('Sidebar configuration exported'))
   }
-
-  const openImportDialog = () => {
-    setImportText('')
-    setImportOpen(true)
-  }
-
   const importConfig = () => {
     try {
-      const raw = JSON.parse(importText) as SidebarImportExportPayload
-      const rawModules = raw.SidebarModulesAdmin ?? raw
-      const importedConfig =
-        typeof rawModules === 'string'
-          ? parseSidebarModulesAdmin(rawModules)
-          : parseSidebarModulesAdmin(JSON.stringify(rawModules))
-      const availableSections = Object.keys(importedConfig)
-      const importedOrder = Array.isArray(raw.SidebarSectionOrder)
-        ? raw.SidebarSectionOrder.join(',')
-        : raw.SidebarSectionOrder
-
-      form.reset(importedConfig)
-      setCurrentSectionOrder(
-        parseSidebarSectionOrder(importedOrder, availableSections)
+      const raw = JSON.parse(importText)
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+        throw new Error('Invalid config')
+      const modules = raw.SidebarModulesAdmin ?? raw
+      setConfig(
+        parseSidebarModulesAdmin(
+          typeof modules === 'string' ? modules : JSON.stringify(modules)
+        )
+      )
+      const csv = (value: unknown) =>
+        Array.isArray(value)
+          ? value.join(',')
+          : typeof value === 'string'
+            ? value
+            : undefined
+      setOrder(
+        resolveTaskSectionOrder(
+          csv(raw.SidebarTaskSectionOrder),
+          csv(raw.SidebarSectionOrder)
+        )
       )
       setImportOpen(false)
       toast.success(t('Sidebar configuration imported'))
@@ -292,221 +153,167 @@ export function SidebarModulesSection({
       toast.error(t('Invalid sidebar configuration JSON'))
     }
   }
-
-  const moveSection = (sectionKey: string, direction: 'up' | 'down') => {
-    const availableSections = Object.keys(form.getValues())
-    const order = parseSidebarSectionOrder(
-      currentSectionOrder.join(','),
-      availableSections
-    )
-    const currentIndex = order.indexOf(sectionKey)
-    const nextIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
-    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= order.length) {
-      return
-    }
-
-    const nextOrder = [...order]
-    ;[nextOrder[currentIndex], nextOrder[nextIndex]] = [
-      nextOrder[nextIndex],
-      nextOrder[currentIndex],
-    ]
-    setCurrentSectionOrder(nextOrder)
-  }
-
-  const moveModule = (
-    sectionKey: string,
-    moduleKey: string,
-    direction: 'up' | 'down'
-  ) => {
-    const sectionConfig = form.getValues(
-      sectionKey as keyof SidebarFormValues
-    ) as SidebarFormValues[string]
-    if (!sectionConfig) return
-
-    const order = getSidebarSectionOrder(sectionConfig)
-    const currentIndex = order.indexOf(moduleKey)
-    const nextIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
-    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= order.length) {
-      return
-    }
-
-    const nextOrder = [...order]
-    ;[nextOrder[currentIndex], nextOrder[nextIndex]] = [
-      nextOrder[nextIndex],
-      nextOrder[currentIndex],
-    ]
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    form.setValue(`${sectionKey}.order` as any, nextOrder, {
-      shouldDirty: true,
-      shouldTouch: true,
-    })
-  }
-
-  const activeConfig = watchedConfig ?? config
-  const sections = parseSidebarSectionOrder(
-    currentSectionOrder.join(','),
-    Object.keys(activeConfig)
-  )
-    .map((sectionKey) => [sectionKey, activeConfig[sectionKey]] as const)
-    .filter(([, sectionConfig]) => Boolean(sectionConfig))
-
   return (
     <SettingsSection title={t('Sidebar modules')}>
-      <Form {...form}>
-        <SettingsForm onSubmit={form.handleSubmit(onSubmit)}>
-          <SettingsPageFormActions
-            onSave={form.handleSubmit(onSubmit)}
-            onReset={resetToDefault}
-            isSaving={updateOption.isPending}
-            resetLabel='Reset to default'
-            saveLabel='Save sidebar modules'
-          />
-          <div className='flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between'>
-            <div>
-              <p className='text-sm font-medium'>{t('Import / export')}</p>
-              <p className='text-muted-foreground mt-1 text-sm'>
-                {t('Backup or restore sidebar visibility and ordering as JSON.')}
-              </p>
-            </div>
-            <div className='flex shrink-0 gap-2'>
-              <Button type='button' variant='outline' onClick={exportConfig}>
-                <Download className='mr-2 h-4 w-4' />
-                {t('Export JSON')}
-              </Button>
-              <Button type='button' variant='outline' onClick={openImportDialog}>
-                <Upload className='mr-2 h-4 w-4' />
-                {t('Import JSON')}
-              </Button>
-            </div>
-          </div>
-          {sections.map(([sectionKey, sectionConfig], sectionIndex) => {
-            const sectionInfo = sectionMeta[sectionKey] ?? {
-              title: toTitleCase(sectionKey),
-              description: t('Custom sidebar section'),
-            }
-            const modules = getSidebarSectionOrder(sectionConfig).filter(
-              (moduleKey) => typeof sectionConfig[moduleKey] === 'boolean'
-            )
-
-            return (
-              <SettingsControlGroup key={sectionKey}>
-                <FormField
-                  control={form.control}
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  name={`${sectionKey}.enabled` as any}
-                  render={({ field }) => (
-                    <SettingsSwitchItem>
-                      <SettingsSwitchContent>
-                        <FormLabel>{sectionInfo.title}</FormLabel>
-                        <FormDescription>
-                          {sectionInfo.description}
-                        </FormDescription>
-                      </SettingsSwitchContent>
-                      <FormControl>
-                        <div className='flex shrink-0 items-center gap-1'>
-                          <Button
-                            type='button'
-                            variant='ghost'
-                            size='icon-sm'
-                            aria-label={t('Move section up')}
-                            title={t('Move section up')}
-                            disabled={sectionIndex === 0}
-                            onClick={() => moveSection(sectionKey, 'up')}
-                          >
-                            <ArrowUp className='h-4 w-4' />
-                          </Button>
-                          <Button
-                            type='button'
-                            variant='ghost'
-                            size='icon-sm'
-                            aria-label={t('Move section down')}
-                            title={t('Move section down')}
-                            disabled={sectionIndex === sections.length - 1}
-                            onClick={() => moveSection(sectionKey, 'down')}
-                          >
-                            <ArrowDown className='h-4 w-4' />
-                          </Button>
-                          <Switch
-                            checked={Boolean(field.value)}
-                            onCheckedChange={field.onChange}
-                          />
-                        </div>
-                      </FormControl>
-                    </SettingsSwitchItem>
+      <SettingsPageFormActions
+        onSave={save}
+        onReset={reset}
+        isSaving={updateOption.isPending}
+      />
+      <p className='text-muted-foreground text-sm'>
+        {t(
+          'Task categories change presentation only. Existing permission sections remain authoritative; Overview is always first when enabled.'
+        )}
+      </p>
+      <div className='flex gap-2 py-3'>
+        <Button variant='outline' onClick={exportConfig}>
+          <Download />
+          {t('Export JSON')}
+        </Button>
+        <Button
+          variant='outline'
+          onClick={() => {
+            setImportText('')
+            setImportOpen(true)
+          }}
+        >
+          <Upload />
+          {t('Import JSON')}
+        </Button>
+      </div>
+      <details className='rounded-lg border p-3'>
+        <summary className='cursor-pointer text-sm font-medium'>
+          {t('Legacy permission sections')}
+        </summary>
+        <div className='grid gap-3 pt-3 sm:grid-cols-2'>
+          {Object.entries(config).map(([section, value]) => (
+            <label
+              key={section}
+              className='flex items-center justify-between gap-2 text-sm'
+            >
+              <span>{section}</span>
+              <Switch
+                aria-label={section}
+                checked={value.enabled}
+                onCheckedChange={(enabled) =>
+                  setConfig({ ...config, [section]: { ...value, enabled } })
+                }
+              />
+            </label>
+          ))}
+        </div>
+      </details>
+      {order.map((task, index) => {
+        const section = TASK_SECTIONS.find((section) => section.id === task)!
+        const refs = taskModuleRefs(task)
+        // Each old section keeps its saved module order, without crossing permission sections.
+        const sectionKeys = [...new Set(refs.map((ref) => ref.section))]
+        const sorted = sectionKeys.flatMap((key) =>
+          getSidebarSectionOrder(config[key]).flatMap((module) =>
+            refs.filter((ref) => ref.section === key && ref.module === module)
+          )
+        )
+        return (
+          <section key={task} className='mt-4 rounded-lg border p-4'>
+            <div className='flex items-center justify-between gap-2'>
+              <h3 className='text-sm font-medium'>{t(section.titleKey)}</h3>
+              <div className='flex items-center gap-1'>
+                <Button
+                  size='icon-sm'
+                  variant='ghost'
+                  aria-label={t('Move section up')}
+                  disabled={index === 0}
+                  onClick={() => moveSection(index, -1)}
+                >
+                  <ArrowUp />
+                </Button>
+                <Button
+                  size='icon-sm'
+                  variant='ghost'
+                  aria-label={t('Move section down')}
+                  disabled={index === order.length - 1}
+                  onClick={() => moveSection(index, 1)}
+                >
+                  <ArrowDown />
+                </Button>
+                <Switch
+                  aria-label={t(section.titleKey)}
+                  checked={refs.every((ref) =>
+                    moduleAllowed(config, ref.section, ref.module)
                   )}
+                  onCheckedChange={(enabled) =>
+                    setConfig(setTaskSectionEnabled(config, task, enabled))
+                  }
                 />
-
-                <SettingsControlChildren className='grid gap-3 md:grid-cols-2'>
-                  {modules.map((moduleKey, moduleIndex) => {
-                    const moduleInfo = moduleMeta[sectionKey]?.[moduleKey] ?? {
-                      title: toTitleCase(moduleKey),
-                      description: t('Custom module'),
-                    }
-                    return (
-                      <FormField
-                        key={`${sectionKey}.${moduleKey}`}
-                        control={form.control}
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        name={`${sectionKey}.${moduleKey}` as any}
-                        render={({ field }) => (
-                          <SettingsSwitchItem className='border-b-0 py-2'>
-                            <SettingsSwitchContent>
-                              <FormLabel>{moduleInfo.title}</FormLabel>
-                              <FormDescription>
-                                {moduleInfo.description}
-                              </FormDescription>
-                            </SettingsSwitchContent>
-                            <FormControl>
-                              <div className='flex shrink-0 items-center gap-1'>
-                                <Button
-                                  type='button'
-                                  variant='ghost'
-                                  size='icon-sm'
-                                  aria-label={t('Move up')}
-                                  title={t('Move up')}
-                                  disabled={moduleIndex === 0}
-                                  onClick={() =>
-                                    moveModule(sectionKey, moduleKey, 'up')
-                                  }
-                                >
-                                  <ArrowUp className='h-4 w-4' />
-                                </Button>
-                                <Button
-                                  type='button'
-                                  variant='ghost'
-                                  size='icon-sm'
-                                  aria-label={t('Move down')}
-                                  title={t('Move down')}
-                                  disabled={moduleIndex === modules.length - 1}
-                                  onClick={() =>
-                                    moveModule(sectionKey, moduleKey, 'down')
-                                  }
-                                >
-                                  <ArrowDown className='h-4 w-4' />
-                                </Button>
-                                <Switch
-                                  checked={Boolean(field.value)}
-                                  onCheckedChange={field.onChange}
-                                  disabled={
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                    !form.watch(`${sectionKey}.enabled` as any)
-                                  }
-                                />
-                              </div>
-                            </FormControl>
-                          </SettingsSwitchItem>
-                        )}
+              </div>
+            </div>
+            <div className='mt-3 grid gap-3 md:grid-cols-2'>
+              {sorted.map((ref) => {
+                const siblings = sorted.filter(
+                  (other) => other.section === ref.section
+                )
+                const position = siblings.findIndex(
+                  (other) => other.module === ref.module
+                )
+                return (
+                  <div
+                    key={`${ref.section}.${ref.module}`}
+                    className='flex items-center justify-between gap-2 rounded border p-3'
+                  >
+                    <span className='text-sm'>{t(ref.titleKey)}</span>
+                    <div className='flex items-center gap-1'>
+                      <Button
+                        size='icon-sm'
+                        variant='ghost'
+                        aria-label={t('Move up')}
+                        disabled={position === 0}
+                        onClick={() =>
+                          moveModule(
+                            ref.section,
+                            ref.module,
+                            siblings[position - 1].module
+                          )
+                        }
+                      >
+                        <ArrowUp />
+                      </Button>
+                      <Button
+                        size='icon-sm'
+                        variant='ghost'
+                        aria-label={t('Move down')}
+                        disabled={position === siblings.length - 1}
+                        onClick={() =>
+                          moveModule(
+                            ref.section,
+                            ref.module,
+                            siblings[position + 1].module
+                          )
+                        }
+                      >
+                        <ArrowDown />
+                      </Button>
+                      <Switch
+                        aria-label={t(ref.titleKey)}
+                        checked={moduleAllowed(config, ref.section, ref.module)}
+                        disabled={!config[ref.section].enabled}
+                        onCheckedChange={(enabled) =>
+                          setConfig({
+                            ...config,
+                            [ref.section]: {
+                              ...config[ref.section],
+                              [ref.module]: enabled,
+                            },
+                          })
+                        }
                       />
-                    )
-                  })}
-                </SettingsControlChildren>
-              </SettingsControlGroup>
-            )
-          })}
-        </SettingsForm>
-      </Form>
-
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )
+      })}
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent className='sm:max-w-2xl'>
           <DialogHeader>
@@ -516,20 +323,13 @@ export function SidebarModulesSection({
             rows={12}
             value={importText}
             onChange={(event) => setImportText(event.target.value)}
-            placeholder='{ "SidebarModulesAdmin": {}, "SidebarSectionOrder": "chat,console,personal,admin" }'
             className='font-mono text-xs'
           />
           <DialogFooter>
-            <Button
-              type='button'
-              variant='outline'
-              onClick={() => setImportOpen(false)}
-            >
+            <Button variant='outline' onClick={() => setImportOpen(false)}>
               {t('Cancel')}
             </Button>
-            <Button type='button' onClick={importConfig}>
-              {t('Import')}
-            </Button>
+            <Button onClick={importConfig}>{t('Import')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

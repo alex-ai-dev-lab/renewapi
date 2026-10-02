@@ -19,6 +19,11 @@ const username = 'qaadmin'
 const password = 'QaRoot123!'
 const sessionSecret = 'aurora-secondary-surfaces-2026-08-24'
 
+async function captureScreenshot(page, options) {
+  if (process.env.QA_SCREENSHOTS === 'false') return
+  await page.screenshot(options)
+}
+
 if (!binary || !dbPath) {
   throw new Error('QA_BINARY and QA_DB are required')
 }
@@ -510,7 +515,7 @@ async function auditPage(context, testCase, theme, viewportName, authRequired) {
       })
     }
 
-    await page.screenshot({
+    await captureScreenshot(page, {
       path: path.join(outDir, 'screenshots', `${sanitize(label)}.png`),
       fullPage: true,
     })
@@ -552,7 +557,7 @@ async function auditPage(context, testCase, theme, viewportName, authRequired) {
       'screenshots',
       `${sanitize(label)}-exception.png`
     )
-    await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {})
+    await captureScreenshot(page, { path: screenshotPath, fullPage: true }).catch(() => {})
     failures.push({
       label,
       type: 'audit-exception',
@@ -601,7 +606,7 @@ async function auditRecoveryCases(browser) {
       )
       // 下列 HTTP 故障是测试主动注入；页面不得因此丢失会话、编辑上下文或伪造状态。
       await test(context, page, requireState)
-      await page.screenshot({
+      await captureScreenshot(page, {
         path: path.join(outDir, 'screenshots', `${label}.png`)
       })
       observations.push({ label, passed: true })
@@ -716,6 +721,7 @@ async function auditRecoveryCases(browser) {
                   data: {
                     system_name: 'QA Gateway',
                     version: 'qa-current',
+                    server_address: 'https://gateway.example.test/api',
                     start_time: Math.floor(Date.now() / 1000) - 60,
                     register_enabled: false,
                     password_login_enabled: true
@@ -726,7 +732,7 @@ async function auditRecoveryCases(browser) {
       })
       await page.goto(`${baseURL}/`, { waitUntil: 'domcontentloaded' })
       await page
-        .locator('[data-gateway-state="online"]')
+        .locator('.obsidian-home')
         .waitFor({ state: 'visible', timeout: 20000 })
       check(
         (await page.locator('a[href="/sign-up"]').count()) === 0,
@@ -737,39 +743,37 @@ async function auditRecoveryCases(browser) {
         '浏览模型应进入实际模型广场'
       )
       check(
-        (await page.locator('.iz-site-brand').first().innerText()).includes(
+        (await page.getByRole('link', { name: 'Go to home', exact: true }).first().innerText()).includes(
           'QA Gateway'
         ),
         '首页应使用配置的站点名称'
       )
-      const live = await page.locator('#live').innerText()
+      const home = await page.locator('.obsidian-home').innerText()
       check(
-        live.includes('qa-current') &&
-          !/184 QPS|99\.91%|fallback stream/.test(live),
-        '首页只能展示实际返回的状态信息'
+        home.includes('https://gateway.example.test/api/v1') &&
+          !/184 QPS|99\.91%|fallback stream/.test(home),
+        '首页应展示配置的 API 地址，不得捏造实时指标'
       )
-      await page.getByRole('tab', { name: 'cURL', exact: true }).focus()
-      await page.keyboard.press('ArrowRight')
+      const example = page.getByLabel('Example cURL command', { exact: true })
+      await example.focus()
       check(
-        (await page
-          .getByRole('tab', { name: 'Python', exact: true })
-          .getAttribute('aria-selected')) === 'true',
-        '代码标签页应支持方向键'
+        await example.evaluate(element => element === document.activeElement),
+        '代码示例应允许键盘聚焦和滚动'
       )
       check(
-        (await page.getByRole('tabpanel').innerText()).includes('YOUR_MODEL'),
+        (await example.innerText()).includes('YOUR_MODEL'),
         '示例不应假设站点启用了固定模型'
       )
+      await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+      await page.getByRole('button', { name: 'Copy', exact: true }).click()
+      const copied = await page.evaluate(() => navigator.clipboard.readText())
+      check(copied.includes('https://gateway.example.test/api/v1/chat/completions') && copied.includes('$API_KEY'), '复制应包含配置的端点与密钥占位符')
       unavailable = true
-      await page
-        .getByRole('button', { name: 'Refresh status', exact: true })
-        .click()
-      await page
-        .locator('[data-gateway-state="unavailable"]')
-        .waitFor({ state: 'visible', timeout: 20000 })
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      await page.locator('.obsidian-home').waitFor({ state: 'visible', timeout: 20000 })
       check(
-        new URL(page.url()).pathname === '/',
-        '状态接口故障应保留首页并明确显示不可用'
+        new URL(page.url()).pathname === '/' && (await page.locator('a[href="/sign-up"]').count()) === 0,
+        '状态接口故障应保留首页且不得显示未经确认的注册入口'
       )
     }
   )

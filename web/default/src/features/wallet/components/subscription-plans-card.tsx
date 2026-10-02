@@ -113,6 +113,12 @@ export function SubscriptionPlansCard({
     useState('subscription_first')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [now, setNow] = useState(() => Date.now() / 1000)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now() / 1000), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
   // Distinguishes "the operator has no plans configured" (hide the card) from
   // "we could not reach the server" (show an error with a retry). Previously
   // both collapsed into `return null`, so a failing endpoint made the entire
@@ -131,49 +137,56 @@ export function SubscriptionPlansCard({
     [topupInfo?.pay_methods]
   )
 
-  const fetchPlans = useCallback(async () => {
-    try {
-      const res = await getPublicPlans()
-      if (res.success) {
-        setPlans(res.data || [])
-        return true
-      }
-      toast.error(res.message || t('Failed to load subscription plans'))
-      return false
-    } catch (error) {
-      toast.error(t('Failed to load subscription plans'))
-      return false
-    }
-  }, [t])
+  const fetchPlans = useCallback(
+    () =>
+      getPublicPlans()
+        .then((res) => {
+          if (res.success) {
+            setPlans(res.data || [])
+            return true
+          }
+          toast.error(res.message || t('Failed to load subscription plans'))
+          return false
+        })
+        .catch(() => {
+          toast.error(t('Failed to load subscription plans'))
+          return false
+        }),
+    [t]
+  )
 
-  const fetchSelfSubscription = useCallback(async () => {
-    try {
-      const res = await getSelfSubscriptionFull()
-      if (res.success && res.data) {
-        setBillingPreference(
-          res.data.billing_preference || 'subscription_first'
-        )
-        setActiveSubscriptions(res.data.subscriptions || [])
-        setAllSubscriptions(res.data.all_subscriptions || [])
-        return true
-      }
-      toast.error(res.message || t('Failed to load your subscriptions'))
-      return false
-    } catch (error) {
-      toast.error(t('Failed to load your subscriptions'))
-      return false
-    }
-  }, [t])
+  const fetchSelfSubscription = useCallback(
+    () =>
+      getSelfSubscriptionFull()
+        .then((res) => {
+          if (res.success && res.data) {
+            setBillingPreference(
+              res.data.billing_preference || 'subscription_first'
+            )
+            setActiveSubscriptions(res.data.subscriptions || [])
+            setAllSubscriptions(res.data.all_subscriptions || [])
+            return true
+          }
+          toast.error(res.message || t('Failed to load your subscriptions'))
+          return false
+        })
+        .catch(() => {
+          toast.error(t('Failed to load your subscriptions'))
+          return false
+        }),
+    [t]
+  )
 
-  const loadAll = useCallback(async () => {
-    setLoading(true)
-    const [plansOk, subsOk] = await Promise.all([
-      fetchPlans(),
-      fetchSelfSubscription(),
-    ])
-    setLoadFailed(!plansOk || !subsOk)
-    setLoading(false)
-  }, [fetchPlans, fetchSelfSubscription])
+  const loadAll = useCallback(
+    () =>
+      Promise.all([fetchPlans(), fetchSelfSubscription()]).then(
+        ([plansOk, subsOk]) => {
+          setLoadFailed(!plansOk || !subsOk)
+          setLoading(false)
+        }
+      ),
+    [fetchPlans, fetchSelfSubscription]
+  )
 
   useEffect(() => {
     loadAll()
@@ -209,7 +222,7 @@ export function SubscriptionPlansCard({
 
   const hasActive = activeSubscriptions.length > 0
   const hasAny = allSubscriptions.length > 0
-  const isAvailable = loading || plans.length > 0 || hasAny
+  const isAvailable = loading || loadFailed || plans.length > 0 || hasAny
   const disablePref = !hasActive
   const isSubPref =
     billingPreference === 'subscription_first' ||
@@ -248,7 +261,6 @@ export function SubscriptionPlansCard({
   const getRemainingDays = (sub: UserSubscriptionRecord) => {
     const endTime = sub?.subscription?.end_time || 0
     if (!endTime) return 0
-    const now = Date.now() / 1000
     return Math.max(0, Math.ceil((endTime - now) / 86400))
   }
 
@@ -289,7 +301,14 @@ export function SubscriptionPlansCard({
           <p className='text-muted-foreground text-sm'>
             {t('Failed to load subscription plans')}
           </p>
-          <Button variant='outline' size='sm' onClick={loadAll}>
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={() => {
+              setLoading(true)
+              void loadAll()
+            }}
+          >
             <RefreshCw className='mr-2 h-3.5 w-3.5' />
             {t('Retry')}
           </Button>
@@ -308,10 +327,10 @@ export function SubscriptionPlansCard({
         title={t('Subscription Plans')}
         description={t('Subscribe to a plan for model access')}
         icon={<Crown className='h-4 w-4' />}
-        contentClassName='space-y-4 sm:space-y-5'
+        contentClassName='space-y-4'
       >
         {/* My subscriptions & billing preference */}
-        <div className='rounded-xl border p-3 sm:p-4'>
+        <div className='border-b pb-4'>
           <div className='flex flex-wrap items-center justify-between gap-2.5 sm:gap-3'>
             <div className='flex min-w-0 flex-wrap items-center gap-2'>
               <span className='text-sm font-medium'>
@@ -439,7 +458,7 @@ export function SubscriptionPlansCard({
           {hasAny && (
             <>
               <Separator className='my-3' />
-              <div className='max-h-64 space-y-3 overflow-y-auto pr-1'>
+              <div className='divide-border max-h-64 divide-y overflow-y-auto pr-1'>
                 {allSubscriptions.map((sub) => {
                   const subscription = sub.subscription
                   const totalAmount = Number(subscription?.amount_total || 0)
@@ -450,7 +469,6 @@ export function SubscriptionPlansCard({
                     planTitleMap.get(subscription?.plan_id) || ''
                   const remainDays = getRemainingDays(sub)
                   const usagePercent = getUsagePercent(sub)
-                  const now = Date.now() / 1000
                   const isExpired = (subscription?.end_time || 0) < now
                   const isCancelled = subscription?.status === 'cancelled'
                   const isActive =
@@ -459,7 +477,7 @@ export function SubscriptionPlansCard({
                   return (
                     <div
                       key={subscription?.id}
-                      className='bg-background rounded-md border p-3 text-xs'
+                      className='min-w-0 py-3 text-xs'
                     >
                       <div className='flex items-center justify-between'>
                         <div className='flex items-center gap-2'>
@@ -558,7 +576,7 @@ export function SubscriptionPlansCard({
 
         {/* Available plans grid */}
         {plans.length > 0 ? (
-          <div className='grid grid-cols-1 gap-3 2xl:grid-cols-2 2xl:gap-4'>
+          <div className='divide-border grid min-w-0 divide-y rounded-md border'>
             {plans.map((p, index) => {
               const plan = p?.plan
               if (!plan) return null
@@ -589,12 +607,9 @@ export function SubscriptionPlansCard({
               return (
                 <Card
                   key={plan.id}
-                  className={cn(
-                    'transition-shadow',
-                    isPopular && 'border-primary/70'
-                  )}
+                  className='gap-0 rounded-none border-0 py-0 shadow-none ring-0'
                 >
-                  <CardContent className='flex h-full flex-col p-3.5 sm:p-4'>
+                  <CardContent className='flex min-w-0 flex-col p-3 sm:p-4'>
                     <div className='mb-2 flex items-start justify-between gap-3'>
                       <div className='min-w-0'>
                         <h4 className='truncate font-semibold'>
@@ -619,7 +634,7 @@ export function SubscriptionPlansCard({
                     </div>
 
                     <div className='py-2'>
-                      <span className='text-primary text-2xl font-bold'>
+                      <span className='text-foreground font-mono text-xl font-semibold tabular-nums'>
                         {priceLabel}
                       </span>
                     </div>

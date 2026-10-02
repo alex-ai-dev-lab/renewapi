@@ -39,6 +39,15 @@ type BillingSession struct {
 	mu               sync.Mutex
 }
 
+// CanRetryRequest reports only the local billing lifecycle's replay eligibility.
+// Active reservations (including trusted zero-preconsume sessions) are not
+// settlement. It makes no assertion about whether an upstream charged a call.
+func (s *BillingSession) CanRetryRequest() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.settled && !s.fundingSettled && !s.refunded && s.pendingTaskID == 0
+}
+
 // Settle 根据实际消耗额度进行结算。
 // enforce 模式由 billing ledger 在单事务内调整余额；shadow/off 模式也必须
 // 原子提交资金来源与令牌 delta，避免成功响应后只提交一侧余额。

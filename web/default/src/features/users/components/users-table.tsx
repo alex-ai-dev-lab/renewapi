@@ -215,8 +215,7 @@ export function UsersTable() {
         isFetching={isFetching}
         isError={isError}
         errorDescription={error instanceof Error ? error.message : undefined}
-        tableHeaderClassName='sticky top-0 z-10 bg-background/80 backdrop-blur-md'
-        tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
+        tableHeaderClassName='sticky top-0 z-10 bg-card'
         emptyTitle={t('No Users Found')}
         emptyDescription={t(
           'No users available. Try adjusting your search or filters.'

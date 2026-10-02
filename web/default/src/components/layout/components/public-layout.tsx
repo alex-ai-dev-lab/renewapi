@@ -16,7 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import '@/styles/obsidian-shell.css'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
 import type { TopNavLink } from '../types'
 import { PublicHeader, type PublicHeaderProps } from './public-header'
 
@@ -38,7 +40,12 @@ type PublicLayoutProps = {
 export function PublicLayout(props: PublicLayoutProps) {
   const { t } = useTranslation()
   return (
-    <div className='bg-background/70 text-foreground relative min-h-svh overflow-x-clip'>
+    <div
+      className={cn(
+        'obsidian-public-layout bg-background text-foreground min-h-svh min-w-0',
+        props.showHeader !== false && 'pt-14'
+      )}
+    >
       <a
         href={props.skipLinkTarget ?? '#main-content'}
         className='bg-foreground text-background fixed top-3 left-3 z-[200] -translate-y-16 px-4 py-2 font-mono text-xs tracking-[0.08em] uppercase transition-transform focus:translate-y-0'
@@ -62,12 +69,12 @@ export function PublicLayout(props: PublicLayoutProps) {
         <main
           id='main-content'
           tabIndex={-1}
-          className='container px-4 py-6 pt-20 outline-none md:px-4'
+          className='mx-auto w-full max-w-[1600px] min-w-0 px-4 py-6 outline-none sm:px-6'
         >
           {props.children}
         </main>
       ) : (
-        <div id='main-content' tabIndex={-1} className='outline-none'>
+        <div id='main-content' tabIndex={-1} className='min-w-0 outline-none'>
           {props.children}
         </div>
       )}

@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useMemo, useState } from 'react'
+import '@/styles/obsidian-user.css'
 import { useTranslation } from 'react-i18next'
 import { PublicLayout } from '@/components/layout'
 import { PageContainer, PageHeader } from '@/components/page-primitives'
@@ -150,7 +151,7 @@ export function Pricing() {
       <PublicLayout showMainContainer={false}>
         <PageContainer
           width='fluid'
-          className='mx-auto max-w-[1760px] pt-16 sm:pt-20 2xl:px-10'
+          className='mx-auto max-w-[1600px] min-w-0 pt-8 sm:pt-8'
         >
           <LoadingSkeleton viewMode={viewMode} />
         </PageContainer>
@@ -164,7 +165,7 @@ export function Pricing() {
         <PageTransition>
           <PageContainer
             width='fluid'
-            className='mx-auto max-w-[1760px] pt-16 sm:pt-20 2xl:px-10'
+            className='mx-auto max-w-[1600px] min-w-0 pt-8 sm:pt-8'
           >
             <PageHeader
               title={t('Model Plaza')}
@@ -194,7 +195,7 @@ export function Pricing() {
               />
             </PageHeader>
 
-            <div className='grid gap-4 xl:grid-cols-[248px_minmax(0,1fr)]'>
+            <div className='grid min-w-0 gap-4 xl:grid-cols-[224px_minmax(0,1fr)]'>
               <PricingSidebar
                 quotaTypeFilter={quotaTypeFilter}
                 endpointTypeFilter={endpointTypeFilter}

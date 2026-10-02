@@ -61,8 +61,8 @@ export function PageContainer({
     <div
       data-slot='page-container'
       className={cn(
-        'flex w-full flex-col gap-5 px-4 py-5 sm:gap-6 sm:px-6 sm:py-7 lg:px-8',
-        width === 'reading' ? 'mx-auto max-w-[1180px]' : 'max-w-none xl:px-8',
+        'flex w-full min-w-0 flex-col gap-4 px-4 py-5 sm:px-6 sm:py-6',
+        width === 'reading' ? 'mx-auto max-w-[1600px]' : 'max-w-none',
         className
       )}
       {...props}
@@ -99,7 +99,7 @@ export function PageHeader({
         {title != null && (
           <h1
             className={cn(
-              'leading-[1.06] font-extrabold tracking-[-0.02em]',
+              'leading-tight font-semibold tracking-[-0.035em]',
               size === 'compact'
                 ? 'text-[15px] sm:text-base'
                 : 'text-2xl sm:text-3xl'
@@ -151,7 +151,7 @@ export function SectionCard({
     <Card
       data-slot='section-card'
       className={cn(
-        'border-border/60 min-w-0 gap-0 rounded-[calc(var(--radius)*1.375)] py-0 shadow-none',
+        'border-border min-w-0 gap-0 rounded-lg py-0 shadow-none',
         className
       )}
       {...props}
@@ -177,7 +177,7 @@ export function SectionCard({
           </div>
         </CardHeader>
       )}
-      <CardContent className={cn('p-5 sm:p-6', contentClassName)}>
+      <CardContent className={cn('p-4 sm:p-5', contentClassName)}>
         {children}
       </CardContent>
     </Card>
@@ -251,7 +251,7 @@ export function StatCard({
           )}
         </div>
         <div>
-          <div className='text-[26px] leading-none font-extrabold tracking-[-0.03em] tabular-nums'>
+          <div className='text-[29px] leading-tight font-medium tracking-[-0.035em] tabular-nums'>
             {value}
           </div>
           {description != null && (
@@ -272,7 +272,7 @@ export function DataTable({
   return (
     <div
       data-slot='primitive-data-table'
-      className='border-border/60 bg-card overflow-x-auto rounded-[calc(var(--radius)*1.375)] border'
+      className='border-border bg-card overflow-x-auto rounded-lg border'
     >
       <Table
         className={cn('[&_th]:text-muted-foreground', className)}

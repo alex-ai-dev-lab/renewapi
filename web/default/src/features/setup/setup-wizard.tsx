@@ -277,12 +277,12 @@ export function SetupWizard() {
   }
 
   return (
-    <div className='bg-muted/40 relative min-h-svh py-10'>
+    <div className='bg-background relative min-h-svh py-8'>
       <div className='absolute top-4 right-4 sm:top-6 sm:right-6'>
         <LanguageSwitcher />
       </div>
-      <div className='container mx-auto flex max-w-5xl flex-col gap-8 px-4 sm:px-6'>
-        <div className='flex flex-col items-center gap-3'>
+      <div className='container mx-auto flex max-w-5xl min-w-0 flex-col gap-4 px-4 sm:px-6'>
+        <div className='flex flex-col items-start gap-2 pr-12'>
           <div className='relative h-12 w-12'>
             {systemConfigLoading ? (
               <Skeleton className='absolute inset-0 rounded-full' />
@@ -290,18 +290,18 @@ export function SetupWizard() {
               <img
                 src={logo}
                 alt={t('System logo')}
-                className='h-12 w-12 rounded-full object-cover shadow-sm'
+                className='size-10 rounded-md object-cover'
               />
             )}
           </div>
           {systemConfigLoading ? (
             <Skeleton className='h-7 w-40' />
           ) : (
-            <h1 className='text-2xl font-semibold tracking-tight'>
+            <h1 className='text-[26px] font-semibold'>
               {t('Initialize')} {systemName}
             </h1>
           )}
-          <p className='text-muted-foreground text-center text-sm sm:text-base'>
+          <p className='text-muted-foreground text-sm'>
             {t(
               'Follow the guided steps to prepare your workspace before the first login.'
             )}
@@ -310,7 +310,7 @@ export function SetupWizard() {
 
         <Card>
           <CardHeader className='space-y-2'>
-            <CardTitle className='text-xl font-semibold'>
+            <CardTitle className='text-sm font-semibold'>
               {t('System setup wizard')}
             </CardTitle>
             <CardDescription>
@@ -318,8 +318,8 @@ export function SetupWizard() {
             </CardDescription>
           </CardHeader>
 
-          <CardContent className='space-y-6'>
-            <ol className='grid gap-3 sm:grid-cols-4'>
+          <CardContent className='space-y-4'>
+            <ol className='grid min-w-0 grid-cols-1 gap-2 md:grid-cols-4'>
               {STEPS.map((step, index) => {
                 const isActive = currentStep === index
                 const isCompleted = currentStep > index
@@ -327,9 +327,9 @@ export function SetupWizard() {
                   <li
                     key={step.titleKey}
                     className={cn(
-                      'rounded-xl border p-3',
+                      'min-w-0 rounded-md border p-3',
                       isActive
-                        ? 'border-primary ring-primary/20 ring-2'
+                        ? 'border-primary bg-accent'
                         : isCompleted
                           ? 'border-primary/40 bg-primary/5'
                           : 'border-muted bg-card'
@@ -372,7 +372,7 @@ export function SetupWizard() {
             ) : (
               <Form {...form}>
                 <form
-                  className='space-y-6'
+                  className='space-y-4'
                   onSubmit={(event) => event.preventDefault()}
                 >
                   {currentStepComponent}

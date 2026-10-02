@@ -37,13 +37,14 @@ export function SettingsAccordion({
   className,
 }: SettingsAccordionProps) {
   return (
-    <AccordionItem value={value} className={cn(className)}>
-      <AccordionTrigger className='hover:no-underline'>
-        <div className='flex flex-col gap-1 text-left'>
-          <div className='text-base font-semibold'>{title}</div>
-        </div>
+    <AccordionItem
+      value={value}
+      className={cn('obsidian-settings-accordion', className)}
+    >
+      <AccordionTrigger className='py-3 text-[13px] hover:no-underline'>
+        <span className='min-w-0 text-left font-semibold'>{title}</span>
       </AccordionTrigger>
-      <AccordionContent className='pt-4'>{children}</AccordionContent>
+      <AccordionContent className='pt-3'>{children}</AccordionContent>
     </AccordionItem>
   )
 }

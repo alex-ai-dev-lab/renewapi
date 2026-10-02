@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Link, getRouteApi, useNavigate } from '@tanstack/react-router'
 import {
   Activity,
@@ -33,6 +33,7 @@ import {
   Timer,
   Users,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import {
   Bar,
   BarChart,
@@ -42,8 +43,11 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import {
+  useCollectionSelection,
+  usePageCursor,
+} from '@/hooks/use-collection-view'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -267,7 +271,6 @@ export function UserOperationsPanel() {
   const defaultHealthFilter = useDashboardDefaultHealthFilter()
   const defaultPageSize = useDashboardDefaultPageSize()
   const healthThresholds = useDashboardHealthThresholds()
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
   const [userQuery, setUserQuery] = useDashboardPreference(
     'dashboard:user-operations:user-query',
     '',
@@ -284,7 +287,6 @@ export function UserOperationsPanel() {
     DEFAULT_USER_SORT,
     isUserSortState
   )
-  const [userPage, setUserPage] = useState(1)
   const [userPageSize, setUserPageSize] = useDashboardPreference<number>(
     'dashboard:user-operations:user-page-size',
     defaultPageSize,
@@ -313,6 +315,10 @@ export function UserOperationsPanel() {
     dataUpdatedAt,
   } = useUserStats(timeRange, autoRefresh, refreshInterval)
   const rows = users ?? []
+  const [selectedUserId, setSelectedUserId] = useCollectionSelection(
+    rows.map((row) => row.user_id),
+    search.user_id ?? null
+  )
   const {
     data: userTrend,
     isLoading: userTrendLoading,
@@ -376,6 +382,10 @@ export function UserOperationsPanel() {
     1,
     Math.ceil(sortedRows.length / userPageSize)
   )
+  const [userPage, setUserPage] = usePageCursor(
+    JSON.stringify([userHealthFilter, userPageSize, userQuery, userSort]),
+    totalUserPages
+  )
   const pagedRows = useMemo(
     () =>
       sortedRows.slice((userPage - 1) * userPageSize, userPage * userPageSize),
@@ -435,41 +445,10 @@ export function UserOperationsPanel() {
   }
 
   useEffect(() => {
-    if (rows.length === 0) {
-      if (selectedUserId !== null) {
-        setSelectedUserId(null)
-      }
-      return
-    }
-    const requestedUserId =
-      search.user_id && rows.some((row) => row.user_id === search.user_id)
-        ? search.user_id
-        : null
-    const nextUserId = requestedUserId ?? selectedUserId
-    if (!nextUserId || !rows.some((row) => row.user_id === nextUserId)) {
-      setSelectedUserId(rows[0].user_id)
-      return
-    }
-    if (selectedUserId !== nextUserId) {
-      setSelectedUserId(nextUserId)
-    }
-  }, [rows, search.user_id, selectedUserId])
-
-  useEffect(() => {
     if (search.time_range && search.time_range !== timeRange) {
       setTimeRange(search.time_range)
     }
   }, [search.time_range, timeRange])
-
-  useEffect(() => {
-    setUserPage(1)
-  }, [userHealthFilter, userPageSize, userQuery, userSort])
-
-  useEffect(() => {
-    if (userPage > totalUserPages) {
-      setUserPage(totalUserPages)
-    }
-  }, [totalUserPages, userPage])
 
   if (error) {
     return (
@@ -509,7 +488,7 @@ export function UserOperationsPanel() {
         </div>
       </div>
 
-      <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-5'>
+      <div className='obsidian-kpi-rack obsidian-kpi-rack-five'>
         <MetricCard
           icon={Users}
           label={t('活跃用户')}
@@ -545,7 +524,7 @@ export function UserOperationsPanel() {
         />
       </div>
 
-      <div className='grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.7fr)]'>
+      <div className='obsidian-observation'>
         <Card className='rounded-lg shadow-none'>
           <CardHeader className='border-b pb-3'>
             <CardTitle className='text-sm'>{t('头部用户消费')}</CardTitle>
@@ -559,10 +538,11 @@ export function UserOperationsPanel() {
               </div>
             ) : (
               <ResponsiveContainer width='100%' height={320}>
-                <BarChart data={spendChart}>
+                <BarChart data={spendChart} accessibilityLayer maxBarSize={24}>
                   <CartesianGrid
-                    strokeDasharray='3 3'
+                    vertical={false}
                     stroke='var(--border)'
+                    strokeOpacity={0.6}
                   />
                   <XAxis
                     dataKey='name'
@@ -583,6 +563,8 @@ export function UserOperationsPanel() {
                     axisLine={false}
                   />
                   <Tooltip
+                    formatter={(value) => `${formatUsd(Number(value))} USD`}
+                    itemStyle={{ color: 'var(--popover-foreground)' }}
                     contentStyle={{
                       background: 'var(--popover)',
                       border: '1px solid var(--border)',
@@ -591,7 +573,7 @@ export function UserOperationsPanel() {
                   />
                   <Bar
                     dataKey='cost'
-                    fill='var(--primary)'
+                    fill='var(--chart-1)'
                     radius={[4, 4, 0, 0]}
                     name={t('成本')}
                   />
@@ -653,7 +635,10 @@ export function UserOperationsPanel() {
               }
               disabled={rows.length === 0 || isLoading}
             >
-              <SelectTrigger className='w-full sm:w-[22rem]'>
+              <SelectTrigger
+                aria-label={t('选择用户')}
+                className='w-full sm:w-[22rem]'
+              >
                 <SelectValue placeholder={t('选择用户')} />
               </SelectTrigger>
               <SelectContent>
@@ -724,7 +709,10 @@ export function UserOperationsPanel() {
                 setUserHealthFilter(value as typeof userHealthFilter)
               }
             >
-              <SelectTrigger className='w-full sm:w-44'>
+              <SelectTrigger
+                aria-label={t('Status')}
+                className='w-full sm:w-44'
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -875,7 +863,9 @@ export function UserOperationsPanel() {
                       }
                       tabIndex={0}
                       role='button'
-                      aria-label={t('查看 {{name}} 的趋势', { name: user.username })}
+                      aria-label={t('查看 {{name}} 的趋势', {
+                        name: user.username,
+                      })}
                       className='focus-visible:ring-ring cursor-pointer outline-none focus-visible:ring-2'
                       onClick={() => selectUser(user.user_id)}
                       onKeyDown={(event) => {
@@ -928,7 +918,9 @@ export function UserOperationsPanel() {
                             </span>
                           </span>
                         ) : (
-                            <span className='text-muted-foreground'>{t('暂无')}</span>
+                          <span className='text-muted-foreground'>
+                            {t('暂无')}
+                          </span>
                         )}
                       </TableCell>
                       <TableCell className='text-right font-mono'>
@@ -954,7 +946,10 @@ export function UserOperationsPanel() {
                   value={String(userPageSize)}
                   onValueChange={(value) => setUserPageSize(Number(value))}
                 >
-                  <SelectTrigger className='h-8 w-28'>
+                  <SelectTrigger
+                    aria-label={t('Rows per page')}
+                    className='h-8 w-28'
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -969,6 +964,7 @@ export function UserOperationsPanel() {
                   <Button
                     variant='outline'
                     size='icon-sm'
+                    aria-label={t('Previous page')}
                     onClick={() => setUserPage((page) => Math.max(1, page - 1))}
                     disabled={userPage <= 1}
                   >
@@ -980,6 +976,7 @@ export function UserOperationsPanel() {
                   <Button
                     variant='outline'
                     size='icon-sm'
+                    aria-label={t('Next page')}
                     onClick={() =>
                       setUserPage((page) => Math.min(totalUserPages, page + 1))
                     }
@@ -1034,7 +1031,7 @@ function MetricCard(props: {
 }) {
   const Icon = props.icon
   return (
-    <div className='bg-card rounded-lg border p-3'>
+    <div className='obsidian-kpi'>
       <div className='flex items-center justify-between gap-2'>
         <span className='text-muted-foreground text-xs font-medium'>
           {props.label}
@@ -1046,12 +1043,7 @@ function MetricCard(props: {
       {props.loading ? (
         <Skeleton className='mt-2 h-7 w-20' />
       ) : (
-        <div
-          className={cn(
-            'mt-2 font-mono text-xl font-semibold tabular-nums',
-            props.valueClassName
-          )}
-        >
+        <div className={cn('obsidian-kpi-value', props.valueClassName)}>
           {props.value}
         </div>
       )}
@@ -1093,7 +1085,8 @@ function CompactRank(props: {
                   {user.username}
                 </div>
                 <div className='text-muted-foreground text-xs'>
-                  #{user.user_id} · {t('{{count}} 次请求', {
+                  #{user.user_id} ·{' '}
+                  {t('{{count}} 次请求', {
                     count: formatCount(user.total_requests),
                   })}
                 </div>

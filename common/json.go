@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -48,6 +49,50 @@ func WalkJsonArray(data []byte, visit func(RawMessage) bool) error {
 	}
 	_, err = decoder.Token()
 	return err
+}
+
+// DecodeUniqueJSONObject preserves raw values and rejects duplicate member names
+// instead of silently replacing an earlier value. Nested objects can be checked
+// independently by callers that understand their schema.
+func DecodeUniqueJSONObject(data []byte) (map[string]RawMessage, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	token, err := decoder.Token()
+	if err != nil {
+		return nil, err
+	}
+	if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
+		return nil, errors.New("JSON value is not an object")
+	}
+	result := make(map[string]RawMessage)
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, err
+		}
+		key, ok := token.(string)
+		if !ok {
+			return nil, errors.New("JSON object member must have a string name")
+		}
+		if _, exists := result[key]; exists {
+			return nil, fmt.Errorf("duplicate JSON object member: %q", key)
+		}
+		var value RawMessage
+		if err := decoder.Decode(&value); err != nil {
+			return nil, err
+		}
+		result[key] = value
+	}
+	if _, err := decoder.Token(); err != nil {
+		return nil, err
+	}
+	var trailing RawMessage
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err != nil {
+			return nil, err
+		}
+		return nil, errors.New("unexpected trailing JSON value")
+	}
+	return result, nil
 }
 
 func Marshal(v any) ([]byte, error) {

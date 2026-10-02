@@ -118,23 +118,23 @@ export function UsersStats(props: { users: User[] }) {
 
   return (
     <div className='space-y-4'>
-      <div className='grid gap-4 sm:grid-cols-3'>
+      <div className='obsidian-admin-stat-strip'>
         {items.map((item) => (
-          <div key={item.label} className='glass-tile min-h-[118px] p-5'>
-            <div className='flex h-full flex-col justify-between gap-3'>
-              <span className='text-muted-foreground text-[10px] font-bold tracking-[1.35px] uppercase'>
+          <div key={item.label} className='obsidian-admin-stat'>
+            <div className='flex h-full flex-col justify-between gap-2'>
+              <span className='text-muted-foreground text-[11px] font-medium'>
                 {item.label}
               </span>
               <div>
                 <div
                   className={cn(
-                    'text-[28px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
+                    'font-mono text-[29px] leading-none font-semibold tabular-nums',
                     item.tone
                   )}
                 >
                   {item.value}
                 </div>
-                <div className='text-muted-foreground mt-1 truncate text-[10px]'>
+                <div className='text-muted-foreground mt-2 truncate text-[11px]'>
                   {item.detail}
                 </div>
               </div>
@@ -142,8 +142,8 @@ export function UsersStats(props: { users: User[] }) {
           </div>
         ))}
       </div>
-      <div className='flex items-center justify-between gap-3 px-1 pt-1'>
-        <h2 className='text-[15px] font-extrabold tracking-[-0.01em]'>
+      <div className='obsidian-admin-toolbar'>
+        <h2 className='text-[13px] font-semibold'>
           {t('aurora.users.list.title', {
             defaultValue: isChinese ? '用户与分组' : 'Users & groups',
           })}

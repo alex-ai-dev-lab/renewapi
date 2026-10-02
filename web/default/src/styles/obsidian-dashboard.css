@@ -1,0 +1,391 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+/* Obsidian dashboard: scoped presentation, shared semantic tokens. */
+.obsidian-dashboard,
+.obsidian-overview {
+  min-width: 0;
+}
+
+.obsidian-overview {
+  display: grid;
+  gap: 16px;
+}
+
+.obsidian-dashboard :where([data-slot='card']) {
+  min-width: 0;
+  gap: 0;
+  padding-block: 0;
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: none;
+}
+
+.obsidian-dashboard :where([data-slot='card-header']) {
+  gap: 4px;
+  padding: 16px;
+}
+
+.obsidian-dashboard :where([data-slot='card-title']) {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.obsidian-dashboard :where([data-slot='card-description']) {
+  font-size: 12px;
+}
+
+.obsidian-dashboard :where([data-slot='card-content']) {
+  min-width: 0;
+}
+
+.obsidian-context,
+.obsidian-controls,
+.obsidian-section-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.obsidian-context {
+  justify-content: space-between;
+  padding-block: 12px;
+  border-block: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.obsidian-context-account,
+.obsidian-context-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.obsidian-context-account strong {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.obsidian-context-meta,
+.obsidian-context-scope {
+  color: var(--muted-foreground);
+}
+
+.obsidian-controls {
+  justify-content: space-between;
+}
+
+.obsidian-kpi-rack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--border);
+}
+
+.obsidian-kpi {
+  min-width: 0;
+  padding: 16px;
+  background: var(--card);
+}
+
+.obsidian-kpi-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.obsidian-kpi-value {
+  margin-top: 8px;
+  font-size: 29px;
+  line-height: 1.15;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.obsidian-kpi-detail {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.obsidian-section-label {
+  justify-content: space-between;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.obsidian-observation,
+.obsidian-inventory,
+.obsidian-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.obsidian-observation > *,
+.obsidian-inventory > *,
+.obsidian-tools > *,
+.obsidian-panel,
+.obsidian-checks {
+  min-width: 0;
+}
+
+.obsidian-checks {
+  display: grid;
+  gap: 16px;
+}
+
+.obsidian-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.obsidian-panel-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.obsidian-panel-heading h2,
+.obsidian-panel-heading h3 {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.obsidian-panel-body {
+  padding: 16px;
+}
+
+.obsidian-detail-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 8px;
+  font-size: 12px;
+}
+
+.obsidian-detail-row + .obsidian-detail-row {
+  border-top: 1px solid var(--border);
+}
+
+.obsidian-detail-row dt {
+  color: var(--muted-foreground);
+}
+
+.obsidian-detail-row dd {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.obsidian-chart-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.obsidian-trend-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-block: 12px;
+  border-block: 1px solid var(--border);
+  font-size: 11px;
+}
+
+.obsidian-trend-summary dt {
+  color: var(--muted-foreground);
+}
+
+.obsidian-trend-summary dd {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.obsidian-chart-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.obsidian-chart-grid > * {
+  min-width: 0;
+}
+
+.obsidian-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-block: 8px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.obsidian-chart-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.obsidian-chart-table {
+  max-height: 320px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+
+.obsidian-chart-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.obsidian-chart-table :where(th, td) {
+  padding: 8px 12px;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--border);
+}
+
+.obsidian-chart-table :where(th, td):first-child {
+  text-align: left;
+}
+
+.obsidian-chart-table th {
+  color: var(--muted-foreground);
+  font-weight: 500;
+}
+
+.obsidian-chart-table summary {
+  padding: 12px 16px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.obsidian-activity-list > li {
+  padding: 12px 16px;
+  font-size: 12px;
+}
+
+.obsidian-activity-list > li + li {
+  border-top: 1px solid var(--border);
+}
+
+.obsidian-quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.obsidian-runbook {
+  padding: 16px;
+  border-left: 2px solid var(--primary);
+  font-size: 12px;
+}
+
+.obsidian-dashboard a:focus-visible,
+.obsidian-dashboard summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+@media (min-width: 768px) {
+  .obsidian-kpi-rack {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .obsidian-chart-grid[data-multiple='true'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.obsidian-share-meter {
+  width: 64px;
+  height: 6px;
+  border: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--chart-1) 15%, var(--card));
+}
+
+.obsidian-share-meter::-webkit-meter-bar {
+  border: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--chart-1) 15%, var(--card));
+}
+
+.obsidian-share-meter::-webkit-meter-optimum-value {
+  background: var(--chart-1);
+}
+
+.obsidian-share-meter::-moz-meter-bar {
+  background: var(--chart-1);
+}
+
+@media (min-width: 1024px) {
+  .obsidian-kpi-rack-five {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .obsidian-observation,
+  .obsidian-inventory,
+  .obsidian-tools {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+}
+
+@media (forced-colors: active) {
+  .obsidian-dashboard .recharts-line-curve {
+    stroke: CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .obsidian-dashboard :where(.animate-pulse, .animate-spin) {
+    animation: none;
+  }
+}

@@ -503,6 +503,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		compactCapabilityUnsupported := false
 		streamRecoveryAdvanceRoute := false
+		var mappedCandidateChannel *model.Channel
 		for ; relayInfo.Failover.CanAttempt() && retryParam.GetRetry() <= maxRetryTimes; retryParam.IncreaseRetry() {
 			if c.Request.Context().Err() != nil {
 				newAPIError = types.NewErrorWithStatusCode(c.Request.Context().Err(), types.ErrorCodeBadResponse, 499, types.ErrOptionWithSkipRetry())
@@ -520,9 +521,15 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				retryParam.StrictPreferredChannel = true
 			}
 			relayInfo.RetryIndex = retryParam.GetRetry()
-			service.SleepBeforeRouterRetry(c, relayInfo.RetryIndex)
-			service.ApplyRouterCooldownFilter(relayInfo, retryParam)
-			channel, channelErr := relaySelectChannel(c, relayInfo, retryParam)
+			sameChannelCandidate := mappedCandidateChannel != nil
+			channel := mappedCandidateChannel
+			mappedCandidateChannel = nil
+			var channelErr *types.NewAPIError
+			if !sameChannelCandidate {
+				service.SleepBeforeRouterRetry(c, relayInfo.RetryIndex)
+				service.ApplyRouterCooldownFilter(relayInfo, retryParam)
+				channel, channelErr = relaySelectChannel(c, relayInfo, retryParam)
+			}
 			if channelErr != nil {
 				if maybeFallbackClaudeThinkingToSanitized(c, relayInfo, retryParam) {
 					retryParam.ResetRetryNextTry()
@@ -536,7 +543,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				}
 				break
 			}
-			if channel == nil || relayInfo.Failover.AttemptedChannelIDs[channel.Id] {
+			if channel == nil || (!sameChannelCandidate && relayInfo.Failover.AttemptedChannelIDs[channel.Id]) {
 				break
 			}
 			resetResponsesFunctionCallArgumentsRetryIfChannelChanged(retryParam, channel)
@@ -571,7 +578,14 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				break
 			}
 			c.Request.Body = io.NopCloser(bodyStorage)
-			if !relayInfo.Failover.Begin(channel.Id, channel.Name, channel.GetPriority()) {
+			began := false
+			if sameChannelCandidate {
+				cursor := relayInfo.ModelMappingRoute
+				began = relayInfo.Failover.BeginMappedCandidate(channel.Id, channel.Name, channel.GetPriority(), cursor.Candidates[cursor.Index])
+			} else {
+				began = relayInfo.Failover.Begin(channel.Id, channel.Name, channel.GetPriority())
+			}
+			if !began {
 				break
 			}
 			relayInfo.StreamStatus = nil
@@ -598,6 +612,15 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			attempt := &relayInfo.Failover.AttemptRecords[len(relayInfo.Failover.AttemptRecords)-1]
 			attempt.ResponseModel = relayInfo.ResponseModel
 			attempt.ObservedUsage = relayInfo.ResponsesObservedUsage
+			if relayInfo.UpstreamWireModel != nil {
+				attempt.UpstreamModel = *relayInfo.UpstreamWireModel
+			} else if relayInfo.ChannelMeta != nil {
+				attempt.UpstreamModel = relayInfo.UpstreamModelName
+			}
+			cursor := relayInfo.ModelMappingRoute
+			if cursor.Index >= 0 && cursor.Index < len(cursor.RuleIDs) {
+				attempt.MappingRuleID = cursor.RuleIDs[cursor.Index]
+			}
 
 			if newAPIError == nil {
 				capabilityOutcome := service.ObserveResponsesCapabilityAttempt(
@@ -637,6 +660,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 			newAPIError = service.NormalizeViolationFeeError(newAPIError)
 			relayInfo.LastError = newAPIError
+			// Planned compact routes and explicit bindings retain their exact route
+			// semantics. Ordinary mapping targets retry without reselecting credentials.
+			if !route.StrictPreferredChannel && retryNextMappedModelCandidate(c, relayInfo, retryParam, channel, newAPIError) {
+				mappedCandidateChannel = channel
+				continue
+			}
 			streamRecoveryFailure := isSessionScopedStreamFailure(relayInfo)
 			streamClientFailure := isClientScopedStreamFailure(relayInfo) || c.Request.Context().Err() != nil
 			sessionRecoveryDecision := service.SessionRecoveryDecision{}
@@ -1144,18 +1173,42 @@ func retryNextMappedModelCandidate(c *gin.Context, info *relaycommon.RelayInfo, 
 	if c == nil || info == nil || retryParam == nil || channel == nil || relayErr == nil {
 		return false
 	}
-	if types.IsSkipRetryError(relayErr) || info.ClientResponseCommitted() || c.Writer.Written() {
+	if types.IsSkipRetryError(relayErr) || info.ClientResponseCommitted() || c.Writer.Written() ||
+		c.Request == nil || c.Request.Context().Err() != nil || info.ResponsesObservedUsage != nil ||
+		info.ReceivedResponseCount > 0 || info.StreamStatus != nil || info.ModelMappingRetryBlocked ||
+		(info.Failover != nil && !info.Failover.CanAttempt()) || retryParam.StrictPreferredChannel {
+		return false
+	}
+	// Unknown billing implementations fail closed; NeedsRefund is not a replay
+	// signal (an active trusted session can legitimately have zero reservation).
+	if info.Billing != nil {
+		state, ok := info.Billing.(interface{ CanRetryRequest() bool })
+		if !ok || !state.CanRetryRequest() {
+			return false
+		}
+	}
+	if _, pinned := c.Get("specific_channel_id"); pinned {
+		return false
+	}
+	// Only explicit model rejection qualifies for the local candidate retry
+	// policy; this is not a guarantee about the upstream's billing behavior.
+	// Generic 429/5xx, authentication, transport/read timeouts, and async task
+	// handlers are deliberately left to the pre-existing channel failover policy.
+	switch info.RelayMode {
+	case relayconstant.RelayModeChatCompletions, relayconstant.RelayModeCompletions,
+		relayconstant.RelayModeResponses, relayconstant.RelayModeResponsesCompact:
+	default:
+		return false
+	}
+	if !isSafeMappedModelRejection(relayErr) {
 		return false
 	}
 	previous, next, ok := helper.AdvanceModelMappingFallback(info)
 	if !ok {
 		return false
 	}
-	retryParam.ModelMappingFallbackChannelId = channel.Id
-	retryParam.ResetRetryNextTry()
-	if retryParam.ExcludedChannelIds != nil {
-		delete(retryParam.ExcludedChannelIds, channel.Id)
-	}
+	// No selector hint, channel exclusion deletion, or retry-budget reset: the
+	// main loop retains this channel only for this validated next target.
 	logger.LogWarn(c, fmt.Sprintf(
 		"model mapping fallback: channel=%d source=%s from=%s to=%s reason=%s",
 		channel.Id,
@@ -1166,6 +1219,25 @@ func retryNextMappedModelCandidate(c *gin.Context, info *relaycommon.RelayInfo, 
 	))
 	return true
 }
+
+// isSafeMappedModelRejection is intentionally narrower than channel failover:
+// an HTTP error alone is not evidence that execution never started.
+func isSafeMappedModelRejection(err *types.NewAPIError) bool {
+	if err == nil || types.IsSkipRetryError(err) || isTransportFailureError(err) {
+		return false
+	}
+	switch err.StatusCode {
+	case http.StatusBadRequest, http.StatusNotFound, http.StatusUnprocessableEntity:
+		return service.IsModelScopedChannelFailureError(err)
+	case http.StatusTooManyRequests, http.StatusServiceUnavailable:
+		switch fmt.Sprint(err.ToOpenAIError().Code) {
+		case "model_rate_limit_exceeded", "model_overloaded", "model_capacity_exceeded":
+			return true
+		}
+	}
+	return false
+}
+
 func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) bool {
 	if openaiErr == nil {
 		return false

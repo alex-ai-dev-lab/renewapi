@@ -16,8 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useTranslation } from 'react-i18next'
 import { ArrowRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Card } from '@/components/ui/card'
 import type { SettingsCategoryDefinition } from '../settings-catalog'
 
@@ -41,17 +41,15 @@ export function SettingsCategoryCard({ category }: SettingsCategoryCardProps) {
   return (
     <Card
       data-ui='settings-category-card'
-      className='border-border/60 overflow-hidden py-0'
+      className='obsidian-settings-category border-border min-w-0 overflow-hidden py-0'
     >
-      <div className='flex items-center gap-3 px-5 pt-5 pb-3'>
-        <span className='bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-xl'>
-          <Icon className='size-4' />
+      <div className='flex items-center gap-3 border-b px-4 py-3'>
+        <span className='bg-secondary text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded border'>
+          <Icon className='size-4' aria-hidden='true' />
         </span>
         <div className='min-w-0'>
-          <h3 className='truncate text-[15px] font-extrabold tracking-[-0.01em]'>
-            {title}
-          </h3>
-          <p className='text-muted-foreground truncate text-xs'>
+          <h3 className='text-[13px] font-semibold'>{title}</h3>
+          <p className='text-muted-foreground text-xs'>
             {isChinese ? category.descriptionZh : category.descriptionEn}
           </p>
         </div>
@@ -64,7 +62,7 @@ export function SettingsCategoryCard({ category }: SettingsCategoryCardProps) {
           <li key={item.id}>
             <a
               href={item.url}
-              className='group hover:bg-muted/50 flex items-center justify-between gap-3 px-5 py-2.5 text-[13px] transition-colors'
+              className='group hover:bg-secondary focus-visible:outline-ring flex items-center justify-between gap-3 px-4 py-2 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px]'
             >
               <span className='min-w-0 truncate'>{item.title}</span>
               <ArrowRight className='text-muted-foreground size-3.5 shrink-0 transition-transform group-hover:translate-x-0.5' />

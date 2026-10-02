@@ -211,6 +211,8 @@ export interface ChannelAttempt {
   timeout_stage?: string
   elapsed_ms: number
   upstream_request_id?: string
+  upstream_model?: string
+  mapping_rule_id?: string
   response_model?: ResponseModelInfo
 }
 

@@ -154,9 +154,11 @@ function applyHeader(text) {
   const header = COPYRIGHT_HEADER.replaceAll('\n', newline)
   const [shebang, body] = splitShebang(text)
   const hadHeader = PROJECT_COPYRIGHT_BLOCK_PATTERN.test(body)
-  const strippedBody = body
-    .replace(PROJECT_COPYRIGHT_BLOCK_PATTERN, '')
-    .replace(/^(?:\r?\n)+/, '')
+  const withoutHeader = body.replace(PROJECT_COPYRIGHT_BLOCK_PATTERN, '')
+  // Preserve the separator chosen by the formatter (CSS adds a blank line).
+  // Header normalization must not oscillate with the formatting gate.
+  const separator = hadHeader ? withoutHeader.match(/^(?:\r?\n)*/)[0] : ''
+  const strippedBody = withoutHeader.replace(/^(?:\r?\n)+/, '')
 
   if (strippedBody.length === 0) {
     return {
@@ -167,7 +169,7 @@ function applyHeader(text) {
 
   return {
     action: hadHeader ? 'updated' : 'added',
-    text: shebang + header + strippedBody,
+    text: shebang + header + separator + strippedBody,
   }
 }
 

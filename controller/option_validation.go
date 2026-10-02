@@ -444,6 +444,10 @@ func validateOptionValues(values map[string]string) error {
 			if !isCSVSubsetOptionValue(value, "overview", "models", "channels", "users") {
 				return invalidOptionValue("无效的 Dashboard 可见分区")
 			}
+		case "SidebarTaskSectionOrder":
+			if value != "" && !isCSVSubsetOptionValue(value, "access", "usage", "account", "models", "operations", "system") {
+				return invalidOptionValue("无效的侧边栏任务分组顺序")
+			}
 		case "SidebarSectionOrder":
 			if !isCSVSubsetOptionValue(value, "chat", "console", "personal", "admin") {
 				return invalidOptionValue("无效的侧边栏分组顺序")

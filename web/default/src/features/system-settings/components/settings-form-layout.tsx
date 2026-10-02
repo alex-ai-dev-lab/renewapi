@@ -45,16 +45,13 @@ type SettingsSwitchFieldProps = SettingsSwitchRowProps & {
 }
 
 const settingsSwitchRowClassName =
-  'border-border/60 bg-card/65 flex min-w-0 flex-row items-start justify-between gap-5 rounded-[calc(var(--radius)*1.125)] border px-4 py-4 shadow-sm backdrop-blur-sm'
+  'obsidian-settings-switch border-border bg-card flex min-w-0 flex-row items-start justify-between gap-4 rounded border px-3 py-3'
 
 export function SettingsFormGrid(props: SettingsFormGridProps) {
   return (
     <div
       data-settings-form-span='full'
-      className={cn(
-        'grid min-w-0 gap-x-5 gap-y-5 lg:grid-cols-2',
-        props.className
-      )}
+      className={cn('grid min-w-0 gap-4 lg:grid-cols-2', props.className)}
     >
       {props.children}
     </div>
@@ -156,7 +153,7 @@ export function SettingsControlGroup({
     <div
       data-settings-form-span='full'
       className={cn(
-        'border-border/60 bg-card/45 min-w-0 space-y-4 rounded-[calc(var(--radius)*1.125)] border px-4 py-4 shadow-sm',
+        'obsidian-settings-control border-border bg-card min-w-0 space-y-3 rounded border px-3 py-3',
         className
       )}
       {...props}
@@ -170,10 +167,7 @@ export function SettingsControlChildren({
 }: SettingsControlChildrenProps) {
   return (
     <div
-      className={cn(
-        'border-primary/15 ml-3 min-w-0 border-l pl-4',
-        className
-      )}
+      className={cn('border-primary/15 ml-3 min-w-0 border-l pl-4', className)}
       {...props}
     />
   )
@@ -183,15 +177,15 @@ export function SettingsForm({ className, ...props }: ComponentProps<'form'>) {
   return (
     <form
       className={cn(
-        'grid min-w-0 gap-x-5 gap-y-6 lg:grid-cols-2',
+        'obsidian-settings-form grid min-w-0 gap-4 lg:grid-cols-2',
         'lg:[&>*:not([data-slot=form-item])]:col-span-2',
         'lg:[&>[data-settings-form-span=full]]:col-span-2',
         'lg:[&>[data-slot=alert]]:col-span-2',
         '[&>[data-slot=form-item]]:min-w-0',
         'lg:[&>[data-slot=form-item]:has(textarea)]:col-span-2',
         'lg:[&>[data-slot=form-item]:has([data-slot=switch])]:col-span-2',
-        '[&_[data-slot=form-item]]:space-y-2.5',
-        '[&_[data-slot=form-item]>label]:text-sm [&_[data-slot=form-item]>label]:font-medium',
+        '[&_[data-slot=form-item]]:space-y-2',
+        '[&_[data-slot=form-item]>label]:text-xs [&_[data-slot=form-item]>label]:font-medium',
         className
       )}
       {...props}

@@ -1,0 +1,195 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+SPDX-License-Identifier: AGPL-3.0-or-later
+*/
+
+/* One shared surface language. Colors stay in theme.css so saved presets,
+   custom palettes, portals and system color-mode changes keep working. */
+html.light {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+[data-slot='card'],
+[data-slot='section-card'] {
+  box-shadow: none;
+  background-image: none;
+  border-color: var(--border);
+}
+
+[data-slot='card-title'] {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+[data-slot='card-description'] {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+[data-slot='button'] {
+  box-shadow: none;
+  font-weight: 500;
+  transition-duration: 120ms;
+}
+
+[data-slot='input'],
+[data-slot='textarea'],
+[data-slot='select-trigger'] {
+  box-shadow: none;
+  background-color: var(--card);
+}
+
+[data-slot='dialog-content'],
+[data-slot='alert-dialog-content'],
+[data-slot='sheet-content'],
+[data-slot='drawer-content'] {
+  background: var(--card);
+  color: var(--card-foreground);
+  border-color: var(--border);
+  box-shadow: 0 16px 56px rgb(0 0 0 / 18%);
+}
+
+[data-slot='dialog-title'],
+[data-slot='alert-dialog-title'],
+[data-slot='sheet-title'],
+[data-slot='drawer-title'] {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+[data-slot='table'] {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-slot='table-header'] {
+  background: var(--secondary);
+}
+
+[data-slot='table-head'] {
+  height: 38px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+[data-slot='table-cell'] {
+  padding-block: 12px;
+  line-height: 1.5;
+}
+
+[data-slot='table-row'] {
+  border-color: var(--border);
+}
+
+[data-slot='badge'] {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+[data-slot='tabs-list'] {
+  box-shadow: none;
+  background: var(--secondary);
+}
+
+[data-slot='tabs-trigger'] {
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+[data-slot='empty'] {
+  border-color: var(--border);
+  padding: 32px 20px;
+}
+
+[data-slot='empty-title'] {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+[data-slot='empty-description'] {
+  max-width: 44ch;
+  font-size: 12px;
+  line-height: 1.75;
+}
+
+[data-slot='page-container'],
+[data-slot='section-card'],
+[data-slot='card-content'],
+[data-slot='table-container'] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-slot='table-container'] {
+  overscroll-behavior-inline: contain;
+}
+
+[data-slot='page-header'] h1 {
+  font-size: clamp(22px, 2.2vw, 26px);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.035em;
+}
+
+[data-slot='page-header'] p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Existing semantic page slots keep their behavior while feature components
+   migrate away from the previous presentation. No theme colors live here. */
+.aurora-page,
+.aurora-content,
+.aurora-overview,
+.aurora-panel {
+  min-width: 0;
+}
+
+.aurora-page .aurora-section-label {
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.recharts-default-tooltip {
+  border-color: var(--border);
+  background: var(--popover);
+  color: var(--popover-foreground);
+}
+
+[data-sonner-toast] {
+  border-color: var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+@media (max-width: 767px) {
+  [data-slot='table-cell'] {
+    padding-block: 10px;
+  }
+  [data-slot='page-header'] h1 {
+    font-size: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='button'],
+  [data-slot='tabs-trigger'],
+  [data-slot='sidebar-menu-button'] {
+    transition: none;
+  }
+}

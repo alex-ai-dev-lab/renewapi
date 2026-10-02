@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState, type ComponentType } from 'react'
+import { useEffect, useMemo, type ComponentType } from 'react'
 import { Link, getRouteApi, useNavigate } from '@tanstack/react-router'
 import {
   Activity,
@@ -33,16 +33,22 @@ import {
   Search,
   Timer,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
 import { cn } from '@/lib/utils'
+import {
+  useCollectionSelection,
+  usePageCursor,
+} from '@/hooks/use-collection-view'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -246,6 +252,7 @@ function compareModelStats(
 }
 
 export function ModelAnalyticsDashboard() {
+  const { t } = useTranslation()
   const search = route.useSearch()
   const navigate = useNavigate()
   const {
@@ -259,9 +266,6 @@ export function ModelAnalyticsDashboard() {
   const defaultHealthFilter = useDashboardDefaultHealthFilter()
   const defaultPageSize = useDashboardDefaultPageSize()
   const healthThresholds = useDashboardHealthThresholds()
-  const [selectedModelName, setSelectedModelName] = useState<string | null>(
-    null
-  )
   const [modelQuery, setModelQuery] = useDashboardPreference(
     'dashboard:model-analytics:model-query',
     '',
@@ -278,7 +282,6 @@ export function ModelAnalyticsDashboard() {
     DEFAULT_MODEL_SORT,
     isModelSortState
   )
-  const [modelPage, setModelPage] = useState(1)
   const [modelPageSize, setModelPageSize] = useDashboardPreference<number>(
     'dashboard:model-analytics:model-page-size',
     defaultPageSize,
@@ -307,6 +310,10 @@ export function ModelAnalyticsDashboard() {
     dataUpdatedAt,
   } = useModelStats(timeRange, autoRefresh, refreshInterval)
   const rows = models ?? []
+  const [selectedModelName, setSelectedModelName] = useCollectionSelection(
+    rows.map((row) => row.model_name),
+    search.model_name ?? null
+  )
   const {
     data: modelTrend,
     isLoading: modelTrendLoading,
@@ -370,6 +377,10 @@ export function ModelAnalyticsDashboard() {
   const totalModelPages = Math.max(
     1,
     Math.ceil(sortedRows.length / modelPageSize)
+  )
+  const [modelPage, setModelPage] = usePageCursor(
+    JSON.stringify([modelHealthFilter, modelPageSize, modelQuery, modelSort]),
+    totalModelPages
   )
   const pagedRows = useMemo(
     () =>
@@ -435,52 +446,15 @@ export function ModelAnalyticsDashboard() {
   }
 
   useEffect(() => {
-    if (rows.length === 0) {
-      if (selectedModelName !== null) {
-        setSelectedModelName(null)
-      }
-      return
-    }
-    const requestedModelName =
-      search.model_name &&
-      rows.some((row) => row.model_name === search.model_name)
-        ? search.model_name
-        : null
-    const nextModelName = requestedModelName ?? selectedModelName
-    if (
-      !nextModelName ||
-      !rows.some((row) => row.model_name === nextModelName)
-    ) {
-      setSelectedModelName(rows[0].model_name)
-      return
-    }
-    if (selectedModelName !== nextModelName) {
-      setSelectedModelName(nextModelName)
-    }
-  }, [rows, search.model_name, selectedModelName])
-
-  useEffect(() => {
     if (search.time_range && search.time_range !== timeRange) {
       setTimeRange(search.time_range)
     }
   }, [search.time_range, timeRange])
 
-  useEffect(() => {
-    setModelPage(1)
-  }, [modelHealthFilter, modelPageSize, modelQuery, modelSort])
-
-  useEffect(() => {
-    if (modelPage > totalModelPages) {
-      setModelPage(totalModelPages)
-    }
-  }, [modelPage, totalModelPages])
-
   if (error) {
     return (
       <Alert variant='destructive'>
-        <AlertDescription>
-          加载模型运维分析失败，请稍后重试。
-        </AlertDescription>
+        <AlertDescription>加载模型运维分析失败，请稍后重试。</AlertDescription>
       </Alert>
     )
   }
@@ -513,7 +487,7 @@ export function ModelAnalyticsDashboard() {
         </div>
       </div>
 
-      <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-5'>
+      <div className='obsidian-kpi-rack obsidian-kpi-rack-five'>
         <MetricCard
           icon={Boxes}
           label='活跃模型'
@@ -549,7 +523,7 @@ export function ModelAnalyticsDashboard() {
         />
       </div>
 
-      <div className='grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.7fr)]'>
+      <div className='obsidian-observation'>
         <Card className='rounded-lg shadow-none'>
           <CardHeader className='border-b pb-3'>
             <CardTitle className='text-sm'>模型流量排行</CardTitle>
@@ -563,10 +537,16 @@ export function ModelAnalyticsDashboard() {
               </div>
             ) : (
               <ResponsiveContainer width='100%' height={320}>
-                <BarChart data={trafficChart}>
+                <BarChart
+                  data={trafficChart}
+                  accessibilityLayer
+                  barGap={4}
+                  maxBarSize={24}
+                >
                   <CartesianGrid
-                    strokeDasharray='3 3'
+                    vertical={false}
                     stroke='var(--border)'
+                    strokeOpacity={0.6}
                   />
                   <XAxis
                     dataKey='name'
@@ -578,6 +558,10 @@ export function ModelAnalyticsDashboard() {
                   />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip
+                    formatter={(value) =>
+                      `${formatCount(Number(value))} ${t('Requests')}`
+                    }
+                    itemStyle={{ color: 'var(--popover-foreground)' }}
                     cursor={{
                       fill: 'color-mix(in oklab, var(--muted) 35%, transparent)',
                     }}
@@ -587,13 +571,22 @@ export function ModelAnalyticsDashboard() {
                       borderRadius: 8,
                     }}
                   />
+                  <Legend
+                    formatter={(value) => (
+                      <span className='text-muted-foreground text-xs'>
+                        {value}
+                      </span>
+                    )}
+                  />
                   <Bar
                     dataKey='requests'
+                    name={t('Requests')}
                     fill='var(--chart-1)'
                     radius={[4, 4, 0, 0]}
                   />
                   <Bar
                     dataKey='failures'
+                    name={t('Failures')}
                     fill='var(--destructive)'
                     radius={[4, 4, 0, 0]}
                   />
@@ -658,7 +651,10 @@ export function ModelAnalyticsDashboard() {
               onValueChange={selectModel}
               disabled={rows.length === 0 || isLoading}
             >
-              <SelectTrigger className='w-full sm:w-[22rem]'>
+              <SelectTrigger
+                aria-label={t('选择模型')}
+                className='w-full sm:w-[22rem]'
+              >
                 <SelectValue placeholder='选择模型' />
               </SelectTrigger>
               <SelectContent>
@@ -724,7 +720,10 @@ export function ModelAnalyticsDashboard() {
                 setModelHealthFilter(value as typeof modelHealthFilter)
               }
             >
-              <SelectTrigger className='w-full sm:w-44'>
+              <SelectTrigger
+                aria-label={t('Status')}
+                className='w-full sm:w-44'
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -947,7 +946,10 @@ export function ModelAnalyticsDashboard() {
                   value={String(modelPageSize)}
                   onValueChange={(value) => setModelPageSize(Number(value))}
                 >
-                  <SelectTrigger className='h-8 w-28'>
+                  <SelectTrigger
+                    aria-label={t('Rows per page')}
+                    className='h-8 w-28'
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -962,6 +964,7 @@ export function ModelAnalyticsDashboard() {
                   <Button
                     variant='outline'
                     size='icon-sm'
+                    aria-label={t('Previous page')}
                     onClick={() =>
                       setModelPage((page) => Math.max(1, page - 1))
                     }
@@ -975,6 +978,7 @@ export function ModelAnalyticsDashboard() {
                   <Button
                     variant='outline'
                     size='icon-sm'
+                    aria-label={t('Next page')}
                     onClick={() =>
                       setModelPage((page) =>
                         Math.min(totalModelPages, page + 1)
@@ -1031,28 +1035,19 @@ function MetricCard(props: {
 }) {
   const Icon = props.icon
   return (
-    <Card className='rounded-lg shadow-none'>
-      <CardContent className='flex items-center gap-3 p-4'>
-        <div className='bg-muted flex size-9 shrink-0 items-center justify-center rounded-md'>
-          <Icon className='text-muted-foreground size-4' />
-        </div>
-        <div className='min-w-0'>
-          <p className='text-muted-foreground text-xs'>{props.label}</p>
-          {props.loading ? (
-            <Skeleton className='mt-1 h-6 w-20' />
-          ) : (
-            <p
-              className={cn(
-                'truncate text-lg font-semibold tabular-nums',
-                props.valueClassName
-              )}
-            >
-              {props.value}
-            </p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+    <div className='obsidian-kpi'>
+      <div className='obsidian-kpi-label'>
+        <Icon className='size-3.5' />
+        <span>{props.label}</span>
+      </div>
+      {props.loading ? (
+        <Skeleton className='mt-2 h-7 w-20' />
+      ) : (
+        <p className={cn('obsidian-kpi-value', props.valueClassName)}>
+          {props.value}
+        </p>
+      )}
+    </div>
   )
 }
 

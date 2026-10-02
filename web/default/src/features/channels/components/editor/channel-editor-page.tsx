@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { type ReactNode, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import '@/styles/obsidian-admin.css'
 import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -69,8 +70,8 @@ export function ChannelEditorPage(props: ChannelEditorPageProps) {
   } else if (props.mode === 'edit' && channelQuery.isLoading) {
     content = (
       <div className='space-y-4'>
-        <Skeleton className='h-28 w-full rounded-2xl' />
-        <Skeleton className='h-96 w-full rounded-2xl' />
+        <Skeleton className='h-28 w-full rounded' />
+        <Skeleton className='h-96 w-full rounded' />
       </div>
     )
   } else if (
@@ -107,8 +108,7 @@ export function ChannelEditorPage(props: ChannelEditorPageProps) {
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>
-        {props.mode === 'edit' ? t('Edit Channel') : t('Create Channel')}{' '}
-        <span className='text-aurora'>{t('Workspace')}</span>
+        {props.mode === 'edit' ? t('Edit Channel') : t('Create Channel')}
       </SectionPageLayout.Title>
       <SectionPageLayout.Description>
         {props.mode === 'edit'

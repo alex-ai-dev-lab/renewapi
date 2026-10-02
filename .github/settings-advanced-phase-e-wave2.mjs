@@ -18,6 +18,11 @@ const requestGuardSecret = 'wave2-request-guard-secret'
 const auditSecretInitial = 'wave2-audit-secret-initial'
 const auditSecretRotated = 'wave2-audit-secret-rotated'
 
+async function captureScreenshot(page, options) {
+  if (process.env.QA_SCREENSHOTS === 'false') return
+  await page.screenshot(options)
+}
+
 if (!binary || !dbPath) {
   throw new Error('QA_BINARY and QA_DB are required')
 }
@@ -69,7 +74,7 @@ finally:
     db.close()
 `
   const result = spawnSync(
-    'python3',
+    process.env.QA_PYTHON || 'python3',
     ['-c', script, dbPath, sql, JSON.stringify(params)],
     { encoding: 'utf8' }
   )
@@ -98,7 +103,7 @@ finally:
     db.close()
 `
   const result = spawnSync(
-    'python3',
+    process.env.QA_PYTHON || 'python3',
     ['-c', script, dbPath, sql, JSON.stringify(params)],
     { encoding: 'utf8' }
   )
@@ -557,7 +562,7 @@ async function runRequestGuardCreateEdit(context, user) {
       'Request Guard edit should issue one additional config PUT',
       { count: mutations.length }
     )
-    await page.screenshot({
+    await captureScreenshot(page, {
       path: path.join(outDir, 'request-guard-created-edited.png'),
       fullPage: true,
     })
@@ -728,7 +733,7 @@ async function runModelPricing(context, user) {
       { ModelRatio: modelRatioValue, CacheRatio: cacheRatioValue },
       'Model pricing'
     )
-    await page.screenshot({
+    await captureScreenshot(page, {
       path: path.join(outDir, 'model-pricing-valid.png'),
       fullPage: true,
     })
@@ -1087,7 +1092,7 @@ async function main() {
   let user = null
   try {
     server = await startBackend('initial')
-    browser = await chromium.launch({ headless: true })
+    browser = await chromium.launch({ headless: true, executablePath: process.env.QA_BROWSER_EXECUTABLE || undefined })
     context = await createBrowserContext(browser)
     user = await setupAndLogin(context, { allowSetup: true })
 

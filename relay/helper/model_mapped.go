@@ -29,22 +29,34 @@ func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Reque
 		mappingModelName = info.ModelMappingRoute.Source
 	}
 
+	// Reused RelayInfo must not leak the previous channel's mapped target.
+	info.IsModelMapped = false
+	info.UpstreamModelName = mappingModelName
 	// map model name
 	modelMapping := c.GetString("model_mapping")
 	if modelMapping != "" && modelMapping != "{}" {
-		modelMap, err := basecommon.ParseModelMapping(modelMapping)
+		modelMap, err := basecommon.ParseModelMappingConfig(modelMapping)
 		if err != nil {
 			return fmt.Errorf("unmarshal_model_mapping_failed")
 		}
 		mappingStartModel := mappingModelName
 		if isResponsesCompact {
-			if mappedModel, exists := modelMap[originModelName]; exists && len(mappedModel) > 0 {
-				mappingStartModel = originModelName
+			for _, source := range modelMap.Sources() {
+				if source == originModelName {
+					mappingStartModel = originModelName
+					break
+				}
 			}
 		}
-		candidates, err := basecommon.ResolveModelMappingCandidates(modelMap, mappingStartModel)
+		resolved, err := modelMap.Candidates(mappingStartModel)
 		if err != nil {
 			return fmt.Errorf("model_mapping_contains_cycle: %w", err)
+		}
+		candidates := make([]string, 0, len(resolved))
+		ruleIDs := make([]string, 0, len(resolved))
+		for _, candidate := range resolved {
+			candidates = append(candidates, candidate.Model)
+			ruleIDs = append(ruleIDs, candidate.RuleID)
 		}
 		channelId := info.ChannelId
 		if info.ModelMappingRoute.ChannelId != channelId || info.ModelMappingRoute.Source != mappingStartModel {
@@ -52,6 +64,7 @@ func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Reque
 				ChannelId:  channelId,
 				Source:     mappingStartModel,
 				Candidates: append([]string(nil), candidates...),
+				RuleIDs:    ruleIDs,
 			}
 		}
 		if len(info.ModelMappingRoute.Candidates) > 0 {
@@ -74,6 +87,14 @@ func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Reque
 		}
 		info.UpstreamModelName = finalUpstreamModelName
 		info.MappedModelName = finalUpstreamModelName
+	}
+	if info.Failover != nil && len(info.Failover.AttemptRecords) > 0 {
+		attempt := &info.Failover.AttemptRecords[len(info.Failover.AttemptRecords)-1]
+		attempt.UpstreamModel = info.UpstreamModelName
+		cursor := info.ModelMappingRoute
+		if cursor.Index >= 0 && cursor.Index < len(cursor.RuleIDs) {
+			attempt.MappingRuleID = cursor.RuleIDs[cursor.Index]
+		}
 	}
 	if request != nil {
 		request.SetModelName(info.UpstreamModelName)

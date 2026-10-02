@@ -57,38 +57,30 @@ export function Playground() {
   )
 
   // Load models
-  const { data: modelsData, isLoading: isLoadingModels } = useQuery({
+  const {
+    data: modelsData,
+    isLoading: isLoadingModels,
+    error: modelsError,
+  } = useQuery({
     queryKey: ['playground-models'],
-    queryFn: async () => {
-      try {
-        return await getUserModels()
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : t('Failed to load playground models')
-        )
-        return []
-      }
-    },
+    queryFn: getUserModels,
   })
 
   // Load groups
-  const { data: groupsData } = useQuery({
+  const { data: groupsData, error: groupsError } = useQuery({
     queryKey: ['playground-groups'],
-    queryFn: async () => {
-      try {
-        return await getUserGroups()
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : t('Failed to load playground groups')
-        )
-        return []
-      }
-    },
+    queryFn: getUserGroups,
   })
+
+  useEffect(() => {
+    if (modelsError)
+      toast.error(modelsError.message || t('Failed to load playground models'))
+  }, [modelsError, t])
+
+  useEffect(() => {
+    if (groupsError)
+      toast.error(groupsError.message || t('Failed to load playground groups'))
+  }, [groupsError, t])
 
   // Update models when data changes
   useEffect(() => {
@@ -197,9 +189,9 @@ export function Playground() {
   }
 
   return (
-    <div className='relative flex size-full flex-col overflow-hidden'>
+    <div className='bg-background relative flex size-full min-h-0 min-w-0 flex-col overflow-hidden'>
       {/* Full-width scroll container: scrolling works even over side whitespace */}
-      <div className='flex flex-1 flex-col overflow-hidden'>
+      <div className='flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'>
         <PlaygroundChat
           messages={messages}
           onCopyMessage={handleCopyMessage}
@@ -215,7 +207,7 @@ export function Playground() {
       </div>
 
       {/* Input area: center content and constrain to the same container width */}
-      <div className='mx-auto w-full max-w-4xl'>
+      <div className='mx-auto w-full max-w-5xl min-w-0'>
         <PlaygroundInput
           disabled={isGenerating}
           groups={groups}

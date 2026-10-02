@@ -17,29 +17,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect } from 'react'
+import '@/styles/obsidian-home.css'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
+import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { Markdown } from '@/components/ui/markdown'
 import { PublicLayout } from '@/components/layout'
-import { IzClosing } from './components/sections/iz-closing'
-import { IzFaq } from './components/sections/iz-faq'
-import { IzFooter } from './components/sections/iz-footer'
-import { IzHeader } from './components/sections/iz-header'
-import { IzHero } from './components/sections/iz-hero'
-import { IzLive } from './components/sections/iz-live'
-import { IzModels } from './components/sections/iz-models'
-import { IzPillars } from './components/sections/iz-pillars'
-import { IzProtocols } from './components/sections/iz-protocols'
-import { IzQuickstart } from './components/sections/iz-quickstart'
-import { IzRouting } from './components/sections/iz-routing'
+import { ObsidianHome } from './components/obsidian-home'
 import { useHomePageContent } from './hooks'
+import { resolveApiBase } from './lib/request-example'
 
 const HOME_SEO = {
   description:
     'A unified, reliable, high-speed AI API gateway for OpenAI, Claude, Gemini, images, embeddings, routing, failover, and retries.',
-  themeColor: '#0D0D10',
+  themeColor: '#101213',
 }
 
 function upsertMeta(
@@ -97,7 +90,7 @@ function upsertCanonical(href: string) {
   }
 }
 
-function useInterfaceZeroSeo(enabled: boolean, systemName: string) {
+function useHomeSeo(enabled: boolean, systemName: string) {
   const { t } = useTranslation()
   useEffect(() => {
     if (!enabled) return
@@ -151,22 +144,34 @@ function documentationLink(value: unknown): string {
 
 export function Home() {
   const { t } = useTranslation()
-  const { auth } = useAuthStore()
+  const user = useAuthStore((state) => state.auth.user)
   const { status } = useStatus()
-  const { systemName } = useSystemConfig()
-  const registrationEnabled = status?.register_enabled === true
+  const { systemName, footerHtml } = useSystemConfig()
+  const registrationEnabled =
+    status?.register_enabled === true && !status?.self_use_mode_enabled
   const docsLink = documentationLink(status?.docs_link)
-  const isAuthenticated = !!auth.user
-  const { content, isLoaded, isUrl } = useHomePageContent({
+  const navModules = parseHeaderNavModulesFromStatus(status)
+  const apiBase = resolveApiBase(status?.server_address, window.location.origin)
+  const isAuthenticated = !!user
+  const { content, isLoaded, isUrl, hasError } = useHomePageContent({
     showErrorToast: false,
   })
-  useInterfaceZeroSeo(isLoaded && !content, systemName)
+  useHomeSeo(isLoaded && !content, systemName)
+  const contentWarning = hasError && (
+    <p role='status' className='obsidian-home-load-error'>
+      {t(
+        'Custom home content could not be loaded. Cached content is shown when available.'
+      )}
+    </p>
+  )
 
   if (!isLoaded) {
     return (
-      <PublicLayout showMainContainer={false}>
-        <main className='flex min-h-screen items-center justify-center'>
-          <div className='text-muted-foreground'>{t('Loading...')}</div>
+      <PublicLayout showMainContainer={false} showNotifications={false}>
+        <main className='obsidian-home-content-state flex items-center justify-center'>
+          <div role='status' className='text-muted-foreground'>
+            {t('Loading...')}
+          </div>
         </main>
       </PublicLayout>
     )
@@ -174,16 +179,13 @@ export function Home() {
 
   if (content) {
     return (
-      <PublicLayout showMainContainer={false}>
-        <main className='overflow-x-hidden'>
+      <PublicLayout showMainContainer={false} showNotifications={false}>
+        <main className='obsidian-home-custom'>
+          {contentWarning}
           {isUrl ? (
-            <iframe
-              src={content}
-              className='h-screen w-full border-none'
-              title={t('Custom Home Page')}
-            />
+            <iframe src={content} title={t('Custom Home Page')} />
           ) : (
-            <div className='bg-background text-foreground min-h-screen'>
+            <div className='bg-background text-foreground'>
               <div className='container mx-auto px-4 py-8'>
                 <Markdown className='custom-home-content'>{content}</Markdown>
               </div>
@@ -197,41 +199,21 @@ export function Home() {
   return (
     <PublicLayout
       showMainContainer={false}
-      showHeader={false}
+      showNotifications={false}
       skipLinkTarget='#home-main-content'
     >
-      <IzHeader
+      {contentWarning}
+      <ObsidianHome
+        systemName={systemName}
+        apiBase={apiBase}
+        docsLink={docsLink}
+        docsEnabled={navModules.docs !== false}
+        aboutEnabled={navModules.about !== false}
         isAuthenticated={isAuthenticated}
         registrationEnabled={registrationEnabled}
-        systemName={systemName}
-        docsLink={docsLink}
-      />
-      <main
-        id='home-main-content'
-        tabIndex={-1}
-        className='iz-root outline-none'
-      >
-        <IzHero
-          isAuthenticated={isAuthenticated}
-          registrationEnabled={registrationEnabled}
-        />
-        <IzModels />
-        <IzPillars />
-        <IzRouting systemName={systemName} />
-        <IzLive />
-        <IzProtocols />
-        <IzQuickstart />
-        <IzFaq />
-        <IzClosing
-          isAuthenticated={isAuthenticated}
-          registrationEnabled={registrationEnabled}
-        />
-      </main>
-      <IzFooter
-        systemName={systemName}
-        docsLink={docsLink}
         termsEnabled={status?.user_agreement_enabled === true}
         privacyEnabled={status?.privacy_policy_enabled === true}
+        footerHtml={footerHtml}
       />
     </PublicLayout>
   )

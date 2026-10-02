@@ -43,9 +43,17 @@ import {
   getGroups,
 } from '../../api'
 import { channelsQueryKeys } from '../../lib'
+import {
+  validateModelMappingJson,
+  findMissingModelsInMapping,
+  parseModelsString,
+} from '../../lib/model-mapping-validation'
 import type { TagOperationParams } from '../../types'
 import { useChannels } from '../channels-provider'
-import { ModelMappingEditor } from '../model-mapping-editor'
+import {
+  ModelMappingEditor,
+  type MappingEditorState,
+} from '../model-mapping-editor'
 
 type TagBatchEditDialogProps = {
   open: boolean
@@ -66,6 +74,11 @@ export function TagBatchEditDialog({
   const [newTag, setNewTag] = useState('')
   const [models, setModels] = useState('')
   const [modelMapping, setModelMapping] = useState('')
+  const [mappingState, setMappingState] = useState<MappingEditorState>({
+    dirty: false,
+    errors: [],
+  })
+  const [mappingResetKey, setMappingResetKey] = useState(0)
   const [groups, setGroups] = useState<string[]>([])
 
   // Fetch available groups
@@ -84,14 +97,7 @@ export function TagBatchEditDialog({
     }))
   }, [groupsData, groups])
 
-  useEffect(() => {
-    if (open && currentTag) {
-      loadTagData()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, currentTag])
-
-  const loadTagData = async () => {
+  async function loadTagData() {
     if (!currentTag) return
 
     setIsLoading(true)
@@ -119,18 +125,44 @@ export function TagBatchEditDialog({
     }
   }
 
+  // Opening or changing the selected tag explicitly resets the batch draft.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (open && currentTag) {
+      setModelMapping('')
+      setMappingState({ dirty: false, errors: [] })
+      setMappingResetKey((key) => key + 1)
+      loadTagData()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, currentTag])
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   const handleSave = async () => {
     if (!currentTag) return
 
-    // Validate model mapping JSON if provided
-    if (modelMapping.trim()) {
-      try {
-        JSON.parse(modelMapping)
-      } catch (_error) {
-        toast.error(t('Model mapping must be valid JSON'))
-        return
-      }
+    const validation = validateModelMappingJson(modelMapping)
+    if (mappingState.errors.length || !validation.valid) {
+      toast.error(
+        t(mappingState.errors[0] || validation.error || 'Invalid model mapping')
+      )
+      return
     }
+    const missing = findMissingModelsInMapping(
+      modelMapping,
+      parseModelsString(models)
+    )
+    if (
+      missing.length &&
+      !window.confirm(
+        t(
+          'Mapping sources are missing from Models. Continue without adding them?'
+        ) +
+          '\n' +
+          missing.join(', ')
+      )
+    )
+      return
 
     setIsSaving(true)
     try {
@@ -183,14 +215,25 @@ export function TagBatchEditDialog({
     setNewTag('')
     setModels('')
     setModelMapping('')
+    setMappingState({ dirty: false, errors: [] })
+    setMappingResetKey((key) => key + 1)
     setGroups([])
     onOpenChange(false)
+  }
+
+  const requestClose = () => {
+    if (
+      mappingState.dirty &&
+      !window.confirm(t('Discard unsaved mapping changes?'))
+    )
+      return
+    handleClose()
   }
 
   if (!currentTag) return null
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={requestClose}>
       <DialogContent className='max-h-[90vh] max-w-2xl overflow-y-auto'>
         <DialogHeader>
           <DialogTitle>{t('Batch Edit by Tag')}</DialogTitle>
@@ -258,6 +301,9 @@ export function TagBatchEditDialog({
                 <ModelMappingEditor
                   value={modelMapping}
                   onChange={setModelMapping}
+                  onStateChange={setMappingState}
+                  emptyMeansUnchanged
+                  resetKey={`${currentTag}-${mappingResetKey}`}
                   disabled={isSaving}
                 />
               </div>
@@ -286,7 +332,7 @@ export function TagBatchEditDialog({
             <DialogFooter>
               <Button
                 variant='outline'
-                onClick={handleClose}
+                onClick={requestClose}
                 disabled={isSaving}
               >
                 {t('Cancel')}

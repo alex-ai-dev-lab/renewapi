@@ -1,0 +1,98 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+
+.obsidian-shell {
+  background: var(--background);
+  color: var(--foreground);
+  isolation: isolate;
+}
+
+.obsidian-shell-main > * {
+  min-width: 0;
+}
+
+.obsidian-header-actions > button:not(.obsidian-command-trigger) {
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+}
+
+.obsidian-sidebar-nav [data-slot='sidebar-group-label'] {
+  height: 1.75rem;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+}
+
+.obsidian-sidebar-nav
+  :is(
+    [data-slot='sidebar-menu-button'],
+    [data-slot='sidebar-menu-sub-button']
+  ) {
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+}
+
+.obsidian-sidebar-nav [data-active='true'] {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-primary);
+  font-weight: 600;
+}
+
+.obsidian-shell > a[href='#content'] {
+  inset-inline-start: 0.75rem;
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+
+/* Includes the portalled mobile drawer; do not depend on old global Aurora overrides. */
+:is(
+    .obsidian-shell,
+    .obsidian-public-layout,
+    .obsidian-sidebar-nav,
+    .obsidian-sidebar-brand,
+    .obsidian-public-drawer,
+    .obsidian-footer
+  )
+  :is(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(
+    .obsidian-shell,
+    .obsidian-public-layout,
+    .obsidian-sidebar-nav,
+    .obsidian-public-drawer,
+    .obsidian-footer
+  ),
+  :is(
+      .obsidian-shell,
+      .obsidian-public-layout,
+      .obsidian-sidebar-nav,
+      .obsidian-public-drawer,
+      .obsidian-footer
+    )
+    * {
+    scroll-behavior: auto;
+    animation-duration: 0s;
+    transition-duration: 0s;
+  }
+}

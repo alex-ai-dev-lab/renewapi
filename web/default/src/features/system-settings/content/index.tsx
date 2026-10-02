@@ -73,6 +73,7 @@ const defaultContentSettings: ContentSettings = {
   HeaderNavModules: '',
   SidebarModulesAdmin: '',
   SidebarSectionOrder: '',
+  SidebarTaskSectionOrder: '',
   SystemSettingsNavigation: '',
   'general_setting.docs_link': '',
 }

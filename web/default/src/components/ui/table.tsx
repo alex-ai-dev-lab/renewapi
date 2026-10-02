@@ -31,7 +31,7 @@ function Table({ className, ...props }: React.ComponentProps<'table'>) {
       <table
         data-slot='table'
         className={cn(
-          'w-full caption-bottom text-[13px] tabular-nums [&_td]:text-[13px] [&_td_*]:text-[13px] [&_th]:text-[12px] [&_th_*]:text-[12px]',
+          'w-full caption-bottom text-xs tabular-nums [&_th]:text-[11px]',
           className
         )}
         {...props}

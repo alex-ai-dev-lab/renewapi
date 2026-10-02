@@ -18,9 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Bar, BarChart, ResponsiveContainer, Tooltip } from 'recharts'
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+} from 'recharts'
 import { cn } from '@/lib/utils'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   useChannelStats,
   useOverviewStats,
@@ -31,12 +37,6 @@ import { CHANNEL_STATUS } from '../constants'
 import { getChannelTypeLabel } from '../lib'
 import { ChannelsPrimaryButtons } from './channels-primary-buttons'
 
-const toneClasses = [
-  'aurora-reference-surface-1',
-  'aurora-reference-surface-2',
-  'aurora-reference-surface-3',
-] as const
-
 function modelCount(models: string): number {
   return models
     .split(',')
@@ -46,9 +46,8 @@ function modelCount(models: string): number {
 
 export function ChannelsAuroraOverview() {
   const { t, i18n } = useTranslation()
-  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
   const healthThresholds = useDashboardHealthThresholds()
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['channels', 'aurora-overview'],
     queryFn: ({ signal }) =>
       getChannels(
@@ -60,14 +59,9 @@ export function ChannelsAuroraOverview() {
   const { data: dailyChannelStats = [] } = useChannelStats('1d')
   const { data: dailyOverview } = useOverviewStats('1d')
 
-  const unavailable = data?.success === false
+  const unavailable = isError || data?.success === false
   const unavailableMessage =
-    (unavailable && data?.message) ||
-    t('aurora.common.unavailable', {
-      defaultValue: isChinese
-        ? '数据暂时不可用'
-        : 'Data temporarily unavailable',
-    })
+    (unavailable && data?.message) || t('Data temporarily unavailable')
   const allChannels = data?.data?.items ?? []
   const dailyStatsById = new Map(
     dailyChannelStats.map((stat) => [stat.channel_id, stat])
@@ -91,54 +85,57 @@ export function ChannelsAuroraOverview() {
         ].slice(0, 6)
   const total = data?.data?.total ?? allChannels.length
   const chartData = (dailyOverview?.trend ?? []).map((point) => ({
+    timestamp: point.timestamp,
     requests: Math.max(0, point.requests),
   }))
-  const routingSummary = unavailable
-    ? t('aurora.channels.routing.unavailable', {
-        defaultValue: isChinese
-          ? '渠道清单暂时不可用'
-          : 'Channel inventory unavailable',
-      })
-    : t('aurora.channels.routing.summary', {
-        defaultValue: isChinese
-          ? '{{total}} 个渠道 · 按健康度与优先级自动编排'
-          : '{{total}} channels · health-aware orchestration',
-        total: total.toLocaleString(),
-      })
+  const formatTime = (timestamp: number) =>
+    new Date(timestamp * 1000).toLocaleTimeString(i18n.resolvedLanguage, {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
 
   return (
-    <div className='grid grid-cols-12 gap-4'>
-      <Card className='border-border/60 bg-card/70 col-span-12 overflow-hidden shadow-[0_8px_30px_rgba(80,90,140,0.08)]'>
-        <CardContent className='flex flex-col justify-between gap-3 px-5 py-3.5 sm:flex-row sm:items-center'>
-          <div>
-            <div className='text-muted-foreground text-[11px] font-bold tracking-[1.2px] uppercase'>
-              {t('aurora.channels.routing.eyebrow', {
-                defaultValue: 'Provider-Aware Routing',
-              })}
-            </div>
-            <div className='mt-1 text-[20px] font-extrabold tracking-[-0.025em]'>
-              {routingSummary}
-            </div>
-            {unavailable ? (
-              <div className='text-muted-foreground mt-1 text-xs'>
-                {unavailableMessage}
-              </div>
-            ) : null}
+    <div className='obsidian-channel-overview space-y-4'>
+      <section className='obsidian-admin-panel'>
+        <header className='obsidian-admin-panel-heading'>
+          <div className='flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1'>
+            <span className='obsidian-admin-section-number' aria-hidden='true'>
+              01
+            </span>
+            <h2>{t('Channel overview')}</h2>
+            <span className='text-muted-foreground text-xs tabular-nums'>
+              {unavailable || isLoading
+                ? t('N/A')
+                : t('{{count}} channels', { count: total })}
+            </span>
           </div>
           <ChannelsPrimaryButtons variant='create' />
-        </CardContent>
-      </Card>
+        </header>
 
-      {unavailable
-        ? null
-        : isLoading && surfacedChannels.length === 0
-          ? Array.from({ length: 6 }).map((_, index) => (
-              <div
-                key={index}
-                className='bg-card/55 col-span-12 h-[136px] animate-pulse rounded-[22px] border sm:col-span-6 lg:col-span-4'
-              />
-            ))
-          : surfacedChannels.map((channel, index) => {
+        {unavailable ? (
+          <p role='status' className='text-muted-foreground p-4 text-sm'>
+            {unavailableMessage}
+          </p>
+        ) : null}
+        {isLoading && !unavailable ? (
+          <div
+            className='obsidian-channel-rack'
+            aria-busy='true'
+            aria-label={t('Loading...')}
+          >
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className='bg-muted h-32 animate-pulse' />
+            ))}
+          </div>
+        ) : null}
+        {!unavailable && !isLoading && surfacedChannels.length === 0 ? (
+          <p className='text-muted-foreground p-4 text-sm'>
+            {t('No channels available')}
+          </p>
+        ) : null}
+        {!unavailable && surfacedChannels.length > 0 ? (
+          <div className='obsidian-channel-rack'>
+            {surfacedChannels.map((channel) => {
               const enabled = channel.status === CHANNEL_STATUS.ENABLED
               const stat = dailyStatsById.get(channel.id)
               const latency =
@@ -151,171 +148,177 @@ export function ChannelsAuroraOverview() {
               const critical =
                 hasTraffic &&
                 successRate < healthThresholds.successRateDegradedThreshold
-
-              let statusLabel = t('aurora.status.healthy', {
-                defaultValue: isChinese ? '正常' : 'Healthy',
-              })
-              let statusClassName = 'bg-success/12 text-success'
+              let statusLabel = t('Healthy')
+              let statusClassName = 'text-success'
               if (!enabled) {
-                statusLabel = t('aurora.status.disabled', {
-                  defaultValue: isChinese ? '停用' : 'Disabled',
-                })
-                statusClassName = 'bg-destructive/10 text-destructive'
+                statusLabel = t('Disabled')
+                statusClassName = 'text-destructive'
               } else if (critical) {
-                statusLabel = t('aurora.status.critical', {
-                  defaultValue: isChinese ? '异常' : 'Critical',
-                })
-                statusClassName = 'bg-destructive/10 text-destructive'
+                statusLabel = t('Critical')
+                statusClassName = 'text-destructive'
               } else if (degraded) {
-                statusLabel = t('aurora.status.degraded', {
-                  defaultValue: isChinese ? '告警' : 'Degraded',
-                })
-                statusClassName = 'bg-warning/14 text-warning'
+                statusLabel = t('Degraded')
+                statusClassName = 'text-warning'
               }
 
-              let successWidth = 0
-              if (enabled) successWidth = hasTraffic ? successRate : 100
-
               return (
-                <Card
-                  key={channel.id}
-                  className={cn(
-                    'border-border/60 col-span-12 min-h-[136px] overflow-hidden sm:col-span-6 lg:col-span-4',
-                    toneClasses[index % toneClasses.length]
-                  )}
-                >
-                  <CardContent className='p-4'>
-                    <div className='flex items-start justify-between gap-3'>
-                      <div className='min-w-0'>
-                        <div className='text-muted-foreground text-[10px] font-bold tracking-[1.2px] uppercase'>
-                          {t(getChannelTypeLabel(channel.type))}
-                        </div>
-                        <div className='mt-1 truncate text-[19px] font-extrabold tracking-[-0.025em]'>
-                          {channel.name}
-                        </div>
+                <article key={channel.id} className='obsidian-channel-unit'>
+                  <div className='flex items-start justify-between gap-3'>
+                    <div className='min-w-0'>
+                      <div className='text-muted-foreground text-[11px]'>
+                        {t(getChannelTypeLabel(channel.type))} · #{channel.id}
                       </div>
-                      <span
-                        className={cn(
-                          'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold',
-                          statusClassName
-                        )}
+                      <h3
+                        className='mt-1 truncate text-[13px] font-semibold'
+                        title={channel.name}
                       >
-                        <span className='size-1.5 rounded-full bg-current' />
-                        {statusLabel}
-                      </span>
+                        {channel.name}
+                      </h3>
                     </div>
-                    <div className='mt-3 flex gap-[18px]'>
-                      <Metric
-                        label={t('aurora.metric.latency', {
-                          defaultValue: isChinese ? '延迟' : 'Latency',
-                        })}
-                        value={
-                          latency > 0 ? `${latency.toFixed(0)}ms` : t('N/A')
-                        }
+                    <span
+                      className={cn(
+                        'inline-flex shrink-0 items-center gap-1.5 text-[11px]',
+                        statusClassName
+                      )}
+                    >
+                      <span
+                        className='size-1.5 rounded-full bg-current'
+                        aria-hidden='true'
                       />
-                      <Metric
-                        label={t('aurora.metric.successRate', {
-                          defaultValue: isChinese ? '成功率' : 'Success rate',
-                        })}
-                        value={
-                          hasTraffic ? `${successRate.toFixed(1)}%` : t('N/A')
-                        }
-                      />
-                      <Metric
-                        label={t('aurora.metric.models', {
-                          defaultValue: isChinese ? '模型' : 'Models',
-                        })}
-                        value={t('aurora.common.modelCount', {
-                          defaultValue: isChinese ? '{{count}}个' : '{{count}}',
-                          count: modelCount(channel.models),
-                        })}
-                      />
-                    </div>
-                    <div className='bg-foreground/8 mt-2 h-1.5 overflow-hidden rounded-full'>
-                      <div
-                        className='aurora-reference-progress h-full rounded-full'
-                        style={{
-                          width: `${Math.min(100, Math.max(0, successWidth))}%`,
-                        }}
-                      />
-                    </div>
-                    <div className='text-muted-foreground mt-1.5 font-mono text-[10px]'>
-                      {t('Group')} {channel.group || 'default'} ·{' '}
-                      {t('Priority')} {channel.priority ?? '—'} ·{' '}
-                      {t('aurora.common.today', {
-                        defaultValue: isChinese ? '今日' : 'Today',
-                      })}{' '}
-                      ${(stat?.total_cost ?? 0).toFixed(2)}
-                    </div>
-                  </CardContent>
-                </Card>
+                      {statusLabel}
+                    </span>
+                  </div>
+                  <dl className='obsidian-channel-metrics'>
+                    <Metric
+                      label={t('Latency')}
+                      value={latency > 0 ? `${latency.toFixed(0)}ms` : t('N/A')}
+                    />
+                    <Metric
+                      label={t('Success rate')}
+                      value={
+                        hasTraffic ? `${successRate.toFixed(1)}%` : t('N/A')
+                      }
+                    />
+                    <Metric
+                      label={t('Models')}
+                      value={modelCount(channel.models)}
+                    />
+                  </dl>
+                  <div className='obsidian-channel-unit-footer'>
+                    <span className='truncate' title={channel.group}>
+                      {t('Group')} {channel.group || 'default'}
+                    </span>
+                    <span>
+                      {t('Priority')} {channel.priority ?? '—'}
+                    </span>
+                    <span>
+                      {t('Today')} ${(stat?.total_cost ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                </article>
               )
             })}
-
-      <Card className='border-border/60 bg-card/70 col-span-12 overflow-hidden shadow-[0_8px_30px_rgba(80,90,140,0.08)]'>
-        <CardContent className='p-4'>
-          <div className='mb-2 flex items-center justify-between gap-3'>
-            <div className='text-[15px] font-extrabold tracking-[-0.01em]'>
-              {t('aurora.channels.chart.title', {
-                defaultValue: isChinese
-                  ? '渠道请求分布 · 24H'
-                  : 'Channel request distribution · 24H',
-              })}
-            </div>
-            <span className='text-muted-foreground text-[10px] font-bold tracking-[1.2px] uppercase'>
-              {t('aurora.common.requestCount', {
-                defaultValue: isChinese
-                  ? '{{count}} 次请求'
-                  : '{{count}} requests',
-                count: (dailyOverview?.total_requests ?? 0).toLocaleString(),
-              })}
-            </span>
           </div>
-          <div className='h-[90px]'>
+        ) : null}
+      </section>
+
+      <section className='obsidian-admin-panel'>
+        <header className='obsidian-admin-panel-heading'>
+          <h2 className='flex items-center gap-3'>
+            <span className='obsidian-admin-section-number' aria-hidden='true'>
+              02
+            </span>
+            {t('Channel requests · 24H')}
+          </h2>
+          <span className='text-muted-foreground text-xs tabular-nums'>
+            {t('{{count}} requests', {
+              count: (dailyOverview?.total_requests ?? 0).toLocaleString(),
+            })}
+          </span>
+        </header>
+        <div className='p-3'>
+          <div className='h-32 min-w-0'>
             {chartData.length === 0 ? (
               <div className='text-muted-foreground flex h-full items-center justify-center text-sm'>
-                {t('aurora.channels.chart.empty', {
-                  defaultValue: isChinese
-                    ? '暂无 24 小时请求分布数据'
-                    : 'No 24-hour request distribution available',
-                })}
+                {t('No 24-hour request distribution available')}
               </div>
             ) : (
               <ResponsiveContainer width='100%' height='100%'>
-                <BarChart
+                <LineChart
                   data={chartData}
-                  margin={{ top: 4, right: 4, left: 4, bottom: 0 }}
+                  margin={{ top: 8, right: 12, left: 12, bottom: 0 }}
+                  accessibilityLayer
                 >
+                  <CartesianGrid vertical={false} stroke='var(--border)' />
+                  <XAxis
+                    dataKey='timestamp'
+                    tickFormatter={formatTime}
+                    tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    minTickGap={48}
+                  />
                   <Tooltip
-                    cursor={{ fill: 'rgba(79,124,255,.05)' }}
-                    contentStyle={{
-                      background: 'rgba(255,255,255,.88)',
-                      border: '1px solid rgba(31,36,48,.08)',
-                      borderRadius: 12,
-                      fontSize: 12,
-                      backdropFilter: 'blur(16px)',
+                    cursor={{
+                      stroke: 'var(--muted-foreground)',
+                      strokeDasharray: '3 3',
                     }}
+                    contentStyle={{
+                      background: 'var(--popover)',
+                      color: 'var(--popover-foreground)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 4,
+                      fontSize: 12,
+                      boxShadow: 'none',
+                    }}
+                    itemStyle={{ color: 'var(--foreground)' }}
                     formatter={(value) => [
                       Number(value).toLocaleString(),
-                      t('aurora.common.requests', {
-                        defaultValue: isChinese ? '请求' : 'Requests',
-                      }),
+                      t('Requests'),
                     ]}
-                    labelFormatter={() => ''}
+                    labelFormatter={(value) => formatTime(Number(value))}
                   />
-                  <Bar
+                  <Line
                     dataKey='requests'
-                    fill='#8A5BFF'
-                    radius={[2, 2, 0, 0]}
-                    maxBarSize={30}
+                    type='linear'
+                    stroke='var(--chart-1)'
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, stroke: 'var(--card)', strokeWidth: 2 }}
                     isAnimationActive={false}
                   />
-                </BarChart>
+                </LineChart>
               </ResponsiveContainer>
             )}
           </div>
-        </CardContent>
-      </Card>
+          {chartData.length > 0 ? (
+            <details className='obsidian-admin-data-details'>
+              <summary>{t('View data')}</summary>
+              <div className='max-h-48 overflow-auto'>
+                <table>
+                  <caption className='sr-only'>
+                    {t('Channel requests · 24H')}
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope='col'>{t('Time')}</th>
+                      <th scope='col'>{t('Requests')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {chartData.map((point) => (
+                      <tr key={point.timestamp}>
+                        <td>{formatTime(point.timestamp)}</td>
+                        <td>{point.requests.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ) : null}
+        </div>
+      </section>
     </div>
   )
 }
@@ -323,12 +326,10 @@ export function ChannelsAuroraOverview() {
 function Metric(props: { label: string; value: string | number }) {
   return (
     <div>
-      <div className='text-foreground font-mono text-base font-extrabold tabular-nums'>
+      <dt className='text-muted-foreground text-[11px]'>{props.label}</dt>
+      <dd className='mt-1 font-mono text-base font-semibold tabular-nums'>
         {props.value}
-      </div>
-      <div className='text-muted-foreground mt-0.5 text-[10px] font-semibold'>
-        {props.label}
-      </div>
+      </dd>
     </div>
   )
 }

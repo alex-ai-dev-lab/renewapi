@@ -315,7 +315,7 @@ export function ApiKeysTable() {
   }, [pageCount, ensurePageInRange])
 
   return (
-    <div className='space-y-4 sm:space-y-5'>
+    <div className='min-w-0 space-y-4'>
       <ApiKeysStats apiKeys={apiKeys} />
 
       <DataTablePage
@@ -327,7 +327,7 @@ export function ApiKeysTable() {
         isFetching={isFetching}
         isError={isError}
         errorDescription={error instanceof Error ? error.message : undefined}
-        tableHeaderClassName='sticky top-0 z-10 bg-background/80 backdrop-blur-md'
+        tableHeaderClassName='sticky top-0 z-10 bg-card'
         tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
         emptyTitle={t('No API Keys Found')}
         emptyDescription={t(

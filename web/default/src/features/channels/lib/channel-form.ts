@@ -23,6 +23,10 @@ import {
   MODEL_FETCHABLE_TYPES,
 } from '../constants'
 import type { Channel } from '../types'
+import {
+  EMPTY_RULE_MAPPING,
+  validateModelMappingJson,
+} from './model-mapping-validation'
 
 // ============================================================================
 // Form Validation Schema
@@ -47,14 +51,7 @@ function isOptionalJsonObject(value: string | undefined): boolean {
 }
 
 function isOptionalModelMapping(value: string | undefined): boolean {
-  try {
-    const parsed = parseOptionalJson(value)
-    if (parsed === undefined) return true
-    if (!isJsonObjectValue(parsed)) return false
-    return Object.values(parsed).every((item) => typeof item === 'string')
-  } catch {
-    return false
-  }
+  return validateModelMappingJson(value || '').valid
 }
 
 function isOptionalStatusCodeMapping(value: string | undefined): boolean {
@@ -132,10 +129,7 @@ export const channelFormSchema = z
     model_mapping: z
       .string()
       .optional()
-      .refine(
-        isOptionalModelMapping,
-        'Model mapping must be a JSON object with string values'
-      ),
+      .refine(isOptionalModelMapping, 'Invalid model mapping'),
     priority: z.number().optional(),
     weight: z.number().optional(),
     test_model: z.string().optional(),
@@ -360,7 +354,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   openai_organization: '',
   models: '',
   group: ['default'],
-  model_mapping: '',
+  model_mapping: EMPTY_RULE_MAPPING,
   priority: 0,
   weight: 0,
   test_model: '',
@@ -1113,8 +1107,7 @@ export function validateJSON(value: string): boolean {
  * Validate model mapping format
  */
 export function validateModelMapping(value: string): boolean {
-  if (!value || value.trim() === '') return true
-  return validateJSON(value)
+  return validateModelMappingJson(value).valid
 }
 
 /**

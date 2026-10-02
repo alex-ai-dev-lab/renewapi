@@ -158,7 +158,8 @@ export const SIDEBAR_MODULES_DEFAULT: SidebarModulesAdminConfig = {
   },
   console: {
     enabled: true,
-    order: ['detail', 'token', 'log', 'midjourney', 'task'],
+    order: ['pricing', 'detail', 'token', 'log', 'midjourney', 'task'],
+    pricing: true,
     detail: true,
     token: true,
     log: true,

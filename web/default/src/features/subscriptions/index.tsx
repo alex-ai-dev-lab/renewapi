@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import '@/styles/obsidian-admin.css'
 import { Info } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -39,7 +40,7 @@ function SubscriptionsContent() {
           {t('Subscription Management')}
         </SectionPageLayout.Title>
         <SectionPageLayout.Actions>
-          <div className='flex items-center gap-2'>
+          <div className='flex min-w-0 flex-wrap items-center justify-end gap-2'>
             <Alert variant='default' className='hidden px-3 py-2 sm:flex'>
               <Info className='h-4 w-4' />
               <AlertDescription className='text-xs'>
@@ -65,7 +66,9 @@ function SubscriptionsContent() {
               </AlertDescription>
             </Alert>
           ) : null}
-          <SubscriptionsTable />
+          <div className='obsidian-admin'>
+            <SubscriptionsTable />
+          </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

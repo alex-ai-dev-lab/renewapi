@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, type ReactNode } from 'react'
+import '@/styles/obsidian-admin.css'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -269,16 +270,7 @@ export function SettingsLanding() {
 
   return (
     <SectionPageLayout>
-      <SectionPageLayout.Title>
-        {t('aurora.settings.hero.lead', {
-          defaultValue: isChinese ? '系统' : 'System',
-        })}{' '}
-        <span className='text-aurora'>
-          {t('aurora.settings.hero.accent', {
-            defaultValue: isChinese ? '设置' : 'settings',
-          })}
-        </span>
-      </SectionPageLayout.Title>
+      <SectionPageLayout.Title>{t('System Settings')}</SectionPageLayout.Title>
       <SectionPageLayout.Description>
         {t('aurora.settings.hero.description', {
           defaultValue: isChinese
@@ -287,7 +279,7 @@ export function SettingsLanding() {
         })}
       </SectionPageLayout.Description>
       <SectionPageLayout.Content>
-        <div className='flex flex-col gap-6'>
+        <div className='obsidian-admin obsidian-settings-landing flex min-w-0 flex-col gap-4'>
           <SettingsSearch />
 
           <div>
@@ -302,7 +294,7 @@ export function SettingsLanding() {
 
             <div className='grid grid-cols-12 gap-4'>
               <SettingsTogglePanel
-                className='aurora-reference-surface-1 col-span-12 lg:col-span-6'
+                className='col-span-12 lg:col-span-6'
                 title={t('aurora.settings.routing.title', {
                   defaultValue: isChinese ? '路由与重试' : 'Routing & retries',
                 })}
@@ -314,7 +306,7 @@ export function SettingsLanding() {
                 disabled={controlsDisabled}
               />
               <SettingsTogglePanel
-                className='aurora-reference-surface-2 col-span-12 lg:col-span-6'
+                className='col-span-12 lg:col-span-6'
                 title={t('aurora.settings.guard.title', {
                   defaultValue: isChinese ? '反投毒防护' : 'Anti-poison guard',
                 })}
@@ -326,9 +318,9 @@ export function SettingsLanding() {
                 disabled={controlsDisabled}
               />
 
-              <Card className='aurora-reference-surface-3 border-border/60 col-span-12 overflow-hidden py-0'>
-                <div className='flex items-center justify-between gap-3 px-5 pt-5 pb-2'>
-                  <h2 className='text-[15px] font-extrabold tracking-[-0.01em]'>
+              <Card className='obsidian-settings-foundation border-border col-span-12 min-w-0 overflow-hidden py-0'>
+                <div className='flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3'>
+                  <h2 className='text-[13px] font-semibold'>
                     {t('aurora.settings.foundation.title', {
                       defaultValue: isChinese
                         ? '网关基础'
@@ -368,7 +360,7 @@ export function SettingsLanding() {
                         : 'Gateway base URL',
                     })}
                     placeholder='https://api.example.com'
-                    className='h-10 w-full rounded-xl bg-white/55 lg:w-[240px]'
+                    className='bg-background h-9 w-full min-w-0 rounded lg:w-[240px]'
                   />
                 </FoundationRow>
                 <FoundationRow
@@ -389,7 +381,7 @@ export function SettingsLanding() {
                     aria-label={t('aurora.settings.systemName.title', {
                       defaultValue: isChinese ? '系统名称' : 'System name',
                     })}
-                    className='h-10 w-full rounded-xl bg-white/55 lg:w-[240px]'
+                    className='bg-background h-9 w-full min-w-0 rounded lg:w-[240px]'
                   />
                 </FoundationRow>
                 <FoundationRow
@@ -416,7 +408,7 @@ export function SettingsLanding() {
                         ? '新用户初始额度'
                         : 'New-user quota',
                     })}
-                    className='h-10 w-full rounded-xl bg-white/55 lg:w-[240px]'
+                    className='bg-background h-9 w-full min-w-0 rounded lg:w-[240px]'
                   />
                 </FoundationRow>
 
@@ -426,7 +418,7 @@ export function SettingsLanding() {
                     size='sm'
                     onClick={resetDraft}
                     disabled={!hasDraftChanges || updateOptions.isPending}
-                    className='rounded-full bg-white/45'
+                    className='rounded'
                   >
                     {t('aurora.settings.discard', {
                       defaultValue: isChinese ? '放弃更改' : 'Discard',
@@ -438,7 +430,7 @@ export function SettingsLanding() {
                     disabled={
                       !hasDraftChanges || !draftValid || updateOptions.isPending
                     }
-                    className='rounded-full'
+                    className='rounded'
                   >
                     {t('aurora.settings.saveAll', {
                       defaultValue: isChinese ? '保存全部' : 'Save all',
@@ -497,12 +489,10 @@ function SettingsTogglePanel(props: {
 }) {
   return (
     <Card
-      className={`border-border/60 overflow-hidden py-0 ${props.className ?? ''}`}
+      className={`obsidian-settings-toggles border-border min-w-0 overflow-hidden py-0 ${props.className ?? ''}`}
     >
-      <div className='flex items-center justify-between gap-3 px-5 pt-5 pb-2'>
-        <h2 className='text-[15px] font-extrabold tracking-[-0.01em]'>
-          {props.title}
-        </h2>
+      <div className='flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3'>
+        <h2 className='text-[13px] font-semibold'>{props.title}</h2>
         <a
           href={props.detailHref}
           className='text-muted-foreground hover:text-foreground text-[10px] font-semibold transition-colors'
@@ -514,21 +504,21 @@ function SettingsTogglePanel(props: {
         {props.items.map((item) => (
           <div
             key={item.key}
-            className='flex min-h-[74px] items-center justify-between gap-5 px-5 py-3'
+            className='flex items-center justify-between gap-4 px-4 py-3'
           >
             <div className='min-w-0'>
-              <div className='text-sm font-bold'>{item.title}</div>
+              <div className='text-[13px] font-medium'>{item.title}</div>
               <div className='text-muted-foreground mt-0.5 text-xs'>
                 {item.description}
               </div>
             </div>
             <Switch
-              size='lg'
+              size='default'
               checked={item.checked}
               onCheckedChange={item.onCheckedChange}
               disabled={props.disabled}
               aria-label={item.title}
-              className='aurora-settings-switch shrink-0 self-center'
+              className='shrink-0 self-center'
             />
           </div>
         ))}
@@ -543,9 +533,9 @@ function FoundationRow(props: {
   children: ReactNode
 }) {
   return (
-    <div className='border-border/50 flex flex-col gap-3 border-b px-5 py-4 lg:flex-row lg:items-center lg:justify-between'>
+    <div className='border-border flex min-w-0 flex-col gap-3 border-b px-4 py-3 lg:flex-row lg:items-center lg:justify-between'>
       <div className='min-w-0'>
-        <div className='text-sm font-bold'>{props.title}</div>
+        <div className='text-[13px] font-medium'>{props.title}</div>
         <div className='text-muted-foreground mt-0.5 text-xs'>
           {props.description}
         </div>

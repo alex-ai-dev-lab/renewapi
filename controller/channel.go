@@ -578,6 +578,12 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		}
 	}
 
+	if isAdd {
+		if err := common.ValidateModelMapping(channel.GetModelMapping()); err != nil {
+			return fmt.Errorf("模型映射格式错误: %w", err)
+		}
+	}
+
 	// VertexAI 特殊校验
 	if channel.Type == constant.ChannelTypeVertexAi {
 		if channel.Other == "" {
@@ -1194,6 +1200,13 @@ func UpdateChannel(c *gin.Context) {
 		})
 		return
 	}
+	// The merged patch is based on this snapshot, not the later service read.
+	// Legacy clients still need an internal CAS so an unrelated field edit cannot
+	// restore stale mappings while leaving the newer routing abilities in place.
+	if expectedVersion == nil {
+		version := originChannel.ConfigVersion
+		expectedVersion = &version
+	}
 	mergePatchChannelWithOrigin(&channel, originChannel, requestFields)
 
 	if channel.Type == constant.ChannelTypeCodex {
@@ -1223,6 +1236,11 @@ func UpdateChannel(c *gin.Context) {
 			"success": false,
 			"message": err.Error(),
 		})
+		return
+	}
+
+	if err := common.ValidateModelMappingChange(originChannel.GetModelMapping(), channel.GetModelMapping()); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": fmt.Sprintf("模型映射格式错误: %s", err)})
 		return
 	}
 

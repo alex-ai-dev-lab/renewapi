@@ -18,9 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import { CheckCircle2, CircleAlert, CircleMinus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useIsAdmin } from '@/hooks/use-admin'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -42,7 +42,6 @@ interface ChannelStatsTableProps {
 
 export function ChannelStatsTable(props: ChannelStatsTableProps) {
   const { t, i18n } = useTranslation()
-  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
   const isAdmin = useIsAdmin()
   const healthThresholds = useDashboardHealthThresholds()
   const { data: channelMetadata } = useQuery({
@@ -63,158 +62,132 @@ export function ChannelStatsTable(props: ChannelStatsTableProps) {
       channel.type,
     ])
   )
-  const secondaryHeader = isAdmin
-    ? t('aurora.metric.type', { defaultValue: isChinese ? '类型' : 'Type' })
-    : t('aurora.common.requests', {
-        defaultValue: isChinese ? '请求' : 'Requests',
-      })
 
   return (
-    <Card className='border-border/60 bg-card/70 overflow-hidden shadow-[0_8px_30px_rgba(60,80,140,0.07)]'>
-      <CardHeader className='border-border/50 flex flex-row items-center justify-between border-b px-4 py-4 sm:px-5'>
-        <CardTitle className='text-[15px] font-extrabold tracking-[-0.01em]'>
-          {t('aurora.dashboard.channels.title', {
-            defaultValue: isChinese
-              ? '渠道健康一览'
-              : 'Channel health overview',
-          })}
-        </CardTitle>
-        {isAdmin ? (
+    <section className='obsidian-panel'>
+      <header className='obsidian-panel-heading'>
+        <h2>{t('Channel health overview')}</h2>
+        {isAdmin && (
           <Link
             to='/channels'
-            className='text-muted-foreground hover:text-foreground text-[11px] font-semibold transition-colors'
+            className='text-muted-foreground hover:text-foreground text-xs hover:underline'
           >
-            {t('aurora.dashboard.channels.viewAll', {
-              defaultValue: isChinese
-                ? '查看全部 {{count}} 个渠道 →'
-                : 'View all {{count}} channels →',
-              count: channelCount,
-            })}
+            {t('View all {{total}} channels', { total: channelCount })} →
           </Link>
-        ) : null}
-      </CardHeader>
-      <CardContent className='p-0'>
-        <div className='overflow-x-auto'>
-          <Table>
-            <TableHeader>
-              <TableRow className='hover:bg-transparent'>
-                <TableHead className='px-4 text-[10px] font-bold tracking-[1.4px] uppercase sm:px-5'>
-                  {t('aurora.metric.channel', {
-                    defaultValue: isChinese ? '渠道' : 'Channel',
-                  })}
-                </TableHead>
-                <TableHead className='text-right text-[10px] font-bold tracking-[1.4px] uppercase'>
-                  {secondaryHeader}
-                </TableHead>
-                <TableHead className='text-right text-[10px] font-bold tracking-[1.4px] uppercase'>
-                  {t('Status')}
-                </TableHead>
-                <TableHead className='text-right text-[10px] font-bold tracking-[1.4px] uppercase'>
-                  {t('aurora.metric.firstToken', {
-                    defaultValue: isChinese ? '延迟' : 'First token',
-                  })}
-                </TableHead>
-                <TableHead className='text-right text-[10px] font-bold tracking-[1.4px] uppercase'>
-                  {t('aurora.metric.successRate', {
-                    defaultValue: isChinese ? '成功率' : 'Success rate',
-                  })}
-                </TableHead>
-                <TableHead className='pr-4 text-right text-[10px] font-bold tracking-[1.4px] uppercase sm:pr-5'>
-                  {t('aurora.metric.cost', {
-                    defaultValue: isChinese ? '消耗' : 'Cost',
-                  })}
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {props.data.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className='text-muted-foreground h-24 text-center'
-                  >
-                    {t('No data available')}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                props.data.slice(0, 10).map((channel) => {
-                  const healthy =
-                    channel.success_rate >=
-                    healthThresholds.successRateGoodThreshold
-                  const degraded =
-                    channel.success_rate >=
-                    healthThresholds.successRateDegradedThreshold
-
-                  let statusLabel = t('aurora.status.critical', {
-                    defaultValue: isChinese ? '异常' : 'Critical',
-                  })
-                  let statusVariant: 'success' | 'warning' | 'danger' = 'danger'
-                  if (healthy) {
-                    statusLabel = t('aurora.status.healthy', {
-                      defaultValue: isChinese ? '正常' : 'Healthy',
-                    })
-                    statusVariant = 'success'
-                  } else if (degraded) {
-                    statusLabel = t('aurora.status.degraded', {
-                      defaultValue: isChinese ? '告警' : 'Degraded',
-                    })
-                    statusVariant = 'warning'
-                  }
-
-                  const channelType = channelTypeById.get(channel.channel_id)
-                  let secondaryContent = (
-                    <span className='font-mono tabular-nums'>
-                      {channel.total_requests.toLocaleString()}
-                    </span>
-                  )
-                  if (isAdmin) {
-                    secondaryContent =
-                      channelType != null ? (
-                        <span className='text-muted-foreground font-semibold'>
-                          {t(getChannelTypeLabel(channelType))}
-                        </span>
-                      ) : (
-                        <span className='text-muted-foreground'>—</span>
-                      )
-                  }
-
-                  return (
-                    <TableRow key={channel.channel_id}>
-                      <TableCell className='px-4 py-3.5 font-semibold sm:px-5'>
-                        {channel.channel_name}
-                        <span className='text-muted-foreground ml-2 font-mono text-[10px] font-normal'>
-                          #{channel.channel_id}
-                        </span>
-                      </TableCell>
-                      <TableCell className='text-right text-xs'>
-                        {secondaryContent}
-                      </TableCell>
-                      <TableCell className='text-right'>
-                        <StatusBadge
-                          label={statusLabel}
-                          variant={statusVariant}
-                          copyable={false}
-                        />
-                      </TableCell>
-                      <TableCell className='text-right font-mono text-xs tabular-nums'>
-                        {channel.avg_first_token > 0
-                          ? `${channel.avg_first_token.toFixed(0)}ms`
-                          : t('N/A')}
-                      </TableCell>
-                      <TableCell className='text-right font-mono text-xs tabular-nums'>
-                        {channel.success_rate.toFixed(2)}%
-                      </TableCell>
-                      <TableCell className='pr-4 text-right font-mono text-xs font-semibold tabular-nums sm:pr-5'>
-                        ${channel.total_cost.toFixed(4)}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })
+        )}
+      </header>
+      <div className='overflow-x-auto'>
+        <Table>
+          <TableHeader>
+            <TableRow className='hover:bg-transparent'>
+              <TableHead className='px-4 text-xs'>{t('Channel')}</TableHead>
+              {isAdmin && (
+                <TableHead className='text-xs'>{t('Type')}</TableHead>
               )}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+              <TableHead className='text-right text-xs'>
+                {t('Requests')}
+              </TableHead>
+              <TableHead className='text-right text-xs'>
+                {t('Status')}
+              </TableHead>
+              <TableHead className='text-right text-xs'>
+                {t('First token')}
+              </TableHead>
+              <TableHead className='text-right text-xs'>
+                {t('Success rate')}
+              </TableHead>
+              <TableHead className='pr-4 text-right text-xs'>
+                {t('Cost (USD)')}
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {props.data.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={isAdmin ? 7 : 6}
+                  className='text-muted-foreground h-24 text-center'
+                >
+                  {t('No data available')}
+                </TableCell>
+              </TableRow>
+            ) : (
+              props.data.slice(0, 10).map((channel) => {
+                let statusLabel = t('Critical')
+                let statusVariant:
+                  | 'neutral'
+                  | 'success'
+                  | 'warning'
+                  | 'danger' = 'danger'
+                let statusIcon = CircleAlert
+                if (channel.total_requests === 0) {
+                  statusLabel = t('No requests')
+                  statusVariant = 'neutral'
+                  statusIcon = CircleMinus
+                } else if (
+                  channel.success_rate >=
+                  healthThresholds.successRateGoodThreshold
+                ) {
+                  statusLabel = t('Healthy')
+                  statusVariant = 'success'
+                  statusIcon = CheckCircle2
+                } else if (
+                  channel.success_rate >=
+                  healthThresholds.successRateDegradedThreshold
+                ) {
+                  statusLabel = t('Degraded')
+                  statusVariant = 'warning'
+                }
+                const channelType = channelTypeById.get(channel.channel_id)
+                return (
+                  <TableRow key={channel.channel_id}>
+                    <TableCell className='px-4 py-3 text-xs font-medium'>
+                      {channel.channel_name}
+                      <span className='text-muted-foreground ml-2 text-[11px] font-normal'>
+                        #{channel.channel_id}
+                      </span>
+                    </TableCell>
+                    {isAdmin && (
+                      <TableCell className='text-muted-foreground text-xs'>
+                        {channelType != null
+                          ? t(getChannelTypeLabel(channelType))
+                          : '—'}
+                      </TableCell>
+                    )}
+                    <TableCell className='text-right text-xs tabular-nums'>
+                      {channel.total_requests.toLocaleString(
+                        i18n.resolvedLanguage
+                      )}
+                    </TableCell>
+                    <TableCell className='text-right'>
+                      <StatusBadge
+                        label={statusLabel}
+                        variant={statusVariant}
+                        icon={statusIcon}
+                        copyable={false}
+                        showDot={false}
+                      />
+                    </TableCell>
+                    <TableCell className='text-right text-xs tabular-nums'>
+                      {channel.avg_first_token > 0
+                        ? `${channel.avg_first_token.toFixed(0)} ms`
+                        : t('N/A')}
+                    </TableCell>
+                    <TableCell className='text-right text-xs tabular-nums'>
+                      {channel.total_requests > 0
+                        ? `${channel.success_rate.toFixed(2)}%`
+                        : t('N/A')}
+                    </TableCell>
+                    <TableCell className='pr-4 text-right text-xs tabular-nums'>
+                      {channel.total_cost.toFixed(4)}
+                    </TableCell>
+                  </TableRow>
+                )
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
   )
 }

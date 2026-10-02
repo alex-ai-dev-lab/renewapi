@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import '@/styles/obsidian-admin.css'
 import { useTranslation } from 'react-i18next'
 import { SectionPageLayout } from '@/components/layout'
 import { UsersDeleteDialog } from './components/users-delete-dialog'
@@ -32,7 +33,9 @@ function UsersContent() {
       <SectionPageLayout>
         <SectionPageLayout.Title>{t('Users')}</SectionPageLayout.Title>
         <SectionPageLayout.Content>
-          <UsersTable />
+          <div className='obsidian-admin'>
+            <UsersTable />
+          </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

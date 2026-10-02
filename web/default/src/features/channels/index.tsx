@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import '@/styles/obsidian-admin.css'
 import { useTranslation } from 'react-i18next'
 import { SectionPageLayout } from '@/components/layout'
 import { ChannelsAuroraOverview } from './components/channels-aurora-overview'
@@ -25,38 +26,20 @@ import { ChannelsProvider } from './components/channels-provider'
 import { ChannelsTable } from './components/channels-table'
 
 export function Channels() {
-  const { t, i18n } = useTranslation()
-  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
+  const { t } = useTranslation()
 
   return (
     <ChannelsProvider>
       <SectionPageLayout>
-        <SectionPageLayout.Title>
-          {t('aurora.channels.hero.lead', {
-            defaultValue: isChinese ? '渠道' : 'Channel',
-          })}{' '}
-          <span className='text-aurora'>
-            {t('aurora.channels.hero.accent', {
-              defaultValue: isChinese ? '编排' : 'orchestration',
-            })}
-          </span>
-        </SectionPageLayout.Title>
+        <SectionPageLayout.Title>{t('Channels')}</SectionPageLayout.Title>
         <SectionPageLayout.Description>
-          {t('aurora.channels.hero.description', {
-            defaultValue: isChinese
-              ? '选择 · 重试 · 限流 · 观测，一站式完成'
-              : 'Selection · retries · rate limits · observability, in one place',
-          })}
+          {t('Manage provider access, routing, and channel health.')}
         </SectionPageLayout.Description>
         <SectionPageLayout.Content>
-          <div className='space-y-4'>
+          <div className='obsidian-admin obsidian-channels space-y-4'>
             <ChannelsAuroraOverview />
-            <div className='flex flex-wrap items-center justify-between gap-3 px-1 pt-1'>
-              <h2 className='text-[15px] font-extrabold tracking-[-0.01em]'>
-                {t('aurora.channels.list.title', {
-                  defaultValue: isChinese ? '渠道清单' : 'Channel list',
-                })}
-              </h2>
+            <div className='obsidian-admin-toolbar'>
+              <h2 className='text-[13px] font-semibold'>{t('Channel list')}</h2>
               <ChannelsPrimaryButtons variant='tools' />
             </div>
             <ChannelsTable />

@@ -16,10 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useTranslation } from 'react-i18next'
 import {
-  Area,
-  AreaChart,
   CartesianGrid,
+  LabelList,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -27,15 +27,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import type { TrendPoint } from './stats-api'
 import {
   useDashboardDefaultPreference,
@@ -48,6 +40,7 @@ interface TrendChartProps {
   description?: string
   storageKey?: string
   usageOnly?: boolean
+  compact?: boolean
 }
 
 const TREND_MODES = [
@@ -57,314 +50,15 @@ const TREND_MODES = [
   'latency',
   'spend',
 ] as const
-
 type TrendMode = (typeof TREND_MODES)[number]
 
 function isTrendMode(value: unknown): value is TrendMode {
   return TREND_MODES.includes(value as TrendMode)
 }
 
-const TREND_MODE_OPTIONS: { value: TrendMode; label: string }[] = [
-  { value: 'overview', label: 'Overview' },
-  { value: 'traffic', label: 'Traffic' },
-  { value: 'reliability', label: 'Reliability' },
-  { value: 'latency', label: 'Latency' },
-  { value: 'spend', label: 'Spend' },
-]
-
-function formatCount(value: number): string {
-  return Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
-}
-
-function formatMs(value: number): string {
-  if (!value || value <= 0) return 'N/A'
-  return `${Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)}ms`
-}
-
-function formatPercent(value: number): string {
-  return `${Intl.NumberFormat('en-US', {
-    maximumFractionDigits: 2,
-  }).format(value)}%`
-}
-
-function formatUsd(value: number): string {
-  return `$${Intl.NumberFormat('en-US', {
-    maximumFractionDigits: value >= 1 ? 2 : 4,
-  }).format(value)}`
-}
-
-function buildTrendSummary(data: TrendPoint[]) {
-  let requests = 0
-  let success = 0
-  let failure = 0
-  let firstTokenTotal = 0
-  let firstTokenWeight = 0
-  let cost = 0
-  let tokens = 0
-
-  for (const point of data) {
-    const pointRequests = Number(point.requests) || 0
-    requests += pointRequests
-    success += Number(point.success) || 0
-    failure += Number(point.failure) || 0
-    cost += Number(point.total_cost) || 0
-    tokens +=
-      (Number(point.total_prompt_tokens) || 0) +
-      (Number(point.total_output_tokens) || 0)
-
-    if (point.avg_first_token > 0 && pointRequests > 0) {
-      firstTokenTotal += point.avg_first_token * pointRequests
-      firstTokenWeight += pointRequests
-    }
-  }
-
-  const rateDenominator = requests > 0 ? requests : success + failure
-  return {
-    requests,
-    successRate: rateDenominator > 0 ? (success / rateDenominator) * 100 : 0,
-    failure,
-    avgFirstToken:
-      firstTokenWeight > 0 ? firstTokenTotal / firstTokenWeight : 0,
-    cost,
-    tokens,
-  }
-}
-
-export function TrendChart({
-  data,
-  title = 'Operational trends',
-  description = 'Requests, reliability, first-token latency, cost, and token volume over time.',
-  storageKey = 'dashboard:trend-chart',
-  usageOnly = false,
-}: TrendChartProps) {
-  const defaultTrendMode = useDashboardDefaultTrendMode()
-  const [mode, setMode] = useDashboardDefaultPreference<TrendMode>(
-    `${storageKey}:trend-mode`,
-    defaultTrendMode,
-    isTrendMode
-  )
-  const chartData = data.map((point) => ({
-    time: new Date(point.timestamp * 1000).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-    }),
-    requests: point.requests,
-    success: point.success,
-    failure: point.failure,
-    successRate: Number(point.success_rate.toFixed(2)),
-    errorRate: Number(point.error_rate.toFixed(2)),
-    firstToken: Math.round(point.avg_first_token || 0),
-    useTime: Math.round((point.avg_use_time || 0) * 1000),
-    cost: Number(point.total_cost.toFixed(point.total_cost >= 1 ? 2 : 4)),
-    tokens: point.total_prompt_tokens + point.total_output_tokens,
-  }))
-  const summary = buildTrendSummary(data)
-  const effectiveMode =
-    usageOnly && (mode === 'reliability' || mode === 'latency')
-      ? 'overview'
-      : mode
-  const modeOptions = usageOnly
-    ? TREND_MODE_OPTIONS.filter((option) =>
-        ['overview', 'traffic', 'spend'].includes(option.value)
-      )
-    : TREND_MODE_OPTIONS
-  const visibleCharts = {
-    traffic: effectiveMode === 'overview' || effectiveMode === 'traffic',
-    reliability:
-      !usageOnly &&
-      (effectiveMode === 'overview' || effectiveMode === 'reliability'),
-    latency:
-      !usageOnly &&
-      (effectiveMode === 'overview' || effectiveMode === 'latency'),
-    spend: effectiveMode === 'overview' || effectiveMode === 'spend',
-  }
-
-  return (
-    <Card className='rounded-lg shadow-none'>
-      <CardHeader className='flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between'>
-        <div>
-          <CardTitle>{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
-        </div>
-        <div className='inline-flex w-fit flex-wrap items-center gap-1 rounded-md border p-1'>
-          {modeOptions.map((option) => (
-            <Button
-              key={option.value}
-              type='button'
-              variant={effectiveMode === option.value ? 'secondary' : 'ghost'}
-              size='sm'
-              onClick={() => setMode(option.value)}
-              className={cn(
-                'h-8 px-3 text-xs',
-                effectiveMode === option.value && 'bg-secondary'
-              )}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
-      </CardHeader>
-      <CardContent className='space-y-4'>
-        <div
-          className={cn(
-            'bg-muted/20 grid gap-2 rounded-lg border p-3 sm:grid-cols-2',
-            !usageOnly && 'xl:grid-cols-6'
-          )}
-        >
-          <TrendSummaryItem
-            label='Requests'
-            value={formatCount(summary.requests)}
-          />
-          {!usageOnly && (
-            <>
-              <TrendSummaryItem
-                label='Success'
-                value={formatPercent(summary.successRate)}
-              />
-              <TrendSummaryItem
-                label='Failures'
-                value={formatCount(summary.failure)}
-              />
-              <TrendSummaryItem
-                label='First token'
-                value={formatMs(summary.avgFirstToken)}
-              />
-              <TrendSummaryItem label='Cost' value={formatUsd(summary.cost)} />
-            </>
-          )}
-          <TrendSummaryItem
-            label='Tokens'
-            value={formatCount(summary.tokens)}
-          />
-        </div>
-        <div
-          className={cn(
-            'grid gap-4',
-            effectiveMode === 'overview' ? 'lg:grid-cols-2' : 'grid-cols-1'
-          )}
-        >
-          {visibleCharts.traffic ? (
-            <TrendMiniChart
-              data={chartData}
-              title='Traffic'
-              kind='area'
-              expanded={effectiveMode !== 'overview'}
-              series={
-                usageOnly
-                  ? [
-                      {
-                        key: 'requests',
-                        name: 'Requests',
-                        color: 'var(--primary)',
-                      },
-                    ]
-                  : [
-                      {
-                        key: 'requests',
-                        name: 'Requests',
-                        color: 'var(--primary)',
-                      },
-                      {
-                        key: 'failure',
-                        name: 'Failures',
-                        color: 'var(--destructive)',
-                      },
-                    ]
-              }
-            />
-          ) : null}
-          {visibleCharts.reliability ? (
-            <TrendMiniChart
-              data={chartData}
-              title='Reliability'
-              expanded={effectiveMode !== 'overview'}
-              series={[
-                {
-                  key: 'successRate',
-                  name: 'Success %',
-                  color: 'var(--success)',
-                },
-                {
-                  key: 'errorRate',
-                  name: 'Error %',
-                  color: 'var(--destructive)',
-                },
-              ]}
-              unit='%'
-            />
-          ) : null}
-          {visibleCharts.latency ? (
-            <TrendMiniChart
-              data={chartData}
-              title='Latency'
-              expanded={effectiveMode !== 'overview'}
-              series={[
-                {
-                  key: 'firstToken',
-                  name: 'First token ms',
-                  color: 'var(--warning)',
-                },
-                {
-                  key: 'useTime',
-                  name: 'Avg use time ms',
-                  color: 'var(--primary)',
-                },
-              ]}
-            />
-          ) : null}
-          {visibleCharts.spend ? (
-            <TrendMiniChart
-              data={chartData}
-              title={usageOnly ? 'Tokens' : 'Cost and tokens'}
-              expanded={effectiveMode !== 'overview'}
-              series={
-                usageOnly
-                  ? [
-                      {
-                        key: 'tokens',
-                        name: 'Tokens',
-                        color: 'var(--primary)',
-                      },
-                    ]
-                  : [
-                      {
-                        key: 'cost',
-                        name: 'Cost $',
-                        color: 'var(--success)',
-                      },
-                      {
-                        key: 'tokens',
-                        name: 'Tokens',
-                        color: 'var(--primary)',
-                      },
-                    ]
-              }
-            />
-          ) : null}
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function TrendSummaryItem(props: { label: string; value: string }) {
-  return (
-    <div className='bg-background/70 min-w-0 rounded-md px-3 py-2'>
-      <div className='text-muted-foreground text-[11px] font-medium uppercase'>
-        {props.label}
-      </div>
-      <div className='mt-1 truncate font-mono text-sm font-semibold tabular-nums'>
-        {props.value}
-      </div>
-    </div>
-  )
-}
-
 type TrendDatum = {
-  time: string
+  timestamp: number
   requests: number
-  success: number
   failure: number
   successRate: number
   errorRate: number
@@ -375,118 +69,457 @@ type TrendDatum = {
 }
 
 type TrendSeries = {
-  key: keyof Omit<TrendDatum, 'time'>
+  key: keyof Omit<TrendDatum, 'timestamp'>
   name: string
   color: string
+  dashed?: boolean
+}
+
+type TrendUnit = 'requests' | 'tokens' | 'ms' | '%' | 'USD'
+
+export function TrendChart(props: TrendChartProps) {
+  const { t } = useTranslation()
+  const defaultTrendMode = useDashboardDefaultTrendMode()
+  const [mode, setMode] = useDashboardDefaultPreference<TrendMode>(
+    `${props.storageKey ?? 'dashboard:trend-chart'}:trend-mode`,
+    defaultTrendMode,
+    isTrendMode
+  )
+  const chartData: TrendDatum[] = props.data.map((point) => ({
+    timestamp: point.timestamp,
+    requests: point.requests,
+    failure: point.failure,
+    successRate: point.success_rate,
+    errorRate: point.error_rate,
+    firstToken: point.avg_first_token,
+    useTime: point.avg_use_time * 1000,
+    cost: point.total_cost,
+    tokens: point.total_prompt_tokens + point.total_output_tokens,
+  }))
+  let effectiveMode = mode
+  if (props.usageOnly && (mode === 'reliability' || mode === 'latency')) {
+    effectiveMode = 'overview'
+  }
+  if (props.compact && effectiveMode === 'overview') effectiveMode = 'traffic'
+  const modeOptions = [
+    { value: 'overview', label: t('Overview') },
+    { value: 'traffic', label: t('Traffic') },
+    { value: 'reliability', label: t('Reliability') },
+    { value: 'latency', label: t('Latency') },
+    { value: 'spend', label: props.usageOnly ? t('Tokens') : t('Spend') },
+  ].filter((option) => {
+    if (props.compact && option.value === 'overview') return false
+    return (
+      !props.usageOnly || !['reliability', 'latency'].includes(option.value)
+    )
+  })
+  const show = (selected: TrendMode) =>
+    effectiveMode === 'overview' || effectiveMode === selected
+
+  return (
+    <section className='obsidian-panel'>
+      <header className='obsidian-panel-heading'>
+        <div>
+          <h2>{props.title ?? t('Operational trends')}</h2>
+          <p className='text-muted-foreground mt-1 text-xs'>
+            {props.description ??
+              t(
+                'Requests, reliability, first-token latency, cost, and token volume over time.'
+              )}
+          </p>
+        </div>
+      </header>
+      <div className='obsidian-panel-body'>
+        <div
+          className='obsidian-chart-toolbar'
+          role='group'
+          aria-label={t('Chart metric')}
+        >
+          <div className='flex flex-wrap gap-1'>
+            {modeOptions.map((option) => (
+              <Button
+                key={option.value}
+                type='button'
+                variant={effectiveMode === option.value ? 'secondary' : 'ghost'}
+                size='sm'
+                aria-pressed={effectiveMode === option.value}
+                onClick={() => setMode(option.value as TrendMode)}
+                className='h-8 px-3 text-xs'
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+        {!props.compact && (
+          <TrendSummary data={props.data} usageOnly={props.usageOnly} />
+        )}
+        <div
+          className='obsidian-chart-grid'
+          data-multiple={
+            effectiveMode === 'overview' ||
+            (effectiveMode === 'spend' && !props.usageOnly)
+          }
+        >
+          {show('traffic') && (
+            <TrendMiniChart
+              data={chartData}
+              title={t('Requests')}
+              unit='requests'
+              compact={effectiveMode === 'overview'}
+              series={[
+                {
+                  key: 'requests',
+                  name: t('Requests'),
+                  color: 'var(--chart-1)',
+                },
+                ...(!props.usageOnly
+                  ? [
+                      {
+                        key: 'failure' as const,
+                        name: t('Failures'),
+                        color: 'var(--destructive)',
+                        dashed: true,
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          )}
+          {!props.usageOnly && show('reliability') && (
+            <TrendMiniChart
+              data={chartData}
+              title={t('Reliability')}
+              unit='%'
+              compact={effectiveMode === 'overview'}
+              series={[
+                {
+                  key: 'successRate',
+                  name: t('Success rate'),
+                  color: 'var(--success)',
+                },
+                {
+                  key: 'errorRate',
+                  name: t('Error rate'),
+                  color: 'var(--destructive)',
+                  dashed: true,
+                },
+              ]}
+            />
+          )}
+          {!props.usageOnly && show('latency') && (
+            <TrendMiniChart
+              data={chartData}
+              title={t('Latency')}
+              unit='ms'
+              compact={effectiveMode === 'overview'}
+              series={[
+                {
+                  key: 'firstToken',
+                  name: t('First token'),
+                  color: 'var(--chart-1)',
+                },
+                {
+                  key: 'useTime',
+                  name: t('Average duration'),
+                  color: 'var(--chart-2)',
+                  dashed: true,
+                },
+              ]}
+            />
+          )}
+          {!props.usageOnly && show('spend') && (
+            <TrendMiniChart
+              data={chartData}
+              title={t('Cost')}
+              unit='USD'
+              compact={effectiveMode === 'overview'}
+              series={[
+                { key: 'cost', name: t('Cost'), color: 'var(--chart-1)' },
+              ]}
+            />
+          )}
+          {show('spend') && (
+            <TrendMiniChart
+              data={chartData}
+              title={t('Tokens')}
+              unit='tokens'
+              compact={effectiveMode === 'overview'}
+              series={[
+                { key: 'tokens', name: t('Tokens'), color: 'var(--chart-1)' },
+              ]}
+            />
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function TrendSummary(props: { data: TrendPoint[]; usageOnly?: boolean }) {
+  const { t, i18n } = useTranslation()
+  let requests = 0
+  let success = 0
+  let failure = 0
+  let firstTokenTotal = 0
+  let firstTokenWeight = 0
+  let cost = 0
+  let tokens = 0
+  for (const point of props.data) {
+    const weight = Number(point.requests) || 0
+    requests += weight
+    success += Number(point.success) || 0
+    failure += Number(point.failure) || 0
+    cost += Number(point.total_cost) || 0
+    tokens +=
+      (Number(point.total_prompt_tokens) || 0) +
+      (Number(point.total_output_tokens) || 0)
+    if (point.avg_first_token > 0 && weight > 0) {
+      firstTokenTotal += point.avg_first_token * weight
+      firstTokenWeight += weight
+    }
+  }
+  const denominator = requests > 0 ? requests : success + failure
+  const count = (value: number) =>
+    value.toLocaleString(i18n.resolvedLanguage, { maximumFractionDigits: 0 })
+  const items = [
+    { label: t('Requests'), value: count(requests) },
+    ...(!props.usageOnly
+      ? [
+          {
+            label: t('Success rate'),
+            value:
+              denominator > 0
+                ? `${((success / denominator) * 100).toFixed(2)}%`
+                : t('N/A'),
+          },
+          { label: t('Failures'), value: count(failure) },
+          {
+            label: t('First token'),
+            value:
+              firstTokenWeight > 0
+                ? `${count(firstTokenTotal / firstTokenWeight)} ms`
+                : t('N/A'),
+          },
+          {
+            label: t('Cost (USD)'),
+            value: cost.toLocaleString(i18n.resolvedLanguage, {
+              maximumFractionDigits: 4,
+            }),
+          },
+        ]
+      : []),
+    { label: t('Tokens'), value: count(tokens) },
+  ]
+  return (
+    <dl className='obsidian-trend-summary'>
+      {items.map((item) => (
+        <div key={item.label}>
+          <dt>{item.label}</dt>
+          <dd>{item.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
 }
 
 function TrendMiniChart(props: {
   data: TrendDatum[]
   title: string
   series: TrendSeries[]
-  kind?: 'line' | 'area'
-  unit?: string
-  expanded?: boolean
+  unit: TrendUnit
+  compact?: boolean
 }) {
-  const tooltipStyle = {
-    backgroundColor: 'var(--popover)',
-    border: '1px solid var(--border)',
-    borderRadius: 8,
+  const { t, i18n } = useTranslation()
+  const locale = i18n.resolvedLanguage ?? 'en'
+  const unitLabel = props.unit === 'requests' ? t('Requests') : props.unit
+  const formatValue = (value: number) => {
+    const digits = props.unit === 'USD' ? 4 : 2
+    return `${value.toLocaleString(locale, { maximumFractionDigits: digits })} ${unitLabel}`
   }
+  const formatTime = (timestamp: number) =>
+    new Date(timestamp * 1000).toLocaleString(locale, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  const lastPoint = props.data.at(-1)
+  const height = props.compact ? 200 : 264
+  // Converging endpoints use the legend/table instead of colliding direct labels.
+  const endpointValues = lastPoint
+    ? props.series.map((series) => lastPoint[series.key]).sort((a, b) => a - b)
+    : []
+  const maxValue = props.data.reduce(
+    (max, point) =>
+      props.series.reduce(
+        (current, series) => Math.max(current, point[series.key]),
+        max
+      ),
+    1
+  )
+  const labelEndpoints = endpointValues.every(
+    (value, index) =>
+      index === 0 ||
+      ((value - endpointValues[index - 1]) / maxValue) * height > 24
+  )
 
   return (
-    <div className='bg-background/50 rounded-lg border p-3'>
-      <div className='mb-2 text-sm font-medium'>{props.title}</div>
-      <TrendLegend series={props.series} />
-      {props.data.length === 0 ? (
-        <div
-          className='text-muted-foreground mt-3 flex items-center justify-center rounded-md border border-dashed text-sm'
-          style={{ height: props.expanded ? 320 : 210 }}
-        >
-          No trend data for this period
+    <div>
+      <h3 className='text-muted-foreground text-xs font-medium'>
+        {props.title} · {unitLabel}
+      </h3>
+      {props.series.length > 1 && (
+        <div className='obsidian-chart-legend'>
+          {props.series.map((series) => (
+            <span key={series.key}>
+              <svg width='20' height='10' aria-hidden='true'>
+                <line
+                  x1='0'
+                  y1='5'
+                  x2='20'
+                  y2='5'
+                  stroke={series.color}
+                  strokeWidth='2'
+                  strokeDasharray={series.dashed ? '5 3' : undefined}
+                />
+              </svg>
+              {series.name}
+            </span>
+          ))}
         </div>
+      )}
+      {props.data.length === 0 ? (
+        <p className='text-muted-foreground flex min-h-64 items-center justify-center text-xs'>
+          {t('No trend data for this period')}
+        </p>
       ) : (
-        <ResponsiveContainer width='100%' height={props.expanded ? 320 : 210}>
-          {props.kind === 'area' ? (
-            <AreaChart data={props.data}>
-              <CartesianGrid strokeDasharray='3 3' stroke='var(--border)' />
-              <XAxis
-                dataKey='time'
-                minTickGap={24}
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip contentStyle={tooltipStyle} />
-              {props.series.map((item, index) => (
-                <Area
-                  key={item.key}
-                  type='monotone'
-                  dataKey={item.key}
-                  stroke={item.color}
-                  strokeWidth={2}
-                  fill={item.color}
-                  fillOpacity={index === 0 ? 0.16 : 0.08}
-                  name={item.name}
-                />
-              ))}
-            </AreaChart>
-          ) : (
-            <LineChart data={props.data}>
-              <CartesianGrid strokeDasharray='3 3' stroke='var(--border)' />
-              <XAxis
-                dataKey='time'
-                minTickGap={24}
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                tickFormatter={(value) => `${value}${props.unit ?? ''}`}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip contentStyle={tooltipStyle} />
-              {props.series.map((item) => (
-                <Line
-                  key={item.key}
-                  type='monotone'
-                  dataKey={item.key}
-                  stroke={item.color}
-                  strokeWidth={2}
-                  dot={false}
-                  name={item.name}
-                />
-              ))}
-            </LineChart>
-          )}
+        <ResponsiveContainer width='100%' height={height} minWidth={0}>
+          <LineChart
+            data={props.data}
+            accessibilityLayer
+            margin={{
+              top: 16,
+              right: labelEndpoints ? 76 : 8,
+              left: 0,
+              bottom: 8,
+            }}
+          >
+            <CartesianGrid
+              vertical={false}
+              stroke='var(--border)'
+              strokeOpacity={0.6}
+            />
+            <XAxis
+              dataKey='timestamp'
+              tickFormatter={formatTime}
+              minTickGap={48}
+              tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+              width={48}
+              domain={props.unit === '%' ? [0, 100] : [0, 'auto']}
+              tickFormatter={(value: number) =>
+                value.toLocaleString(locale, {
+                  notation: 'compact',
+                  maximumFractionDigits: 1,
+                })
+              }
+              tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <Tooltip
+              cursor={{ stroke: 'var(--muted-foreground)', strokeWidth: 1 }}
+              labelFormatter={(value) => formatTime(Number(value))}
+              formatter={(value) => formatValue(Number(value))}
+              contentStyle={{
+                backgroundColor: 'var(--popover)',
+                color: 'var(--popover-foreground)',
+                border: '1px solid var(--border)',
+                borderRadius: 4,
+                fontSize: 12,
+                boxShadow: 'none',
+              }}
+              itemStyle={{ color: 'var(--popover-foreground)' }}
+            />
+            {props.series.map((series) => (
+              <Line
+                key={series.key}
+                type='linear'
+                dataKey={series.key}
+                name={series.name}
+                stroke={series.color}
+                strokeWidth={2}
+                strokeDasharray={series.dashed ? '5 3' : undefined}
+                dot={
+                  props.data.length === 1
+                    ? { r: 4, stroke: 'var(--card)', strokeWidth: 2 }
+                    : false
+                }
+                activeDot={{ r: 4, stroke: 'var(--card)', strokeWidth: 2 }}
+                isAnimationActive={false}
+              >
+                {labelEndpoints && (
+                  <LabelList
+                    content={(label) => {
+                      if (label.index !== props.data.length - 1 || !lastPoint)
+                        return null
+                      return (
+                        <text
+                          x={Number(label.x) + 8}
+                          y={Number(label.y)}
+                          dy={4}
+                          fill='var(--muted-foreground)'
+                          fontSize={10}
+                        >
+                          {lastPoint[series.key].toLocaleString(locale, {
+                            notation: 'compact',
+                            maximumFractionDigits: 2,
+                          })}
+                          {['%', 'ms', 'USD'].includes(props.unit)
+                            ? ` ${props.unit}`
+                            : ''}
+                        </text>
+                      )
+                    }}
+                  />
+                )}
+              </Line>
+            ))}
+          </LineChart>
         </ResponsiveContainer>
       )}
-    </div>
-  )
-}
-
-function TrendLegend(props: { series: TrendSeries[] }) {
-  return (
-    <div className='mb-2 flex flex-wrap items-center gap-x-3 gap-y-1'>
-      {props.series.map((item) => (
-        <div
-          key={item.key}
-          className='text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs'
-        >
-          <span
-            className='size-2 shrink-0 rounded-full'
-            style={{ backgroundColor: item.color }}
-          />
-          <span className='truncate'>{item.name}</span>
-        </div>
-      ))}
+      <details className='obsidian-chart-table'>
+        <summary>{t('View data table')}</summary>
+        <table>
+          <caption className='sr-only'>
+            {props.title} · {unitLabel}
+          </caption>
+          <thead>
+            <tr>
+              <th scope='col'>{t('Time')}</th>
+              {props.series.map((series) => (
+                <th scope='col' key={series.key}>
+                  {series.name} ({unitLabel})
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {props.data.map((point) => (
+              <tr key={point.timestamp}>
+                <th scope='row'>{formatTime(point.timestamp)}</th>
+                {props.series.map((series) => (
+                  <td key={series.key}>{formatValue(point[series.key])}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
     </div>
   )
 }

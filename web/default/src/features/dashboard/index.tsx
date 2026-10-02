@@ -25,13 +25,14 @@ import {
   Suspense,
 } from 'react'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
+import '@/styles/obsidian-dashboard.css'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 import { ROLE } from '@/lib/roles'
-import { SegmentedTabs } from '@/components/page-primitives'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SectionPageLayout } from '@/components/layout'
+import { SegmentedTabs } from '@/components/page-primitives'
 import { FadeIn } from '@/components/page-transition'
 import { ChannelAnalyticsDashboard } from './components/channels/channel-analytics-dashboard'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
@@ -209,17 +210,30 @@ export function Dashboard() {
     )
   )
 
-  useEffect(() => {
-    if (typeof window === 'undefined' || systemConfigLoading) return
-    const hasSavedChartPreferences =
-      window.localStorage.getItem(DASHBOARD_CHART_PREFERENCES_STORAGE_KEY) !=
-        null ||
-      window.localStorage.getItem(TIME_GRANULARITY_STORAGE_KEY) != null
+  const [hasSavedChartPreferences, setHasSavedChartPreferences] = useState(
+    () => {
+      if (typeof window === 'undefined') return false
+      try {
+        return (
+          window.localStorage.getItem(
+            DASHBOARD_CHART_PREFERENCES_STORAGE_KEY
+          ) != null ||
+          window.localStorage.getItem(TIME_GRANULARITY_STORAGE_KEY) != null
+        )
+      } catch {
+        return false
+      }
+    }
+  )
+  const [appliedDefaults, setAppliedDefaults] =
+    useState<DashboardChartPreferences | null>(null)
+  if (!systemConfigLoading && appliedDefaults !== defaultChartPreferences) {
+    setAppliedDefaults(defaultChartPreferences)
     if (!hasSavedChartPreferences) {
       setChartPreferences(defaultChartPreferences)
       setModelFilters(buildDefaultDashboardFilters(defaultChartPreferences))
     }
-  }, [defaultChartPreferences, systemConfigLoading])
+  }
 
   const handleFilterChange = useCallback((filters: DashboardFilters) => {
     setModelFilters(filters)
@@ -241,6 +255,7 @@ export function Dashboard() {
     (preferences: DashboardChartPreferences) => {
       setChartPreferences(preferences)
       setModelFilters(buildDefaultDashboardFilters(preferences))
+      setHasSavedChartPreferences(true)
       saveChartPreferences(preferences)
     },
     []
@@ -287,8 +302,7 @@ export function Dashboard() {
     },
     [navigate, search.time_range]
   )
-  const showSectionTabs =
-    activeSection !== 'overview' && visibleSections.length > 1
+  const showSectionTabs = visibleSections.length > 1
   const modelActions =
     activeSection === 'models' ? (
       <>
@@ -308,8 +322,8 @@ export function Dashboard() {
     <SectionPageLayout>
       <SectionPageLayout.Title>{t(meta.titleKey)}</SectionPageLayout.Title>
       <SectionPageLayout.Content>
-        <div className='space-y-3 sm:space-y-4'>
-          {activeSection !== 'overview' && (
+        <div className='obsidian-dashboard space-y-3 sm:space-y-4'>
+          {(showSectionTabs || modelActions != null) && (
             <div className='flex flex-wrap items-center justify-between gap-1.5 sm:gap-2'>
               {showSectionTabs ? (
                 <SegmentedTabs

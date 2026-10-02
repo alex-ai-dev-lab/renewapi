@@ -16,74 +16,95 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
+import { useTranslation } from 'react-i18next'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import type { ModelStat } from './stats-api'
 
 interface ModelDistributionChartProps {
   data: ModelStat[]
 }
 
-const COLORS = [
-  'var(--chart-1)',
-  'var(--chart-2)',
-  'var(--chart-3)',
-  'var(--chart-4)',
-  'var(--chart-5)',
-  'var(--primary)',
-  'var(--success)',
-  'var(--warning)',
-]
-
-export function ModelDistributionChart({ data }: ModelDistributionChartProps) {
-  // Take top 8 models and group the rest as "Others"
-  const topModels = data.slice(0, 8)
-  const othersCount = data.slice(8).reduce((sum, model) => sum + model.total_requests, 0)
-
-  const chartData = [
-    ...topModels.map((model) => ({
-      name: model.model_name,
-      value: model.total_requests,
-    })),
-    ...(othersCount > 0 ? [{ name: 'Others', value: othersCount }] : []),
-  ]
-
+export function ModelDistributionChart(props: ModelDistributionChartProps) {
+  const { t, i18n } = useTranslation()
+  const totalRequests = props.data.reduce(
+    (sum, model) => sum + model.total_requests,
+    0
+  )
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Model Distribution</CardTitle>
-        <CardDescription>Request distribution by model</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <PieChart>
-            <Pie
-              data={chartData}
-              cx="50%"
-              cy="50%"
-              labelLine={false}
-              label={({ name, percent }) =>
-                `${name} ${(((percent ?? 0) as number) * 100).toFixed(0)}%`
-              }
-              outerRadius={80}
-              fill='var(--primary)'
-              dataKey="value"
-            >
-              {chartData.map((_, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip
-              contentStyle={{
-                backgroundColor: 'var(--popover)',
-                border: '1px solid var(--border)',
-                borderRadius: '6px',
-              }}
-            />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
+    <section className='obsidian-panel'>
+      <header className='obsidian-panel-heading'>
+        <h2>{t('Model Distribution')}</h2>
+        <p className='text-muted-foreground text-xs'>
+          {t('Request distribution by model')}
+        </p>
+      </header>
+      <div className='max-h-96 overflow-auto'>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className='px-4 text-xs'>{t('Model')}</TableHead>
+              <TableHead className='text-right text-xs'>
+                {t('Requests')}
+              </TableHead>
+              <TableHead className='pr-4 text-right text-xs'>
+                {t('Share')}
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {props.data.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={3}
+                  className='text-muted-foreground h-24 text-center'
+                >
+                  {t('No data available')}
+                </TableCell>
+              </TableRow>
+            ) : (
+              props.data.map((model) => {
+                const share =
+                  totalRequests > 0
+                    ? (model.total_requests / totalRequests) * 100
+                    : 0
+                return (
+                  <TableRow key={model.model_name}>
+                    <TableCell className='px-4 py-3 text-xs font-medium'>
+                      {model.model_name}
+                    </TableCell>
+                    <TableCell className='text-right text-xs tabular-nums'>
+                      {model.total_requests.toLocaleString(
+                        i18n.resolvedLanguage
+                      )}
+                    </TableCell>
+                    <TableCell className='pr-4 text-right text-xs tabular-nums'>
+                      <div className='flex items-center justify-end gap-3'>
+                        <meter
+                          className='obsidian-share-meter'
+                          min={0}
+                          max={100}
+                          value={share}
+                          aria-label={t('Request share for {{model}}', {
+                            model: model.model_name,
+                          })}
+                        />
+                        <span className='min-w-12'>{share.toFixed(1)}%</span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
   )
 }

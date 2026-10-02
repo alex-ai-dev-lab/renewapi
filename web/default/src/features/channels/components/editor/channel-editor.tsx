@@ -128,6 +128,11 @@ import {
   getChannelFormInitializationTarget,
 } from '../../lib'
 import {
+  mappingCandidates,
+  mappingSources,
+  parseModelMappingConfig,
+} from '../../lib/model-mapping-validation'
+import {
   collectInvalidStatusCodeEntries,
   collectNewDisallowedStatusCodeRedirects,
 } from '../../lib/status-code-risk-guard'
@@ -149,7 +154,10 @@ import {
   ChannelModelEndpointsSection,
   ChannelModelsSection,
 } from '../drawers/sections'
-import { ModelMappingEditor } from '../model-mapping-editor'
+import {
+  ModelMappingEditor,
+  type MappingEditorState,
+} from '../model-mapping-editor'
 
 type ChannelEditorProps = {
   currentRow?: Channel | null
@@ -345,7 +353,7 @@ function ChannelEditorSectionNav({ onAdvancedOpen }: ChannelEditorNavProps) {
       <aside className='hidden lg:block'>
         <nav
           aria-label={t('Channel configuration sections')}
-          className='glass-tile sticky top-24 space-y-1 p-3'
+          className='obsidian-channel-nav space-y-1'
         >
           <div className='text-muted-foreground px-2 pb-2 text-[11px] font-semibold tracking-[0.14em] uppercase'>
             {t('Configuration')}
@@ -368,8 +376,8 @@ function ChannelEditorSectionNav({ onAdvancedOpen }: ChannelEditorNavProps) {
         </nav>
       </aside>
 
-      <div className='sticky top-16 z-20 lg:hidden'>
-        <div className='glass-tile p-2'>
+      <div className='obsidian-channel-mobile-nav lg:hidden'>
+        <div className='bg-card rounded border p-2'>
           <Select
             value={activeSection}
             onValueChange={(value) => value && selectSection(value)}
@@ -416,6 +424,11 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
   const [isChannelKeyLoading, setIsChannelKeyLoading] = useState(false)
   const initialModelsRef = useRef<string[]>([])
   const initialModelMappingRef = useRef<string>('')
+  const [mappingState, setMappingState] = useState<MappingEditorState>({
+    dirty: false,
+    errors: [],
+  })
+  const [mappingResetKey, setMappingResetKey] = useState(0)
   const initialStatusCodeMappingRef = useRef<string>('')
   const initializedFormTargetRef = useRef<number | 'create' | null>(null)
   const [statusCodeRiskOpen, setStatusCodeRiskOpen] = useState(false)
@@ -464,7 +477,22 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
 
   // Form setup
   const form = useForm<ChannelFormValues>({
-    resolver: zodResolver(channelFormSchema),
+    resolver: async (values, context, options) => {
+      // The server permits untouched historic legacy mappings while other fields change.
+      const unchanged =
+        isEditing && values.model_mapping === initialModelMappingRef.current
+      const result = await zodResolver(channelFormSchema)(
+        unchanged ? { ...values, model_mapping: '' } : values,
+        context,
+        options
+      )
+      if (unchanged && Object.keys(result.errors).length === 0)
+        result.values = {
+          ...(result.values as ChannelFormValues),
+          model_mapping: values.model_mapping,
+        }
+      return result
+    },
     defaultValues: CHANNEL_FORM_DEFAULT_VALUES,
   })
 
@@ -472,6 +500,8 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
     (channel: Channel) => {
       const defaults = transformChannelToFormDefaults(channel)
       form.reset(defaults)
+      setMappingResetKey((key) => key + 1)
+      setMappingState({ dirty: false, errors: [] })
       setAdvancedSettingsOpen(
         readAdvancedSettingsPreference() || hasAdvancedSettingsValues(defaults)
       )
@@ -664,24 +694,14 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
     }
 
     try {
-      const parsed = JSON.parse(currentModelMapping)
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        return { ...createEmptyModelMappingGuardrail(), invalidJson: true }
-      }
-
-      const entries = Object.entries(parsed).reduce<
-        Array<{ source: string; target: string }>
-      >((acc, [rawSource, rawTarget]) => {
-        const source = String(rawSource).trim()
-        const target = String(rawTarget ?? '').trim()
-
-        if (!source || !target) {
-          return acc
-        }
-
-        acc.push({ source, target })
-        return acc
-      }, [])
+      const parsed = parseModelMappingConfig(currentModelMapping)
+      const budget = { remaining: 65536 }
+      const entries = mappingSources(parsed).flatMap((source) =>
+        mappingCandidates(parsed, source, budget).map((target) => ({
+          source,
+          target,
+        }))
+      )
 
       const missingSourceModels = Array.from(
         new Set(
@@ -782,6 +802,8 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
       initializeEditForm(channelData.data)
     } else {
       form.reset(CHANNEL_FORM_DEFAULT_VALUES)
+      setMappingResetKey((key) => key + 1)
+      setMappingState({ dirty: false, errors: [] })
       setAdvancedSettingsOpen(false)
       initialModelsRef.current = []
       initialModelMappingRef.current = ''
@@ -1038,7 +1060,12 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
           queryKey: channelsQueryKeys.detail(channelId),
         })
       }
-      if (!savedChannel) form.reset(form.getValues())
+      if (!savedChannel) {
+        form.reset(form.getValues())
+        initialModelMappingRef.current = form.getValues('model_mapping') || ''
+        setMappingResetKey((key) => key + 1)
+        setMappingState({ dirty: false, errors: [] })
+      }
       if (!isEditing) onClose()
     },
     [channelId, queryClient, form, isEditing, onClose, initializeEditForm]
@@ -1138,7 +1165,7 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
   })
 
   const isSubmitting = channelMutation.isPending
-  const isDirty = form.formState.isDirty
+  const isDirty = form.formState.isDirty || mappingState.dirty
   const blocker = useBlocker({
     shouldBlockFn: () => isDirty && !isSubmitting,
     enableBeforeUnload: isDirty && !isSubmitting,
@@ -1148,6 +1175,26 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
   // Submit handler
   const onSubmit = useCallback(
     async (data: ChannelFormValues) => {
+      if (mappingState.errors.length) {
+        form.setError('model_mapping', {
+          type: 'manual',
+          message: t(mappingState.errors[0]),
+        })
+        toast.error(t(mappingState.errors[0]))
+        return
+      }
+      try {
+        if (
+          parseModelMappingConfig(initialModelMappingRef.current).version ===
+            2 &&
+          parseModelMappingConfig(data.model_mapping || '').version !== 2
+        ) {
+          toast.error(t('Rules cannot be downgraded to legacy mappings'))
+          return
+        }
+      } catch {
+        /* changed invalid values are handled by the shared validator */
+      }
       if (isChannelDetailUnavailable) {
         toast.error(channelDetailErrorMessage)
         return
@@ -1208,7 +1255,10 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
         typeof data.model_mapping === 'string' &&
         data.model_mapping.trim() !== ''
 
-      if (hasModelMapping) {
+      if (
+        hasModelMapping &&
+        (!isEditing || data.model_mapping !== initialModelMappingRef.current)
+      ) {
         const validation = validateModelMappingJson(data.model_mapping!)
         if (!validation.valid) {
           toast.error(t(validation.error || 'Invalid model mapping'))
@@ -1261,6 +1311,7 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
       confirmStatusCodeRisk,
       channelMutation,
       prepareCodexCredentialForSubmit,
+      mappingState,
       t,
     ]
   )
@@ -1294,7 +1345,7 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
     <>
       <div
         data-ui='channel-editor-page'
-        className='grid min-w-0 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]'
+        className='obsidian-admin obsidian-channel-editor grid min-w-0 gap-4 lg:grid-cols-[192px_minmax(0,1fr)]'
       >
         <ChannelEditorSectionNav
           onAdvancedOpen={() => handleAdvancedSettingsOpenChange(true)}
@@ -1302,7 +1353,7 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
         <div className='min-w-0 space-y-5'>
           <div
             data-ui='channel-editor-summary'
-            className='glass-tile sticky top-[calc(var(--app-header-height)+0.5rem)] z-[var(--z-sticky-header)] flex min-w-0 items-center gap-2 p-3 sm:gap-3 sm:p-4'
+            className='obsidian-channel-summary sticky z-[var(--z-sticky-header)] flex min-w-0 items-center gap-2 p-3'
           >
             <Button
               type='button'
@@ -2908,7 +2959,9 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
                                       </Tooltip>
                                     </div>
                                     <FormDescription>
-                                      {t(FIELD_DESCRIPTIONS.MODEL_MAPPING)}
+                                      {t(
+                                        'Use direct v2 rules with ordered priorities, or retain legacy string/string-array mappings with chain expansion.'
+                                      )}
                                     </FormDescription>
                                   </div>
                                 </div>
@@ -2916,6 +2969,8 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
                                   <ModelMappingEditor
                                     value={field.value || ''}
                                     onChange={field.onChange}
+                                    onStateChange={setMappingState}
+                                    resetKey={`${channelId ?? 'create'}-${mappingResetKey}`}
                                     disabled={isSubmitting}
                                     sourceModelOptions={currentModelsArray}
                                     targetModelOptions={modelOptions.map(
@@ -2927,13 +2982,9 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
                                   <Alert variant='destructive'>
                                     <AlertDescription>
                                       {t(
-                                        'Model Mapping must be a JSON object like'
-                                      )}{' '}
-                                      <code className='font-mono'>
-                                        {'{"gpt-4":"Azure-GPT4"}'}
-                                      </code>
-                                      {t(
-                                        '. Please fix the JSON before saving.'
+                                        validateModelMappingJson(
+                                          currentModelMapping || ''
+                                        ).error || 'Invalid model mapping'
                                       )}
                                     </AlertDescription>
                                   </Alert>
@@ -3020,7 +3071,11 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
                       onOpenChange={handleAdvancedSettingsOpenChange}
                     >
                       {/* ── Routing & Overrides ── */}
-                      <div className={sideDrawerSectionClassName()}>
+                      <div
+                        className={sideDrawerSectionClassName(
+                          'obsidian-channel-section'
+                        )}
+                      >
                         <CardHeading
                           title={t('Routing & Overrides')}
                           icon={<Route className='h-4 w-4' />}
@@ -4221,7 +4276,11 @@ export function ChannelEditor({ currentRow, onClose }: ChannelEditorProps) {
                       </div>
 
                       {/* ── Extra Settings ── */}
-                      <div className={sideDrawerSectionClassName()}>
+                      <div
+                        className={sideDrawerSectionClassName(
+                          'obsidian-channel-section'
+                        )}
+                      >
                         <CardHeading
                           title={t('Channel Extra Settings')}
                           icon={<Settings className='h-4 w-4' />}

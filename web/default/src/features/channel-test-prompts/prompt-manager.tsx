@@ -5,6 +5,7 @@ Copyright (C) 2026 RenewAPI 贡献者
 本程序不提供任何担保；许可证全文见仓库 LICENSE。
 */
 import { useState } from 'react'
+import '@/styles/obsidian-admin.css'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -29,8 +30,11 @@ export function PromptManager() {
     toast.success(t('Saved successfully'))
   }
   return (
-    <SettingsSection title={t('Test prompt profiles')}>
-      <h2 className='text-base font-semibold'>{t('Test prompt profiles')}</h2>
+    <SettingsSection
+      title={t('Test prompt profiles')}
+      className='obsidian-admin obsidian-prompt-manager'
+    >
+      <h2 className='text-[13px] font-semibold'>{t('Test prompt profiles')}</h2>
       <p className='text-muted-foreground text-sm'>
         {t(
           'Each channel can select its own prompt. Anti-poison appends a nonce check.'
@@ -73,9 +77,12 @@ export function PromptManager() {
           {t('No prompt profiles. The legacy prompt is used.')}
         </p>
       )}
-      <div className='space-y-3'>
+      <div className='obsidian-prompt-list'>
         {prompts.data?.map((prompt) => (
-          <article key={prompt.id} className='space-y-2 rounded-lg border p-3'>
+          <article
+            key={prompt.id}
+            className='obsidian-prompt-item space-y-2 p-3'
+          >
             <div className='flex flex-wrap items-center gap-2'>
               <span className='font-medium break-all'>{prompt.name}</span>
               {prompt.is_default && <Badge>{t('Default')}</Badge>}
@@ -93,7 +100,7 @@ export function PromptManager() {
                 {prompt.description}
               </p>
             )}
-            <p className='line-clamp-3 text-sm break-words whitespace-pre-wrap'>
+            <p className='bg-background line-clamp-3 rounded border p-3 font-mono text-xs break-words whitespace-pre-wrap'>
               {prompt.prompt}
             </p>
             <div className='flex flex-wrap gap-2'>

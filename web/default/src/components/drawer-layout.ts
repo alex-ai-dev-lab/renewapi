@@ -21,13 +21,13 @@ import { cn } from '@/lib/utils'
 
 export const sideDrawerContentClassName = (className?: string) =>
   cn(
-    'bg-background/90 text-foreground flex h-dvh w-full flex-col gap-0 overflow-hidden p-0 shadow-none backdrop-blur-xl',
+    'bg-card text-card-foreground flex h-dvh w-full flex-col gap-0 overflow-hidden p-0 shadow-none',
     className
   )
 
 export const sideDrawerHeaderClassName = (className?: string) =>
   cn(
-    'border-border/60 bg-background/70 border-b px-4 py-3 text-start backdrop-blur-xl backdrop-saturate-150 sm:px-6 sm:py-4',
+    'border-border bg-card border-b px-4 py-3 text-start sm:px-5 sm:py-4',
     className
   )
 
@@ -39,13 +39,13 @@ export const sideDrawerFormClassName = (className?: string) =>
 
 export const sideDrawerFooterClassName = (className?: string) =>
   cn(
-    'border-border/60 bg-background/70 grid grid-cols-2 gap-2 border-t px-4 py-3 backdrop-blur-xl backdrop-saturate-150 sm:flex sm:flex-row sm:justify-end sm:px-6 sm:py-4',
+    'border-border bg-card grid grid-cols-2 gap-2 border-t px-4 py-3 sm:flex sm:flex-row sm:justify-end sm:px-5 sm:py-4',
     className
   )
 
 export const sideDrawerSectionClassName = (className?: string) =>
   cn(
-    'border-border/60 bg-card/55 flex flex-col gap-4 rounded-[calc(var(--radius)*1.125)] border p-4 shadow-sm sm:p-5',
+    'border-border bg-card flex flex-col gap-4 rounded-lg border p-4 shadow-none',
     className
   )
 
@@ -91,8 +91,7 @@ export function SideDrawerSectionHeader(props: {
       createElement(
         'h3',
         {
-          className:
-            'text-sm leading-none font-semibold tracking-[-0.01em]',
+          className: 'text-sm leading-none font-semibold tracking-[-0.01em]',
         },
         props.title
       ),

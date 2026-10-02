@@ -12,6 +12,8 @@ const MaxChannelSwitches = 5
 const ChannelFailoverContextKey = "relay_channel_failover"
 
 type ChannelAttemptRecord struct {
+	UpstreamModel     string         `json:"upstream_model,omitempty"`
+	MappingRuleID     string         `json:"mapping_rule_id,omitempty"`
 	ChannelID         int            `json:"channel_id"`
 	ChannelName       string         `json:"channel_name"`
 	Priority          int64          `json:"priority"`
@@ -50,8 +52,28 @@ func (s *ChannelFailoverState) Begin(channelID int, name string, priority int64)
 		return false
 	}
 	s.AttemptedChannelIDs[channelID] = true
+	if s.AttemptCount > 0 {
+		s.SwitchCount++
+	}
+	return s.beginAttempt(channelID, name, priority)
+}
+
+// BeginMappedCandidate permits only a new target on the immediately preceding
+// channel. It never removes channel exclusions or creates a fresh budget.
+func (s *ChannelFailoverState) BeginMappedCandidate(channelID int, name string, priority int64, target string) bool {
+	if !s.CanAttempt() || target == "" || len(s.AttemptRecords) == 0 || s.AttemptRecords[len(s.AttemptRecords)-1].ChannelID != channelID {
+		return false
+	}
+	for _, attempt := range s.AttemptRecords {
+		if attempt.ChannelID == channelID && attempt.UpstreamModel == target {
+			return false
+		}
+	}
+	return s.beginAttempt(channelID, name, priority)
+}
+
+func (s *ChannelFailoverState) beginAttempt(channelID int, name string, priority int64) bool {
 	s.AttemptCount++
-	s.SwitchCount = s.AttemptCount - 1
 	s.startedAt = time.Now()
 	s.AttemptRecords = append(s.AttemptRecords, ChannelAttemptRecord{
 		ChannelID: channelID, ChannelName: name, Priority: priority,

@@ -20,6 +20,12 @@ import { useEffect } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { InternalAxiosRequestConfig } from 'axios'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterContextProvider,
+} from '@tanstack/react-router'
 import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { Window } from 'happy-dom'
 import { api } from '@/lib/api'
@@ -38,6 +44,9 @@ mock.module('sonner', () => ({
   },
 }))
 
+// Base UI detects DOM availability while its modules load; this test must not
+// depend on another test having installed a window first.
+installDom()
 const { CopyChannelDialog } = await import('./copy-channel-dialog')
 const { ChannelsProvider, useChannels } = await import('../channels-provider')
 
@@ -96,6 +105,15 @@ function installDom() {
   setGlobalProperty('cancelAnimationFrame', cancelAnimationFrame)
   setGlobalProperty('localStorage', window.localStorage)
   setGlobalProperty('navigator', window.navigator)
+  setGlobalProperty('history', window.history)
+  setGlobalProperty('location', window.location)
+  setGlobalProperty('getComputedStyle', window.getComputedStyle.bind(window))
+  setGlobalProperty('DocumentFragment', window.DocumentFragment)
+  setGlobalProperty('HTMLInputElement', window.HTMLInputElement)
+  setGlobalProperty('MutationObserver', window.MutationObserver)
+  setGlobalProperty('ResizeObserver', window.ResizeObserver)
+  setGlobalProperty('KeyboardEvent', window.KeyboardEvent)
+  setGlobalProperty('PointerEvent', window.PointerEvent)
 }
 
 function baseChannel(): Channel {
@@ -153,13 +171,19 @@ async function renderDialog(onOpenChange: (open: boolean) => void) {
   const container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+  })
   root.render(
-    <QueryClientProvider client={new QueryClient()}>
-      <ChannelsProvider>
-        <SeedCurrentRow />
-        <CopyChannelDialog open={true} onOpenChange={onOpenChange} />
-      </ChannelsProvider>
-    </QueryClientProvider>
+    <RouterContextProvider router={router}>
+      <QueryClientProvider client={new QueryClient()}>
+        <ChannelsProvider>
+          <SeedCurrentRow />
+          <CopyChannelDialog open={true} onOpenChange={onOpenChange} />
+        </ChannelsProvider>
+      </QueryClientProvider>
+    </RouterContextProvider>
   )
   await new Promise((resolve) => setTimeout(resolve, 0))
   await new Promise((resolve) => setTimeout(resolve, 0))

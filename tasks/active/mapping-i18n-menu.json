@@ -1,0 +1,38 @@
+{
+  "en": {
+    "Access & debugging": "Access & debugging",
+    "Usage & troubleshooting": "Usage & troubleshooting",
+    "Funds & account": "Funds & account",
+    "Models & channels": "Models & channels",
+    "Users & operations": "Users & operations",
+    "System administration": "System administration",
+    "Models & pricing": "Models & pricing",
+    "Data analytics": "Data analytics",
+    "Request logs": "Request logs",
+    "Wallet & subscriptions": "Wallet & subscriptions",
+    "Upstream channels": "Upstream channels",
+    "Model management": "Model management",
+    "Subscription plans": "Subscription plans",
+    "Platform settings": "Platform settings",
+    "Legacy permission sections": "Legacy permission sections",
+    "Task categories change presentation only. Existing permission sections remain authoritative; Overview is always first when enabled.": "Task categories change presentation only. Existing permission sections remain authoritative; Overview is always first when enabled."
+  },
+  "zh": {
+    "Access & debugging": "接入与调试",
+    "Usage & troubleshooting": "用量与排障",
+    "Funds & account": "资金与账户",
+    "Models & channels": "模型与渠道",
+    "Users & operations": "用户与运营",
+    "System administration": "系统管理",
+    "Models & pricing": "模型与价格",
+    "Data analytics": "数据分析",
+    "Request logs": "请求日志",
+    "Wallet & subscriptions": "钱包与订阅",
+    "Upstream channels": "上游渠道",
+    "Model management": "模型管理",
+    "Subscription plans": "订阅方案",
+    "Platform settings": "平台设置",
+    "Legacy permission sections": "兼容权限分区",
+    "Task categories change presentation only. Existing permission sections remain authoritative; Overview is always first when enabled.": "任务分类只影响展示，原有权限分区仍为上层开关；总览启用时始终置顶。"
+  }
+}

@@ -105,12 +105,10 @@ export function ResetPasswordConfirm({
 
   return (
     <AuthLayout>
-      <div className='w-full space-y-8'>
-        <div className='space-y-2'>
-          <h2 className='text-center text-2xl font-semibold tracking-tight sm:text-left'>
-            {t('Reset password')}
-          </h2>
-          <p className='text-muted-foreground text-left text-sm sm:text-base'>
+      <div className='obsidian-auth-page'>
+        <div className='obsidian-auth-page-header'>
+          <h1 className='obsidian-auth-title'>{t('Reset password')}</h1>
+          <p className='obsidian-auth-description'>
             {newPassword
               ? t('auth.resetPasswordConfirm.success')
               : t('auth.resetPasswordConfirm.description')}

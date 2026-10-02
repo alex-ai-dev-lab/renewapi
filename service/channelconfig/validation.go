@@ -104,13 +104,11 @@ func ValidateChannel(channel *model.Channel, isAdd bool) error {
 			return fmt.Errorf("渠道地址不能包含用户凭据")
 		}
 	}
-	if channel.ModelMapping != nil {
-		mapping, err := common.ParseModelMapping(*channel.ModelMapping)
-		if err != nil {
+	// Updates validate the transition against the stored value inside Update's
+	// transaction. Revalidating unchanged historical mappings blocks unrelated edits.
+	if isAdd {
+		if err := common.ValidateModelMapping(channel.GetModelMapping()); err != nil {
 			return fmt.Errorf("模型映射格式错误: %w", err)
-		}
-		if mapping == nil {
-			return fmt.Errorf("模型映射必须是 JSON 对象")
 		}
 	}
 	if channel.Type == constant.ChannelTypeVertexAi {

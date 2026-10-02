@@ -23,16 +23,18 @@ export function MaintenanceError() {
   const { t } = useTranslation()
   return (
     <div className='flex min-h-svh items-center justify-center px-4 py-8'>
-      <div className='glass-tile flex w-full max-w-xl flex-col items-center justify-center gap-2 px-6 py-10 text-center sm:px-10'>
-        <h1 className='text-aurora text-[7rem] leading-tight font-bold'>503</h1>
-        <span className='font-medium'>
+      <div className='bg-card border-border flex w-full max-w-xl flex-col items-start gap-3 rounded-md border p-6 text-left'>
+        <h1 className='text-muted-foreground font-mono text-[29px] leading-tight font-semibold tabular-nums'>
+          503
+        </h1>
+        <span className='text-base font-semibold'>
           {t('Website is under maintenance!')}
         </span>
-        <p className='text-muted-foreground text-center'>
+        <p className='text-muted-foreground text-left'>
           {t('The site is not available at the moment.')} <br />
           {t("We'll be back online shortly.")}
         </p>
-        <div className='mt-6 flex flex-wrap justify-center gap-3 sm:gap-4'>
+        <div className='mt-3 flex flex-wrap gap-2'>
           <Button variant='outline'>{t('Learn more')}</Button>
         </div>
       </div>

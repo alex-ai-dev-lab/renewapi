@@ -56,15 +56,18 @@ interface AutoRefreshToggleProps {
   className?: string
 }
 
-function formatLastUpdated(timestamp?: number): string | null {
+function formatLastUpdated(
+  timestamp: number | undefined,
+  locale: string
+): string | null {
   if (!timestamp) return null
   const updatedAt = new Date(timestamp)
   if (Number.isNaN(updatedAt.getTime())) return null
-  return `已更新 ${updatedAt.toLocaleTimeString('zh-CN', {
+  return updatedAt.toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-  })}`
+  })
 }
 
 export function AutoRefreshToggle({
@@ -78,8 +81,11 @@ export function AutoRefreshToggle({
   className,
 }: AutoRefreshToggleProps) {
   const id = useId()
-  const { t } = useTranslation()
-  const lastUpdatedLabel = formatLastUpdated(lastUpdatedAt)
+  const { t, i18n } = useTranslation()
+  const lastUpdatedLabel = formatLastUpdated(
+    lastUpdatedAt,
+    i18n.resolvedLanguage ?? 'en'
+  )
 
   return (
     <div className={cn('flex flex-wrap items-center gap-2', className)}>
@@ -90,8 +96,8 @@ export function AutoRefreshToggle({
           size='icon-sm'
           onClick={() => onRefresh()}
           disabled={isRefreshing}
-          aria-label='刷新统计'
-          title='刷新统计'
+          aria-label={t('Refresh statistics')}
+          title={t('Refresh statistics')}
         >
           <RefreshCw
             className={cn('size-4', isRefreshing && 'animate-spin')}
@@ -112,7 +118,7 @@ export function AutoRefreshToggle({
         htmlFor={id}
         className='text-muted-foreground cursor-pointer text-sm'
       >
-        自动刷新
+        {t('Auto refresh')}
       </Label>
       {onIntervalChange ? (
         <Select
@@ -145,7 +151,7 @@ export function AutoRefreshToggle({
       )}
       {lastUpdatedLabel ? (
         <span className='text-muted-foreground text-xs tabular-nums'>
-          {lastUpdatedLabel}
+          {t('Updated {{time}}', { time: lastUpdatedLabel })}
         </span>
       ) : null}
     </div>

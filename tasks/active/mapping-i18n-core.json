@@ -1,0 +1,16 @@
+{
+  "en": {
+    "Channel priority": "Channel priority",
+    "Upstream target": "Upstream target",
+    "Mapping rule": "Mapping rule",
+    "Upstream error": "Upstream error",
+    "Attempt result": "Attempt result"
+  },
+  "zh": {
+    "Channel priority": "渠道优先级",
+    "Upstream target": "实际上游模型",
+    "Mapping rule": "映射规则",
+    "Upstream error": "上游错误",
+    "Attempt result": "尝试结果"
+  }
+}

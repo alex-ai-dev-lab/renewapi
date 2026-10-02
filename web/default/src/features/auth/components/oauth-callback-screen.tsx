@@ -91,18 +91,14 @@ export function OAuthCallbackScreen({
 
   return (
     <AuthLayout>
-      <div className='w-full space-y-8'>
+      <div className='obsidian-auth-page'>
         <div className='flex flex-col items-center space-y-4 text-center'>
-          <div className='bg-muted flex h-16 w-16 items-center justify-center rounded-xl'>
-            <Icon className='h-8 w-8' />
+          <div className='bg-muted border-border flex size-12 items-center justify-center rounded border'>
+            <Icon className='size-6' />
           </div>
           <div className='space-y-2'>
-            <h2 className='text-center text-2xl font-semibold tracking-tight'>
-              {headline}
-            </h2>
-            <p className='text-muted-foreground text-sm sm:text-base'>
-              {description}
-            </p>
+            <h1 className='obsidian-auth-title'>{headline}</h1>
+            <p className='obsidian-auth-description'>{description}</p>
           </div>
         </div>
 

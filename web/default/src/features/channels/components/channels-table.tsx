@@ -405,8 +405,7 @@ export function ChannelsTable() {
         isFetching={isFetching}
         isError={isError}
         errorDescription={error instanceof Error ? error.message : undefined}
-        tableHeaderClassName='bg-background/80 backdrop-blur-md sticky top-0 z-10'
-        tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
+        tableHeaderClassName='sticky top-0 z-10 bg-card'
         emptyTitle={t('未找到渠道')}
         emptyDescription={t('当前没有可用渠道，请先创建第一个渠道。')}
         skeletonKeyPrefix='channel-skeleton'

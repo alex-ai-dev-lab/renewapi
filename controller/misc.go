@@ -145,6 +145,7 @@ func GetStatus(c *gin.Context) {
 		"HeaderNavModules":         common.OptionMap["HeaderNavModules"],
 		"SidebarModulesAdmin":      common.OptionMap["SidebarModulesAdmin"],
 		"SidebarSectionOrder":      common.SidebarSectionOrder,
+		"SidebarTaskSectionOrder":  common.SidebarTaskSectionOrder,
 		"SystemSettingsNavigation": common.SystemSettingsNavigation,
 
 		"oidc_enabled":                system_setting.GetOIDCSettings().Enabled,

@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { CSSProperties } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { TriangleAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -29,12 +28,6 @@ import { formatPrice, formatRequestPrice } from '@/features/pricing/lib/price'
 import type { PricingModel } from '@/features/pricing/types'
 import { getModels } from '../api'
 import type { Model, Vendor } from '../types'
-
-const toneBackgrounds: CSSProperties['background'][] = [
-  'linear-gradient(135deg, color-mix(in oklch, var(--primary) 13%, transparent), color-mix(in oklch, var(--card) 88%, transparent))',
-  'linear-gradient(135deg, color-mix(in oklch, var(--warning) 12%, transparent), color-mix(in oklch, var(--card) 89%, transparent))',
-  'linear-gradient(135deg, color-mix(in oklch, var(--success) 13%, transparent), color-mix(in oklch, var(--card) 88%, transparent))',
-]
 
 type PricingCopy = {
   unavailable: string
@@ -199,17 +192,15 @@ export function ModelsStats(props: {
   }
 
   return (
-    <div className='space-y-4'>
-      <div className='glass-tile flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between'>
+    <div className='obsidian-model-registry space-y-4'>
+      <div className='obsidian-admin-panel flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between'>
         <div>
-          <div className='text-muted-foreground text-[10px] font-bold tracking-[1.35px] uppercase'>
+          <div className='text-muted-foreground text-[11px] font-medium'>
             {t('aurora.models.registry.title', {
               defaultValue: 'Model Registry',
             })}
           </div>
-          <div className='mt-1 text-[20px] font-extrabold tracking-[-0.025em]'>
-            {registryHeadline}
-          </div>
+          <div className='mt-1 text-sm font-semibold'>{registryHeadline}</div>
           <div className='text-muted-foreground mt-1 text-xs'>
             {registryStatus}
           </div>
@@ -219,7 +210,7 @@ export function ModelsStats(props: {
           variant='outline'
           size='sm'
           onClick={props.onManagementToggle}
-          className='shrink-0 rounded-full bg-white/45 px-4'
+          className='shrink-0 px-3'
           aria-expanded={props.managementOpen}
         >
           {props.managementOpen
@@ -234,12 +225,12 @@ export function ModelsStats(props: {
 
       {props.isLoading ? (
         <div
-          className='glass-tile grid gap-4 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-3'
+          className='obsidian-admin-panel grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3'
           aria-busy='true'
         >
           <span className='sr-only'>{registryHeadline}</span>
           {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className='glass-tile min-h-[174px] space-y-4 p-5'>
+            <div key={index} className='bg-card space-y-3 rounded border p-3'>
               <div className='flex items-center justify-between gap-3'>
                 <Skeleton className='h-3 w-20' />
                 <Skeleton className='h-6 w-16 rounded-full' />
@@ -253,7 +244,7 @@ export function ModelsStats(props: {
       ) : props.isError ? (
         <div
           role='alert'
-          className='glass-tile border-destructive/25 bg-destructive/5 flex min-h-44 items-center gap-4 p-5'
+          className='obsidian-admin-panel border-destructive flex min-h-32 items-center gap-3 p-4'
         >
           <div className='bg-destructive/10 text-destructive flex size-10 shrink-0 items-center justify-center rounded-full'>
             <TriangleAlert className='size-5' />
@@ -266,7 +257,7 @@ export function ModelsStats(props: {
           </div>
         </div>
       ) : visibleModels.length === 0 ? (
-        <div className='glass-tile flex min-h-44 items-center justify-center p-6 text-center'>
+        <div className='obsidian-admin-panel flex min-h-32 items-center justify-center p-4 text-center'>
           <div className='max-w-lg'>
             <div className='font-semibold'>{registryHeadline}</div>
             <div className='text-muted-foreground mt-1 text-sm'>
@@ -275,9 +266,9 @@ export function ModelsStats(props: {
           </div>
         </div>
       ) : (
-        <div className='glass-tile p-4 sm:p-5'>
-          <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
-            {visibleModels.map((model, index) => {
+        <div className='obsidian-admin-panel'>
+          <div className='obsidian-model-rack'>
+            {visibleModels.map((model) => {
               const pricingModel = pricingByName.get(model.model_name)
               const pricingLine = getPricingLine(
                 pricingModel,
@@ -315,21 +306,15 @@ export function ModelsStats(props: {
                     })
 
               return (
-                <article
-                  key={model.id}
-                  className='glass-tile min-h-[174px] p-5'
-                  style={{
-                    background: toneBackgrounds[index % toneBackgrounds.length],
-                  }}
-                >
+                <article key={model.id} className='obsidian-model-unit'>
                   <div className='flex h-full flex-col'>
                     <div className='flex items-start justify-between gap-3'>
-                      <div className='text-muted-foreground text-[10px] font-bold tracking-[1.25px] uppercase'>
+                      <div className='text-muted-foreground text-[11px]'>
                         {vendorLabel}
                       </div>
                       <span
                         className={cn(
-                          'rounded-full px-2 py-1 text-[10px] font-bold',
+                          'rounded border px-1.5 py-0.5 text-[11px] font-medium',
                           model.status === 1
                             ? 'bg-success/12 text-success'
                             : 'bg-muted text-muted-foreground'
@@ -338,16 +323,16 @@ export function ModelsStats(props: {
                         {statusLabel}
                       </span>
                     </div>
-                    <div className='mt-3 truncate font-mono text-[17px] font-extrabold tracking-[-0.02em]'>
+                    <div className='mt-2 truncate font-mono text-[13px] font-semibold'>
                       {model.model_name}
                     </div>
                     <div className='text-foreground mt-1.5 truncate font-mono text-[11px] font-semibold tabular-nums'>
                       {pricingLabel}
                     </div>
-                    <p className='text-muted-foreground mt-1 line-clamp-2 min-h-9 text-xs leading-[18px]'>
+                    <p className='text-muted-foreground mt-1 line-clamp-2 text-xs'>
                       {description}
                     </p>
-                    <div className='text-muted-foreground border-border/40 mt-auto flex items-center justify-between gap-3 border-t pt-3 text-[10px]'>
+                    <div className='text-muted-foreground border-border mt-3 flex items-center justify-between gap-3 border-t pt-3 text-[10px]'>
                       <span>
                         {t('aurora.models.channelCount', {
                           defaultValue: isChinese

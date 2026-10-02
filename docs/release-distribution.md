@@ -50,6 +50,7 @@ MySQL 5.7/8.4、PostgreSQL 9.6/16 和两组实际浏览器检查。
 `image_tag` 不能使用 `edge`、`rc`、`latest` 等保留名称。
 
 产品版本、源码 SHA、构建时间和构建渠道分别记录。已发布附件不可覆盖，
-既有 Git 标签不可移动或删除；重跑已公开的 Release 只验证原附件。
-历史产物清理须有用户明确授权，具体规则见 [ADR-010](decisions/010-releases-only-distribution.md)。
+既有 Git 标签不可移动；重跑已公开的 Release 只验证原附件。
+历史产物及标签清理须有用户明确授权，具体规则见 [ADR-010](decisions/010-releases-only-distribution.md)
+和 [首次正式发布](decisions/013-stable-release-cleanup.md)。
 本地构建使用 [local-build 脚本](docker.md)的加载模式；部署助手只使用服务器已导入的镜像。

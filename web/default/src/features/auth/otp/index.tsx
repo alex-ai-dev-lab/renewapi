@@ -25,15 +25,15 @@ export function Otp() {
   const { t } = useTranslation()
   return (
     <AuthLayout>
-      <div className='w-full space-y-8'>
-        <div className='space-y-3'>
-          <h2 className='text-center text-2xl font-semibold tracking-tight sm:text-left'>
+      <div className='obsidian-auth-page'>
+        <div className='obsidian-auth-page-header'>
+          <h1 className='obsidian-auth-title'>
             {t('Two-factor Authentication')}
-          </h2>
-          <p className='text-muted-foreground text-left text-sm sm:text-base'>
+          </h1>
+          <p className='obsidian-auth-description'>
             {t('Please enter the authentication code.')}
           </p>
-          <p className='text-muted-foreground text-left text-sm sm:text-base'>
+          <p className='obsidian-auth-description'>
             {t('Session expired?')}{' '}
             <Link
               to='/sign-in'

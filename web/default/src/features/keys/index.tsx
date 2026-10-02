@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import '@/styles/obsidian-user.css'
 import { useTranslation } from 'react-i18next'
 import { SectionPageLayout } from '@/components/layout'
 import { ApiKeysAuroraOverview } from './components/api-keys-aurora-overview'
@@ -24,28 +25,16 @@ import { ApiKeysProvider } from './components/api-keys-provider'
 import { ApiKeysTable } from './components/api-keys-table'
 
 export function ApiKeys() {
-  const { t, i18n } = useTranslation()
-  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
+  const { t } = useTranslation()
 
   return (
     <ApiKeysProvider>
       <SectionPageLayout>
-        <SectionPageLayout.Title>
-          {t('aurora.keys.hero.lead', {
-            defaultValue: isChinese ? '访问' : 'Access',
-          })}{' '}
-          <span className='text-aurora'>
-            {t('aurora.keys.hero.accent', {
-              defaultValue: isChinese ? '令牌' : 'tokens',
-            })}
-          </span>
-        </SectionPageLayout.Title>
+        <SectionPageLayout.Title>{t('API Keys')}</SectionPageLayout.Title>
         <SectionPageLayout.Description>
-          {t('aurora.keys.hero.description', {
-            defaultValue: isChinese
-              ? '细粒度额度、IP 白名单与模型范围控制'
-              : 'Fine-grained quota, IP allowlists and model scope controls',
-          })}
+          {t(
+            'Control quotas, IP allowlists and model access for your API keys.'
+          )}
         </SectionPageLayout.Description>
         <SectionPageLayout.Content>
           <div className='space-y-4'>

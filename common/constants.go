@@ -89,6 +89,9 @@ var DashboardDefaultConsumptionChart = "bar"
 var DashboardDefaultModelAnalyticsChart = "trend"
 var DashboardVisibleSections = "overview,models,channels,users"
 var SidebarSectionOrder = "chat,console,personal,admin"
+
+// SidebarTaskSectionOrder is optional; empty preserves the default-theme compatibility fallback.
+var SidebarTaskSectionOrder = ""
 var SystemSettingsNavigation = `{"order":["operations","models","site","auth","billing","security","content"],"areas":{"site":{"enabled":true,"order":["system-info","notice","header-navigation","sidebar-modules","settings-navigation"]},"auth":{"enabled":true,"order":["basic-auth","oauth","passkey","bot-protection","custom-oauth"]},"billing":{"enabled":true,"order":["quota","currency","model-pricing","group-pricing","payment","checkin"]},"models":{"enabled":true,"order":["overview","global","gemini","claude","grok","user-agents","client-identity","model-pricing","channel-affinity","model-deployment"]},"security":{"enabled":true,"order":["rate-limit","sensitive-words","ssrf","upstream-error-rules","anti-poison-guard"]},"content":{"enabled":true,"order":["dashboard","appearance","announcements","api-info","faq","uptime-kuma","chat","drawing"]},"operations":{"enabled":true,"order":["overview","behavior","monitoring","channel-test","email","worker","logs","performance","update-checker"]}}}`
 var DashboardSlowFirstTokenThresholdMs = 3000
 var DashboardErrorRateWarningThreshold = 0.0

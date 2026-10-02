@@ -16,8 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Button } from '@/components/ui/button'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import type { TimeRange } from './stats-api'
 
 interface TimeRangeSelectorProps {
@@ -27,28 +28,41 @@ interface TimeRangeSelectorProps {
 }
 
 const TIME_RANGES: { value: TimeRange; label: string }[] = [
-  { value: '1d', label: '1 天' },
-  { value: '7d', label: '7 天' },
-  { value: '30d', label: '30 天' },
-  { value: '1y', label: '1 年' },
-  { value: 'all', label: '全部时间' },
+  { value: '1d', label: '1 day' },
+  { value: '7d', label: '7 days' },
+  { value: '30d', label: '30 days' },
+  { value: '1y', label: '1 year' },
+  { value: 'all', label: 'All time' },
 ]
 
-export function TimeRangeSelector({ value, onChange, className }: TimeRangeSelectorProps) {
+export function TimeRangeSelector({
+  value,
+  onChange,
+  className,
+}: TimeRangeSelectorProps) {
+  const { t } = useTranslation()
   return (
-    <div className={cn('inline-flex items-center gap-1 rounded-md border p-1', className)}>
+    <div
+      role='group'
+      aria-label={t('Time range')}
+      className={cn(
+        'inline-flex flex-wrap items-center gap-1 rounded-md border p-1',
+        className
+      )}
+    >
       {TIME_RANGES.map((range) => (
         <Button
           key={range.value}
           variant={value === range.value ? 'secondary' : 'ghost'}
-          size="sm"
+          size='sm'
+          aria-pressed={value === range.value}
           onClick={() => onChange(range.value)}
           className={cn(
             'h-8 px-3 text-xs',
             value === range.value && 'bg-secondary'
           )}
         >
-          {range.label}
+          {t(range.label)}
         </Button>
       ))}
     </div>

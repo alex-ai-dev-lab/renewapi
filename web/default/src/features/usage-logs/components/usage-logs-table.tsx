@@ -218,7 +218,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       tableClassName={cn(
         'min-w-0 max-w-full [&_[data-slot=table]]:table-fixed [&_[data-slot=table]]:text-[13px] [&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
       )}
-      tableHeaderClassName='bg-background/80 backdrop-blur-md sticky top-0 z-10'
+      tableHeaderClassName='bg-card sticky top-0 z-10'
       mobile={
         <UsageLogsMobileList
           table={table}

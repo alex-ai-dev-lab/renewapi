@@ -165,8 +165,7 @@ export function RedemptionsTable() {
         columns={columns}
         isLoading={isLoading}
         isFetching={isFetching}
-        tableHeaderClassName='sticky top-0 z-10 bg-background/80 backdrop-blur-md'
-        tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
+        tableHeaderClassName='sticky top-0 z-10 bg-card'
         emptyTitle={t('No Redemption Codes Found')}
         emptyDescription={t(
           'No redemption codes available. Create your first redemption code to get started.'

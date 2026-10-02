@@ -262,7 +262,7 @@ export function ModelsTable() {
             <Link
               to='/models/$section'
               params={{ section: 'deployments' }}
-              className='border-border/60 bg-background/45 text-muted-foreground hover:bg-background/75 hover:text-foreground inline-flex h-8 items-center rounded-full border px-3 text-xs font-semibold transition-colors'
+              className='border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground inline-flex h-8 items-center rounded border px-3 text-xs font-medium transition-colors'
             >
               {t('Deployments')}
             </Link>
@@ -277,8 +277,7 @@ export function ModelsTable() {
             isFetching={isFetching}
             isError={isError}
             errorDescription={errorDescription}
-            tableHeaderClassName='bg-background/80 backdrop-blur-md sticky top-0 z-10'
-            tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
+            tableHeaderClassName='sticky top-0 z-10 bg-card'
             emptyTitle={t('No Models Found')}
             emptyDescription={t(
               'No models available. Create your first model to get started.'

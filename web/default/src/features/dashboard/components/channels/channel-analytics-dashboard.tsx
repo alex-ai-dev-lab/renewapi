@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState, type ComponentType } from 'react'
+import { useEffect, useMemo, type ComponentType } from 'react'
 import { Link, getRouteApi, useNavigate } from '@tanstack/react-router'
 import {
   AlertTriangle,
@@ -33,17 +33,22 @@ import {
   Timer,
   TrendingUp,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
-import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import {
+  useCollectionSelection,
+  usePageCursor,
+} from '@/hooks/use-collection-view'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -103,7 +108,10 @@ function formatUsd(value: number): string {
   }).format(value)}`
 }
 
-function formatChannelName(name: string | undefined, t: (key: string) => string) {
+function formatChannelName(
+  name: string | undefined,
+  t: (key: string) => string
+) {
   const trimmed = String(name || '').trim()
   if (!trimmed || trimmed.toLowerCase() === 'unknown') {
     return t('未知渠道')
@@ -364,9 +372,6 @@ export function ChannelAnalyticsDashboard() {
   const defaultHealthFilter = useDashboardDefaultHealthFilter()
   const defaultPageSize = useDashboardDefaultPageSize()
   const healthThresholds = useDashboardHealthThresholds()
-  const [selectedChannelId, setSelectedChannelId] = useState<number | null>(
-    null
-  )
   const [channelQuery, setChannelQuery] = useDashboardPreference(
     'dashboard:channel-analytics:channel-query',
     '',
@@ -384,7 +389,6 @@ export function ChannelAnalyticsDashboard() {
       DEFAULT_CHANNEL_SORT,
       isChannelSortState
     )
-  const [channelPage, setChannelPage] = useState(1)
   const [channelPageSize, setChannelPageSize] = useDashboardPreference<number>(
     'dashboard:channel-analytics:channel-page-size',
     defaultPageSize,
@@ -413,6 +417,10 @@ export function ChannelAnalyticsDashboard() {
     dataUpdatedAt,
   } = useChannelStats(timeRange, autoRefresh, refreshInterval)
   const rows = channels ?? []
+  const [selectedChannelId, setSelectedChannelId] = useCollectionSelection(
+    rows.map((row) => row.channel_id),
+    search.channel_id ?? null
+  )
   const {
     data: channelUsers,
     isLoading: channelUsersLoading,
@@ -496,6 +504,15 @@ export function ChannelAnalyticsDashboard() {
     1,
     Math.ceil(sortedRows.length / channelPageSize)
   )
+  const [channelPage, setChannelPage] = usePageCursor(
+    JSON.stringify([
+      channelHealthFilter,
+      channelPageSize,
+      channelQuery,
+      channelSort,
+    ]),
+    totalChannelPages
+  )
   const pagedRows = useMemo(
     () =>
       sortedRows.slice(
@@ -563,45 +580,10 @@ export function ChannelAnalyticsDashboard() {
   }
 
   useEffect(() => {
-    if (rows.length === 0) {
-      if (selectedChannelId !== null) {
-        setSelectedChannelId(null)
-      }
-      return
-    }
-    const requestedChannelId =
-      search.channel_id &&
-      rows.some((row) => row.channel_id === search.channel_id)
-        ? search.channel_id
-        : null
-    const nextChannelId = requestedChannelId ?? selectedChannelId
-    if (
-      !nextChannelId ||
-      !rows.some((row) => row.channel_id === nextChannelId)
-    ) {
-      setSelectedChannelId(rows[0].channel_id)
-      return
-    }
-    if (selectedChannelId !== nextChannelId) {
-      setSelectedChannelId(nextChannelId)
-    }
-  }, [rows, search.channel_id, selectedChannelId])
-
-  useEffect(() => {
     if (search.time_range && search.time_range !== timeRange) {
       setTimeRange(search.time_range)
     }
   }, [search.time_range, timeRange])
-
-  useEffect(() => {
-    setChannelPage(1)
-  }, [channelHealthFilter, channelPageSize, channelQuery, channelSort])
-
-  useEffect(() => {
-    if (channelPage > totalChannelPages) {
-      setChannelPage(totalChannelPages)
-    }
-  }, [channelPage, totalChannelPages])
 
   if (error) {
     return (
@@ -643,7 +625,7 @@ export function ChannelAnalyticsDashboard() {
         </div>
       </div>
 
-      <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-5'>
+      <div className='obsidian-kpi-rack obsidian-kpi-rack-five'>
         <MetricCard
           icon={RadioTower}
           label={t('活跃渠道')}
@@ -679,7 +661,7 @@ export function ChannelAnalyticsDashboard() {
         />
       </div>
 
-      <div className='grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.7fr)]'>
+      <div className='obsidian-observation'>
         <Card className='rounded-lg shadow-none'>
           <CardHeader className='border-b pb-3'>
             <CardTitle className='text-sm'>{t('头部渠道流量')}</CardTitle>
@@ -693,10 +675,16 @@ export function ChannelAnalyticsDashboard() {
               </div>
             ) : (
               <ResponsiveContainer width='100%' height={320}>
-                <BarChart data={trafficChart}>
+                <BarChart
+                  data={trafficChart}
+                  accessibilityLayer
+                  barGap={4}
+                  maxBarSize={24}
+                >
                   <CartesianGrid
-                    strokeDasharray='3 3'
+                    vertical={false}
                     stroke='var(--border)'
+                    strokeOpacity={0.6}
                   />
                   <XAxis
                     dataKey='name'
@@ -717,15 +705,26 @@ export function ChannelAnalyticsDashboard() {
                     axisLine={false}
                   />
                   <Tooltip
+                    formatter={(value) =>
+                      `${formatCount(Number(value))} ${t('Requests')}`
+                    }
+                    itemStyle={{ color: 'var(--popover-foreground)' }}
                     contentStyle={{
                       background: 'var(--popover)',
                       border: '1px solid var(--border)',
                       borderRadius: 8,
                     }}
                   />
+                  <Legend
+                    formatter={(value) => (
+                      <span className='text-muted-foreground text-xs'>
+                        {value}
+                      </span>
+                    )}
+                  />
                   <Bar
                     dataKey='requests'
-                    fill='var(--primary)'
+                    fill='var(--chart-1)'
                     radius={[4, 4, 0, 0]}
                     name={t('请求数')}
                   />
@@ -828,7 +827,10 @@ export function ChannelAnalyticsDashboard() {
               }
               disabled={rows.length === 0 || isLoading}
             >
-              <SelectTrigger className='w-full sm:w-[18rem]'>
+              <SelectTrigger
+                aria-label={t('选择渠道')}
+                className='w-full sm:w-[18rem]'
+              >
                 <SelectValue placeholder={t('选择渠道')} />
               </SelectTrigger>
               <SelectContent>
@@ -837,7 +839,8 @@ export function ChannelAnalyticsDashboard() {
                     key={channel.channel_id}
                     value={String(channel.channel_id)}
                   >
-                    {formatChannelName(channel.channel_name, t)} #{channel.channel_id}
+                    {formatChannelName(channel.channel_name, t)} #
+                    {channel.channel_id}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -890,7 +893,10 @@ export function ChannelAnalyticsDashboard() {
                 setChannelHealthFilter(value as typeof channelHealthFilter)
               }
             >
-              <SelectTrigger className='w-full sm:w-44'>
+              <SelectTrigger
+                aria-label={t('Status')}
+                className='w-full sm:w-44'
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1120,7 +1126,10 @@ export function ChannelAnalyticsDashboard() {
                   value={String(channelPageSize)}
                   onValueChange={(value) => setChannelPageSize(Number(value))}
                 >
-                  <SelectTrigger className='h-8 w-28'>
+                  <SelectTrigger
+                    aria-label={t('Rows per page')}
+                    className='h-8 w-28'
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1135,6 +1144,7 @@ export function ChannelAnalyticsDashboard() {
                   <Button
                     variant='outline'
                     size='icon-sm'
+                    aria-label={t('Previous page')}
                     onClick={() =>
                       setChannelPage((page) => Math.max(1, page - 1))
                     }
@@ -1148,6 +1158,7 @@ export function ChannelAnalyticsDashboard() {
                   <Button
                     variant='outline'
                     size='icon-sm'
+                    aria-label={t('Next page')}
                     onClick={() =>
                       setChannelPage((page) =>
                         Math.min(totalChannelPages, page + 1)
@@ -1204,7 +1215,7 @@ function MetricCard(props: {
 }) {
   const Icon = props.icon
   return (
-    <div className='bg-card rounded-lg border p-3'>
+    <div className='obsidian-kpi'>
       <div className='flex items-center justify-between gap-2'>
         <span className='text-muted-foreground text-xs font-medium'>
           {props.label}
@@ -1216,12 +1227,7 @@ function MetricCard(props: {
       {props.loading ? (
         <Skeleton className='mt-2 h-7 w-20' />
       ) : (
-        <div
-          className={cn(
-            'mt-2 font-mono text-xl font-semibold tabular-nums',
-            props.valueClassName
-          )}
-        >
+        <div className={cn('obsidian-kpi-value', props.valueClassName)}>
           {props.value}
         </div>
       )}
@@ -1254,7 +1260,6 @@ function ChannelUserSpendTable(props: {
     DEFAULT_CHANNEL_USER_SORT,
     isChannelUserSortState
   )
-  const [userPage, setUserPage] = useState(1)
   const [userPageSize, setUserPageSize] = useDashboardPreference<number>(
     'dashboard:channel-analytics:channel-users-page-size',
     defaultPageSize,
@@ -1305,6 +1310,16 @@ function ChannelUserSpendTable(props: {
     [filteredRows, userSort]
   )
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / userPageSize))
+  const [userPage, setUserPage] = usePageCursor(
+    JSON.stringify([
+      props.selectedChannel?.channel_id,
+      userHealthFilter,
+      userPageSize,
+      userQuery,
+      userSort,
+    ]),
+    totalPages
+  )
   const pagedRows = useMemo(
     () =>
       sortedRows.slice((userPage - 1) * userPageSize, userPage * userPageSize),
@@ -1313,22 +1328,6 @@ function ChannelUserSpendTable(props: {
   const pageStart =
     sortedRows.length === 0 ? 0 : (userPage - 1) * userPageSize + 1
   const pageEnd = Math.min(sortedRows.length, userPage * userPageSize)
-
-  useEffect(() => {
-    setUserPage(1)
-  }, [
-    props.selectedChannel?.channel_id,
-    userHealthFilter,
-    userPageSize,
-    userQuery,
-    userSort,
-  ])
-
-  useEffect(() => {
-    if (userPage > totalPages) {
-      setUserPage(totalPages)
-    }
-  }, [totalPages, userPage])
 
   return (
     <div>
@@ -1357,7 +1356,7 @@ function ChannelUserSpendTable(props: {
             }
             disabled={props.loading || props.rows.length === 0}
           >
-            <SelectTrigger className='w-full sm:w-44'>
+            <SelectTrigger aria-label={t('Status')} className='w-full sm:w-44'>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1584,7 +1583,10 @@ function ChannelUserSpendTable(props: {
               value={String(userPageSize)}
               onValueChange={(value) => setUserPageSize(Number(value))}
             >
-              <SelectTrigger className='h-8 w-28'>
+              <SelectTrigger
+                aria-label={t('Rows per page')}
+                className='h-8 w-28'
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1599,6 +1601,7 @@ function ChannelUserSpendTable(props: {
               <Button
                 variant='outline'
                 size='icon-sm'
+                aria-label={t('Previous page')}
                 onClick={() => setUserPage((page) => Math.max(1, page - 1))}
                 disabled={userPage <= 1}
               >
@@ -1610,6 +1613,7 @@ function ChannelUserSpendTable(props: {
               <Button
                 variant='outline'
                 size='icon-sm'
+                aria-label={t('Next page')}
                 onClick={() =>
                   setUserPage((page) => Math.min(totalPages, page + 1))
                 }
@@ -1659,7 +1663,8 @@ function CompactRank(props: {
                   {formatChannelName(channel.channel_name, t)}
                 </div>
                 <div className='text-muted-foreground text-xs'>
-                  #{channel.channel_id} · {t('{{count}} 次请求', {
+                  #{channel.channel_id} ·{' '}
+                  {t('{{count}} 次请求', {
                     count: formatCount(channel.total_requests),
                   })}
                 </div>

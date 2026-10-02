@@ -28,15 +28,16 @@ const SearchContext = createContext<SearchContextType | null>(null)
 
 type SearchProviderProps = {
   children: React.ReactNode
+  commandMenu?: React.ReactNode
 }
 
-export function SearchProvider({ children }: SearchProviderProps) {
+export function SearchProvider(props: SearchProviderProps) {
   const [open, setOpen] = useState(false)
 
   return (
     <SearchContext.Provider value={{ open, setOpen }}>
-      {children}
-      <CommandMenu />
+      {props.children}
+      {props.commandMenu === undefined ? <CommandMenu /> : props.commandMenu}
     </SearchContext.Provider>
   )
 }

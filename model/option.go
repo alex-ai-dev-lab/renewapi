@@ -173,6 +173,7 @@ func InitOptionMap() {
 	common.OptionMap["DashboardDefaultModelAnalyticsChart"] = common.DashboardDefaultModelAnalyticsChart
 	common.OptionMap["DashboardVisibleSections"] = common.DashboardVisibleSections
 	common.OptionMap["SidebarSectionOrder"] = common.SidebarSectionOrder
+	common.OptionMap["SidebarTaskSectionOrder"] = common.SidebarTaskSectionOrder
 	common.OptionMap["SystemSettingsNavigation"] = common.SystemSettingsNavigation
 	common.OptionMap["DashboardSlowFirstTokenThresholdMs"] = strconv.Itoa(common.DashboardSlowFirstTokenThresholdMs)
 	common.OptionMap["DashboardErrorRateWarningThreshold"] = strconv.FormatFloat(common.DashboardErrorRateWarningThreshold, 'f', -1, 64)
@@ -501,6 +502,8 @@ func updateOptionMap(key string, value string) (err error) {
 		common.DashboardDefaultModelAnalyticsChart = value
 	case "DashboardVisibleSections":
 		common.DashboardVisibleSections = value
+	case "SidebarTaskSectionOrder":
+		common.SidebarTaskSectionOrder = value
 	case "SidebarSectionOrder":
 		common.SidebarSectionOrder = value
 	case "SystemSettingsNavigation":

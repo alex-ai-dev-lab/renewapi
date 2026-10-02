@@ -47,20 +47,19 @@ import {
   type ThemeRadius,
   type ThemeScale,
 } from '@/lib/theme-customization'
-import type { ContentSettings } from '../types'
+import { resolveTaskSectionOrder } from '@/components/layout/lib/sidebar-navigation'
 import {
   parseHeaderNavModules,
   parseSidebarModulesAdmin,
-  parseSidebarSectionOrder,
   parseSystemSettingsNavigation,
   serializeHeaderNavModules,
   serializeSidebarModulesAdmin,
-  serializeSidebarSectionOrder,
   serializeSystemSettingsNavigation,
 } from '../maintenance/config'
 import { HeaderNavigationSection } from '../maintenance/header-navigation-section'
-import { SidebarModulesSection } from '../maintenance/sidebar-modules-section'
 import { SettingsNavigationSection } from '../maintenance/settings-navigation-section'
+import { SidebarModulesSection } from '../maintenance/sidebar-modules-section'
+import type { ContentSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { AnnouncementsSection } from './announcements-section'
 import { ApiInfoSection } from './api-info-section'
@@ -356,18 +355,16 @@ const CONTENT_SECTIONS = [
         settings.SidebarModulesAdmin
       )
       const sidebarSerialized = serializeSidebarModulesAdmin(sidebarConfig)
-      const sectionOrder = parseSidebarSectionOrder(
-        settings.SidebarSectionOrder,
-        Object.keys(sidebarConfig)
+      const sectionOrder = resolveTaskSectionOrder(
+        settings.SidebarTaskSectionOrder,
+        settings.SidebarSectionOrder
       )
-      const sectionOrderSerialized = serializeSidebarSectionOrder(
-        sectionOrder,
-        Object.keys(sidebarConfig)
-      )
+      const sectionOrderSerialized = sectionOrder.join(',')
       return (
         <SidebarModulesSection
           config={sidebarConfig}
           initialSerialized={sidebarSerialized}
+          classicSectionOrder={settings.SidebarSectionOrder}
           sectionOrder={sectionOrder}
           initialSectionOrderSerialized={sectionOrderSerialized}
         />

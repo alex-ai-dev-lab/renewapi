@@ -35,6 +35,7 @@ const STATUS_RELATED_KEYS = [
   'HeaderNavModules',
   'SidebarModulesAdmin',
   'SidebarSectionOrder',
+  'SidebarTaskSectionOrder',
   'SystemSettingsNavigation',
   'Notice',
   'LogConsumeEnabled',

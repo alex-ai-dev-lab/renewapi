@@ -17,10 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useNavigate, useSearch } from '@tanstack/react-router'
+import '@/styles/obsidian-user.css'
 import { useTranslation } from 'react-i18next'
-import { EmptyState, PageContainer, StatCard } from '@/components/page-primitives'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PublicLayout } from '@/components/layout'
+import { EmptyState, PageContainer } from '@/components/page-primitives'
 import { PageTransition } from '@/components/page-transition'
 import {
   MarketShareSection,
@@ -58,64 +59,73 @@ export function Rankings() {
     <PublicLayout showMainContainer={false}>
       <div className='relative'>
         <PageTransition>
-          <PageContainer className='pt-16 sm:pt-20'>
-          <RankingsHero period={period} onPeriodChange={handlePeriodChange} />
+          <PageContainer className='min-w-0 pt-8 sm:pt-8'>
+            <RankingsHero period={period} onPeriodChange={handlePeriodChange} />
 
-          {rankingsQuery.isLoading ? (
-            <RankingsLoading />
-          ) : !snapshot ? (
-            <RankingsError
-              message={
-                rankingsQuery.error instanceof Error
-                  ? rankingsQuery.error.message
-                  : t('Unable to load rankings data')
-              }
-            />
-          ) : (
-            <>
-              {/* KPI Bar */}
-              <div className='grid gap-4 sm:grid-cols-3'>
-                <StatCard
-                  label={t('Total Tokens')}
-                  value={snapshot.models
-                    .reduce((sum, m) => sum + m.total_tokens, 0)
-                    .toLocaleString()}
-                  tone='accent'
-                />
-                <StatCard
-                  label={t('Active Models')}
-                  value={snapshot.models.length}
-                  tone='default'
-                />
-                <StatCard
-                  label={t('Top Vendor')}
-                  value={snapshot.vendors[0]?.vendor || '-'}
-                  tone='success'
-                />
-              </div>
-
-              {/* Side-by-side: Top Models + Market Share */}
-              <div className='grid gap-6 xl:grid-cols-2'>
-                <ModelsSection
-                  history={snapshot.models_history}
-                  rows={snapshot.models}
-                  period={period}
-                />
-
-                <MarketShareSection
-                  history={snapshot.vendor_share_history}
-                  rows={snapshot.vendors}
-                  period={period}
-                />
-              </div>
-
-              {/* Pulse Section: bottom compact dual cards */}
-              <PulseSection
-                movers={snapshot.top_movers}
-                droppers={snapshot.top_droppers}
+            {rankingsQuery.isLoading ? (
+              <RankingsLoading />
+            ) : !snapshot ? (
+              <RankingsError
+                message={
+                  rankingsQuery.error instanceof Error
+                    ? rankingsQuery.error.message
+                    : t('Unable to load rankings data')
+                }
               />
-            </>
-          )}
+            ) : (
+              <>
+                {/* KPI Bar */}
+                <dl className='obsidian-user-metrics'>
+                  <div className='obsidian-user-metric'>
+                    <dt className='obsidian-user-metric-label'>
+                      {t('Total Tokens')}
+                    </dt>
+                    <dd className='obsidian-user-metric-value'>
+                      {snapshot.models
+                        .reduce((sum, m) => sum + m.total_tokens, 0)
+                        .toLocaleString()}
+                    </dd>
+                  </div>
+                  <div className='obsidian-user-metric'>
+                    <dt className='obsidian-user-metric-label'>
+                      {t('Active Models')}
+                    </dt>
+                    <dd className='obsidian-user-metric-value'>
+                      {snapshot.models.length}
+                    </dd>
+                  </div>
+                  <div className='obsidian-user-metric'>
+                    <dt className='obsidian-user-metric-label'>
+                      {t('Top Vendor')}
+                    </dt>
+                    <dd className='obsidian-user-metric-value'>
+                      {snapshot.vendors[0]?.vendor || '-'}
+                    </dd>
+                  </div>
+                </dl>
+
+                {/* Side-by-side: Top Models + Market Share */}
+                <div className='grid min-w-0 gap-4 xl:grid-cols-2'>
+                  <ModelsSection
+                    history={snapshot.models_history}
+                    rows={snapshot.models}
+                    period={period}
+                  />
+
+                  <MarketShareSection
+                    history={snapshot.vendor_share_history}
+                    rows={snapshot.vendors}
+                    period={period}
+                  />
+                </div>
+
+                {/* Pulse Section: bottom compact dual cards */}
+                <PulseSection
+                  movers={snapshot.top_movers}
+                  droppers={snapshot.top_droppers}
+                />
+              </>
+            )}
           </PageContainer>
         </PageTransition>
       </div>
@@ -126,9 +136,9 @@ export function Rankings() {
 function RankingsLoading() {
   return (
     <div className='space-y-6'>
-      <Skeleton className='h-[420px] w-full rounded-xl' />
-      <Skeleton className='h-[360px] w-full rounded-xl' />
-      <Skeleton className='h-[180px] w-full rounded-xl' />
+      <Skeleton className='h-[420px] w-full rounded-md' />
+      <Skeleton className='h-[360px] w-full rounded-md' />
+      <Skeleton className='h-[180px] w-full rounded-md' />
     </div>
   )
 }

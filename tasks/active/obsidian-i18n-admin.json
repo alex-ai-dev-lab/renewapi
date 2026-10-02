@@ -1,0 +1,38 @@
+{
+  "en": {
+    "Manage provider access, routing, and channel health.": "Manage provider access, routing, and channel health.",
+    "Channel list": "Channel list",
+    "Channel overview": "Channel overview",
+    "{{count}} channels": "{{count}} channels",
+    "Data temporarily unavailable": "Data temporarily unavailable",
+    "No channels available": "No channels available",
+    "Healthy": "Healthy",
+    "Critical": "Critical",
+    "Degraded": "Degraded",
+    "Latency": "Latency",
+    "Success rate": "Success rate",
+    "Today": "Today",
+    "Channel requests · 24H": "Channel requests · 24H",
+    "{{count}} requests": "{{count}} requests",
+    "No 24-hour request distribution available": "No 24-hour request distribution available",
+    "View data": "View data"
+  },
+  "zh": {
+    "Manage provider access, routing, and channel health.": "管理供应商接入、路由与渠道健康状态。",
+    "Channel list": "渠道清单",
+    "Channel overview": "渠道概览",
+    "{{count}} channels": "{{count}} 个渠道",
+    "Data temporarily unavailable": "数据暂时不可用",
+    "No channels available": "暂无可用渠道",
+    "Healthy": "正常",
+    "Critical": "异常",
+    "Degraded": "告警",
+    "Latency": "延迟",
+    "Success rate": "成功率",
+    "Today": "今日",
+    "Channel requests · 24H": "渠道请求 · 24 小时",
+    "{{count}} requests": "{{count}} 次请求",
+    "No 24-hour request distribution available": "暂无 24 小时请求分布数据",
+    "View data": "查看数据"
+  }
+}

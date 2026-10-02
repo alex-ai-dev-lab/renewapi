@@ -31,14 +31,18 @@ export function NotFoundError() {
       data-page-state='not-found'
       className='flex min-h-svh items-center justify-center px-4 py-8'
     >
-      <div className='glass-tile flex w-full max-w-xl flex-col items-center justify-center gap-2 px-6 py-10 text-center sm:px-10'>
-        <h1 className='text-aurora text-[7rem] leading-tight font-bold'>404</h1>
-        <span className='font-medium'>{t('Oops! Page Not Found!')}</span>
-        <p className='text-muted-foreground text-center'>
+      <div className='bg-card border-border flex w-full max-w-xl flex-col items-start gap-3 rounded-md border p-6 text-left'>
+        <h1 className='text-muted-foreground font-mono text-[29px] leading-tight font-semibold tabular-nums'>
+          404
+        </h1>
+        <span className='text-base font-semibold'>
+          {t('Oops! Page Not Found!')}
+        </span>
+        <p className='text-muted-foreground text-left'>
           {t("It seems like the page you're looking for")} <br />
           {t('does not exist or might have been removed.')}
         </p>
-        <div className='mt-6 flex flex-wrap justify-center gap-3 sm:gap-4'>
+        <div className='mt-3 flex flex-wrap gap-2'>
           <Button variant='outline' onClick={() => history.go(-1)}>
             {t('Go Back')}
           </Button>

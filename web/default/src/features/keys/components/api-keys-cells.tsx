@@ -115,7 +115,7 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
                 aria-label={t('Full API Key')}
                 autoFocus
                 onFocus={(e) => e.target.select()}
-                className='bg-muted/40 border-border/60 w-full min-w-[280px] rounded-lg border px-3 py-2 font-mono text-xs tracking-tight outline-none'
+                className='bg-background border-border focus-visible:ring-ring w-[min(70vw,24rem)] min-w-0 rounded-md border px-3 py-2 font-mono text-xs tracking-tight focus-visible:ring-2 focus-visible:outline-none'
               />
             )}
           </div>

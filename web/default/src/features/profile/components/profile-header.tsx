@@ -40,7 +40,7 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
 
   if (loading) {
     return (
-      <div className='bg-card overflow-hidden rounded-lg border'>
+      <div className='bg-card overflow-hidden rounded-md border'>
         <div className='p-4 sm:p-5'>
           <div className='flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left'>
             <Skeleton className='h-16 w-16 rounded-xl' />
@@ -99,18 +99,18 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   ]
 
   return (
-    <div className='bg-card overflow-hidden rounded-lg border'>
-      <div className='p-3 sm:p-5'>
+    <div className='bg-card overflow-hidden rounded-md border'>
+      <div className='p-3 sm:p-4'>
         <div className='flex items-center gap-3 text-left sm:gap-4'>
-          <Avatar className='ring-background h-12 w-12 rounded-xl text-sm ring-2 sm:h-16 sm:w-16 sm:text-lg sm:ring-4'>
-            <AvatarFallback className='bg-primary/10 text-foreground rounded-xl'>
+          <Avatar className='size-10 rounded-md text-sm'>
+            <AvatarFallback className='bg-secondary text-foreground rounded-md'>
               {initials}
             </AvatarFallback>
           </Avatar>
 
-          <div className='min-w-0 flex-1 space-y-1.5 sm:space-y-3'>
+          <div className='min-w-0 flex-1 space-y-1'>
             <div className='flex min-w-0 items-center gap-2'>
-              <h1 className='truncate text-xl font-semibold tracking-tight sm:text-2xl'>
+              <h1 className='truncate text-[26px] leading-tight font-semibold'>
                 {displayName}
               </h1>
               <StatusBadge
@@ -139,19 +139,15 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
         </div>
       </div>
       <div className='border-t'>
-        <div className='divide-border/60 grid grid-cols-3 divide-x'>
+        <div className='obsidian-user-metrics obsidian-user-metrics-inset'>
           {stats.map((item) => (
-            <div key={item.label} className='min-w-0 px-3 py-3 sm:px-5 sm:py-4'>
+            <div key={item.label} className='obsidian-user-metric'>
               <div className='flex items-center gap-2'>
                 <item.icon className='text-muted-foreground size-3.5 shrink-0' />
-                <div className='text-muted-foreground truncate text-xs font-medium tracking-wider uppercase'>
-                  {item.label}
-                </div>
+                <div className='obsidian-user-metric-label'>{item.label}</div>
               </div>
 
-              <div className='text-foreground mt-1.5 truncate font-mono text-lg font-bold tracking-tight tabular-nums sm:mt-2 sm:text-2xl'>
-                {item.value}
-              </div>
+              <div className='obsidian-user-metric-value'>{item.value}</div>
               <div className='text-muted-foreground mt-1 hidden text-xs md:block'>
                 {item.description}
               </div>

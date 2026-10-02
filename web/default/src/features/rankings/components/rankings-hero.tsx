@@ -41,12 +41,12 @@ export function RankingsHero(props: RankingsHeroProps) {
   const { t } = useTranslation()
 
   return (
-    <section className='space-y-5'>
+    <section className='flex min-w-0 flex-col gap-4 border-b pb-4 lg:flex-row lg:items-end lg:justify-between'>
       <div className='space-y-2'>
         <p className='text-muted-foreground text-xs font-medium tracking-widest uppercase'>
           {t('Leaderboards')}
         </p>
-        <h1 className='text-foreground text-[clamp(1.75rem,4vw,2.5rem)] leading-[1.15] font-bold tracking-tight'>
+        <h1 className='text-foreground text-[26px] leading-tight font-semibold'>
           {t('Rankings')}
         </h1>
         <p className='text-muted-foreground max-w-2xl text-sm'>
@@ -56,12 +56,11 @@ export function RankingsHero(props: RankingsHeroProps) {
         </p>
       </div>
 
-      {/* Period selector — solid black pill for the active period, matching
-          the global selected-state convention (SegmentedTabs / FilterPills). */}
+      {/* Period controls preserve the existing URL-driven filter. */}
       <div
         role='tablist'
         aria-label={t('Period')}
-        className='flex flex-wrap items-center gap-1.5'
+        className='flex shrink-0 flex-wrap items-center gap-1'
       >
         {PERIODS.map((p) => {
           const isActive = props.period === p.id
@@ -73,7 +72,7 @@ export function RankingsHero(props: RankingsHeroProps) {
               aria-selected={isActive}
               onClick={() => props.onPeriodChange(p.id)}
               className={cn(
-                'focus-visible:ring-ring/40 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none',
+                'focus-visible:ring-ring rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none',
                 isActive
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground'

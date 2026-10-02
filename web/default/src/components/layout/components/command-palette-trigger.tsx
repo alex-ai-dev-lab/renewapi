@@ -16,31 +16,35 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Search, Command } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useSearch } from '@/context/search-provider'
 import { Button } from '@/components/ui/button'
-import { useCommandPalette } from '@/stores/command-palette-store'
-import { cn } from '@/lib/utils'
 
 export function CommandPaletteTrigger() {
   const { t } = useTranslation()
-  const { open } = useCommandPalette()
+  const { setOpen } = useSearch()
+  const isMac =
+    typeof navigator !== 'undefined' &&
+    /Mac|iPhone|iPad/.test(navigator.userAgent)
 
   return (
     <Button
-      variant="outline"
-      className={cn(
-        'relative h-9 w-full justify-start text-sm text-muted-foreground sm:pr-12 md:w-40 lg:w-64',
-        'hover:bg-accent/50'
-      )}
-      onClick={open}
+      variant='outline'
+      aria-label={t('Open command menu')}
+      aria-haspopup='dialog'
+      className='obsidian-command-trigger text-muted-foreground h-8 w-8 shrink-0 gap-2 p-0 sm:w-36 sm:justify-start sm:px-2 lg:w-52'
+      onClick={() => setOpen(true)}
     >
-      <Search className="mr-2 h-4 w-4" />
-      <span className="hidden lg:inline-flex">{t('Search...')}</span>
-      <span className="inline-flex lg:hidden">{t('Search')}</span>
-      <kbd className="pointer-events-none absolute right-1.5 top-1.5 hidden h-6 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
-        <Command className="h-3 w-3" />
-        K
+      <Search className='size-4 shrink-0' aria-hidden='true' />
+      <span className='hidden flex-1 text-left text-xs sm:block'>
+        {t('Search...')}
+      </span>
+      <kbd
+        aria-hidden='true'
+        className='bg-muted hidden shrink-0 rounded-sm border px-1 font-mono text-[10px] sm:block'
+      >
+        {isMac ? '⌘ K' : 'Ctrl K'}
       </kbd>
     </Button>
   )

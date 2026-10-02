@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 import { formatNumber } from '@/lib/format'
-import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCreemPrice } from '../lib/format'
 import type { CreemProduct } from '../types'
@@ -38,7 +38,7 @@ export function CreemProductsSection({
 
   if (loading) {
     return (
-      <div className='grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-3 md:grid-cols-3'>
+      <div className='grid min-w-0 gap-2'>
         {Array.from({ length: 3 }).map((_, i) => (
           <Skeleton key={i} className='h-24 rounded-lg' />
         ))}
@@ -51,23 +51,24 @@ export function CreemProductsSection({
   }
 
   return (
-    <div className='grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-3 md:grid-cols-3'>
+    <div className='grid min-w-0 gap-2'>
       {products.map((product) => (
-        <Card
+        <Button
           key={product.productId}
-          className='hover:border-foreground/50 cursor-pointer transition-all'
+          variant='outline'
+          className='h-auto min-w-0 justify-between gap-3 rounded-md px-3 py-3 text-left whitespace-normal'
           onClick={() => onProductSelect(product)}
         >
-          <CardContent className='p-3 text-center sm:p-4'>
-            <div className='mb-2 text-lg font-medium'>{product.name}</div>
-            <div className='text-muted-foreground mb-2 text-sm'>
+          <span className='min-w-0'>
+            <span className='block text-sm font-medium'>{product.name}</span>
+            <span className='text-muted-foreground mt-1 block text-xs'>
               {t('Quota')}: {formatNumber(product.quota)}
-            </div>
-            <div className='text-lg font-semibold text-chart-1'>
-              {formatCreemPrice(product.price, product.currency)}
-            </div>
-          </CardContent>
-        </Card>
+            </span>
+          </span>
+          <span className='shrink-0 font-mono text-sm font-semibold tabular-nums'>
+            {formatCreemPrice(product.price, product.currency)}
+          </span>
+        </Button>
       ))}
     </div>
   )

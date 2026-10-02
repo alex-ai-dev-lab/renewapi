@@ -75,26 +75,26 @@ export function GeneralError({
     >
       <div
         className={cn(
-          'flex w-full flex-col items-center justify-center gap-2 text-center',
-          !minimal && 'glass-tile max-w-2xl px-6 py-10 sm:px-10'
+          'flex w-full flex-col items-start gap-3 text-left',
+          !minimal && 'bg-card border-border max-w-xl rounded-md border p-6'
         )}
       >
         {!minimal && (
-          <h1 className='text-aurora text-[7rem] leading-tight font-bold'>
+          <h1 className='text-muted-foreground font-mono text-[29px] leading-tight font-semibold tabular-nums'>
             {status ?? 500}
           </h1>
         )}
-        <span className='font-medium'>{title}</span>
-        <p className='text-muted-foreground text-center'>
+        <span className='text-base font-semibold'>{title}</span>
+        <p className='text-muted-foreground text-left'>
           {t('We apologize for the inconvenience.')} <br /> {description}
         </p>
         {!minimal && (
-          <p className='text-muted-foreground text-center text-sm'>
+          <p className='text-muted-foreground text-left text-sm'>
             {t('If this keeps happening, please report it on GitHub Issues.')}
           </p>
         )}
         {!minimal && (
-          <div className='mt-6 flex flex-wrap justify-center gap-3 sm:gap-4'>
+          <div className='mt-3 flex flex-wrap gap-2'>
             {error != null && (
               <Button onClick={() => void retry()} disabled={retrying}>
                 {t('Retry')}

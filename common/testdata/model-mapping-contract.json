@@ -1,0 +1,22 @@
+[
+  {"name":"empty","raw":"","valid":true,"version":1,"sources":[],"candidates":{"unknown":[]}},
+  {"name":"legacy chain","raw":"{\"public\":[\"bridge\",\"backup\"],\"bridge\":\"wire\"}","valid":true,"version":1,"sources":["bridge","public"],"candidates":{"public":["wire","backup"],"bridge":["wire"]}},
+  {"name":"legacy self","raw":"{\"self\":\"self\"}","valid":true,"version":1,"sources":["self"],"candidates":{"self":["self"]}},
+  {"name":"legacy reserved source names","raw":"{\"version\":\"v-model\",\"rules\":[\"one\",\"two\"]}","valid":true,"version":1,"sources":["rules","version"],"candidates":{"rules":["one","two"],"version":["v-model"]}},
+  {"name":"legacy prototype names","raw":"{\"__proto__\":\"wire\",\"constructor\":\"toString\"}","valid":true,"version":1,"sources":["__proto__","constructor"],"candidates":{"__proto__":["wire"],"constructor":["toString"],"toString":[]}},
+  {"name":"direct cross mapping","raw":"{\"version\":2,\"rules\":[{\"id\":\"a\",\"from\":\"A\",\"to\":\"B\"},{\"id\":\"b\",\"from\":\"B\",\"to\":\"A\"}]}","valid":true,"version":2,"sources":["A","B"],"candidates":{"A":["B"],"B":["A"]}},
+  {"name":"priority ties duplicates disabled","raw":"{\"version\":2,\"rules\":[{\"id\":\"low\",\"from\":\"one\",\"to\":\"B\",\"priority\":10},{\"id\":\"high\",\"from\":\"one\",\"to\":\"A\",\"priority\":100},{\"id\":\"tie\",\"from\":\"one\",\"to\":\"C\",\"priority\":100},{\"id\":\"dup\",\"from\":\"one\",\"to\":\"A\"},{\"id\":\"off\",\"from\":\"disabled\",\"to\":\"D\",\"enabled\":false}]}","valid":true,"version":2,"sources":["one"],"candidates":{"one":["A","C","B"],"disabled":[]}},
+  {"name":"integral JSON numbers","raw":"{\"version\":2.0,\"rules\":[{\"id\":\"r\",\"from\":\" a \",\"to\":\" b \",\"priority\":1e2}]}","valid":true,"version":2,"sources":["a"],"candidates":{"a":["b"]}},
+  {"name":"explicit clear","raw":"{\"version\":2,\"rules\":[]}","valid":true,"version":2,"sources":[],"candidates":{"a":[]}},
+  {"name":"null write","raw":"null","valid":false},
+  {"name":"legacy cycle","raw":"{\"A\":\"B\",\"B\":\"A\"}","valid":false},
+  {"name":"legacy trim collision","raw":"{\" a \":\"x\",\"a\":\"y\"}","valid":false},
+  {"name":"duplicate object source","raw":"{\"a\":\"x\",\"a\":\"y\"}","valid":false},
+  {"name":"duplicate rule member","raw":"{\"version\":2,\"rules\":[{\"id\":\"r\",\"from\":\"a\",\"from\":\"b\",\"to\":\"c\"}]}","valid":false},
+  {"name":"duplicate rule id","raw":"{\"version\":2,\"rules\":[{\"id\":\"r\",\"from\":\"a\",\"to\":\"b\"},{\"id\":\"r\",\"from\":\"a\",\"to\":\"c\"}]}","valid":false},
+  {"name":"unknown version","raw":"{\"version\":3,\"rules\":[]}","valid":false},
+  {"name":"null enabled","raw":"{\"version\":2,\"rules\":[{\"id\":\"r\",\"from\":\"a\",\"to\":\"b\",\"enabled\":null}]}","valid":false},
+  {"name":"fractional priority","raw":"{\"version\":2,\"rules\":[{\"id\":\"r\",\"from\":\"a\",\"to\":\"b\",\"priority\":1.2}]}","valid":false},
+  {"name":"overflow priority","raw":"{\"version\":2,\"rules\":[{\"id\":\"r\",\"from\":\"a\",\"to\":\"b\",\"priority\":2147483648}]}","valid":false},
+  {"name":"unknown rule property","raw":"{\"version\":2,\"rules\":[{\"id\":\"r\",\"from\":\"a\",\"to\":\"b\",\"weight\":2}]}","valid":false}
+]

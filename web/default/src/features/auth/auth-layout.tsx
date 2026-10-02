@@ -17,46 +17,84 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
+import '@/styles/obsidian-auth.css'
+import { ArrowLeft, KeyRound, SlidersHorizontal, Activity } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { Skeleton } from '@/components/ui/skeleton'
+import { LanguageSwitcher } from '@/components/language-switcher'
+import { ThemeSwitch } from '@/components/theme-switch'
 
 type AuthLayoutProps = {
   children: React.ReactNode
 }
 
-export function AuthLayout({ children }: AuthLayoutProps) {
+export function AuthLayout(props: AuthLayoutProps) {
   const { t } = useTranslation()
   const { systemName, logo, loading } = useSystemConfig()
 
   return (
-    <div className='relative grid min-h-svh max-w-none overflow-hidden'>
-      <Link
-        to='/'
-        className='absolute top-4 left-4 z-10 flex items-center gap-2 transition-opacity hover:opacity-80 sm:top-8 sm:left-8'
-      >
-        <div className='relative h-8 w-8'>
+    <div className='obsidian-auth'>
+      <a className='obsidian-auth-skip' href='#auth-main'>
+        {t('Skip to content')}
+      </a>
+      <header className='obsidian-auth-header'>
+        <Link to='/' className='obsidian-auth-brand'>
           {loading ? (
-            <Skeleton className='absolute inset-0 rounded-full' />
+            <Skeleton className='size-7' />
           ) : (
-            <img
-              src={logo}
-              alt={t('Logo')}
-              className='ring-border/60 h-8 w-8 rounded-full object-cover ring-1'
-            />
+            <img src={logo} alt='' className='size-7 object-contain' />
           )}
+          {loading ? (
+            <Skeleton className='h-4 w-24' />
+          ) : (
+            <span>{systemName}</span>
+          )}
+        </Link>
+        <div className='obsidian-auth-tools'>
+          <LanguageSwitcher />
+          <ThemeSwitch />
         </div>
-        {loading ? (
-          <Skeleton className='h-6 w-24' />
-        ) : (
-          <h1 className='text-xl font-semibold tracking-tight'>{systemName}</h1>
-        )}
-      </Link>
-      <div className='container flex items-center py-20 sm:min-h-svh sm:py-8'>
-        <div className='glass-tile mx-auto flex w-full flex-col justify-center space-y-3 px-6 py-8 sm:w-[480px] sm:p-8'>
-          {children}
-        </div>
-      </div>
+      </header>
+      <main id='auth-main' tabIndex={-1} className='obsidian-auth-main'>
+        <aside
+          className='obsidian-auth-context'
+          aria-label={t('Account access')}
+        >
+          <p className='obsidian-auth-eyebrow'>{t('Account access')}</p>
+          <p className='obsidian-auth-context-title'>
+            {t('Your gateway, within reach.')}
+          </p>
+          <p className='obsidian-auth-context-description'>
+            {t('Manage your API keys and usage from one account.')}
+          </p>
+          <ul className='obsidian-auth-capabilities'>
+            <li>
+              <KeyRound size={16} aria-hidden='true' />
+              <span>{t('API key management')}</span>
+            </li>
+            <li>
+              <SlidersHorizontal size={16} aria-hidden='true' />
+              <span>{t('Model access')}</span>
+            </li>
+            <li>
+              <Activity size={16} aria-hidden='true' />
+              <span>{t('Usage visibility')}</span>
+            </li>
+          </ul>
+          <Link to='/' className='obsidian-auth-back'>
+            <ArrowLeft size={14} aria-hidden='true' />
+            {t('Back to home')}
+          </Link>
+        </aside>
+        <div className='obsidian-auth-form'>{props.children}</div>
+      </main>
+      <footer className='obsidian-auth-footer'>
+        <span>
+          © {new Date().getFullYear()} {systemName}
+        </span>
+        <Link to='/'>{t('Back to home')}</Link>
+      </footer>
     </div>
   )
 }

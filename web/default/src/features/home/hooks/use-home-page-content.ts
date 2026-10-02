@@ -33,15 +33,18 @@ export function useHomePageContent(options?: {
 }): HomePageContentResult {
   const [content, setContent] = useState<string>('')
   const [isLoaded, setIsLoaded] = useState(false)
+  const [hasError, setHasError] = useState(false)
 
   useEffect(() => {
     let mounted = true
 
     const loadContent = async () => {
-      // Load from localStorage first for immediate display
-      const cached = localStorage.getItem(STORAGE_KEY)
-      if (cached && mounted) {
-        setContent(cached)
+      // A blocked browser cache must not prevent the network request.
+      try {
+        const cached = localStorage.getItem(STORAGE_KEY)
+        if (cached && mounted) setContent(cached)
+      } catch {
+        // Storage is optional.
       }
 
       try {
@@ -49,17 +52,22 @@ export function useHomePageContent(options?: {
         const { success, data } = response
 
         if (!mounted) return
+        if (!success)
+          throw new Error(
+            response.message || 'Failed to load home page content'
+          )
 
-        if (success && data) {
-          setContent(data)
-          localStorage.setItem(STORAGE_KEY, data)
-        } else {
-          // Clear content if API returns empty
-          setContent('')
-          localStorage.removeItem(STORAGE_KEY)
+        setContent(data || '')
+        setHasError(false)
+        try {
+          if (data) localStorage.setItem(STORAGE_KEY, data)
+          else localStorage.removeItem(STORAGE_KEY)
+        } catch {
+          // Keep successfully loaded content even when storage is unavailable.
         }
       } catch (error) {
         if (!mounted) return
+        setHasError(true)
         // eslint-disable-next-line no-console
         console.error('Failed to load home page content:', error)
         if (options?.showErrorToast !== false) {
@@ -87,5 +95,5 @@ export function useHomePageContent(options?: {
     // not a URL
   }
 
-  return { content, isLoaded, isUrl }
+  return { content, isLoaded, isUrl, hasError }
 }

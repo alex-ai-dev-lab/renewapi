@@ -49,23 +49,21 @@ export function CompleteStep({ status, values }: CompleteStepProps) {
   const databaseVariant = DATABASE_VARIANT[dbType.toLowerCase()] ?? 'neutral'
 
   return (
-    <div className='flex flex-col items-center gap-6 text-center'>
-      <div className='bg-success/10 text-success rounded-xl p-4'>
-        <CheckCircle2 className='size-8' />
+    <div className='flex min-w-0 flex-col items-start gap-4 text-left'>
+      <div className='text-success'>
+        <CheckCircle2 className='size-5' />
       </div>
       <div className='space-y-2'>
-        <h2 className='text-2xl font-semibold tracking-tight'>
-          {t('Ready to initialize')}
-        </h2>
-        <p className='text-muted-foreground max-w-lg text-sm sm:text-base'>
+        <h2 className='text-base font-semibold'>{t('Ready to initialize')}</h2>
+        <p className='text-muted-foreground max-w-lg text-sm'>
           {t(
             'Double check the configuration below. Your system will be locked until initialization is complete.'
           )}
         </p>
       </div>
 
-      <div className='bg-card w-full rounded-xl border p-6 text-left sm:p-8'>
-        <dl className='grid gap-6'>
+      <div className='w-full border-y py-4 text-left'>
+        <dl className='grid gap-3'>
           <div className='space-y-1.5'>
             <dt className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
               {t('Database')}

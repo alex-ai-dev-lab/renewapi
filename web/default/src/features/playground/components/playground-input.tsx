@@ -116,9 +116,9 @@ export function PlaygroundInput({
   }
 
   return (
-    <div className='grid shrink-0 gap-4 px-1 md:pb-4'>
+    <div className='grid min-w-0 shrink-0 gap-2 px-3 pb-3 sm:px-6'>
       <PromptInput
-        groupClassName='border-border/60 rounded-[calc(var(--radius)*1.25)] shadow-lg shadow-foreground/5'
+        groupClassName='border-border bg-card rounded-md shadow-none'
         onSubmit={handleSubmit}
       >
         <PromptInputTextarea
@@ -126,14 +126,14 @@ export function PlaygroundInput({
           autoCorrect='off'
           autoCapitalize='off'
           spellCheck={false}
-          className='px-5 md:text-base'
+          className='px-3 text-sm md:text-sm'
           disabled={disabled}
           onChange={(event) => setText(event.target.value)}
           placeholder={t('Ask anything')}
           value={text}
         />
 
-        <PromptInputFooter className='p-2.5'>
+        <PromptInputFooter className='flex-wrap gap-2 border-t p-2'>
           <PromptInputTools>
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -229,7 +229,7 @@ export function PlaygroundInput({
       <Suggestions>
         {suggestions.map(({ icon: Icon, text, className }) => (
           <Suggestion
-            className={`text-xs font-normal sm:text-sm ${
+            className={`rounded-md border-0 bg-transparent px-2 text-xs font-normal ${
               text === 'More' ? 'hidden sm:flex' : ''
             }`}
             key={text}
@@ -237,7 +237,7 @@ export function PlaygroundInput({
             suggestion={text}
           >
             {Icon && <Icon className={className} size={16} />}
-            {text}
+            {t(text)}
           </Suggestion>
         ))}
       </Suggestions>

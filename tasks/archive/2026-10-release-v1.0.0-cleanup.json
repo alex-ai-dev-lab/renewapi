@@ -1,0 +1,839 @@
+{
+  "source": "20cdd2d0c6dd83c5b2e58b852f11684223475d47",
+  "kept": "renewapi-v1.0.0",
+  "deletedReleases": [
+    {
+      "id": 401635492,
+      "tag": "renewapi-build-20cdd2d0c6dd-36981012896",
+      "assets": [
+        {
+          "id": 605123184,
+          "name": "build-info.json",
+          "size": 257
+        },
+        {
+          "id": 605123183,
+          "name": "CHECKSUMS.txt",
+          "size": 1111
+        },
+        {
+          "id": 605123188,
+          "name": "compose.yaml",
+          "size": 3234
+        },
+        {
+          "id": 605123185,
+          "name": "default.env.example",
+          "size": 6543
+        },
+        {
+          "id": 605123196,
+          "name": "docker-compose.yml",
+          "size": 2504
+        },
+        {
+          "id": 605123197,
+          "name": "image-linux-amd64.json",
+          "size": 4340
+        },
+        {
+          "id": 605123199,
+          "name": "image-linux-arm64.json",
+          "size": 4341
+        },
+        {
+          "id": 605123200,
+          "name": "qa-databases.tar.gz",
+          "size": 14101
+        },
+        {
+          "id": 605123201,
+          "name": "qa-secondary-surfaces.tar.gz",
+          "size": 77684
+        },
+        {
+          "id": 605123210,
+          "name": "qa-settings-wave2.tar.gz",
+          "size": 8453
+        },
+        {
+          "id": 605123187,
+          "name": "RELEASE_NOTES.md",
+          "size": 799
+        },
+        {
+          "id": 605123209,
+          "name": "renewapi-sha-20cdd2d0c6dd-linux-amd64.tar.gz",
+          "size": 36034960
+        },
+        {
+          "id": 605123221,
+          "name": "renewapi-sha-20cdd2d0c6dd-linux-arm64.tar.gz",
+          "size": 35042236
+        }
+      ]
+    },
+    {
+      "id": 395697915,
+      "tag": "renewapi-build-d35afe9528fb-36001993433",
+      "assets": [
+        {
+          "id": 585978857,
+          "name": "build-info.json",
+          "size": 262
+        },
+        {
+          "id": 585978858,
+          "name": "CHECKSUMS.txt",
+          "size": 1111
+        },
+        {
+          "id": 585978855,
+          "name": "compose.yaml",
+          "size": 3234
+        },
+        {
+          "id": 585978856,
+          "name": "default.env.example",
+          "size": 6543
+        },
+        {
+          "id": 585978873,
+          "name": "docker-compose.yml",
+          "size": 2504
+        },
+        {
+          "id": 585978877,
+          "name": "image-linux-amd64.json",
+          "size": 4346
+        },
+        {
+          "id": 585978872,
+          "name": "image-linux-arm64.json",
+          "size": 4346
+        },
+        {
+          "id": 585978875,
+          "name": "qa-databases.tar.gz",
+          "size": 12491
+        },
+        {
+          "id": 585978878,
+          "name": "qa-secondary-surfaces.tar.gz",
+          "size": 21466557
+        },
+        {
+          "id": 585978887,
+          "name": "qa-settings-wave2.tar.gz",
+          "size": 295199
+        },
+        {
+          "id": 585978859,
+          "name": "RELEASE_NOTES.md",
+          "size": 804
+        },
+        {
+          "id": 585978886,
+          "name": "renewapi-sha-d35afe9528fb-linux-amd64.tar.gz",
+          "size": 36165296
+        },
+        {
+          "id": 585978889,
+          "name": "renewapi-sha-d35afe9528fb-linux-arm64.tar.gz",
+          "size": 35177407
+        }
+      ]
+    },
+    {
+      "id": 394266944,
+      "tag": "renewapi-build-b7e27b0fa667-35811726125",
+      "assets": [
+        {
+          "id": 582818285,
+          "name": "build-info.json",
+          "size": 262
+        },
+        {
+          "id": 582818287,
+          "name": "CHECKSUMS.txt",
+          "size": 1111
+        },
+        {
+          "id": 582818283,
+          "name": "compose.yaml",
+          "size": 3170
+        },
+        {
+          "id": 582818284,
+          "name": "default.env.example",
+          "size": 6412
+        },
+        {
+          "id": 582818300,
+          "name": "docker-compose.yml",
+          "size": 2440
+        },
+        {
+          "id": 582818301,
+          "name": "image-linux-amd64.json",
+          "size": 4346
+        },
+        {
+          "id": 582818303,
+          "name": "image-linux-arm64.json",
+          "size": 4346
+        },
+        {
+          "id": 582818309,
+          "name": "qa-databases.tar.gz",
+          "size": 14200
+        },
+        {
+          "id": 582818311,
+          "name": "qa-secondary-surfaces.tar.gz",
+          "size": 15869469
+        },
+        {
+          "id": 582818317,
+          "name": "qa-settings-wave2.tar.gz",
+          "size": 297456
+        },
+        {
+          "id": 582818292,
+          "name": "RELEASE_NOTES.md",
+          "size": 804
+        },
+        {
+          "id": 582818320,
+          "name": "renewapi-sha-b7e27b0fa667-linux-amd64.tar.gz",
+          "size": 36164707
+        },
+        {
+          "id": 582818331,
+          "name": "renewapi-sha-b7e27b0fa667-linux-arm64.tar.gz",
+          "size": 35177041
+        }
+      ]
+    },
+    {
+      "id": 394297036,
+      "tag": "renewapi-build-b50450a00d89-35817370718",
+      "assets": [
+        {
+          "id": 582947646,
+          "name": "build-info.json",
+          "size": 262
+        },
+        {
+          "id": 582947644,
+          "name": "CHECKSUMS.txt",
+          "size": 1111
+        },
+        {
+          "id": 582947642,
+          "name": "compose.yaml",
+          "size": 3170
+        },
+        {
+          "id": 582947641,
+          "name": "default.env.example",
+          "size": 6412
+        },
+        {
+          "id": 582947658,
+          "name": "docker-compose.yml",
+          "size": 2440
+        },
+        {
+          "id": 582947656,
+          "name": "image-linux-amd64.json",
+          "size": 4346
+        },
+        {
+          "id": 582947664,
+          "name": "image-linux-arm64.json",
+          "size": 4346
+        },
+        {
+          "id": 582947661,
+          "name": "qa-databases.tar.gz",
+          "size": 11947
+        },
+        {
+          "id": 582947663,
+          "name": "qa-secondary-surfaces.tar.gz",
+          "size": 15867036
+        },
+        {
+          "id": 582947669,
+          "name": "qa-settings-wave2.tar.gz",
+          "size": 293605
+        },
+        {
+          "id": 582947643,
+          "name": "RELEASE_NOTES.md",
+          "size": 804
+        },
+        {
+          "id": 582947671,
+          "name": "renewapi-sha-b50450a00d89-linux-amd64.tar.gz",
+          "size": 36162144
+        },
+        {
+          "id": 582947678,
+          "name": "renewapi-sha-b50450a00d89-linux-arm64.tar.gz",
+          "size": 35173504
+        }
+      ]
+    },
+    {
+      "id": 394490413,
+      "tag": "renewapi-build-9e1d6c709fb5-35841396235",
+      "assets": [
+        {
+          "id": 583424450,
+          "name": "build-info.json",
+          "size": 262
+        },
+        {
+          "id": 583424454,
+          "name": "CHECKSUMS.txt",
+          "size": 1111
+        },
+        {
+          "id": 583424453,
+          "name": "compose.yaml",
+          "size": 3170
+        },
+        {
+          "id": 583424451,
+          "name": "default.env.example",
+          "size": 6412
+        },
+        {
+          "id": 583424466,
+          "name": "docker-compose.yml",
+          "size": 2440
+        },
+        {
+          "id": 583424468,
+          "name": "image-linux-amd64.json",
+          "size": 4346
+        },
+        {
+          "id": 583424469,
+          "name": "image-linux-arm64.json",
+          "size": 4346
+        },
+        {
+          "id": 583424473,
+          "name": "qa-databases.tar.gz",
+          "size": 12981
+        },
+        {
+          "id": 583424475,
+          "name": "qa-secondary-surfaces.tar.gz",
+          "size": 21468583
+        },
+        {
+          "id": 583424480,
+          "name": "qa-settings-wave2.tar.gz",
+          "size": 296340
+        },
+        {
+          "id": 583424452,
+          "name": "RELEASE_NOTES.md",
+          "size": 804
+        },
+        {
+          "id": 583424485,
+          "name": "renewapi-sha-9e1d6c709fb5-linux-amd64.tar.gz",
+          "size": 36175010
+        },
+        {
+          "id": 583424482,
+          "name": "renewapi-sha-9e1d6c709fb5-linux-arm64.tar.gz",
+          "size": 35182971
+        }
+      ]
+    },
+    {
+      "id": 394234609,
+      "tag": "renewapi-build-8d8bef09a9b7-35806368451",
+      "assets": [
+        {
+          "id": 582703862,
+          "name": "build-info.json",
+          "size": 262
+        },
+        {
+          "id": 582703865,
+          "name": "CHECKSUMS.txt",
+          "size": 1111
+        },
+        {
+          "id": 582703860,
+          "name": "compose.yaml",
+          "size": 3170
+        },
+        {
+          "id": 582703866,
+          "name": "default.env.example",
+          "size": 6412
+        },
+        {
+          "id": 582703875,
+          "name": "docker-compose.yml",
+          "size": 2440
+        },
+        {
+          "id": 582703877,
+          "name": "image-linux-amd64.json",
+          "size": 4346
+        },
+        {
+          "id": 582703890,
+          "name": "image-linux-arm64.json",
+          "size": 4346
+        },
+        {
+          "id": 582703885,
+          "name": "qa-databases.tar.gz",
+          "size": 13361
+        },
+        {
+          "id": 582703887,
+          "name": "qa-secondary-surfaces.tar.gz",
+          "size": 15874114
+        },
+        {
+          "id": 582703891,
+          "name": "qa-settings-wave2.tar.gz",
+          "size": 293042
+        },
+        {
+          "id": 582703861,
+          "name": "RELEASE_NOTES.md",
+          "size": 804
+        },
+        {
+          "id": 582703892,
+          "name": "renewapi-sha-8d8bef09a9b7-linux-amd64.tar.gz",
+          "size": 36163403
+        },
+        {
+          "id": 582703897,
+          "name": "renewapi-sha-8d8bef09a9b7-linux-arm64.tar.gz",
+          "size": 35173563
+        }
+      ]
+    }
+  ],
+  "deletedTags": [
+    {
+      "name": "renewapi-v1.0.0-rc.3",
+      "commit": "a3cfa2bd35998a665d912d87ffd19b09600c3620",
+      "object": "4800b57d23710180dbeae690365dfb066b086ddc"
+    },
+    {
+      "name": "renewapi-v1.0.0-rc.2",
+      "commit": "f0f8e6ff034906ebb62a4cd752a47f1cca45d55c",
+      "object": "07a31bd595718a65c4cc69c46f7adce191566d82"
+    },
+    {
+      "name": "renewapi-source-sha-ffe8bb6b73d5",
+      "commit": "ffe8bb6b73d5f8d1d825c094ee8f558d616b5258",
+      "object": "ffe8bb6b73d5f8d1d825c094ee8f558d616b5258"
+    },
+    {
+      "name": "renewapi-source-sha-ffdb82633f7e",
+      "commit": "ffdb8267ca2dadf39e75026a5126164434a97efa",
+      "object": "ffdb8267ca2dadf39e75026a5126164434a97efa"
+    },
+    {
+      "name": "renewapi-source-sha-fe74d13e296c",
+      "commit": "fe74d13e296cb0a29413e8d51206030bb78e8045",
+      "object": "fe74d13e296cb0a29413e8d51206030bb78e8045"
+    },
+    {
+      "name": "renewapi-source-sha-f79053d8ee0b",
+      "commit": "f79053d8ee0b222690afb1902d97cbbedbb09cfb",
+      "object": "f79053d8ee0b222690afb1902d97cbbedbb09cfb"
+    },
+    {
+      "name": "renewapi-source-sha-f0192bd8ea4d",
+      "commit": "f0192bd8ea4d9883d56c8366e93d382c02c0adc9",
+      "object": "f0192bd8ea4d9883d56c8366e93d382c02c0adc9"
+    },
+    {
+      "name": "renewapi-source-sha-f7a402f5d8f4",
+      "commit": "f7a402f5d8f40ccf22b96ab38233dd1d43911c81",
+      "object": "f7a402f5d8f40ccf22b96ab38233dd1d43911c81"
+    },
+    {
+      "name": "renewapi-source-sha-efbfc0908bc3",
+      "commit": "efbfc0908bc3f04d920b4882f092ddbddb0c8f9c",
+      "object": "efbfc0908bc3f04d920b4882f092ddbddb0c8f9c"
+    },
+    {
+      "name": "renewapi-source-sha-e4c07729b7b2",
+      "commit": "e4c07729b7b231d878d4996a648acbe826c4029d",
+      "object": "e4c07729b7b231d878d4996a648acbe826c4029d"
+    },
+    {
+      "name": "renewapi-source-sha-d365932a",
+      "commit": "d365932a27ac48c13dc9bbf8e21f570f570de845",
+      "object": "d365932a27ac48c13dc9bbf8e21f570f570de845"
+    },
+    {
+      "name": "renewapi-source-sha-d4874f871d7f",
+      "commit": "d4874f871d7f84a12aba52df518df42b6f3c85d8",
+      "object": "d4874f871d7f84a12aba52df518df42b6f3c85d8"
+    },
+    {
+      "name": "renewapi-source-sha-cb870c5cda9c-after-pull-20260706T0210Z",
+      "commit": "cb870c5cda9c7af936412f0c7c9af66fad99a2cf",
+      "object": "cb870c5cda9c7af936412f0c7c9af66fad99a2cf"
+    },
+    {
+      "name": "renewapi-source-sha-cb870c5cda9c",
+      "commit": "cb870c5cda9c7af936412f0c7c9af66fad99a2cf",
+      "object": "cb870c5cda9c7af936412f0c7c9af66fad99a2cf"
+    },
+    {
+      "name": "renewapi-source-sha-c4d117f3cf55",
+      "commit": "c4d117f3cf55c67e543c1b9713f7af71896b8450",
+      "object": "c4d117f3cf55c67e543c1b9713f7af71896b8450"
+    },
+    {
+      "name": "renewapi-source-sha-b7f921e4c460",
+      "commit": "b7f921e4c4602e6606098e9416de14fe0a93c99b",
+      "object": "b7f921e4c4602e6606098e9416de14fe0a93c99b"
+    },
+    {
+      "name": "renewapi-source-sha-b2c7a78",
+      "commit": "b2c7a78cea80e9d864d473dd9d831950f65f9f7d",
+      "object": "b2c7a78cea80e9d864d473dd9d831950f65f9f7d"
+    },
+    {
+      "name": "renewapi-source-sha-a339b9286550",
+      "commit": "a339b9286550b78a3d899738077d85aa078e681d",
+      "object": "a339b9286550b78a3d899738077d85aa078e681d"
+    },
+    {
+      "name": "renewapi-source-sha-a8bd375d3031",
+      "commit": "a8bd375d30316113f3b3d7a2229e737b1840e0d6",
+      "object": "a8bd375d30316113f3b3d7a2229e737b1840e0d6"
+    },
+    {
+      "name": "renewapi-source-sha-48748097bebc",
+      "commit": "48748097bebcc1665a03672f33abebd9dbc6d19e",
+      "object": "48748097bebcc1665a03672f33abebd9dbc6d19e"
+    },
+    {
+      "name": "renewapi-source-sha-5517392cbe63",
+      "commit": "5517392cbe63cb2d9346925b68c250abd4a2946f",
+      "object": "5517392cbe63cb2d9346925b68c250abd4a2946f"
+    },
+    {
+      "name": "renewapi-source-sha-77216bea9453",
+      "commit": "77216bea945300a5915b9b81c6eabc90024cad98",
+      "object": "77216bea945300a5915b9b81c6eabc90024cad98"
+    },
+    {
+      "name": "renewapi-source-sha-9629e2458ea6",
+      "commit": "9629e2458ea62cd5ac1301adfdea95bd5f9d79d0",
+      "object": "9629e2458ea62cd5ac1301adfdea95bd5f9d79d0"
+    },
+    {
+      "name": "renewapi-source-sha-02570ada6185",
+      "commit": "02570ada618594b10d3c64ec1ab477747ab81487",
+      "object": "02570ada618594b10d3c64ec1ab477747ab81487"
+    },
+    {
+      "name": "renewapi-source-sha-890f747c65fe",
+      "commit": "890f747c65febc1867b243f6ffb36d2b8bbecc4e",
+      "object": "890f747c65febc1867b243f6ffb36d2b8bbecc4e"
+    },
+    {
+      "name": "renewapi-source-sha-732f28af389f",
+      "commit": "732f28af389fc674d05e199eae581319eab6040e",
+      "object": "732f28af389fc674d05e199eae581319eab6040e"
+    },
+    {
+      "name": "renewapi-source-sha-528f43c",
+      "commit": "528f43c5fd66fb78d8a8e983224b2458c1c63524",
+      "object": "528f43c5fd66fb78d8a8e983224b2458c1c63524"
+    },
+    {
+      "name": "renewapi-source-sha-00357c33b30e",
+      "commit": "00357c33b30e0c3ea484c01e11b0e9eefdb8ba13",
+      "object": "00357c33b30e0c3ea484c01e11b0e9eefdb8ba13"
+    },
+    {
+      "name": "renewapi-source-sha-345c56dd5cfc",
+      "commit": "345c56dd5cfc54769317d6f13661501abcb52d7c",
+      "object": "345c56dd5cfc54769317d6f13661501abcb52d7c"
+    },
+    {
+      "name": "renewapi-source-sha-91d636fba978",
+      "commit": "91d636fba97864e54a9aec2f55667e14bcd6ae34",
+      "object": "91d636fba97864e54a9aec2f55667e14bcd6ae34"
+    },
+    {
+      "name": "renewapi-source-sha-54a46b10d266",
+      "commit": "54a46b10d266cfab10e32089b9f600f26c8fc1fc",
+      "object": "54a46b10d266cfab10e32089b9f600f26c8fc1fc"
+    },
+    {
+      "name": "renewapi-source-sha-47de74a3d083",
+      "commit": "47de74a3d08313d04643a67370b78b20b4349c76",
+      "object": "47de74a3d08313d04643a67370b78b20b4349c76"
+    },
+    {
+      "name": "renewapi-source-sha-44c6fb9",
+      "commit": "44c6fb9f667e46ac26970f66c72a5c8c9e5e90fe",
+      "object": "44c6fb9f667e46ac26970f66c72a5c8c9e5e90fe"
+    },
+    {
+      "name": "renewapi-source-sha-034bc96d70ad",
+      "commit": "034bc96d70addc40e6c7469b399cc14771d47862",
+      "object": "034bc96d70addc40e6c7469b399cc14771d47862"
+    },
+    {
+      "name": "renewapi-source-sha-023ab7821909",
+      "commit": "023ab7821909d84080d99598c2b59055210ddb59",
+      "object": "023ab7821909d84080d99598c2b59055210ddb59"
+    },
+    {
+      "name": "renewapi-source-sha-011bdfbf6cab",
+      "commit": "011bdfbf6cab9d092e771af019b29eb05fce0072",
+      "object": "011bdfbf6cab9d092e771af019b29eb05fce0072"
+    },
+    {
+      "name": "renewapi-source-sha-9a4efb56b00d",
+      "commit": "9a4efb56b00d9ce609e8c5e10076bbe309fb766e",
+      "object": "9a4efb56b00d9ce609e8c5e10076bbe309fb766e"
+    },
+    {
+      "name": "renewapi-source-sha-7f7b1881e519",
+      "commit": "7f7b1881e5191783536b24322b9d293446d8b84b",
+      "object": "7f7b1881e5191783536b24322b9d293446d8b84b"
+    },
+    {
+      "name": "renewapi-source-sha-6b322fc16ecd",
+      "commit": "6b322fc16ecde366cc7d8c1adb913a5955871b66",
+      "object": "6b322fc16ecde366cc7d8c1adb913a5955871b66"
+    },
+    {
+      "name": "renewapi-source-sha-5c6b07bde15b",
+      "commit": "5c6b07bde15b2de635c5912f82581c1e72d3f9a4",
+      "object": "5c6b07bde15b2de635c5912f82581c1e72d3f9a4"
+    },
+    {
+      "name": "renewapi-source-sha-5bd3dbec2af2",
+      "commit": "5bd3dbec2af28ba34499b9b8364162fcd3b33d29",
+      "object": "5bd3dbec2af28ba34499b9b8364162fcd3b33d29"
+    },
+    {
+      "name": "renewapi-source-sha-5a4d91fb40b3",
+      "commit": "5a4d91fb40b31cc9305aa2a400941e56039326ee",
+      "object": "5a4d91fb40b31cc9305aa2a400941e56039326ee"
+    },
+    {
+      "name": "renewapi-source-sha-4f3eeeb9c22f",
+      "commit": "4f3eeeb9c22f53d207b1633addc9e5f37ff013bf",
+      "object": "4f3eeeb9c22f53d207b1633addc9e5f37ff013bf"
+    },
+    {
+      "name": "renewapi-source-sha-4d344b31",
+      "commit": "4d344b31c5b111ff3234606fa76c6ff44e1aa37f",
+      "object": "4d344b31c5b111ff3234606fa76c6ff44e1aa37f"
+    },
+    {
+      "name": "renewapi-source-sha-3eb499689095",
+      "commit": "3eb4996890956ed4e713c077b77d69d7abf27d2a",
+      "object": "3eb4996890956ed4e713c077b77d69d7abf27d2a"
+    },
+    {
+      "name": "renewapi-source-sha-3e87488d3b99",
+      "commit": "3e87488d3b997161e89292443942d697efa1d566",
+      "object": "3e87488d3b997161e89292443942d697efa1d566"
+    },
+    {
+      "name": "renewapi-source-interface-zero-7d27402590f5",
+      "commit": "7d27402590f5ace20001f3f1e9d0b916ed2d4336",
+      "object": "7d27402590f5ace20001f3f1e9d0b916ed2d4336"
+    },
+    {
+      "name": "renewapi-source-compaction-bd3d4c20a",
+      "commit": "bd3d4c20aff85e89db07f5f0e109a20654d717a2",
+      "object": "bd3d4c20aff85e89db07f5f0e109a20654d717a2"
+    },
+    {
+      "name": "renewapi-source-aurora-bento-v2-a7244d8d1d00",
+      "commit": "a7244d8d1d009a733da0f6c4a5c7665e17475ad7",
+      "object": "a7244d8d1d009a733da0f6c4a5c7665e17475ad7"
+    },
+    {
+      "name": "renewapi-fix-0621-0e1422757989",
+      "commit": "0e14227579890f1c4dd763a020d2fdc983dd9d8a",
+      "object": "0e14227579890f1c4dd763a020d2fdc983dd9d8a"
+    },
+    {
+      "name": "renewapi-build-d35afe9528fb-36001993433",
+      "commit": "d35afe9528fb630199b8b40e1a528f33afe3239d",
+      "object": "d35afe9528fb630199b8b40e1a528f33afe3239d"
+    },
+    {
+      "name": "renewapi-build-b50450a00d89-35817370718",
+      "commit": "b50450a00d8901aeae362dab6d0d9bdec66e5362",
+      "object": "b50450a00d8901aeae362dab6d0d9bdec66e5362"
+    },
+    {
+      "name": "renewapi-build-b7e27b0fa667-35811726125",
+      "commit": "b7e27b0fa6677b4fd03691876271ebe6236bbd50",
+      "object": "b7e27b0fa6677b4fd03691876271ebe6236bbd50"
+    },
+    {
+      "name": "renewapi-build-20cdd2d0c6dd-36981012896",
+      "commit": "20cdd2d0c6dd83c5b2e58b852f11684223475d47",
+      "object": "20cdd2d0c6dd83c5b2e58b852f11684223475d47"
+    },
+    {
+      "name": "renewapi-build-9e1d6c709fb5-35841396235",
+      "commit": "9e1d6c709fb5f7a13023e23cd9a1c55508e25739",
+      "object": "9e1d6c709fb5f7a13023e23cd9a1c55508e25739"
+    },
+    {
+      "name": "renewapi-build-8d8bef09a9b7-35806368451",
+      "commit": "8d8bef09a9b7980c0e490a049621583bc1842724",
+      "object": "8d8bef09a9b7980c0e490a049621583bc1842724"
+    },
+    {
+      "name": "newapi-source-v1.0.0-rc.24",
+      "commit": "ea14ddcf49703c2c66d770fd4bd3968993675ba9",
+      "object": "ea14ddcf49703c2c66d770fd4bd3968993675ba9"
+    },
+    {
+      "name": "newapi-source-v1.0.0-rc.23",
+      "commit": "217ae8d639cc321d9a8e94e2b7204731b42156b2",
+      "object": "217ae8d639cc321d9a8e94e2b7204731b42156b2"
+    },
+    {
+      "name": "newapi-source-v1.0.0-rc.22",
+      "commit": "217ae8d639cc321d9a8e94e2b7204731b42156b2",
+      "object": "217ae8d639cc321d9a8e94e2b7204731b42156b2"
+    },
+    {
+      "name": "newapi-source-v1.0.0-rc.21",
+      "commit": "c428c2fc6fd73a92108d7e3a2557daf5fb7093dd",
+      "object": "c428c2fc6fd73a92108d7e3a2557daf5fb7093dd"
+    },
+    {
+      "name": "newapi-source-v1.0.0-rc.20",
+      "commit": "b5a062112ac9ffd4e862c5d271725c31b7e0d5e3",
+      "object": "b5a062112ac9ffd4e862c5d271725c31b7e0d5e3"
+    },
+    {
+      "name": "newapi-source-v1.0.0-rc.19",
+      "commit": "6dc4cc8464a17b49b6226268bf9f133bac489bb0",
+      "object": "6dc4cc8464a17b49b6226268bf9f133bac489bb0"
+    },
+    {
+      "name": "newapi-source-v1.0.0-rc.18",
+      "commit": "d0dd7e167f6de0cbaf1824eaf865b0cc8cfaff60",
+      "object": "d0dd7e167f6de0cbaf1824eaf865b0cc8cfaff60"
+    },
+    {
+      "name": "newapi-source-v1.0.0-rc.17",
+      "commit": "67ee823b10fee80e22c219730abac9f18c25ce68",
+      "object": "67ee823b10fee80e22c219730abac9f18c25ce68"
+    },
+    {
+      "name": "newapi-source-v1.0.0-rc.16",
+      "commit": "e1c4af298c7add3f8c25c25b5d592c8007c98ef5",
+      "object": "e1c4af298c7add3f8c25c25b5d592c8007c98ef5"
+    },
+    {
+      "name": "newapi-source-v1.0.0-rc.15",
+      "commit": "ec13ef124b32918875e581d9666bf768b1bebd13",
+      "object": "ec13ef124b32918875e581d9666bf768b1bebd13"
+    },
+    {
+      "name": "newapi-source-v1.0.0-rc.14",
+      "commit": "2826a6a880b71af303d4b07ed8ca425e28a5d7b2",
+      "object": "2826a6a880b71af303d4b07ed8ca425e28a5d7b2"
+    },
+    {
+      "name": "newapi-source-v1.0.0-rc.13",
+      "commit": "98efcb40ecd63a0e4e25cc3925b5c9c012ac4f2d",
+      "object": "98efcb40ecd63a0e4e25cc3925b5c9c012ac4f2d"
+    },
+    {
+      "name": "newapi-source-v1.0.0-rc.12",
+      "commit": "9f3754b5ddaf38eb5c7cc626da1b34fc509c445f",
+      "object": "9f3754b5ddaf38eb5c7cc626da1b34fc509c445f"
+    },
+    {
+      "name": "newapi-source-v1.0.0-rc.11",
+      "commit": "9a32c38a888a7762fbcf18b28d1bbe5cf92aea2b",
+      "object": "9a32c38a888a7762fbcf18b28d1bbe5cf92aea2b"
+    },
+    {
+      "name": "newapi-source-header-rules-04879cb211e3",
+      "commit": "66b3ad635d622673fccf83ab2f36ee4e8a0e364e",
+      "object": "66b3ad635d622673fccf83ab2f36ee4e8a0e364e"
+    },
+    {
+      "name": "newapi-source-compaction-refresh-final-20260715-acb7afa",
+      "commit": "acb7afab9410aa0c94e8f9569f81998aee9ae311",
+      "object": "acb7afab9410aa0c94e8f9569f81998aee9ae311"
+    },
+    {
+      "name": "newapi-source-compaction-refresh-20260715-4b3121a",
+      "commit": "4b3121a7a1d7bc4549a323b3e4d2ce53041178bc",
+      "object": "4b3121a7a1d7bc4549a323b3e4d2ce53041178bc"
+    },
+    {
+      "name": "newapi-source-compaction-probe-final-20260715-09f8c71",
+      "commit": "09f8c71f94ee84d68c43e5b88df25bad3cb98adc",
+      "object": "09f8c71f94ee84d68c43e5b88df25bad3cb98adc"
+    },
+    {
+      "name": "newapi-source-compaction-manual-final-20260715-75901fa",
+      "commit": "75901faa53d54c2913271b40843436b37deb9734",
+      "object": "75901faa53d54c2913271b40843436b37deb9734"
+    },
+    {
+      "name": "newapi-source-compaction-final-20260715-9acd3cd",
+      "commit": "9acd3cdb9df879d58072786f276f3574e2bc71c5",
+      "object": "9acd3cdb9df879d58072786f276f3574e2bc71c5"
+    },
+    {
+      "name": "newapi-source-claude-fix-a863f6342d9e",
+      "commit": "181d072e5e6e7514e65fe1e90096138a29c833e6",
+      "object": "181d072e5e6e7514e65fe1e90096138a29c833e6"
+    },
+    {
+      "name": "newapi-source-claude-fix-7f2e03c290b4",
+      "commit": "535912ee0761f6c1158c161cd3f7c6b6b9ce07b0",
+      "object": "535912ee0761f6c1158c161cd3f7c6b6b9ce07b0"
+    },
+    {
+      "name": "newapi-source-claude-fix-02c8c3d495fb",
+      "commit": "f9a9e62fe02ebe5c51552a3c0048a4b9102bc9a5",
+      "object": "f9a9e62fe02ebe5c51552a3c0048a4b9102bc9a5"
+    },
+    {
+      "name": "newapi-compat-v1.0.0-rc.10",
+      "commit": "4879ced56b09a7c12c16c9c612b27fd1f3077f3c",
+      "object": "4879ced56b09a7c12c16c9c612b27fd1f3077f3c"
+    }
+  ],
+  "verified": true,
+  "remaining": {
+    "releases": 1,
+    "tags": 1
+  }
+}

@@ -8,7 +8,7 @@
 - 当前维护分支：`main`（初期隔离开发使用 `feature/obsidian-ui`，后按用户要求直接发布主分支）
 - 基线：`main` / `d35afe9528fb630199b8b40e1a528f33afe3239d`
 - 视觉来源：本次 `01-obsidian-control` 模板。不是将静态 HTML 嵌入应用。
-- 原 `D:\Code\renewapi\source` 及 20 套模板保持不动。发布进度见[正式版发布任务](../tasks/active/release-v1.0.0.md)；发布镜像不等于部署服务器。
+- 原 `D:\Code\renewapi\source` 及 20 套模板保持不动。正式发布和验证结果见[发布归档](../tasks/archive/2026-10-release-v1.0.0.md)；发布镜像不等于部署服务器。
 
 ## 本轮内容
 

@@ -149,4 +149,4 @@ QA_MAPPING_FLOWS=1 QA_OUT=qa-artifacts/model-mapping node scripts/obsidian-brows
 
 Windows PowerShell 请用 `$env:QA_MAPPING_FLOWS='1'` 等设置本终端环境变量。`QA_BINARY` 指向包含最新前端产物的本地构建程序。测试全部使用随机测试密码、临时 SQLite，不访问生产库、不执行真实付费模型或支付。
 
-原始报告在被 Git 忽略的 `qa-artifacts/model-mapping/`。最终数字见 `tasks/active/menu-model-mapping.md`；不截图。架构理由见 [ADR-012](decisions/012-model-mapping-rules.md)。
+原始报告在被 Git 忽略的 `qa-artifacts/model-mapping/`。初期验收见[映射任务归档](../tasks/archive/2026-10-ui/menu-model-mapping.md)，正式发布验证见[发布归档](../tasks/archive/2026-10-release-v1.0.0.md)；不截图。架构理由见 [ADR-012](decisions/012-model-mapping-rules.md)。

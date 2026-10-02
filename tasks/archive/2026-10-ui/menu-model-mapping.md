@@ -1,5 +1,7 @@
 # 当前任务：菜单分类与混合模型映射（2026-10-02）
 
+> 历史阶段记录，已完成并随 v1.0.0 发布。下文的分支和禁止提交限制仅对应初期开发，后续授权和最终验证见[正式发布归档](../2026-10-release-v1.0.0.md)。
+
 继续在 D:/Code/renewapi/ui-20261001/renewapi / feature/obsidian-ui 实施已批准计划。保留全部已存在Obsidian改动；不reset、不切分支、不commit/push/deploy、不读历史设计或记忆、不截图。上一轮docs/OBSIDIAN_UI.md为当前交付说明而非新视觉来源。本轮详细已批准计划位于 C:/Users/Ken/.claude/plans/iterative-squishing-mountain.md。
 
 ## 基线

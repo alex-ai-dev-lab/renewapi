@@ -9,11 +9,15 @@
 直达规则及真实转发候选切换，旧链式配置不自动迁移。行为和限制见
 [模型映射说明](MODEL_MAPPING.md)、ADR-012。
 
-用户已授权直接在 `main` 提交并通过 Actions 发布 `RenewAPI v1.0.0`，随后删除
-全部旧发布、镜像附件和标签。已核对的清理范围与执行顺序见 ADR-013；实际
-发布、验证及清理结果持续记录在[正式发布任务](../tasks/active/release-v1.0.0.md)。
-本轮本地相关九个 Go 包测试、150 项前端测试通过，最终云端门禁与镜像结果以
-对应 Actions 和 Release 为准。没有执行服务器部署。
+已直接在 `main` 提交，并由 [Actions](https://github.com/alex-ai-dev-lab/renewapi/actions/runs/36982359440)
+成功发布 [RenewAPI v1.0.0](https://github.com/alex-ai-dev-lab/renewapi/releases/tag/renewapi-v1.0.0)，
+源码为 `20cdd2d0c6dd83c5b2e58b852f11684223475d47`。amd64/arm64 离线镜像均通过迁移和下载校验，
+正式版已设为 latest。前端 150 测试、Go 完整检查、四版本数据库、108 页面场景、
+4 个故障恢复及高级设置流程通过；额外本地浏览器回归 453 项通过。
+
+按已确认范围清理 6 个旧/临时 Release、78 个附件和 80 个旧标签，远端只剩
+`renewapi-v1.0.0` 一个正式发布与标签。清单和证据见[发布归档](../tasks/archive/2026-10-release-v1.0.0.md)
+及 ADR-013。没有执行服务器部署；最后的文档归档提交不改变已发布产品源码。
 
 ## 线上产品复核
 

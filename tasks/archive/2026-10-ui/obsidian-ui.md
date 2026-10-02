@@ -1,5 +1,7 @@
 # Obsidian Control integration — 2026-10-01
 
+> Archived implementation stage, completed and shipped in v1.0.0. The initial branch and no-push limits below were superseded by the user's release authorization; see the [release record](../2026-10-release-v1.0.0.md).
+
 ## Scope and baseline
 - Fresh clone at D:/Code/renewapi/ui-20261001/renewapi, baseline d35afe9528fb630199b8b40e1a528f33afe3239d, approved isolated branch feature/obsidian-ui. Do not switch branches, commit, push, deploy, modify backend, touch classic or previous source/templates.
 - User-approved current task and branch take precedence over historical repository main-only workflow notes. Do not read previous design/task documents or memories. Only use current source for behavior and this session's 01-obsidian-control visual specification.

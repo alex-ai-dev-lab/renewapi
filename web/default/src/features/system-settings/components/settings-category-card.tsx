@@ -41,7 +41,7 @@ export function SettingsCategoryCard({ category }: SettingsCategoryCardProps) {
   return (
     <Card
       data-ui='settings-category-card'
-      className='obsidian-settings-category border-border min-w-0 overflow-hidden py-0'
+      className='border-border min-w-0 overflow-hidden py-0'
     >
       <div className='flex items-center gap-3 border-b px-4 py-3'>
         <span className='bg-secondary text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded border'>

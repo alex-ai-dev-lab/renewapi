@@ -16,53 +16,28 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { CSSProperties } from 'react'
-import '@/styles/obsidian-shell.css'
-import { getCookie } from '@/lib/cookies'
-import { LayoutProvider } from '@/context/layout-provider'
+import { useLayoutEffect } from 'react'
 import { SearchProvider } from '@/context/search-provider'
-import { SidebarProvider } from '@/components/ui/sidebar'
-import { AnimatedOutlet } from '@/components/page-transition'
-import { SkipToMain } from '@/components/skip-to-main'
-import { AppHeader } from './app-header'
-import { AppSidebar } from './app-sidebar'
-import { CommandPalette } from './command-palette'
+import { AnnouncementNotice } from '@/features/dashboard/components/announcement-notice'
+import { AstryxAppShell } from './astryx-app-shell'
 
 type AuthenticatedLayoutProps = {
   children?: React.ReactNode
 }
 
-const shellStyle = {
-  '--sidebar-width': '232px',
-  '--sidebar-width-icon': '56px',
-} as CSSProperties
-
 export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
-  const defaultOpen = getCookie('sidebar_state') !== 'false'
+  useLayoutEffect(() => {
+    document.body.dataset.snowapiConsole = 'true'
+
+    return () => {
+      delete document.body.dataset.snowapiConsole
+    }
+  }, [])
 
   return (
-    <LayoutProvider>
-      <SearchProvider commandMenu={null}>
-        <SidebarProvider
-          defaultOpen={defaultOpen}
-          className='obsidian-shell'
-          style={shellStyle}
-        >
-          <SkipToMain />
-          <CommandPalette />
-          <AppSidebar />
-          <div className='flex h-svh min-h-0 min-w-0 flex-1 flex-col'>
-            <AppHeader showTopNav={false} />
-            <main
-              id='content'
-              tabIndex={-1}
-              className='obsidian-shell-main @container/content flex min-h-0 min-w-0 flex-1 flex-col outline-none'
-            >
-              {props.children ?? <AnimatedOutlet />}
-            </main>
-          </div>
-        </SidebarProvider>
-      </SearchProvider>
-    </LayoutProvider>
+    <SearchProvider>
+      <AnnouncementNotice />
+      <AstryxAppShell>{props.children}</AstryxAppShell>
+    </SearchProvider>
   )
 }

@@ -19,38 +19,32 @@ For commercial licensing, please contact support@quantumnous.com
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { SystemStatePage } from './system-state-page'
 
 export function NotFoundError() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { history } = useRouter()
-  // Keep a stable state marker so browser QA can distinguish a valid route
-  // from the SPA's not-found fallback even when both return the app shell.
   return (
-    <div
-      data-page-state='not-found'
-      className='flex min-h-svh items-center justify-center px-4 py-8'
-    >
-      <div className='bg-card border-border flex w-full max-w-xl flex-col items-start gap-3 rounded-md border p-6 text-left'>
-        <h1 className='text-muted-foreground font-mono text-[29px] leading-tight font-semibold tabular-nums'>
-          404
-        </h1>
-        <span className='text-base font-semibold'>
-          {t('Oops! Page Not Found!')}
-        </span>
-        <p className='text-muted-foreground text-left'>
-          {t("It seems like the page you're looking for")} <br />
+    <SystemStatePage
+      code={404}
+      title={t('Oops! Page Not Found!')}
+      description={
+        <>
+          {t("It seems like the page you're looking for")}{' '}
           {t('does not exist or might have been removed.')}
-        </p>
-        <div className='mt-3 flex flex-wrap gap-2'>
+        </>
+      }
+      actions={
+        <>
           <Button variant='outline' onClick={() => history.go(-1)}>
             {t('Go Back')}
           </Button>
           <Button onClick={() => navigate({ to: '/' })}>
             {t('Back to Home')}
           </Button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   )
 }

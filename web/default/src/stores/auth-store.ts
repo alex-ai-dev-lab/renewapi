@@ -17,10 +17,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { create } from 'zustand'
+import type { AdminCapabilities } from '@/lib/admin-permissions'
 
 export type UserPermissions = {
   sidebar_settings?: boolean
   sidebar_modules?: Record<string, unknown>
+  admin_permissions?: AdminCapabilities
 }
 
 export interface AuthUser {
@@ -34,56 +36,22 @@ export interface AuthUser {
   quota?: number
   used_quota?: number
   request_count?: number
-  aff_code?: string
-  aff_count?: number
-  aff_quota?: number
-  aff_history_quota?: number
-  inviter_id?: number
   github_id?: string
   oidc_id?: string
   wechat_id?: string
   telegram_id?: string
   linux_do_id?: string
   setting?: Record<string, unknown> | string
-  stripe_customer?: string
   sidebar_modules?: string
   permissions?: UserPermissions
 }
 
-type StoredAuthUser = Pick<
-  AuthUser,
-  | 'id'
-  | 'username'
-  | 'display_name'
-  | 'email'
-  | 'role'
-  | 'status'
-  | 'group'
-  | 'setting'
-  | 'sidebar_modules'
-  | 'permissions'
->
-
 interface AuthState {
   auth: {
     user: AuthUser | null
+    sessionVersion: number
     setUser: (user: AuthUser | null) => void
     reset: () => void
-  }
-}
-
-function sanitizeAuthUserForStorage(user: AuthUser): StoredAuthUser {
-  return {
-    id: user.id,
-    username: user.username,
-    display_name: user.display_name,
-    email: user.email,
-    role: user.role,
-    status: user.status,
-    group: user.group,
-    setting: user.setting,
-    sidebar_modules: user.sidebar_modules,
-    permissions: user.permissions,
   }
 }
 
@@ -107,29 +75,50 @@ export const useAuthStore = create<AuthState>()((set) => {
   return {
     auth: {
       user: initUser,
+      sessionVersion: 0,
       setUser: (user) =>
         set((state) => {
           // Persist user to localStorage
-          if (typeof window !== 'undefined') {
-            if (user) {
-              window.localStorage.setItem(
-                'user',
-                JSON.stringify(sanitizeAuthUserForStorage(user))
-              )
-            } else {
-              window.localStorage.removeItem('user')
+          try {
+            if (typeof window !== 'undefined') {
+              if (user) {
+                window.localStorage.setItem('user', JSON.stringify(user))
+                window.localStorage.setItem('uid', String(user.id))
+              } else {
+                window.localStorage.removeItem('user')
+                window.localStorage.removeItem('uid')
+              }
             }
+          } catch {
+            // Storage failure must not prevent the in-memory account change.
           }
-          return { ...state, auth: { ...state.auth, user } }
+          const changed = state.auth.user?.id !== user?.id
+          return {
+            ...state,
+            auth: {
+              ...state.auth,
+              user,
+              sessionVersion: state.auth.sessionVersion + Number(changed),
+            },
+          }
         }),
       reset: () =>
         set((state) => {
-          if (typeof window !== 'undefined') {
-            window.localStorage.removeItem('user')
+          try {
+            if (typeof window !== 'undefined') {
+              window.localStorage.removeItem('user')
+              window.localStorage.removeItem('uid')
+            }
+          } catch {
+            // Still invalidate requests and private caches in restricted mode.
           }
           return {
             ...state,
-            auth: { ...state.auth, user: null },
+            auth: {
+              ...state.auth,
+              user: null,
+              sessionVersion: state.auth.sessionVersion + 1,
+            },
           }
         }),
     },

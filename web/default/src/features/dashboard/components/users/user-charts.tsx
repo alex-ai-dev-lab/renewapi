@@ -20,25 +20,22 @@ import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
 import { Users, Loader2 } from 'lucide-react'
+import { useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
-import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
+import { getRollingDateRange } from '@/lib/time'
+import { cn } from '@/lib/utils'
 import { VCHART_OPTION } from '@/lib/vchart'
-import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { useTheme } from '@/context/theme-provider'
+import { IconBadge } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getUserQuotaDataByUsers } from '@/features/dashboard/api'
-import {
-  TIME_GRANULARITY_OPTIONS,
-  TIME_RANGE_PRESETS,
-} from '@/features/dashboard/constants'
-import {
-  getDefaultDays,
-  getSavedGranularity,
-  saveGranularity,
-  processUserChartData,
-} from '@/features/dashboard/lib'
-import type { ProcessedUserChartData } from '@/features/dashboard/types'
+import { TIME_RANGE_PRESETS } from '@/features/dashboard/constants'
+import { processUserChartData } from '@/features/dashboard/lib'
+import type {
+  ProcessedUserChartData,
+  UserChartsFilters,
+} from '@/features/dashboard/types'
 
 let themeManagerPromise: Promise<
   (typeof import('@visactor/vchart'))['ThemeManager']
@@ -51,62 +48,54 @@ const USER_CHARTS: {
 }[] = [
   {
     value: 'rank',
-    labelKey: 'User Consumption Ranking',
+    labelKey: 'User Token Consumption Ranking',
     specKey: 'spec_user_rank',
-  },
-  {
-    value: 'trend',
-    labelKey: 'User Consumption Trend',
-    specKey: 'spec_user_trend',
   },
 ]
 
 const TOP_USER_LIMIT_OPTIONS = [5, 10, 20, 50]
 
-export function UserCharts() {
+interface UserChartsProps {
+  filters: UserChartsFilters
+  onFiltersChange: (filters: UserChartsFilters) => void
+}
+
+export function UserCharts(props: UserChartsProps) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
-  const { customization } = useThemeCustomization()
+  const shouldReduceMotion = useReducedMotion()
   const [themeReady, setThemeReady] = useState(false)
   const themeManagerRef = useRef<
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
   >(null)
 
-  const [timeGranularity, setTimeGranularity] = useState<TimeGranularity>(() =>
-    getSavedGranularity()
-  )
-  const [selectedRange, setSelectedRange] = useState<number>(() =>
-    getDefaultDays(timeGranularity)
-  )
-  const [topUserLimit, setTopUserLimit] = useState(10)
-  const [timeRange, setTimeRange] = useState(() => {
-    const days = getDefaultDays(timeGranularity)
-    const { start, end } = getRollingDateRange(days)
+  // The selection is owned by the dashboard parent so it persists across
+  // sub-section switches; the rolling window is derived from the chosen range.
+  const timeGranularity = props.filters.timeGranularity
+  const selectedRange = props.filters.selectedRange
+  const topUserLimit = props.filters.topUserLimit
+  const onFiltersChange = props.onFiltersChange
+
+  const timeRange = useMemo(() => {
+    const { start, end } = getRollingDateRange(selectedRange)
     return {
       start_timestamp: Math.floor(start.getTime() / 1000),
       end_timestamp: Math.floor(end.getTime() / 1000),
     }
-  })
+  }, [selectedRange])
 
-  const handleRangeChange = useCallback((days: number) => {
-    setSelectedRange(days)
-    const { start, end } = getRollingDateRange(days)
-    setTimeRange({
-      start_timestamp: Math.floor(start.getTime() / 1000),
-      end_timestamp: Math.floor(end.getTime() / 1000),
-    })
-  }, [])
-
-  const handleGranularityChange = useCallback(
-    (g: TimeGranularity) => {
-      setTimeGranularity(g)
-      saveGranularity(g)
-      const days = getDefaultDays(g)
-      if (days !== selectedRange) {
-        handleRangeChange(days)
-      }
+  const handleRangeChange = useCallback(
+    (days: number) => {
+      onFiltersChange({ ...props.filters, selectedRange: days })
     },
-    [selectedRange, handleRangeChange]
+    [onFiltersChange, props.filters]
+  )
+
+  const handleTopUserLimitChange = useCallback(
+    (limit: number) => {
+      onFiltersChange({ ...props.filters, topUserLimit: limit })
+    },
+    [onFiltersChange, props.filters]
   )
 
   useEffect(() => {
@@ -138,85 +127,72 @@ export function UserCharts() {
         isLoading ? [] : (userData ?? []),
         timeGranularity,
         t,
-        topUserLimit,
-        resolvedTheme
+        topUserLimit
       ),
-    [
-      userData,
-      isLoading,
-      timeGranularity,
-      t,
-      topUserLimit,
-      resolvedTheme,
-      customization.radius,
-    ]
+    [userData, isLoading, timeGranularity, t, topUserLimit]
   )
+  let chartHeightClass = 'h-[900px]'
+  if (topUserLimit <= 10) {
+    chartHeightClass = 'h-[360px]'
+  } else if (topUserLimit <= 20) {
+    chartHeightClass = 'h-[600px]'
+  }
 
   return (
     <div className='space-y-3'>
-      <div className='flex items-center gap-1.5 overflow-x-auto pb-1 sm:gap-2'>
-        <Tabs
-          value={String(selectedRange)}
-          onValueChange={(value) => handleRangeChange(Number(value))}
-          className='shrink-0'
-        >
-          <TabsList>
-            {TIME_RANGE_PRESETS.map((preset) => (
-              <TabsTrigger
-                key={preset.days}
-                value={String(preset.days)}
-                className='px-2.5 text-xs'
-              >
-                {t(preset.label)}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+      <div className='snowapi-rainflow-panel flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4'>
+        <div>
+          <div className='text-sm font-medium'>
+            {t('User Token Consumption')}
+          </div>
+          <p className='text-muted-foreground mt-0.5 text-xs'>
+            {t('Users are sorted by total tokens in the selected period.')}
+          </p>
+        </div>
+        <div className='flex items-center gap-1.5 overflow-x-auto pb-1 sm:gap-2 sm:pb-0'>
+          <Tabs
+            value={String(selectedRange)}
+            onValueChange={(value) => handleRangeChange(Number(value))}
+            className='shrink-0'
+          >
+            <TabsList>
+              {TIME_RANGE_PRESETS.map((preset) => (
+                <TabsTrigger
+                  key={preset.days}
+                  value={String(preset.days)}
+                  className='px-2.5 text-xs'
+                >
+                  {t(preset.label)}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
 
-        <Tabs
-          value={timeGranularity}
-          onValueChange={(value) =>
-            handleGranularityChange(value as TimeGranularity)
-          }
-          className='shrink-0'
-        >
-          <TabsList>
-            {TIME_GRANULARITY_OPTIONS.map((opt) => (
-              <TabsTrigger
-                key={opt.value}
-                value={opt.value}
-                className='px-2.5 text-xs'
-              >
-                {t(opt.label)}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+          <Tabs
+            value={String(topUserLimit)}
+            onValueChange={(value) => handleTopUserLimitChange(Number(value))}
+            className='shrink-0'
+          >
+            <TabsList>
+              <span className='text-muted-foreground px-2 text-xs font-medium whitespace-nowrap'>
+                {t('Top Users')}
+              </span>
+              {TOP_USER_LIMIT_OPTIONS.map((limit) => (
+                <TabsTrigger
+                  key={limit}
+                  value={String(limit)}
+                  className='px-2.5 text-xs'
+                >
+                  {t('Top {{count}}', { count: limit })}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
 
-        <Tabs
-          value={String(topUserLimit)}
-          onValueChange={(value) => setTopUserLimit(Number(value))}
-          className='shrink-0'
-        >
-          <TabsList>
-            <span className='text-muted-foreground px-2 text-xs font-medium whitespace-nowrap'>
-              {t('Top Users')}
-            </span>
-            {TOP_USER_LIMIT_OPTIONS.map((limit) => (
-              <TabsTrigger
-                key={limit}
-                value={String(limit)}
-                className='px-2.5 text-xs'
-              >
-                {t('Top {{count}}', { count: limit })}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-
-        {isLoading && (
-          <Loader2 className='text-muted-foreground size-4 animate-spin' />
-        )}
+          {isLoading && (
+            <Loader2 className='text-muted-foreground size-4 animate-spin' />
+          )}
+        </div>
       </div>
 
       <div className='grid gap-3'>
@@ -226,23 +202,26 @@ export function UserCharts() {
           return (
             <div
               key={chart.value}
-              className='overflow-hidden rounded-lg border'
+              className='snowapi-rainflow-panel overflow-hidden'
             >
               <div className='flex w-full items-center gap-2 border-b px-3 py-2 sm:px-5 sm:py-3'>
-                <Users className='text-muted-foreground/60 size-4' />
+                <IconBadge tone='info' size='sm'>
+                  <Users />
+                </IconBadge>
                 <div className='text-sm font-semibold'>{t(chart.labelKey)}</div>
               </div>
 
-              <div className='h-[300px] p-1.5 sm:h-96 sm:p-2'>
+              <div className={cn(chartHeightClass, 'p-1.5 sm:p-2')}>
                 {isLoading ? (
                   <Skeleton className='h-full w-full' />
                 ) : (
                   themeReady &&
                   spec && (
                     <VChart
-                      key={`user-${chart.value}-${topUserLimit}-${resolvedTheme}-${customization.preset}`}
+                      key={`user-${chart.value}-${topUserLimit}-${resolvedTheme}`}
                       spec={{
                         ...spec,
+                        animation: !shouldReduceMotion,
                         theme: resolvedTheme === 'dark' ? 'dark' : 'light',
                         background: 'transparent',
                       }}

@@ -16,331 +16,284 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMemo } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
-import { ArrowRight, Flame, ShieldCheck, TrendingDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
-import { getCurrencyLabel, isCurrencyDisplayEnabled } from '@/lib/currency'
 import { formatNumber, formatQuota } from '@/lib/format'
 import { computeTimeRange } from '@/lib/time'
-import { cn } from '@/lib/utils'
-import { useStatus } from '@/hooks/use-status'
-import { Button } from '@/components/ui/button'
-import { StaggerContainer, StaggerItem } from '@/components/page-transition'
+import { Skeleton } from '@/components/ui/skeleton'
 import { getUserQuotaDates } from '@/features/dashboard/api'
-import { useSummaryCardsConfig } from '@/features/dashboard/hooks/use-dashboard-config'
 import type { QuotaDataItem } from '@/features/dashboard/types'
-import { StatCard } from '../ui/stat-card'
+import { ApiAccessPanel } from './api-access-panel'
 
-const SUMMARY_SPARKLINE_BUCKETS = 12
+const CHART_BUCKETS = 24
+const CHART_WIDTH = 1000
+const CHART_HEIGHT = 220
+const CHART_TOP = 24
+const CHART_BOTTOM = 192
+const HOUR_BUCKET_KEYS = Array.from(
+  { length: CHART_BUCKETS },
+  (_, index) => `hour-bucket-${index}`
+)
 
-type SummarySparklineKey = 'balance' | 'usage' | 'requests'
-
-function getBucketIndex(
-  timestamp: number,
+function buildHourlySeries(
+  data: QuotaDataItem[],
   start: number,
   end: number,
-  bucketCount: number
-): number {
-  if (end <= start) return 0
-  const ratio = (timestamp - start) / (end - start)
-  return Math.min(bucketCount - 1, Math.max(0, Math.floor(ratio * bucketCount)))
-}
-
-function buildSummarySparklines(
-  data: QuotaDataItem[],
-  currentBalance: number,
-  start: number,
-  end: number
-): Record<SummarySparklineKey, number[]> {
-  const usage = Array.from({ length: SUMMARY_SPARKLINE_BUCKETS }, () => 0)
-  const requests = Array.from({ length: SUMMARY_SPARKLINE_BUCKETS }, () => 0)
-
+  selectValue: (item: QuotaDataItem) => number
+) {
+  const buckets = Array.from({ length: CHART_BUCKETS }, () => 0)
+  const duration = Math.max(1, end - start)
   for (const item of data) {
     const timestamp = Number(item.created_at) || start
-    const index = getBucketIndex(
-      timestamp,
-      start,
-      end,
-      SUMMARY_SPARKLINE_BUCKETS
+    const ratio = Math.min(
+      0.999999,
+      Math.max(0, (timestamp - start) / duration)
     )
-    usage[index] += Number(item.quota) || 0
-    requests[index] += Number(item.count) || 0
+    buckets[Math.floor(ratio * CHART_BUCKETS)] += selectValue(item)
   }
+  return buckets
+}
 
-  let balance = currentBalance
-  const balanceTrend = Array.from(
-    { length: SUMMARY_SPARKLINE_BUCKETS },
-    () => 0
+function UsageTrendChart({
+  values,
+  label,
+  formatValue,
+}: {
+  values: number[]
+  label: string
+  formatValue: (value: number) => string
+}) {
+  const { t } = useTranslation()
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
+  const gradientId = `overview-area-${useId().replaceAll(':', '')}`
+  const peak = Math.max(1, ...values)
+  const points = values.map((value, index) => ({
+    x: (index / Math.max(1, values.length - 1)) * CHART_WIDTH,
+    y: CHART_BOTTOM - (Math.max(0, value) / peak) * (CHART_BOTTOM - CHART_TOP),
+  }))
+  const polyline = points.map((point) => `${point.x},${point.y}`).join(' ')
+  const area = `0,${CHART_BOTTOM} ${polyline} ${CHART_WIDTH},${CHART_BOTTOM}`
+  const activePoint = activeIndex === null ? null : points[activeIndex]
+
+  return (
+    <section
+      className='snowapi-rainflow-panel overflow-hidden'
+      aria-label={label}
+    >
+      <div className='flex items-center justify-between px-4 pt-4 sm:px-5'>
+        <h2 className='text-sm font-medium'>{label}</h2>
+        <span className='text-muted-foreground text-xs'>{t('24 hours')}</span>
+      </div>
+      <div className='h-[240px] px-3 pt-2 pb-3 sm:h-[260px] sm:px-5'>
+        <div className='relative h-[calc(100%-18px)]'>
+          <svg
+            viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+            preserveAspectRatio='none'
+            className='h-full w-full overflow-visible'
+            role='img'
+            aria-label={label}
+          >
+            {[CHART_TOP, 80, 136, CHART_BOTTOM].map((y) => (
+              <line
+                key={y}
+                x1='0'
+                x2={CHART_WIDTH}
+                y1={y}
+                y2={y}
+                stroke='currentColor'
+                className='text-border'
+                strokeWidth='1'
+                strokeDasharray='3 5'
+                vectorEffect='non-scaling-stroke'
+              />
+            ))}
+            <defs>
+              <linearGradient id={gradientId} x1='0' y1='0' x2='0' y2='1'>
+                <stop offset='0%' stopColor='currentColor' stopOpacity='0.12' />
+                <stop offset='100%' stopColor='currentColor' stopOpacity='0' />
+              </linearGradient>
+            </defs>
+            <polygon points={area} fill={`url(#${gradientId})`} />
+            <polyline
+              points={polyline}
+              fill='none'
+              stroke='currentColor'
+              className='text-foreground'
+              strokeWidth='2'
+              strokeLinejoin='round'
+              strokeLinecap='round'
+              vectorEffect='non-scaling-stroke'
+            />
+            {activePoint ? (
+              <circle
+                cx={activePoint.x}
+                cy={activePoint.y}
+                r='5'
+                className='fill-background stroke-foreground'
+                strokeWidth='2'
+                vectorEffect='non-scaling-stroke'
+              />
+            ) : null}
+          </svg>
+
+          <div className='absolute inset-0 grid grid-cols-24'>
+            {values.map((value, index) => (
+              <button
+                key={HOUR_BUCKET_KEYS[index]}
+                type='button'
+                className='h-full cursor-crosshair outline-none'
+                aria-label={`${23 - index} ${t('hours ago')}: ${formatValue(value)}`}
+                onMouseEnter={() => setActiveIndex(index)}
+                onMouseLeave={() => setActiveIndex(null)}
+                onFocus={() => setActiveIndex(index)}
+                onBlur={() => setActiveIndex(null)}
+              />
+            ))}
+          </div>
+
+          {activeIndex !== null && activePoint ? (
+            <div
+              className='bg-foreground text-background pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-lg px-2.5 py-1.5 text-xs shadow-sm'
+              style={{
+                left: `${((activeIndex + 0.5) / CHART_BUCKETS) * 100}%`,
+                top: `${(activePoint.y / CHART_HEIGHT) * 100}%`,
+              }}
+            >
+              <div className='font-medium'>
+                {formatValue(values[activeIndex])}
+              </div>
+              <div className='opacity-70'>
+                {activeIndex === values.length - 1
+                  ? t('Current hour')
+                  : t('{{count}} hours ago', {
+                      count: values.length - 1 - activeIndex,
+                    })}
+              </div>
+            </div>
+          ) : null}
+        </div>
+        <div className='text-muted-foreground flex justify-between text-[10px]'>
+          <span>{t('23 hours ago')}</span>
+          <span>{t('Now')}</span>
+        </div>
+      </div>
+    </section>
   )
-
-  for (let index = SUMMARY_SPARKLINE_BUCKETS - 1; index >= 0; index--) {
-    balanceTrend[index] = Math.max(0, balance)
-    balance += usage[index]
-  }
-
-  return {
-    balance: balanceTrend,
-    usage,
-    requests,
-  }
 }
 
-function getSummarySparkline(
-  key: string,
-  sparklineData: Record<SummarySparklineKey, number[]>
-): number[] | undefined {
-  if (key === 'usage') return sparklineData.usage
-  if (key === 'requests') return sparklineData.requests
-  return undefined
-}
-
-function getRunwayDays(
-  remainQuota: number,
-  recentUsage: number
-): number | null {
-  if (remainQuota <= 0 || recentUsage <= 0) return null
-  const days = remainQuota / recentUsage
-  if (!Number.isFinite(days)) return null
-  return days
-}
-
-type HealthLevel = 'healthy' | 'caution' | 'critical'
-
-function getHealthLevel(remainQuota: number, recentUsage: number): HealthLevel {
-  if (remainQuota <= 0) return 'critical'
-  const days = getRunwayDays(remainQuota, recentUsage)
-  if (days !== null && days < 3) return 'caution'
-  return 'healthy'
-}
-
-const HEALTH_CONFIG: Record<
-  HealthLevel,
-  { dotClass: string; labelKey: string }
-> = {
-  healthy: {
-    dotClass: 'bg-success',
-    labelKey: 'Healthy',
-  },
-  caution: {
-    dotClass: 'bg-warning',
-    labelKey: 'Low balance',
-  },
-  critical: {
-    dotClass: 'bg-destructive',
-    labelKey: 'Balance depleted',
-  },
+function SummaryMetric({
+  label,
+  value,
+  loading,
+}: {
+  label: string
+  value: string
+  loading?: boolean
+}) {
+  return (
+    <div className='snowapi-rainflow-panel min-h-24 p-4 sm:p-5'>
+      <div className='text-muted-foreground text-xs'>{label}</div>
+      {loading ? (
+        <Skeleton className='mt-3 h-7 w-28' />
+      ) : (
+        <div className='mt-3 text-2xl leading-none font-medium tracking-tight tabular-nums'>
+          {value}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function SummaryCards() {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
-  const { status, loading } = useStatus()
-
-  const summaryTimeRange = useMemo(() => computeTimeRange(1), [])
-  const remainQuota = Number(user?.quota ?? 0)
-  const usedQuota = Number(user?.used_quota ?? 0)
-  const requestCount = Number(user?.request_count ?? 0)
-
-  const usageTrendQuery = useQuery({
+  const timeRange = useMemo(() => computeTimeRange(1), [])
+  const usageQuery = useQuery({
     queryKey: [
       'dashboard',
       'overview',
-      'summary-sparklines',
-      summaryTimeRange.start_timestamp,
-      summaryTimeRange.end_timestamp,
+      'hourly-usage',
+      timeRange.start_timestamp,
+      timeRange.end_timestamp,
     ],
-    queryFn: async () =>
+    queryFn: () =>
       getUserQuotaDates({
-        start_timestamp: summaryTimeRange.start_timestamp,
-        end_timestamp: summaryTimeRange.end_timestamp,
+        start_timestamp: timeRange.start_timestamp,
+        end_timestamp: timeRange.end_timestamp,
         default_time: 'hour',
       }),
     staleTime: 60 * 1000,
   })
-
-  const summaryValues = useMemo(() => {
-    return {
-      usedDisplay: formatQuota(usedQuota),
-      requestCountDisplay: formatNumber(requestCount),
-    }
-  }, [requestCount, usedQuota])
-
-  const currencyEnabledFromStore = isCurrencyDisplayEnabled()
-  const statusCurrencyFlag =
-    typeof status?.display_in_currency === 'boolean'
-      ? Boolean(status.display_in_currency)
-      : undefined
-  const currencyEnabled =
-    statusCurrencyFlag !== undefined
-      ? statusCurrencyFlag
-      : currencyEnabledFromStore
-  const currencyLabel = currencyEnabled ? getCurrencyLabel() : 'Tokens'
-
-  const sparklineData = useMemo(
-    () =>
-      buildSummarySparklines(
-        usageTrendQuery.data?.data ?? [],
-        remainQuota,
-        summaryTimeRange.start_timestamp,
-        summaryTimeRange.end_timestamp
-      ),
-    [
-      remainQuota,
-      summaryTimeRange.end_timestamp,
-      summaryTimeRange.start_timestamp,
-      usageTrendQuery.data?.data,
-    ]
+  const usageItems = useMemo(
+    () => usageQuery.data?.data ?? [],
+    [usageQuery.data?.data]
   )
-
-  const recentUsage = useMemo(
+  const hourlyTokens = useMemo(
     () =>
-      (usageTrendQuery.data?.data ?? []).reduce(
-        (total, item) => total + (Number(item.quota) || 0),
-        0
+      buildHourlySeries(
+        usageItems,
+        timeRange.start_timestamp,
+        timeRange.end_timestamp,
+        (item) => Number(item.token_used) || 0
       ),
-    [usageTrendQuery.data?.data]
+    [usageItems, timeRange]
   )
-
-  const healthLevel = getHealthLevel(remainQuota, recentUsage)
-  const healthCfg = HEALTH_CONFIG[healthLevel]
-  const runwayDays = getRunwayDays(remainQuota, recentUsage)
-
-  const todayUsageDisplay = formatQuota(recentUsage)
-
-  const items = useSummaryCardsConfig({
-    ...summaryValues,
-    todayUsageDisplay,
-    currencyEnabled,
-    currencyLabel,
-  }).map((config, index) => {
-    const tones = ['rose', 'teal', 'gray'] as const
-
-    return {
-      key: config.key,
-      title: config.title,
-      value: config.value,
-      desc: config.description,
-      icon: config.icon,
-      tone: tones[index] ?? 'gray',
-      sparkline:
-        config.key === 'todayUsage'
-          ? sparklineData.usage
-          : getSummarySparkline(config.key, sparklineData),
-      sparklineVariant: 'line' as const,
-    }
-  })
+  const hourlyRequests = useMemo(
+    () =>
+      buildHourlySeries(
+        usageItems,
+        timeRange.start_timestamp,
+        timeRange.end_timestamp,
+        (item) => Number(item.count) || 0
+      ),
+    [usageItems, timeRange]
+  )
+  const recentQuota = useMemo(
+    () =>
+      usageItems.reduce((total, item) => total + (Number(item.quota) || 0), 0),
+    [usageItems]
+  )
+  const metrics = [
+    {
+      label: t('Credit remaining'),
+      value: formatQuota(Number(user?.quota ?? 0)),
+    },
+    {
+      label: t('Last 24h usage'),
+      value: formatQuota(recentQuota),
+      loading: usageQuery.isLoading,
+    },
+    {
+      label: t('Historical Usage'),
+      value: formatQuota(Number(user?.used_quota ?? 0)),
+    },
+    {
+      label: t('Request Count'),
+      value: formatNumber(Number(user?.request_count ?? 0)),
+    },
+  ]
 
   return (
-    <div className='bg-card overflow-hidden rounded-xl border'>
-      <div className='grid xl:grid-cols-[minmax(0,1fr)_19rem]'>
-        <div className='flex flex-col gap-3 p-4 sm:p-5'>
-          <div className='flex flex-wrap items-start justify-between gap-3'>
-            <div className='flex flex-col gap-1'>
-              <h3 className='text-base font-semibold'>
-                {t('Usage at a glance')}
-              </h3>
-              <p className='text-muted-foreground text-sm'>
-                {t('Monitor balance, usage, and request volume')}
-              </p>
-            </div>
-          </div>
-          <StaggerContainer className='grid gap-3 md:grid-cols-3'>
-            {items.map((it) => (
-              <StaggerItem
-                key={it.key}
-                className='bg-background/60 rounded-xl border p-3'
-              >
-                <StatCard
-                  title={it.title}
-                  value={it.value}
-                  description={it.desc}
-                  icon={it.icon}
-                  tone={it.tone}
-                  sparkline={it.sparkline}
-                  sparklineVariant={it.sparklineVariant}
-                  loading={loading}
-                />
-              </StaggerItem>
-            ))}
-          </StaggerContainer>
-        </div>
-
-        <div className='bg-warning/10 flex flex-col justify-between gap-4 border-t p-4 sm:p-5 xl:border-t-0 xl:border-l'>
-          <div className='flex flex-col gap-3'>
-            <div className='flex items-center justify-between'>
-              <span className='text-muted-foreground text-xs font-medium'>
-                {t('Credit remaining')}
-              </span>
-              <span className='flex items-center gap-1.5'>
-                <span
-                  className={cn('size-1.5 rounded-full', healthCfg.dotClass)}
-                  aria-hidden='true'
-                />
-                <span className='text-muted-foreground text-[11px] font-medium'>
-                  {t(healthCfg.labelKey)}
-                </span>
-              </span>
-            </div>
-
-            <div className='font-mono text-2xl font-semibold tracking-tight'>
-              {formatQuota(remainQuota)}
-            </div>
-
-            <div className='grid grid-cols-2 gap-2'>
-              <div className='bg-background/60 rounded-lg px-2.5 py-2'>
-                <div className='text-muted-foreground flex items-center gap-1 text-[11px] leading-none font-medium'>
-                  <Flame className='size-3 shrink-0' aria-hidden='true' />
-                  <span className='truncate'>{t('Last 24h usage')}</span>
-                </div>
-                <div className='text-foreground mt-1.5 truncate text-xs font-semibold tabular-nums'>
-                  {formatQuota(recentUsage)}
-                </div>
-              </div>
-              <div className='bg-background/60 rounded-lg px-2.5 py-2'>
-                <div className='text-muted-foreground flex items-center gap-1 text-[11px] leading-none font-medium'>
-                  {runwayDays !== null && runwayDays < 3 ? (
-                    <TrendingDown
-                      className='size-3 shrink-0'
-                      aria-hidden='true'
-                    />
-                  ) : (
-                    <ShieldCheck
-                      className='size-3 shrink-0'
-                      aria-hidden='true'
-                    />
-                  )}
-                  <span className='truncate'>{t('Runway')}</span>
-                </div>
-                <div
-                  className={cn(
-                    'mt-1.5 truncate text-xs font-semibold tabular-nums',
-                    healthLevel === 'critical' && 'text-destructive',
-                    healthLevel === 'caution' && 'text-warning'
-                  )}
-                >
-                  {runwayDays !== null
-                    ? runwayDays < 1
-                      ? t('Less than 1 day left')
-                      : runwayDays > 999
-                        ? `999+ ${t('days')}`
-                        : `~${formatNumber(Math.floor(runwayDays))} ${t('days')}`
-                    : remainQuota <= 0
-                      ? t('Balance depleted')
-                      : t('No recent usage')}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <Button className='justify-between' render={<Link to='/wallet' />}>
-            <span>{t('Wallet')}</span>
-            <ArrowRight data-icon='inline-end' />
-          </Button>
-        </div>
+    <div className='flex flex-col gap-4'>
+      <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4'>
+        {metrics.map((metric) => (
+          <SummaryMetric key={metric.label} {...metric} />
+        ))}
       </div>
+      <UsageTrendChart
+        values={hourlyTokens}
+        label={t('Hourly Token Consumption')}
+        formatValue={formatNumber}
+      />
+      <UsageTrendChart
+        values={hourlyRequests}
+        label={t('Hourly Request Count')}
+        formatValue={formatNumber}
+      />
+
+      <ApiAccessPanel />
     </div>
   )
 }

@@ -1,0 +1,8 @@
+/* Copyright (C) 2026 RenewAPI contributors. SPDX-License-Identifier: AGPL-3.0-or-later */
+.snowapi-playground-input textarea::placeholder {
+  color: #666 !important;
+  opacity: 1 !important;
+}
+.dark .snowapi-playground-input textarea::placeholder {
+  color: #b7b7b7 !important;
+}

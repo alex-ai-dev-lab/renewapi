@@ -20,7 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
  * Shared constants for usage logs feature
  */
 import type { StatusBadgeProps } from '@/components/status-badge'
-import type { LogStatistics, LogCategory } from './types'
+import type { LogStatistics, UsageLogView, LogCategory } from './types'
 
 // ============================================================================
 // Default Values
@@ -58,13 +58,8 @@ export const LOG_TYPE_ENUM = {
   SYSTEM: 4,
   ERROR: 5,
   REFUND: 6,
+  LOGIN: 7,
 } as const
-
-/**
- * The log list/stat backend uses type=0 as the "all types" sentinel.
- * Row rendering still displays records with type=0 as "Unknown".
- */
-export const LOG_TYPE_ALL_VALUE = '0' as const
 
 // ============================================================================
 // Time Range Presets
@@ -92,10 +87,42 @@ export const LOG_TYPES = [
   { value: 1, label: 'Top-up', color: 'cyan' },
   { value: 2, label: 'Consume', color: 'green' },
   { value: 3, label: 'Manage', color: 'orange' },
-  { value: 4, label: 'System', color: 'accent' },
+  { value: 4, label: 'System', color: 'purple' },
   { value: 5, label: 'Error', color: 'red' },
   { value: 6, label: 'Refund', color: 'blue' },
+  { value: 7, label: 'Login', color: 'teal' },
 ] as const
+
+export const USAGE_LOG_VIEW_TYPES: Record<UsageLogView, readonly number[]> = {
+  consume: [LOG_TYPE_ENUM.CONSUME, LOG_TYPE_ENUM.ERROR],
+  billing: [LOG_TYPE_ENUM.TOPUP, LOG_TYPE_ENUM.REFUND],
+  other: [
+    LOG_TYPE_ENUM.UNKNOWN,
+    LOG_TYPE_ENUM.MANAGE,
+    LOG_TYPE_ENUM.SYSTEM,
+    LOG_TYPE_ENUM.LOGIN,
+  ],
+}
+
+// ============================================================================
+// Log Type Checkers (Constants)
+// ============================================================================
+
+/**
+ * Log types that are displayable (have detailed info)
+ */
+export const DISPLAYABLE_LOG_TYPES = [0, 2, 5, 6] as const
+
+/**
+ * Log types that show timing info
+ */
+export const TIMING_LOG_TYPES = [2, 5] as const
+
+/**
+ * The log list/stat backend uses type=0 as the "all types" sentinel.
+ * Row rendering still displays records with type=0 as "Unknown".
+ */
+export const LOG_TYPE_ALL_VALUE = '0' as const
 
 /**
  * Log types for DataTableToolbar filters (single select mode)
@@ -228,17 +255,20 @@ export const MJ_TASK_TYPE_MAPPINGS: Record<string, StatusMapping> = {
   [MJ_TASK_TYPES.UPSCALE]: { label: 'Upscale', variant: 'orange' },
   [MJ_TASK_TYPES.VIDEO]: { label: 'Video', variant: 'orange' },
   [MJ_TASK_TYPES.EDITS]: { label: 'Edit', variant: 'orange' },
-  [MJ_TASK_TYPES.VARIATION]: { label: 'Vary', variant: 'accent' },
-  [MJ_TASK_TYPES.HIGH_VARIATION]: { label: 'Vary (Strong)', variant: 'accent' },
-  [MJ_TASK_TYPES.LOW_VARIATION]: { label: 'Vary (Subtle)', variant: 'accent' },
+  [MJ_TASK_TYPES.VARIATION]: { label: 'Vary', variant: 'neutral' },
+  [MJ_TASK_TYPES.HIGH_VARIATION]: {
+    label: 'Vary (Strong)',
+    variant: 'neutral',
+  },
+  [MJ_TASK_TYPES.LOW_VARIATION]: { label: 'Vary (Subtle)', variant: 'neutral' },
   [MJ_TASK_TYPES.PAN]: { label: 'Pan', variant: 'cyan' },
   [MJ_TASK_TYPES.DESCRIBE]: { label: 'Describe', variant: 'yellow' },
   [MJ_TASK_TYPES.BLEND]: { label: 'Blend', variant: 'lime' },
   [MJ_TASK_TYPES.UPLOAD]: { label: 'Upload', variant: 'blue' },
   [MJ_TASK_TYPES.SHORTEN]: { label: 'Shorten', variant: 'pink' },
-  [MJ_TASK_TYPES.REROLL]: { label: 'Reroll', variant: 'accent' },
+  [MJ_TASK_TYPES.REROLL]: { label: 'Reroll', variant: 'neutral' },
   [MJ_TASK_TYPES.INPAINT]: { label: 'Inpaint', variant: 'teal' },
-  [MJ_TASK_TYPES.SWAP_FACE]: { label: 'Swap Face', variant: 'accent' },
+  [MJ_TASK_TYPES.SWAP_FACE]: { label: 'Swap Face', variant: 'neutral' },
   [MJ_TASK_TYPES.ZOOM]: { label: 'Zoom', variant: 'green' },
   [MJ_TASK_TYPES.CUSTOM_ZOOM]: { label: 'Custom Zoom', variant: 'green' },
 }
@@ -318,7 +348,7 @@ export const TASK_STATUS_MAPPINGS: Record<string, StatusMapping> = {
 export const TASK_PLATFORM_MAPPINGS: Record<string, StatusMapping> = {
   [TASK_PLATFORMS.SUNO]: { label: 'suno', variant: 'green' },
   [TASK_PLATFORMS.KLING]: { label: 'kling', variant: 'blue' },
-  [TASK_PLATFORMS.RUNWAY]: { label: 'runway', variant: 'accent' },
+  [TASK_PLATFORMS.RUNWAY]: { label: 'runway', variant: 'neutral' },
   [TASK_PLATFORMS.LUMA]: { label: 'luma', variant: 'orange' },
   [TASK_PLATFORMS.VIGGLE]: { label: 'viggle', variant: 'pink' },
 }
@@ -335,17 +365,3 @@ export const LOG_CATEGORY_LABELS: Record<LogCategory, string> = {
   drawing: 'Drawing',
   task: 'Task',
 }
-
-// ============================================================================
-// Log Type Checkers (Constants)
-// ============================================================================
-
-/**
- * Log types that are displayable (have detailed info)
- */
-export const DISPLAYABLE_LOG_TYPES = [0, 2, 5, 6] as const
-
-/**
- * Log types that show timing info
- */
-export const TIMING_LOG_TYPES = [2, 5] as const

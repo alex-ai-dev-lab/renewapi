@@ -86,7 +86,17 @@ export function AccountBindingsTab({
   }, [customProviders])
 
   useEffect(() => {
-    fetchCustomBindings()
+    let cleanup: (() => void) | undefined
+    const timer = setTimeout(() => {
+      const effectCleanup = (() => {
+        fetchCustomBindings()
+      })()
+      if (typeof effectCleanup === 'function') cleanup = effectCleanup
+    }, 0)
+    return () => {
+      clearTimeout(timer)
+      cleanup?.()
+    }
   }, [fetchCustomBindings])
 
   const handleUnbindCustom = async () => {
@@ -115,7 +125,9 @@ export function AccountBindingsTab({
 
   const handleBindCustomOAuth = (provider: { id: string; name: string }) => {
     const redirectUrl = `${window.location.origin}/oauth/${provider.id}?bind=true`
-    window.location.href = `/api/oauth/${provider.id}?redirect=${encodeURIComponent(redirectUrl)}`
+    window.location.assign(
+      `/api/oauth/${provider.id}?redirect=${encodeURIComponent(redirectUrl)}`
+    )
   }
 
   useEffect(() => {
@@ -296,11 +308,17 @@ export function AccountBindingsTab({
               onClick={binding.onBind}
               disabled={binding.isBound && binding.id !== 'email'}
             >
-              {binding.isBound
-                ? binding.id === 'email'
-                  ? t('Change')
-                  : t('Bound')
-                : t('Bind')}
+              {
+                <>
+                  {binding.isBound && binding.id === 'email'
+                    ? t('Change')
+                    : null}
+                  {binding.isBound && !(binding.id === 'email')
+                    ? t('Bound')
+                    : null}
+                  {!binding.isBound ? t('Bind') : null}
+                </>
+              }
             </Button>
           </div>
         ))}
@@ -350,7 +368,7 @@ export function AccountBindingsTab({
                     <Button
                       variant='ghost'
                       size='sm'
-                      className='text-destructive hover:text-destructive h-7 shrink-0 px-2.5 text-xs'
+                      className='text-destructive h-7 shrink-0 px-2.5 text-xs'
                       onClick={() => setUnbindTarget(binding)}
                     >
                       <Unlink className='mr-1 h-3 w-3' />

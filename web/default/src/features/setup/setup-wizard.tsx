@@ -221,9 +221,9 @@ export function SetupWizard() {
     if (!password || password.length < 8) {
       form.setError('password', {
         type: 'manual',
-        message: t('Password must be at least 8 characters long'),
+        message: t('Password must be at least 8 characters'),
       })
-      toast.error(t('Password must be at least 8 characters long'))
+      toast.error(t('Password must be at least 8 characters'))
       return false
     }
 
@@ -277,12 +277,12 @@ export function SetupWizard() {
   }
 
   return (
-    <div className='bg-background relative min-h-svh py-8'>
+    <div className='bg-muted/40 relative min-h-svh py-10'>
       <div className='absolute top-4 right-4 sm:top-6 sm:right-6'>
         <LanguageSwitcher />
       </div>
-      <div className='container mx-auto flex max-w-5xl min-w-0 flex-col gap-4 px-4 sm:px-6'>
-        <div className='flex flex-col items-start gap-2 pr-12'>
+      <div className='container mx-auto flex max-w-5xl flex-col gap-8 px-4 sm:px-6'>
+        <div className='flex flex-col items-center gap-3'>
           <div className='relative h-12 w-12'>
             {systemConfigLoading ? (
               <Skeleton className='absolute inset-0 rounded-full' />
@@ -290,27 +290,27 @@ export function SetupWizard() {
               <img
                 src={logo}
                 alt={t('System logo')}
-                className='size-10 rounded-md object-cover'
+                className='h-12 w-12 rounded-full object-cover shadow-sm'
               />
             )}
           </div>
           {systemConfigLoading ? (
             <Skeleton className='h-7 w-40' />
           ) : (
-            <h1 className='text-[26px] font-semibold'>
+            <h1 className='text-2xl font-semibold tracking-tight'>
               {t('Initialize')} {systemName}
             </h1>
           )}
-          <p className='text-muted-foreground text-sm'>
+          <p className='text-muted-foreground text-center text-sm sm:text-base'>
             {t(
               'Follow the guided steps to prepare your workspace before the first login.'
             )}
           </p>
         </div>
 
-        <Card>
+        <Card className='shadow-lg'>
           <CardHeader className='space-y-2'>
-            <CardTitle className='text-sm font-semibold'>
+            <CardTitle className='text-xl font-semibold'>
               {t('System setup wizard')}
             </CardTitle>
             <CardDescription>
@@ -318,8 +318,8 @@ export function SetupWizard() {
             </CardDescription>
           </CardHeader>
 
-          <CardContent className='space-y-4'>
-            <ol className='grid min-w-0 grid-cols-1 gap-2 md:grid-cols-4'>
+          <CardContent className='space-y-6'>
+            <ol className='grid gap-3 sm:grid-cols-4'>
               {STEPS.map((step, index) => {
                 const isActive = currentStep === index
                 const isCompleted = currentStep > index
@@ -327,23 +327,21 @@ export function SetupWizard() {
                   <li
                     key={step.titleKey}
                     className={cn(
-                      'min-w-0 rounded-md border p-3',
-                      isActive
-                        ? 'border-primary bg-accent'
-                        : isCompleted
-                          ? 'border-primary/40 bg-primary/5'
-                          : 'border-muted bg-card'
+                      'rounded-xl border p-3',
+                      isActive && 'border-primary ring-primary/20 ring-2',
+                      !isActive &&
+                        isCompleted &&
+                        'border-primary/40 bg-primary/5',
+                      !isActive && !isCompleted && 'border-muted bg-card'
                     )}
                   >
                     <div className='flex items-start gap-3'>
                       <span
                         className={cn(
                           'flex size-6 items-center justify-center rounded-md border text-xs font-semibold',
-                          isActive
+                          isActive || isCompleted
                             ? 'border-primary bg-primary text-primary-foreground'
-                            : isCompleted
-                              ? 'border-primary bg-primary text-primary-foreground'
-                              : 'border-muted-foreground/40 text-muted-foreground'
+                            : 'border-muted-foreground/40 text-muted-foreground'
                         )}
                       >
                         {index + 1}
@@ -362,23 +360,29 @@ export function SetupWizard() {
               })}
             </ol>
 
-            {isLoading ? (
-              <LoadingState message={t('Loading setup status…')} />
-            ) : isError ? (
-              <ErrorState
-                title={t('We could not load the setup status.')}
-                onRetry={() => refetch()}
-              />
-            ) : (
-              <Form {...form}>
-                <form
-                  className='space-y-4'
-                  onSubmit={(event) => event.preventDefault()}
-                >
-                  {currentStepComponent}
-                </form>
-              </Form>
-            )}
+            {
+              <>
+                {isLoading ? (
+                  <LoadingState message={t('Loading setup status…')} />
+                ) : null}
+                {!isLoading && isError ? (
+                  <ErrorState
+                    title={t('We could not load the setup status.')}
+                    onRetry={() => refetch()}
+                  />
+                ) : null}
+                {!isLoading && !isError ? (
+                  <Form {...form}>
+                    <form
+                      className='space-y-6'
+                      onSubmit={(event) => event.preventDefault()}
+                    >
+                      {currentStepComponent}
+                    </form>
+                  </Form>
+                ) : null}
+              </>
+            }
           </CardContent>
 
           {!isLoading && !isError && (

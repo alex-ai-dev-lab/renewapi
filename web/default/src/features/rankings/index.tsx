@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import '@/styles/obsidian-user.css'
 import { useTranslation } from 'react-i18next'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PublicLayout } from '@/components/layout'
@@ -75,32 +74,22 @@ export function Rankings() {
             ) : (
               <>
                 {/* KPI Bar */}
-                <dl className='obsidian-user-metrics'>
-                  <div className='obsidian-user-metric'>
-                    <dt className='obsidian-user-metric-label'>
-                      {t('Total Tokens')}
-                    </dt>
-                    <dd className='obsidian-user-metric-value'>
+                <dl className=''>
+                  <div className=''>
+                    <dt className=''>{t('Total Tokens')}</dt>
+                    <dd className=''>
                       {snapshot.models
                         .reduce((sum, m) => sum + m.total_tokens, 0)
                         .toLocaleString()}
                     </dd>
                   </div>
-                  <div className='obsidian-user-metric'>
-                    <dt className='obsidian-user-metric-label'>
-                      {t('Active Models')}
-                    </dt>
-                    <dd className='obsidian-user-metric-value'>
-                      {snapshot.models.length}
-                    </dd>
+                  <div className=''>
+                    <dt className=''>{t('Active Models')}</dt>
+                    <dd className=''>{snapshot.models.length}</dd>
                   </div>
-                  <div className='obsidian-user-metric'>
-                    <dt className='obsidian-user-metric-label'>
-                      {t('Top Vendor')}
-                    </dt>
-                    <dd className='obsidian-user-metric-value'>
-                      {snapshot.vendors[0]?.vendor || '-'}
-                    </dd>
+                  <div className=''>
+                    <dt className=''>{t('Top Vendor')}</dt>
+                    <dd className=''>{snapshot.vendors[0]?.vendor || '-'}</dd>
                   </div>
                 </dl>
 

@@ -17,50 +17,42 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
-import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import type { TopNavLink } from '../types'
 
 interface NavLinkItemProps {
   link: TopNavLink
   className?: string
-  isActive?: boolean
-  onClick?: React.MouseEventHandler<HTMLAnchorElement>
 }
 
-/** Shared internal, external and hash link semantics for both navigation sizes. */
-export function NavLinkItem(props: NavLinkItemProps) {
-  const { t } = useTranslation()
+/**
+ * Renders a single navigation link (internal or external)
+ * Handles routing and proper link attributes
+ */
+export function NavLinkItem({ link, className }: NavLinkItemProps) {
   const linkClassName = cn(
     'text-muted-foreground hover:text-foreground transition-colors',
-    props.isActive && 'bg-accent text-accent-foreground',
-    props.link.disabled && 'pointer-events-none opacity-50',
-    props.className
+    link.disabled && 'pointer-events-none opacity-50',
+    className
   )
-  const linkProps = {
-    className: linkClassName,
-    onClick: props.onClick,
-    'aria-disabled': props.link.disabled,
-    'aria-current': props.isActive ? ('page' as const) : undefined,
-    tabIndex: props.link.disabled ? -1 : undefined,
-  }
 
-  if (props.link.external || props.link.href.startsWith('#')) {
+  if (link.external) {
     return (
       <a
-        href={props.link.href}
-        target={props.link.external ? '_blank' : undefined}
-        rel={props.link.external ? 'noopener noreferrer' : undefined}
-        {...linkProps}
+        href={link.href}
+        target='_blank'
+        rel='noopener noreferrer'
+        className={linkClassName}
+        aria-disabled={link.disabled}
       >
-        {t(props.link.title)}
+        {link.title}
       </a>
     )
   }
 
   return (
-    <Link to={props.link.href} disabled={props.link.disabled} {...linkProps}>
-      {t(props.link.title)}
+    <Link to={link.href} className={linkClassName} disabled={link.disabled}>
+      {link.title}
     </Link>
   )
 }
@@ -82,9 +74,9 @@ export function NavLinkList({
 }: NavLinkListProps) {
   return (
     <>
-      {links.map((link, index) => (
+      {links.map((link) => (
         <NavLinkItem
-          key={index}
+          key={link.href}
           link={link}
           className={cn(className, itemClassName)}
         />

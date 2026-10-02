@@ -64,15 +64,8 @@ function CommandDialog({
   children: React.ReactNode
 }) {
   const { t } = useTranslation()
-  const resolvedTitle = title ?? t('命令面板')
-  const resolvedDescription = description ?? t('搜索并运行命令...')
-
   return (
     <Dialog {...props}>
-      <DialogHeader className='sr-only'>
-        <DialogTitle>{resolvedTitle}</DialogTitle>
-        <DialogDescription>{resolvedDescription}</DialogDescription>
-      </DialogHeader>
       <DialogContent
         className={cn(
           'top-1/3 translate-y-0 overflow-hidden rounded-xl! p-0',
@@ -80,6 +73,12 @@ function CommandDialog({
         )}
         showCloseButton={showCloseButton}
       >
+        <DialogHeader className='sr-only'>
+          <DialogTitle>{title ?? t('Command Palette')}</DialogTitle>
+          <DialogDescription>
+            {description ?? t('Search for a command to run...')}
+          </DialogDescription>
+        </DialogHeader>
         {children}
       </DialogContent>
     </Dialog>

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type SVGProps } from 'react'
+import type { SVGProps } from 'react'
 import { Radio as RadioPrimitive } from '@base-ui/react/radio'
 import { RadioGroup as Radio } from '@base-ui/react/radio-group'
 import { CircleCheck, Palette, RotateCcw } from 'lucide-react'
@@ -133,6 +133,7 @@ function SectionTitle(props: {
   onReset?: () => void
   className?: string
 }) {
+  const { t } = useTranslation()
   return (
     <div
       className={cn(
@@ -147,7 +148,7 @@ function SectionTitle(props: {
           variant='secondary'
           className='size-4'
           onClick={props.onReset}
-          aria-label='Reset'
+          aria-label={t('Reset')}
         >
           <RotateCcw className='size-3' aria-hidden='true' />
         </Button>
@@ -275,16 +276,12 @@ function PresetConfig() {
               <div
                 aria-hidden='true'
                 className='absolute inset-0 rounded-md'
-                style={
-                  preset.value === 'default'
-                    ? {
-                        background:
-                          'linear-gradient(135deg, var(--background) 0%, var(--muted) 50%, var(--foreground) 100%)',
-                      }
-                    : {
-                        background: `linear-gradient(135deg, ${preset.swatches[0]} 0%, ${preset.swatches[1] ?? preset.swatches[0]} 100%)`,
-                      }
-                }
+                style={{
+                  background:
+                    preset.value === 'default'
+                      ? 'linear-gradient(135deg, oklch(0.68 0.2 25) 0%, oklch(0.8 0.17 85) 25%, oklch(0.72 0.18 155) 50%, oklch(0.66 0.19 245) 75%, oklch(0.68 0.2 315) 100%)'
+                      : `linear-gradient(135deg, ${preset.swatches[0]} 0%, ${preset.swatches[1] ?? preset.swatches[0]} 100%)`,
+                }}
               />
               <CircleCheck
                 className={cn(
@@ -467,13 +464,15 @@ function ScalePreview(props: { rows: number; rowGap: string }) {
       className='absolute inset-2.5 flex flex-col justify-center'
       style={{ gap: props.rowGap }}
     >
-      {Array.from({ length: props.rows }).map((_, i) => (
-        <span
-          key={i}
-          className='bg-foreground/60 block h-[2px] rounded-full'
-          style={{ width: `${85 - i * 10}%` }}
-        />
-      ))}
+      {Array.from({ length: props.rows }, (_, index) => 85 - index * 10).map(
+        (width) => (
+          <span
+            key={width}
+            className='bg-foreground/60 block h-[2px] rounded-full'
+            style={{ width: `${width}%` }}
+          />
+        )
+      )}
     </div>
   )
 }

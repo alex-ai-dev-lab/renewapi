@@ -34,6 +34,7 @@ import {
 const calendarLocales = {
   en: enUS,
   zh: zhCN,
+  zhCN,
   fr,
   ru,
   ja,
@@ -57,12 +58,15 @@ export function DateTimePicker({
   const placeholderText = placeholder ?? t('Select date')
   const calendarLocale =
     calendarLocales[i18n.language as keyof typeof calendarLocales] ?? enUS
+  const currentYear = new Date().getFullYear()
   const [open, setOpen] = React.useState(false)
   const [date, setDate] = React.useState<Date | undefined>(value)
   const [month, setMonth] = React.useState<Date | undefined>(value)
   const [time, setTime] = React.useState<string>('00:00')
 
-  React.useEffect(() => {
+  const [previousValue, setPreviousValue] = React.useState(value)
+  if (value !== previousValue) {
+    setPreviousValue(value)
     setDate(value)
     setMonth(value)
     if (value) {
@@ -70,7 +74,7 @@ export function DateTimePicker({
       const minutes = value.getMinutes().toString().padStart(2, '0')
       setTime(`${hours}:${minutes}`)
     }
-  }, [value])
+  }
 
   const handleDateSelect = (selectedDate: Date | undefined) => {
     if (selectedDate) {
@@ -134,6 +138,8 @@ export function DateTimePicker({
             captionLayout='dropdown'
             onSelect={handleDateSelect}
             locale={calendarLocale}
+            startMonth={new Date(currentYear - 100, 0)}
+            endMonth={new Date(currentYear + 100, 11)}
           />
         </PopoverContent>
       </Popover>
@@ -151,7 +157,7 @@ export function DateTimePicker({
           size='icon'
           onClick={handleClear}
           className='shrink-0'
-          aria-label='Clear'
+          aria-label={t('Clear')}
         >
           <span aria-hidden='true'>✕</span>
         </Button>

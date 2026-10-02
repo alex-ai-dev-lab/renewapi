@@ -35,8 +35,9 @@ type UseChannelMutateFormParams = {
   isEditing: boolean
   isMultiKeyChannel: boolean
   configVersion?: number
+  getConfigVersion?: () => number | undefined
   onSuccess: (channel?: Channel) => void | Promise<void>
-  onConflict: (message: string) => void
+  onConflict?: (message: string) => void
 }
 
 export function useChannelMutateForm(props: UseChannelMutateFormParams) {
@@ -45,7 +46,8 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
   return useMutation({
     mutationFn: async (data: ChannelFormValues): Promise<string> => {
       if (props.isEditing && props.currentRow) {
-        if (!props.configVersion) {
+        const configVersion = props.getConfigVersion?.() ?? props.configVersion
+        if (!configVersion) {
           throw new Error(t(ERROR_MESSAGES.UPDATE_FAILED))
         }
         const payload = transformFormDataToUpdatePayload(
@@ -63,7 +65,7 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
         const response = await updateChannelConfig(
           props.currentRow.id,
           payloadWithKeyMode,
-          props.configVersion
+          configVersion
         )
         if (!response.success) {
           throw new Error(response.message || t(ERROR_MESSAGES.UPDATE_FAILED))
@@ -85,9 +87,9 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
     },
     onError: (error: unknown) => {
       if (props.isEditing && isChannelConfigConflict(error)) {
-        props.onConflict(
-          getApiErrorMessage(error, t(ERROR_MESSAGES.UPDATE_FAILED))
-        )
+        const onConflict =
+          props.onConflict ?? ((message: string) => toast.error(message))
+        onConflict(getApiErrorMessage(error, t(ERROR_MESSAGES.UPDATE_FAILED)))
         return
       }
       toast.error(

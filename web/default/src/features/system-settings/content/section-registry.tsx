@@ -278,24 +278,24 @@ const CONTENT_SECTIONS = [
             custom_accent_enabled: settings['theme.custom_accent_enabled'],
             custom_accent_color: safeHexColorValue(
               settings['theme.custom_accent_color'],
-              DEFAULT_THEME_CUSTOMIZATION.customAccentColor
+              ''
             ),
             custom_palette_enabled: settings['theme.custom_palette_enabled'],
             custom_background_color: safeHexColorValue(
               settings['theme.custom_background_color'],
-              DEFAULT_THEME_CUSTOMIZATION.customBackgroundColor
+              ''
             ),
             custom_surface_color: safeHexColorValue(
               settings['theme.custom_surface_color'],
-              DEFAULT_THEME_CUSTOMIZATION.customSurfaceColor
+              ''
             ),
             custom_sidebar_color: safeHexColorValue(
               settings['theme.custom_sidebar_color'],
-              DEFAULT_THEME_CUSTOMIZATION.customSidebarColor
+              ''
             ),
             custom_chart_color: safeHexColorValue(
               settings['theme.custom_chart_color'],
-              DEFAULT_THEME_CUSTOMIZATION.customChartColor
+              ''
             ),
           },
         }}

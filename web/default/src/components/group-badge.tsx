@@ -31,12 +31,12 @@ type GroupBadgeProps = Omit<
 
 function getGroupRatioClassName(ratio: number): string {
   if (ratio > 1) {
-    return 'border-warning/20 bg-warning/12 text-warning'
+    return 'bg-warning/10 text-warning'
   }
   if (ratio < 1) {
-    return 'border-info/20 bg-info/12 text-info'
+    return 'bg-info/10 text-info'
   }
-  return 'border-border/70 bg-muted/55 text-muted-foreground'
+  return 'bg-muted text-muted-foreground'
 }
 
 function getGroupLabel(params: {
@@ -60,6 +60,7 @@ export function GroupBadge(props: GroupBadgeProps) {
     ratio,
     copyable = false,
     showDot,
+    className,
     ...badgeProps
   } = props
   const groupName = group?.trim()
@@ -82,6 +83,7 @@ export function GroupBadge(props: GroupBadgeProps) {
       showDot={showDot ?? (isSpecialGroup ? false : undefined)}
       variant={isSpecialGroup ? 'neutral' : undefined}
       autoColor={isSpecialGroup ? undefined : groupName}
+      className={cn('min-w-0 shrink overflow-hidden', className)}
     />
   )
 
@@ -90,11 +92,11 @@ export function GroupBadge(props: GroupBadgeProps) {
   }
 
   return (
-    <span className='inline-flex items-center gap-2 text-xs'>
-      {badge}
+    <span className='inline-flex max-w-full min-w-0 items-center gap-2 text-xs'>
+      <span className='max-w-full min-w-0 overflow-hidden'>{badge}</span>
       <span
         className={cn(
-          'inline-flex h-6 items-center rounded-full border px-2 font-mono text-[11px] leading-none font-medium tabular-nums',
+          'inline-flex h-5 shrink-0 items-center rounded-full px-1.5 font-mono text-xs leading-none font-medium tabular-nums',
           getGroupRatioClassName(ratio)
         )}
       >

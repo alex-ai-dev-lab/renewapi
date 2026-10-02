@@ -46,37 +46,28 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { checkIsActive } from '../lib/url-utils'
-import {
-  type NavCollapsible,
-  type NavChatPresets,
-  type NavLink,
-  type NavGroup as NavGroupProps,
+import type {
+  NavCollapsible,
+  NavLink,
+  NavGroup as NavGroupProps,
 } from '../types'
-import { ChatPresetsItem } from './chat-presets-item'
 
 /**
  * Sidebar navigation group component
  * Renders a group of navigation items, supporting regular links and collapsible submenus
  */
-export function NavGroup({ id, title, items }: NavGroupProps) {
+export function NavGroup({ title, items }: NavGroupProps) {
   const { state, isMobile } = useSidebar()
   const href = useLocation({ select: (location) => location.href })
 
   return (
-    <SidebarGroup className='obsidian-nav-group' data-nav-group={id}>
-      {id !== 'overview' && (
-        <SidebarGroupLabel className='text-muted-foreground px-3 text-[11px] font-medium'>
-          {title}
-        </SidebarGroupLabel>
-      )}
+    <SidebarGroup className='px-2 py-1'>
+      <SidebarGroupLabel className='text-muted-foreground/70 px-2 text-[11px] font-medium tracking-wider uppercase'>
+        {title}
+      </SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
-          const key = item.id ?? `${item.url || item.type || item.title}`
-
-          // Special handling: dynamic chat presets list
-          if (item.type === 'chat-presets') {
-            return <ChatPresetsItem key={key} item={item as NavChatPresets} />
-          }
+          const key = `${item.title}-${item.url || item.type}`
 
           // If no sub-items, render regular link
           if (!item.items) {
@@ -127,13 +118,7 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
       <SidebarMenuButton
         isActive={checkIsActive(href, item)}
         tooltip={item.title}
-        render={
-          <Link
-            to={item.url}
-            aria-current={checkIsActive(href, item) ? 'page' : undefined}
-            onClick={() => setOpenMobile(false)}
-          />
-        }
+        render={<Link to={item.url} onClick={() => setOpenMobile(false)} />}
       >
         {item.icon && <item.icon className='shrink-0' />}
         <span className='min-w-0 flex-1 truncate'>{item.title}</span>
@@ -190,13 +175,7 @@ function SidebarMenuCollapsible({
               <SidebarMenuSubButton
                 isActive={checkIsActive(href, subItem)}
                 render={
-                  <Link
-                    to={subItem.url}
-                    aria-current={
-                      checkIsActive(href, subItem) ? 'page' : undefined
-                    }
-                    onClick={() => setOpenMobile(false)}
-                  />
+                  <Link to={subItem.url} onClick={() => setOpenMobile(false)} />
                 }
               >
                 {subItem.icon && <subItem.icon className='shrink-0' />}
@@ -250,7 +229,6 @@ function SidebarMenuCollapsedDropdown({
                 render={
                   <Link
                     to={sub.url}
-                    aria-current={checkIsActive(href, sub) ? 'page' : undefined}
                     className={`${checkIsActive(href, sub) ? 'bg-secondary' : ''}`}
                   />
                 }

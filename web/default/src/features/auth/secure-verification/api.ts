@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api, get2FAStatus } from '@/lib/api'
+import { api } from '@/lib/api'
 import {
   buildAssertionResult,
   prepareCredentialRequestOptions,
@@ -34,21 +34,20 @@ import type { VerificationMethod, VerificationMethods } from './types'
  */
 export async function checkVerificationMethods(): Promise<VerificationMethods> {
   try {
-    const [twoFAResponse, passkeyResponse, passkeySupported] =
-      await Promise.all([
-        get2FAStatus(),
-        getPasskeyStatus(),
-        detectPasskeySupport(),
-      ])
+    const [passkeyResponse, passkeySupported] = await Promise.all([
+      getPasskeyStatus(),
+      detectPasskeySupport(),
+    ])
 
-    const has2FA =
-      Boolean(twoFAResponse?.success) && Boolean(twoFAResponse?.data?.enabled)
+    const hasPassword =
+      Boolean(passkeyResponse?.success) &&
+      Boolean(passkeyResponse?.data?.password_set)
     const hasPasskey =
       Boolean(passkeyResponse?.success) &&
       Boolean(passkeyResponse?.data?.enabled)
 
     return {
-      has2FA,
+      hasPassword,
       hasPasskey,
       passkeySupported,
     }
@@ -56,7 +55,7 @@ export async function checkVerificationMethods(): Promise<VerificationMethods> {
     // eslint-disable-next-line no-console
     console.error('[Secure Verification] Failed to check methods', error)
     return {
-      has2FA: false,
+      hasPassword: false,
       hasPasskey: false,
       passkeySupported: false,
     }
@@ -71,8 +70,8 @@ export async function verify(
   code?: string
 ): Promise<void> {
   switch (method) {
-    case '2fa':
-      return verifyTwoFA(code)
+    case 'password':
+      return verifyPassword(code)
     case 'passkey':
       return verifyPasskey()
     default:
@@ -81,17 +80,17 @@ export async function verify(
 }
 
 /**
- * Perform 2FA verification flow.
+ * Perform secure identity verification.
  */
-async function verifyTwoFA(code?: string | null): Promise<void> {
+async function verifyPassword(code?: string | null): Promise<void> {
   const trimmed = code?.trim()
   if (!trimmed) {
-    throw new Error('Please enter the verification code or backup code')
+    throw new Error('Please enter your current password')
   }
 
   const res = await api.post('/api/verify', {
-    method: '2fa',
-    code: trimmed,
+    method: 'password',
+    password: trimmed,
   })
 
   if (!res.data?.success) {

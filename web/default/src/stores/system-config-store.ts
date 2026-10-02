@@ -19,14 +19,6 @@ For commercial licensing, please contact support@quantumnous.com
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { DEFAULT_SYSTEM_NAME, DEFAULT_LOGO } from '@/lib/constants'
-import {
-  DEFAULT_DASHBOARD_DEFAULTS,
-  type DashboardDefaults,
-} from '@/lib/dashboard-defaults'
-import {
-  DEFAULT_THEME_CUSTOMIZATION,
-  type ThemeCustomization,
-} from '@/lib/theme-customization'
 
 export type CurrencyDisplayType = 'USD' | 'CNY' | 'TOKENS' | 'CUSTOM'
 
@@ -46,15 +38,13 @@ export interface CurrencyConfig {
 }
 
 export interface SystemConfig {
+  systemSettingsNavigation?: string
   systemName: string
   logo: string
   footerHtml?: string
   demoSiteEnabled?: boolean
   displayTokenStatEnabled?: boolean
   currency: CurrencyConfig
-  themeCustomization: ThemeCustomization
-  dashboardDefaults: DashboardDefaults
-  systemSettingsNavigation: string
 }
 
 export const DEFAULT_CURRENCY_CONFIG: CurrencyConfig = {
@@ -64,39 +54,6 @@ export const DEFAULT_CURRENCY_CONFIG: CurrencyConfig = {
   usdExchangeRate: 1,
   customCurrencySymbol: '¤',
   customCurrencyExchangeRate: 1,
-}
-
-function mergeSystemConfig(
-  base: SystemConfig,
-  incoming?: Partial<SystemConfig>
-): SystemConfig {
-  const dashboardDefaults = {
-    ...DEFAULT_DASHBOARD_DEFAULTS,
-    ...(base.dashboardDefaults ?? {}),
-    ...(incoming?.dashboardDefaults ?? {}),
-  }
-  if (!Array.isArray(dashboardDefaults.visibleSections)) {
-    dashboardDefaults.visibleSections =
-      DEFAULT_DASHBOARD_DEFAULTS.visibleSections
-  }
-
-  return {
-    ...base,
-    ...(incoming ?? {}),
-    currency: {
-      ...DEFAULT_CURRENCY_CONFIG,
-      ...(base.currency ?? {}),
-      ...(incoming?.currency ?? {}),
-    },
-    themeCustomization: {
-      ...DEFAULT_THEME_CUSTOMIZATION,
-      ...(base.themeCustomization ?? {}),
-      ...(incoming?.themeCustomization ?? {}),
-    },
-    dashboardDefaults,
-    systemSettingsNavigation:
-      incoming?.systemSettingsNavigation ?? base.systemSettingsNavigation ?? '',
-  }
 }
 
 interface SystemConfigState {
@@ -119,15 +76,19 @@ export const useSystemConfigStore = create<SystemConfigState>()(
         systemName: DEFAULT_SYSTEM_NAME,
         logo: DEFAULT_LOGO,
         currency: { ...DEFAULT_CURRENCY_CONFIG },
-        themeCustomization: { ...DEFAULT_THEME_CUSTOMIZATION },
-        dashboardDefaults: { ...DEFAULT_DASHBOARD_DEFAULTS },
-        systemSettingsNavigation: '',
       },
       loading: true,
       loadedLogoUrl: DEFAULT_LOGO,
       setConfig: (newConfig) =>
         set((state) => ({
-          config: mergeSystemConfig(state.config, newConfig),
+          config: {
+            ...state.config,
+            ...newConfig,
+            currency: {
+              ...state.config.currency,
+              ...newConfig.currency,
+            },
+          },
         })),
       setLoadedLogoUrl: (url) => set({ loadedLogoUrl: url }),
       setLoading: (loading) => set({ loading }),
@@ -138,17 +99,6 @@ export const useSystemConfigStore = create<SystemConfigState>()(
         config: state.config,
         loadedLogoUrl: state.loadedLogoUrl,
       }),
-      merge: (persisted, current) => {
-        const persistedState = persisted as
-          | Partial<Pick<SystemConfigState, 'config' | 'loadedLogoUrl'>>
-          | undefined
-        return {
-          ...current,
-          loadedLogoUrl:
-            persistedState?.loadedLogoUrl ?? current.loadedLogoUrl,
-          config: mergeSystemConfig(current.config, persistedState?.config),
-        }
-      },
     }
   )
 )

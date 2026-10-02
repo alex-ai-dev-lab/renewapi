@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useRef, useState } from 'react'
-import { Crown, CalendarClock, Package } from 'lucide-react'
+import { ArrowLeft, CalendarClock, Package } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { DEFAULT_CURRENCY_CONFIG } from '@/stores/system-config-store'
@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
+  DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
@@ -62,6 +62,7 @@ interface PaymentMethod {
 }
 
 interface Props {
+  appearance?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   plan: PlanRecord | null
@@ -97,7 +98,7 @@ function payErrorMessage(
 
 export function SubscriptionPurchaseDialog(props: Props) {
   const { t } = useTranslation()
-  const { currency } = useSystemConfig()
+  const { currency, systemName } = useSystemConfig()
   const [paying, setPaying] = useState(false)
   // paying 是异步 state：五个渠道的按钮都只靠它禁用，
   // 快速双击或先点 Stripe 再点 Creem 仍可能下出两张订单。
@@ -283,179 +284,210 @@ export function SubscriptionPurchaseDialog(props: Props) {
   }
 
   return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className='max-sm:w-[calc(100vw-1.5rem)] sm:max-w-md'>
-        <DialogHeader>
-          <DialogTitle className='flex items-center gap-2'>
-            <Crown className='h-5 w-5' />
-            {t('Purchase Subscription')}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className='space-y-3 sm:space-y-4'>
-          <div className='bg-muted/50 space-y-2.5 rounded-lg border p-3 sm:space-y-3 sm:p-4'>
-            <div className='flex justify-between'>
-              <span className='text-muted-foreground text-sm'>
-                {t('Plan Name')}
-              </span>
-              <span className='max-w-[200px] truncate text-sm font-medium'>
-                {plan.title}
-              </span>
-            </div>
-            <div className='flex items-center justify-between'>
-              <span className='text-muted-foreground text-sm'>
-                {t('Validity Period')}
-              </span>
-              <span className='flex items-center gap-1 text-sm'>
-                <CalendarClock className='h-3.5 w-3.5' />
-                {formatDuration(plan, t)}
-              </span>
-            </div>
-            {formatResetPeriod(plan, t) !== t('No Reset') && (
-              <div className='flex justify-between'>
-                <span className='text-muted-foreground text-sm'>
-                  {t('Reset Period')}
-                </span>
-                <span className='text-sm'>{formatResetPeriod(plan, t)}</span>
-              </div>
-            )}
-            {/* NOTE: 列头「Received amount（已收金额）」与字段语义不符，
-                total_amount 实际是计划总额度/限额（0 = 不限）。同 #48。 */}
-            <div className='flex items-center justify-between'>
-              <span className='text-muted-foreground text-sm'>
-                {t('Received amount')}
-              </span>
-              <span className='flex items-center gap-1 text-sm'>
-                <Package className='h-3.5 w-3.5' />
-                {totalAmount > 0 ? formatQuota(totalAmount) : t('Unlimited')}
-              </span>
-            </div>
-            {plan.upgrade_group && (
-              <div className='flex items-center justify-between'>
-                <span className='text-muted-foreground text-sm'>
-                  {t('Upgrade Group')}
-                </span>
-                <GroupBadge group={plan.upgrade_group} />
-              </div>
-            )}
-            <Separator />
-            <div className='flex items-center justify-between'>
-              <span className='text-sm font-medium'>{t('Amount Due')}</span>
-              <span className='text-primary text-lg font-bold'>
-                {priceLabel}
-              </span>
-            </div>
-          </div>
-
-          {limitReached && (
-            <Alert variant='destructive'>
-              <AlertDescription>
-                {t('Purchase limit reached')} ({props.purchaseCount}/
-                {props.purchaseLimit})
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <div className='flex flex-col gap-2 rounded-md border p-3'>
-            <div className='flex items-center justify-between gap-2 text-xs'>
-              <span className='text-muted-foreground'>{t('Required')}</span>
-              <span>{formatQuota(balanceCost)}</span>
-            </div>
-            <div className='flex items-center justify-between gap-2 text-xs'>
-              <span className='text-muted-foreground'>{t('Available')}</span>
-              <span>{formatQuota(userQuota)}</span>
-            </div>
-            {insufficientBalance && (
-              <Alert variant='destructive'>
-                <AlertDescription>{t('Insufficient balance')}</AlertDescription>
-              </Alert>
-            )}
+    <Dialog
+      open={props.open}
+      onOpenChange={(open) => {
+        if (!paying) props.onOpenChange(open)
+      }}
+    >
+      <DialogContent
+        className='snowapi-checkout inset-0 translate-x-0 translate-y-0'
+        showCloseButton={false}
+      >
+        <div className='snowapi-checkout-sheet'>
+          <header className='snowapi-checkout-header'>
             <Button
-              variant='outline'
-              onClick={handlePayBalance}
-              disabled={paying || limitReached || insufficientBalance}
+              variant='ghost'
+              disabled={paying}
+              onClick={() => props.onOpenChange(false)}
+              aria-label={t('Back')}
             >
-              {t('Pay with Balance')}
+              <ArrowLeft />
             </Button>
-          </div>
-
-          {hasAnyPayment && (
-            <div className='space-y-3'>
-              <p className='text-muted-foreground text-xs'>
-                {t('Select payment method')}
-              </p>
-              {(hasStripe || hasCreem || hasWaffoPancake) && (
-                <div className='grid grid-cols-2 gap-2 sm:flex'>
-                  {hasStripe && (
-                    <Button
-                      variant='outline'
-                      className='flex-1'
-                      onClick={handlePayStripe}
-                      disabled={paying || limitReached}
-                    >
-                      Stripe
-                    </Button>
-                  )}
-                  {hasCreem && (
-                    <Button
-                      variant='outline'
-                      className='flex-1'
-                      onClick={handlePayCreem}
-                      disabled={paying || limitReached}
-                    >
-                      Creem
-                    </Button>
-                  )}
-                  {hasWaffoPancake && (
-                    <Button
-                      variant='outline'
-                      className='flex-1'
-                      onClick={handlePayWaffoPancake}
-                      disabled={paying || limitReached}
-                    >
-                      Waffo Pancake
-                    </Button>
-                  )}
+            <span>{systemName}</span>
+          </header>
+          <div className='snowapi-checkout-body'>
+            <div className='snowapi-checkout-details'>
+              <DialogTitle className='snowapi-checkout-title mb-9 text-3xl font-semibold'>
+                {t('Checkout')}
+              </DialogTitle>
+              <DialogDescription className='sr-only'>
+                {t('Review your subscription and choose a payment method.')}
+              </DialogDescription>
+              <div className='bg-muted/50 space-y-2.5 rounded-lg border p-3 sm:space-y-3 sm:p-4'>
+                <div className='flex justify-between'>
+                  <span className='text-muted-foreground text-sm'>
+                    {t('Plan Name')}
+                  </span>
+                  <span className='max-w-[200px] truncate text-sm font-medium'>
+                    {plan.title}
+                  </span>
                 </div>
+                <div className='flex items-center justify-between'>
+                  <span className='text-muted-foreground text-sm'>
+                    {t('Validity Period')}
+                  </span>
+                  <span className='flex items-center gap-1 text-sm'>
+                    <CalendarClock className='h-3.5 w-3.5' />
+                    {formatDuration(plan, t)}
+                  </span>
+                </div>
+                {formatResetPeriod(plan, t) !== t('No Reset') && (
+                  <div className='flex justify-between'>
+                    <span className='text-muted-foreground text-sm'>
+                      {t('Reset Period')}
+                    </span>
+                    <span className='text-sm'>
+                      {formatResetPeriod(plan, t)}
+                    </span>
+                  </div>
+                )}
+                {/* NOTE: 列头「Received amount（已收金额）」与字段语义不符，
+                total_amount 实际是计划总额度/限额（0 = 不限）。同 #48。 */}
+                <div className='flex items-center justify-between'>
+                  <span className='text-muted-foreground text-sm'>
+                    {t('Total quota')}
+                  </span>
+                  <span className='flex items-center gap-1 text-sm'>
+                    <Package className='h-3.5 w-3.5' />
+                    {totalAmount > 0
+                      ? formatQuota(totalAmount)
+                      : t('Unlimited')}
+                  </span>
+                </div>
+                {plan.upgrade_group && (
+                  <div className='flex items-center justify-between'>
+                    <span className='text-muted-foreground text-sm'>
+                      {t('Upgrade Group')}
+                    </span>
+                    <GroupBadge group={plan.upgrade_group} />
+                  </div>
+                )}
+                <Separator />
+                <div className='flex items-center justify-between'>
+                  <span className='text-sm font-medium'>{t('Amount Due')}</span>
+                  <span className='text-primary text-lg font-bold'>
+                    {priceLabel}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className='snowapi-checkout-payment space-y-4'>
+              {limitReached && (
+                <Alert variant='destructive'>
+                  <AlertDescription>
+                    {t('Purchase limit reached')} ({props.purchaseCount}/
+                    {props.purchaseLimit})
+                  </AlertDescription>
+                </Alert>
               )}
-              {hasEpay && (
-                <div className='grid grid-cols-[minmax(0,1fr)_auto] gap-2'>
-                  <Select
-                    items={[
-                      ...(props.epayMethods || []).map((m) => ({
-                        value: m.type,
-                        label: m.name || m.type,
-                      })),
-                    ]}
-                    value={selectedEpayMethod}
-                    onValueChange={(v) =>
-                      v !== null && setSelectedEpayMethod(v)
-                    }
-                    disabled={limitReached}
-                  >
-                    <SelectTrigger className='flex-1'>
-                      <SelectValue>{selectedEpayMethodLabel}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent alignItemWithTrigger={false}>
-                      <SelectGroup>
-                        {(props.epayMethods || []).map((m) => (
-                          <SelectItem key={m.type} value={m.type}>
-                            {m.name || m.type}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    onClick={handlePayEpay}
-                    disabled={paying || !selectedEpayMethod || limitReached}
-                  >
-                    {t('Pay')}
-                  </Button>
+
+              <div className='flex flex-col gap-2 rounded-md border p-3'>
+                <div className='flex items-center justify-between gap-2 text-xs'>
+                  <span className='text-muted-foreground'>{t('Required')}</span>
+                  <span>{formatQuota(balanceCost)}</span>
+                </div>
+                <div className='flex items-center justify-between gap-2 text-xs'>
+                  <span className='text-muted-foreground'>
+                    {t('Available')}
+                  </span>
+                  <span>{formatQuota(userQuota)}</span>
+                </div>
+                {insufficientBalance && (
+                  <Alert variant='destructive'>
+                    <AlertDescription>
+                      {t('Insufficient balance')}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <Button
+                  variant='outline'
+                  onClick={handlePayBalance}
+                  disabled={paying || limitReached || insufficientBalance}
+                >
+                  {t('Pay with Balance')}
+                </Button>
+              </div>
+
+              {hasAnyPayment && (
+                <div className='space-y-3'>
+                  <p className='text-muted-foreground text-xs'>
+                    {t('Select payment method')}
+                  </p>
+                  {(hasStripe || hasCreem || hasWaffoPancake) && (
+                    <div className='grid grid-cols-2 gap-2 sm:flex'>
+                      {hasStripe && (
+                        <Button
+                          variant='outline'
+                          className='flex-1'
+                          onClick={handlePayStripe}
+                          disabled={paying || limitReached}
+                        >
+                          Stripe
+                        </Button>
+                      )}
+                      {hasCreem && (
+                        <Button
+                          variant='outline'
+                          className='flex-1'
+                          onClick={handlePayCreem}
+                          disabled={paying || limitReached}
+                        >
+                          Creem
+                        </Button>
+                      )}
+                      {hasWaffoPancake && (
+                        <Button
+                          variant='outline'
+                          className='flex-1'
+                          onClick={handlePayWaffoPancake}
+                          disabled={paying || limitReached}
+                        >
+                          Waffo Pancake
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {hasEpay && (
+                    <div className='grid grid-cols-[minmax(0,1fr)_auto] gap-2'>
+                      <Select
+                        items={[
+                          ...(props.epayMethods || []).map((m) => ({
+                            value: m.type,
+                            label: m.name || m.type,
+                          })),
+                        ]}
+                        value={selectedEpayMethod}
+                        onValueChange={(v) =>
+                          v !== null && setSelectedEpayMethod(v)
+                        }
+                        disabled={limitReached}
+                      >
+                        <SelectTrigger className='flex-1'>
+                          <SelectValue>{selectedEpayMethodLabel}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent alignItemWithTrigger={false}>
+                          <SelectGroup>
+                            {(props.epayMethods || []).map((m) => (
+                              <SelectItem key={m.type} value={m.type}>
+                                {m.name || m.type}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        onClick={handlePayEpay}
+                        disabled={paying || !selectedEpayMethod || limitReached}
+                      >
+                        {t('Pay')}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

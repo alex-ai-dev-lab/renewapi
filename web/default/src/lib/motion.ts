@@ -22,9 +22,9 @@ const EASE_OUT_CUBIC = [0.33, 1, 0.68, 1] as const
 
 const DURATION = {
   instant: 0,
-  fast: 0.15,
-  normal: 0.25,
-  slow: 0.35,
+  fast: 0.18,
+  normal: 0.24,
+  slow: 0.32,
 } as const
 
 export const MOTION_TRANSITION: Record<string, Transition> = {
@@ -37,7 +37,7 @@ export const MOTION_TRANSITION: Record<string, Transition> = {
 
 export const MOTION_VARIANTS = {
   pageEnter: {
-    initial: { opacity: 0, y: 8, filter: 'blur(4px)' },
+    initial: { opacity: 0, y: 6, filter: 'blur(2px)' },
     animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
     exit: { opacity: 0, y: -4, filter: 'blur(2px)' },
   },
@@ -47,9 +47,9 @@ export const MOTION_VARIANTS = {
     exit: { opacity: 0 },
   },
   scaleIn: {
-    initial: { opacity: 0, scale: 0.96 },
-    animate: { opacity: 1, scale: 1 },
-    exit: { opacity: 0, scale: 0.96 },
+    initial: { opacity: 0, y: 6 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: 4 },
   },
   slideUp: {
     initial: { opacity: 0, y: 16 },
@@ -66,8 +66,8 @@ export const MOTION_VARIANTS = {
     animate: { opacity: 1, y: 0 },
   },
   cardItem: {
-    initial: { opacity: 0, y: 12, scale: 0.98 },
-    animate: { opacity: 1, y: 0, scale: 1 },
+    initial: { opacity: 0, y: 8 },
+    animate: { opacity: 1, y: 0 },
   },
   sidebarSlide: {
     initial: { opacity: 0, x: -8 },
@@ -102,11 +102,10 @@ export const CARD_STAGGER_VARIANTS: Variants = {
 }
 
 export const CARD_ITEM_VARIANTS: Variants = {
-  initial: { opacity: 0, y: 12, scale: 0.98 },
+  initial: { opacity: 0, y: 8 },
   animate: {
     opacity: 1,
     y: 0,
-    scale: 1,
     transition: MOTION_TRANSITION.default,
   },
 }

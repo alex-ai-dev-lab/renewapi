@@ -20,36 +20,23 @@ import { useState } from 'react'
 import {
   BarChartIcon,
   BoxIcon,
-  CameraIcon,
   CodeSquareIcon,
-  FileIcon,
-  GlobeIcon,
   GraduationCapIcon,
-  ImageIcon,
   NotepadTextIcon,
-  PaperclipIcon,
-  ScreenShareIcon,
   SendIcon,
   SquareIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import {
   PromptInput,
   PromptInputButton,
   PromptInputFooter,
   type PromptInputMessage,
   PromptInputTextarea,
-  PromptInputTools,
 } from '@/components/ai-elements/prompt-input'
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
 import { ModelGroupSelector } from '@/components/model-group-selector'
+import '../playground.css'
 import type { GroupOption, ModelOption } from '../types'
 
 interface PlaygroundInputProps {
@@ -105,18 +92,12 @@ export function PlaygroundInput({
     setText('')
   }
 
-  const handleFileAction = (action: string) => {
-    toast.info(t('Feature in development'), {
-      description: action,
-    })
-  }
-
   const handleSuggestionClick = (suggestion: string) => {
     onSubmit(suggestion)
   }
 
   return (
-    <div className='grid min-w-0 shrink-0 gap-2 px-3 pb-3 sm:px-6'>
+    <div className='snowapi-playground-input grid min-w-0 shrink-0 gap-2 px-3 pb-3 sm:px-6'>
       <PromptInput
         groupClassName='border-border bg-card rounded-md shadow-none'
         onSubmit={handleSubmit}
@@ -126,7 +107,7 @@ export function PlaygroundInput({
           autoCorrect='off'
           autoCapitalize='off'
           spellCheck={false}
-          className='px-3 text-sm md:text-sm'
+          className='placeholder:text-foreground/70 px-3 text-sm md:text-sm'
           disabled={disabled}
           onChange={(event) => setText(event.target.value)}
           placeholder={t('Ask anything')}
@@ -134,61 +115,6 @@ export function PlaygroundInput({
         />
 
         <PromptInputFooter className='flex-wrap gap-2 border-t p-2'>
-          <PromptInputTools>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <PromptInputButton
-                    className='border font-medium'
-                    disabled={disabled}
-                    variant='outline'
-                  />
-                }
-              >
-                <PaperclipIcon size={16} />
-                <span className='hidden sm:inline'>{t('Attach')}</span>
-                <span className='sr-only sm:hidden'>{t('Attach')}</span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align='start'>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('upload-file')}
-                >
-                  <FileIcon className='mr-2' size={16} />
-                  {t('Upload file')}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('upload-photo')}
-                >
-                  <ImageIcon className='mr-2' size={16} />
-                  {t('Upload photo')}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('take-screenshot')}
-                >
-                  <ScreenShareIcon className='mr-2' size={16} />
-                  {t('Take screenshot')}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('take-photo')}
-                >
-                  <CameraIcon className='mr-2' size={16} />
-                  {t('Take photo')}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <PromptInputButton
-              className='border font-medium'
-              disabled={disabled}
-              onClick={() => toast.info(t('Search feature in development'))}
-              variant='outline'
-            >
-              <GlobeIcon size={16} />
-              <span className='hidden sm:inline'>{t('Search')}</span>
-              <span className='sr-only sm:hidden'>{t('Search')}</span>
-            </PromptInputButton>
-          </PromptInputTools>
-
           <div className='flex items-center gap-1.5 md:gap-2'>
             <ModelGroupSelector
               selectedModel={modelValue}

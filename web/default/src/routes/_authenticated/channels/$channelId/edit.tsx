@@ -1,31 +1,21 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
+/* Copyright (C) 2026 RenewAPI contributors. SPDX-License-Identifier: AGPL-3.0-or-later */
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
+import { ChannelEditorRoute } from '@/features/channels/components/editor/channel-editor-route'
 
 export const Route = createFileRoute(
   '/_authenticated/channels/$channelId/edit'
 )({
-  beforeLoad: () => {
-    const { auth } = useAuthStore.getState()
-    if (!auth.user || auth.user.role < ROLE.ADMIN)
+  beforeLoad: ({ params }) => {
+    if ((useAuthStore.getState().auth.user?.role ?? 0) < ROLE.ADMIN)
       throw redirect({ to: '/403' })
+    if (!/^\d+$/.test(params.channelId) || Number(params.channelId) <= 0)
+      throw redirect({ to: '/404' })
   },
+  component: EditChannel,
 })
+function EditChannel() {
+  const { channelId } = Route.useParams()
+  return <ChannelEditorRoute channelId={Number(channelId)} />
+}

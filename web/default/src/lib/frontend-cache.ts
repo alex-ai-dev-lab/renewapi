@@ -17,11 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 const FRONTEND_CACHE_VERSION = 'default-v1'
-const FRONTEND_CACHE_VERSION_KEY = 'renewapi:default:cache-version'
-const LEGACY_FRONTEND_CACHE_VERSION_KEY = 'newapi:default:cache-version'
+const FRONTEND_CACHE_VERSION_KEY = 'newapi:default:cache-version'
 const PRESERVED_LOCAL_STORAGE_KEYS = new Set([
   FRONTEND_CACHE_VERSION_KEY,
-  LEGACY_FRONTEND_CACHE_VERSION_KEY,
   'user',
   'uid',
   'aff',
@@ -32,16 +30,6 @@ export function initializeFrontendCache(): void {
   if (typeof window === 'undefined') return
 
   try {
-    const legacyVersion = window.localStorage.getItem(
-      LEGACY_FRONTEND_CACHE_VERSION_KEY
-    )
-    if (
-      legacyVersion &&
-      window.localStorage.getItem(FRONTEND_CACHE_VERSION_KEY) === null
-    ) {
-      window.localStorage.setItem(FRONTEND_CACHE_VERSION_KEY, legacyVersion)
-    }
-
     const currentVersion = window.localStorage.getItem(
       FRONTEND_CACHE_VERSION_KEY
     )

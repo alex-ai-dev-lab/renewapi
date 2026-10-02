@@ -16,14 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type LinkProps } from '@tanstack/react-router'
-import { type TFunction } from 'i18next'
+import type { LinkProps } from '@tanstack/react-router'
+import type { TFunction } from 'i18next'
 
 /**
  * Base navigation item type
  */
 type BaseNavItem = {
-  /** Stable feature identity, independent of title, route and display group. */
   id?: string
   minimumRole?: number
   rootOnly?: boolean
@@ -34,6 +33,12 @@ type BaseNavItem = {
   icon?: React.ElementType
   activeUrls?: (LinkProps['to'] | (string & {}))[]
   configUrls?: (LinkProps['to'] | (string & {}))[]
+  /**
+   * Minimum role required to see this item in the sidebar. When set, the item
+   * is hidden for users whose role is below this threshold (see
+   * `useSidebarView`). Route-level guards still enforce access independently.
+   */
+  requiredRole?: number
 }
 
 /**
@@ -55,17 +60,13 @@ export type NavCollapsible = BaseNavItem & {
 }
 
 /**
- * Dynamic chat presets type - dynamically loaded chat preset list from API
+ * Navigation item union type
  */
 export type NavChatPresets = BaseNavItem & {
   type: 'chat-presets'
   url?: never
   items?: never
 }
-
-/**
- * Navigation item union type
- */
 export type NavItem = NavCollapsible | NavLink | NavChatPresets
 
 /**

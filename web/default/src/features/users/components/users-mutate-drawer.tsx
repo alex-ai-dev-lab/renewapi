@@ -16,16 +16,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQuery } from '@tanstack/react-query'
 import { Pencil } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
+import {
+  ADMIN_PERMISSION_ACTIONS,
+  ADMIN_PERMISSION_RESOURCES,
+  EMPTY_PERMISSION_CATALOG,
+  hasPermission,
+  normalizeAdminPermissions,
+} from '@/lib/admin-permissions'
+import { backendCapabilities } from '@/lib/backend-capabilities'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
+import { ROLE } from '@/lib/roles'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Form,
   FormControl,
@@ -62,7 +73,13 @@ import {
   sideDrawerFormClassName,
   sideDrawerHeaderClassName,
 } from '@/components/drawer-layout'
-import { createUser, updateUser, getUser, getGroups } from '../api'
+import {
+  createUser,
+  updateUser,
+  getUser,
+  getGroups,
+  getPermissionCatalog,
+} from '../api'
 import { BINDING_FIELDS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import {
   userFormSchema,
@@ -71,12 +88,9 @@ import {
   transformFormDataToPayload,
   transformUserToFormDefaults,
 } from '../lib'
-import { type User } from '../types'
+import type { User } from '../types'
 import { UserQuotaDialog } from './user-quota-dialog'
 import { useUsers } from './users-provider'
-
-const PASSWORD_MIN_LENGTH = 8
-const PASSWORD_MAX_LENGTH = 20
 
 type UsersMutateDrawerProps = {
   open: boolean
@@ -92,10 +106,9 @@ export function UsersMutateDrawer({
   const { t } = useTranslation()
   const isUpdate = !!currentRow
   const { triggerRefresh } = useUsers()
+  const currentUser = useAuthStore((s) => s.auth.user)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isLoadingUser, setIsLoadingUser] = useState(false)
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
-  const userLoadRequestRef = useRef(0)
 
   // Fetch groups
   const { data: groupsData } = useQuery({
@@ -106,6 +119,14 @@ export function UsersMutateDrawer({
 
   const groups = groupsData?.data || []
 
+  // Permission catalog is owned by the backend; fetched once and reused.
+  const { data: permissionCatalog = EMPTY_PERMISSION_CATALOG } = useQuery({
+    queryKey: ['admin-permission-catalog'],
+    queryFn: getPermissionCatalog,
+    enabled: backendCapabilities.adminPermissionCatalog,
+    staleTime: 5 * 60 * 1000,
+  })
+
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema),
     defaultValues: USER_FORM_DEFAULT_VALUES,
@@ -113,45 +134,22 @@ export function UsersMutateDrawer({
 
   // Load existing data when updating
   useEffect(() => {
-    const requestId = ++userLoadRequestRef.current
     let active = true
-
-    const isCurrentRequest = () =>
-      active && userLoadRequestRef.current === requestId
-
     if (open && isUpdate && currentRow) {
-      // Seed the form from the selected table row *before* awaiting the fetch.
-      // form.reset() used to run only inside the success branch, so a slow or
-      // failed load left the previously edited user's group/remark in the form
-      // while the submit payload already carried the newly selected user's id.
-      form.reset({
-        ...USER_FORM_DEFAULT_VALUES,
-        ...transformUserToFormDefaults(currentRow),
-      })
-      setIsLoadingUser(true)
       // For update, fetch fresh data
       getUser(currentRow.id)
         .then((result) => {
-          if (!isCurrentRequest()) return
-          if (result.success && result.data) {
+          if (active && result.success && result.data) {
             form.reset(transformUserToFormDefaults(result.data))
-          } else {
-            toast.error(result.message || t(ERROR_MESSAGES.LOAD_FAILED))
           }
         })
         .catch(() => {
-          if (!isCurrentRequest()) return
-          toast.error(t(ERROR_MESSAGES.LOAD_FAILED))
-        })
-        .finally(() => {
-          if (isCurrentRequest()) setIsLoadingUser(false)
+          if (active) toast.error(t('Request failed'))
         })
     } else if (open && !isUpdate) {
       // For create, reset to defaults
       form.reset(USER_FORM_DEFAULT_VALUES)
-      setIsLoadingUser(false)
     }
-
     return () => {
       active = false
     }
@@ -162,18 +160,14 @@ export function UsersMutateDrawer({
   const tokensOnly = currencyMeta.kind === 'tokens'
 
   const currentQuotaRaw = form.watch('quota_dollars') || 0
+  const selectedRole = form.watch('role')
+  const canEditAdminPermissions = currentUser?.role === ROLE.SUPER_ADMIN
+  const targetIsAdmin = (selectedRole ?? currentRow?.role ?? 0) >= ROLE.ADMIN
 
   const onSubmit = async (data: UserFormValues) => {
-    const passwordLength = data.password?.length || 0
-    // On create a password is mandatory. On update an empty value means "keep
-    // unchanged", but a non-empty one must satisfy the same length rules; the
-    // check used to be skipped entirely for updates, so an admin could set a
-    // 1-character password from this drawer.
-    if (!isUpdate || passwordLength > 0) {
-      if (
-        passwordLength < PASSWORD_MIN_LENGTH ||
-        passwordLength > PASSWORD_MAX_LENGTH
-      ) {
+    if (!isUpdate) {
+      const passwordLength = data.password?.length || 0
+      if (passwordLength < 8 || passwordLength > 20) {
         form.setError('password', {
           type: 'manual',
           message: t('Password must be between 8 and 20 characters'),
@@ -184,7 +178,11 @@ export function UsersMutateDrawer({
 
     setIsSubmitting(true)
     try {
-      const payload = transformFormDataToPayload(data, currentRow?.id)
+      const payload = transformFormDataToPayload(
+        data,
+        currentRow?.id,
+        permissionCatalog
+      )
       const result = isUpdate
         ? await updateUser(payload as typeof payload & { id: number })
         : await createUser(payload)
@@ -205,7 +203,7 @@ export function UsersMutateDrawer({
               : t(ERROR_MESSAGES.CREATE_FAILED))
         )
       }
-    } catch (_error) {
+    } catch {
       toast.error(t(ERROR_MESSAGES.UNEXPECTED))
     } finally {
       setIsSubmitting(false)
@@ -214,13 +212,9 @@ export function UsersMutateDrawer({
 
   const refreshUserData = async () => {
     if (!currentRow) return
-    try {
-      const result = await getUser(currentRow.id)
-      if (result.success && result.data) {
-        form.reset(transformUserToFormDefaults(result.data))
-      }
-    } catch (_error) {
-      toast.error(t(ERROR_MESSAGES.LOAD_FAILED))
+    const result = await getUser(currentRow.id)
+    if (result.success && result.data) {
+      form.reset(transformUserToFormDefaults(result.data))
     }
     triggerRefresh()
   }
@@ -292,7 +286,8 @@ export function UsersMutateDrawer({
                             { value: '10', label: t('Admin') },
                           ]}
                           onValueChange={(value) =>
-                            value !== null && field.onChange(parseInt(value))
+                            value !== null &&
+                            field.onChange(Number.parseInt(value))
                           }
                           value={String(field.value)}
                         >
@@ -352,7 +347,7 @@ export function UsersMutateDrawer({
                           placeholder={
                             isUpdate
                               ? t('Leave empty to keep unchanged')
-                              : t('Enter password (min 8 characters)')
+                              : t('Enter password (8-20 characters)')
                           }
                         />
                       </FormControl>
@@ -374,12 +369,10 @@ export function UsersMutateDrawer({
                       <FormItem>
                         <FormLabel>{t('Group')}</FormLabel>
                         <Select
-                          items={[
-                            ...groups.map((group) => ({
-                              value: group,
-                              label: group,
-                            })),
-                          ]}
+                          items={groups.map((group) => ({
+                            value: group,
+                            label: group,
+                          }))}
                           onValueChange={field.onChange}
                           value={field.value}
                         >
@@ -428,7 +421,6 @@ export function UsersMutateDrawer({
                           <Button
                             type='button'
                             variant='outline'
-                            disabled={isLoadingUser}
                             onClick={() => setQuotaDialogOpen(true)}
                           >
                             <Pencil className='mr-1 h-4 w-4' />
@@ -464,6 +456,97 @@ export function UsersMutateDrawer({
                   />
                 </SideDrawerSection>
               )}
+
+              {canEditAdminPermissions &&
+                targetIsAdmin &&
+                permissionCatalog.resources.length > 0 && (
+                  <SideDrawerSection>
+                    <h3 className='text-sm font-medium'>
+                      {t('Admin Permissions')}
+                    </h3>
+                    <p className='text-muted-foreground text-xs'>
+                      {t(
+                        'Default administrator permissions can be overridden for this user.'
+                      )}
+                    </p>
+                    <FormField
+                      control={form.control}
+                      name='admin_permissions'
+                      render={({ field }) => {
+                        const selected = normalizeAdminPermissions(
+                          field.value,
+                          permissionCatalog
+                        )
+                        return (
+                          <FormItem>
+                            <div className='space-y-3'>
+                              {permissionCatalog.resources.map((resource) => (
+                                <div
+                                  key={resource.resource}
+                                  className='space-y-2 rounded-md border p-3'
+                                >
+                                  <div className='text-sm font-medium'>
+                                    {t(resource.label_key)}
+                                  </div>
+                                  <div className='space-y-2'>
+                                    {resource.actions.map((option) => (
+                                      <label
+                                        key={option.action}
+                                        className='flex items-start gap-3'
+                                      >
+                                        <Checkbox
+                                          checked={
+                                            selected[resource.resource]?.[
+                                              option.action
+                                            ] === true
+                                          }
+                                          onCheckedChange={(checked) => {
+                                            field.onChange({
+                                              ...selected,
+                                              [resource.resource]: {
+                                                ...selected[resource.resource],
+                                                [option.action]:
+                                                  checked === true,
+                                              },
+                                            })
+                                          }}
+                                        />
+                                        <span className='flex flex-col gap-1'>
+                                          <span className='text-sm font-medium'>
+                                            {t(option.label_key)}
+                                          </span>
+                                          <span className='text-muted-foreground text-xs'>
+                                            {t(option.description_key)}
+                                          </span>
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )
+                      }}
+                    />
+                    {currentUser && (
+                      <p className='text-muted-foreground text-xs'>
+                        {hasPermission(
+                          currentUser,
+                          ADMIN_PERMISSION_RESOURCES.CHANNEL,
+                          ADMIN_PERMISSION_ACTIONS.SENSITIVE_WRITE
+                        )
+                          ? t(
+                              'Your account can edit sensitive channel settings.'
+                            )
+                          : t(
+                              'Your account cannot edit sensitive channel settings.'
+                            )}
+                      </p>
+                    )}
+                  </SideDrawerSection>
+                )}
 
               {/* Binding Information (Read-only) */}
               {isUpdate && (
@@ -501,11 +584,7 @@ export function UsersMutateDrawer({
             <SheetClose render={<Button variant='outline' />}>
               {t('Close')}
             </SheetClose>
-            <Button
-              form='user-form'
-              type='submit'
-              disabled={isSubmitting || isLoadingUser}
-            >
+            <Button form='user-form' type='submit' disabled={isSubmitting}>
               {isSubmitting ? t('Saving...') : t('Save changes')}
             </Button>
           </SheetFooter>

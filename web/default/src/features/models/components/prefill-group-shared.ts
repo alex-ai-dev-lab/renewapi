@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { StatusBadgeProps } from '@/components/status-badge'
-import { type PrefillGroup, type PrefillGroupFormValues } from '../types'
+import type { PrefillGroup, PrefillGroupFormValues } from '../types'
 
 export type PrefillGroupType = PrefillGroup['type']
 
@@ -32,7 +32,7 @@ export const PREFILL_GROUP_TYPES = [
     value: 'tag' as PrefillGroupType,
     label: 'Tag Group',
     description: 'Collections of metadata tags for bulk operations.',
-    badge: 'accent' as StatusBadgeProps['variant'],
+    badge: 'purple' as StatusBadgeProps['variant'],
   },
   {
     value: 'endpoint' as PrefillGroupType,
@@ -97,13 +97,10 @@ export function parseEndpointKeys(items: PrefillGroup['items']): string[] {
       typeof items === 'string' ? JSON.parse(items || '{}') : (items as unknown)
     if (Array.isArray(parsed)) {
       return parsed
-        .map((item) =>
-          typeof item === 'string'
-            ? item
-            : typeof item?.name === 'string'
-              ? item.name
-              : ''
-        )
+        .map((item) => {
+          if (typeof item === 'string') return item
+          return typeof item?.name === 'string' ? item.name : ''
+        })
         .filter(Boolean)
     }
     if (parsed && typeof parsed === 'object') {

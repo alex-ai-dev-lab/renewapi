@@ -19,55 +19,23 @@ For commercial licensing, please contact support@quantumnous.com
 // Static translation keys that don't get picked up by the t('...') regex.
 // These cover dynamic labels (e.g. constants, configs) that are passed into t at runtime.
 export const STATIC_I18N_KEYS = [
-  // 首页配置、常量列表和 SEO 中的动态翻译键。
-  'Live',
-  'Live status',
-  'Routing',
-  'Product',
-  'Developers',
-  'Site',
-  'API reference',
-  'Status page',
-  'Changelog',
-  'Terms',
-  'Privacy',
-  'health',
-  'failover',
-  'retry',
-  'routing',
-  'embedding',
-  'rendering',
-  'Configured channels',
-  'chat · responses · images',
-  'messages · tools · stream',
-  'generateContent · models',
-  'Do I need to change my code?',
-  'No. Keep your existing OpenAI, Anthropic or Gemini SDK and just point the Base URL to this gateway. Streaming, tool calls, embeddings and the Image API behave identically.',
-  'How does failover work?',
-  'Eligible channels are selected using the configured priority, weight and health rules. Failed requests can switch channels before a response is committed.',
-  'Which providers are supported?',
-  'The gateway supports multiple providers. The model catalog shows the models currently enabled for this site.',
-  'How are usage and cost tracked?',
-  'Every request carries trace and token accounting, with model-level usage and cost you can audit in real time from the console.',
-  'Chat completions with streaming and tool calls',
-  'Responses API, with reasoning and tool surfaces',
-  'Claude Messages, streaming and tool use',
-  'Gemini generateContent passthrough',
-  'Embeddings for any supported model',
-  'Image generation across multiple providers',
-  'A unified, reliable, high-speed AI API gateway for OpenAI, Claude, Gemini, images, embeddings, routing, failover, and retries.',
-
+  // Dynamic model-preset labels.
+  'Tag Group',
+  'Endpoint Group',
+  'Reusable sets of models you can attach to channels.',
+  'Collections of metadata tags for bulk operations.',
+  'HTTP endpoint mappings shared across providers.',
   // Header navigation
   'Home',
   'Console',
-  'Model Plaza',
-  'Rankings',
   'Docs',
-  'About',
 
   // Sidebar views (drill-in workspaces)
   'System Settings',
   'Back to Dashboard',
+  'Auto-disable rules',
+  'Channel health checks',
+  'Request retry',
 
   // System settings sidebar
   'System Administration',
@@ -77,7 +45,14 @@ export const STATIC_I18N_KEYS = [
   'Content',
   'Integrations',
   'Models',
+  'Routing Reliability',
   'Maintenance',
+
+  // System info
+  'online',
+  'stale',
+  'Master instances run scheduled background tasks.',
+  'Worker instances do not run master-only background tasks.',
 
   // Pricing constants
   'Name',
@@ -126,6 +101,7 @@ export const STATIC_I18N_KEYS = [
   'Failed to delete API key',
   'Failed to delete API keys',
   'Failed to update API key status',
+  'Expected a JSON array of group identifiers',
   'Successfully created {{count}} API Key(s)',
   'Successfully deleted {{count}} API key(s)',
   'Enter API key for this channel',
@@ -254,6 +230,7 @@ export const STATIC_I18N_KEYS = [
   'Match models starting with this name',
   'Match models containing this name',
   'Match models ending with this name',
+
   'All Status',
   'All Sync Status',
   'Official Sync',
@@ -355,13 +332,6 @@ export const STATIC_I18N_KEYS = [
   'Param Override',
   'Override request parameters',
 
-  // Profile / 2FA
-  'Backed up',
-  'Not backed up',
-  'No backup',
-  'Generate New Codes',
-  'Audio Preview',
-
   // Status-code risk dialog
   'High-risk status code retry risk check 1',
   'High-risk status code retry risk check 2',
@@ -378,7 +348,7 @@ export const STATIC_I18N_KEYS = [
 
   // Subscription management
   'Subscription Management',
-  'Stripe/Creem requires creating products on the third-party platform and entering the ID',
+  'Subscriptions',
   'Create Plan',
   'Active',
   'Invalidated',
@@ -387,6 +357,10 @@ export const STATIC_I18N_KEYS = [
   'Priority',
   'Payment Channel',
   'No Upgrade',
+  'Downgrade to pre-purchase group',
+  'Downgrade Group',
+  'Downgrade to this group after the subscription expires',
+  'Allow wallet balance after quota used up',
   'Unlimited',
   'Update plan info',
   'Create new subscription plan',
@@ -398,6 +372,10 @@ export const STATIC_I18N_KEYS = [
   'Plan Subtitle',
   'e.g. Suitable for light usage',
   'Actual Amount',
+  'Plan Price',
+  'Amount the user pays to purchase this plan; the actual currency depends on the payment gateway.',
+  'Plan Quota',
+  'Total quota included in the plan, usable per billing period. 0 means unlimited.',
   'Total Quota',
   '0 means unlimited',
   'Sort Order',
@@ -451,23 +429,32 @@ export const STATIC_I18N_KEYS = [
   'Actions',
 
   // Sidebar modules
-  'Chat Area',
-  'Playground and chat functions',
-  'Playground',
-  'AI model testing environment',
-  'Chat session management',
+  'No content to copy',
+  'Please wait for the current generation to complete',
+  'An unknown error occurred',
+  'Request error occurred',
+  'Network connection failed or server not responding',
+  'Error parsing response data',
+  'Error establishing connection',
+  'Connection closed',
+  'Generation was interrupted',
+  'Note',
+  'Tip',
+  'Important',
+  'Image not available',
+  'Back to footnote {{id}} reference',
   'Console Area',
   'Data management and log viewing',
   'Dashboard',
   'System data statistics',
+  'Flow',
+  'Flow Filters',
+  'Filter the traffic flow view by time range and user.',
+  'Requests',
   'Token Management',
   'API token management',
   'Usage Logs',
   'API usage records',
-  'Drawing Logs',
-  'Drawing task records',
-  'Task Logs',
-  'System task records',
   'Personal Center Area',
   'User personal functions',
   'Wallet Management',
@@ -500,11 +487,6 @@ export const STATIC_I18N_KEYS = [
   'Violation deduction amount',
   'Base amount. Actual deduction = base amount × system group rate.',
 
-  // Chat2Link
-  'No available Web chat links',
-  'No enabled tokens available',
-  'Redirecting to chat page...',
-
   // Channel upstream updates
   'No processable upstream model updates for this channel',
   'Upstream model updates applied: {{added}} added, {{removed}} removed, {{ignored}} ignored this time, {{totalIgnored}} total ignored models',
@@ -514,6 +496,20 @@ export const STATIC_I18N_KEYS = [
   'Detection complete: {{add}} to add, {{remove}} to remove',
   'Batch detection failed',
   'Batch detection complete: {{channels}} channels, {{add}} to add, {{remove}} to remove, {{fails}} failed',
+
+  // Dashboard flow stages (labels/descriptions passed to t at runtime)
+  'User',
+  'Node',
+  'Token',
+  'Group',
+  'Model',
+  'Channel',
+  'The user who made the requests',
+  'The deployment node that handled the requests',
+  'The API key used for the requests',
+  'The user group applied to the requests',
+  'The model that was requested',
+  'The upstream channel that served the requests',
 
   // Misc
   'Cancel',

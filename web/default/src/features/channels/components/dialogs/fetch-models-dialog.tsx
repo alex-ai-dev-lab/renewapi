@@ -28,14 +28,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -44,6 +36,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { Dialog } from '@/components/dialog'
 import { fetchUpstreamModels, updateChannel } from '../../api'
 import {
   channelsQueryKeys,
@@ -51,13 +44,10 @@ import {
   normalizeModelName,
   parseModelsString,
 } from '../../lib'
-import type { Channel } from '../../types'
-import { useChannelsOptional } from '../channels-provider'
+import { useChannels } from '../channels-provider'
 
 function normalizeModelNameList(models: readonly string[]): string[] {
-  return Array.from(
-    new Set(models.map((m) => normalizeModelName(m)).filter(Boolean))
-  )
+  return [...new Set(models.map((m) => normalizeModelName(m)).filter(Boolean))]
 }
 
 type FetchModelsDialogProps = {
@@ -69,7 +59,6 @@ type FetchModelsDialogProps = {
   customFetcher?: () => Promise<string[]>
   existingModelsOverride?: string[]
   channelName?: string | null
-  activeChannelOverride?: Channel | null
 }
 
 export function FetchModelsDialog({
@@ -81,13 +70,10 @@ export function FetchModelsDialog({
   customFetcher,
   existingModelsOverride,
   channelName,
-  activeChannelOverride,
 }: FetchModelsDialogProps) {
   const { t } = useTranslation()
-  const channelsContext = useChannelsOptional()
-  const activeChannel = customFetcher
-    ? null
-    : (activeChannelOverride ?? channelsContext?.currentRow ?? null)
+  const { currentRow } = useChannels()
+  const activeChannel = customFetcher ? null : currentRow
   const queryClient = useQueryClient()
   const [isFetching, setIsFetching] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -134,10 +120,20 @@ export function FetchModelsDialog({
   }, [fetchedModelSet, redirectSourceKeysSet, searchKeyword, selectedModels])
 
   useEffect(() => {
-    if (open && (activeChannel || customFetcher)) {
-      handleFetchModels()
+    let cleanup: (() => void) | undefined
+    const timer = setTimeout(() => {
+      const effectCleanup = (() => {
+        if (open && (activeChannel || customFetcher)) {
+          handleFetchModels()
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      })()
+      if (typeof effectCleanup === 'function') cleanup = effectCleanup
+    }, 0)
+    return () => {
+      clearTimeout(timer)
+      cleanup?.()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, activeChannel?.id, customFetcher])
 
   async function handleFetchModels() {
@@ -150,8 +146,8 @@ export function FetchModelsDialog({
         setFetchedModels(list)
         setSelectedModels(existingModels)
         toast.success(t('Fetched {{count}} models', { count: list.length }))
-      } else {
-        const response = await fetchUpstreamModels(activeChannel!.id)
+      } else if (activeChannel) {
+        const response = await fetchUpstreamModels(activeChannel.id)
         if (response.success) {
           const list = Array.isArray(response.data) ? response.data : []
           setFetchedModels(list)
@@ -326,7 +322,7 @@ export function FetchModelsDialog({
           <div className='flex items-center gap-2'>
             <span className='text-muted-foreground text-sm'>
               {categoryModels.filter((m) => selectedModels.includes(m)).length}{' '}
-              / {categoryModels.length} selected
+              / {categoryModels.length} {t('selected')}
             </span>
             <Checkbox
               checked={allSelected}
@@ -354,8 +350,8 @@ export function FetchModelsDialog({
                   {redirectOnlySet.has(normalizeModelName(model)) && (
                     <Tooltip>
                       <TooltipTrigger
-                        render={<Info className='text-warning h-3.5 w-3.5' />}
-                      ></TooltipTrigger>
+                        render={<Info className='h-3.5 w-3.5 text-amber-500' />}
+                      />
                       <TooltipContent>
                         {t('From model redirect, not yet added to models list')}
                       </TooltipContent>
@@ -370,49 +366,76 @@ export function FetchModelsDialog({
     )
   }
 
-  return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className='max-w-3xl'>
-        <DialogHeader>
-          <DialogTitle>{t('Fetch Models')}</DialogTitle>
-          <DialogDescription>
-            {activeChannel ? (
-              <>
-                {t('Fetch available models for:')}{' '}
-                <strong>{activeChannel.name}</strong>
-              </>
-            ) : channelName ? (
-              <>
-                {t('Fetch available models for:')}{' '}
-                <strong>{channelName}</strong>
-              </>
-            ) : (
-              t('Fetch available models from upstream')
-            )}
-          </DialogDescription>
-        </DialogHeader>
+  const showFooterActions =
+    !!(activeChannel || customFetcher) &&
+    !isFetching &&
+    (fetchedModels.length > 0 || removedModels.length > 0)
 
-        {!activeChannel && !customFetcher ? (
-          <div className='text-muted-foreground py-8 text-center'>
-            {t('No channel selected')}
-          </div>
-        ) : isFetching ? (
-          <div className='flex items-center justify-center py-12'>
-            <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
-          </div>
-        ) : fetchedModels.length === 0 && removedModels.length === 0 ? (
-          <div className='text-muted-foreground py-8 text-center'>
-            <p>{t('No models fetched yet.')}</p>
-            <Button
-              className='mt-4'
-              onClick={handleFetchModels}
-              disabled={isFetching}
-            >
-              {t('Fetch Models')}
-            </Button>
-          </div>
-        ) : (
+  let defaultTab = removedModels.length > 0 ? 'removed' : 'existing'
+  if (newModels.length > 0) defaultTab = 'new'
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={handleClose}
+      title={t('Fetch Models')}
+      description={
+        activeChannel || channelName ? (
           <>
+            {t('Channel:')}{' '}
+            <strong>{activeChannel?.name ?? channelName}</strong>
+          </>
+        ) : (
+          t('Fetch available models from upstream')
+        )
+      }
+      contentClassName='max-w-3xl'
+      contentHeight='auto'
+      bodyClassName='space-y-4'
+      footer={
+        showFooterActions ? (
+          <>
+            <Button variant='outline' onClick={handleClose} disabled={isSaving}>
+              {t('Cancel')}
+            </Button>
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
+              {isSaving ? t('Saving...') : t('Save Models')}
+            </Button>
+          </>
+        ) : null
+      }
+    >
+      {
+        <>
+          {!activeChannel && !customFetcher ? (
+            <div className='text-muted-foreground py-8 text-center'>
+              {t('No channel selected')}
+            </div>
+          ) : null}
+          {!(!activeChannel && !customFetcher) && isFetching ? (
+            <div className='flex items-center justify-center py-12'>
+              <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
+            </div>
+          ) : null}
+          {!(!activeChannel && !customFetcher) &&
+          !isFetching &&
+          fetchedModels.length === 0 &&
+          removedModels.length === 0 ? (
+            <div className='text-muted-foreground py-8 text-center'>
+              <p>{t('No models fetched yet.')}</p>
+              <Button
+                className='mt-4'
+                onClick={handleFetchModels}
+                disabled={isFetching}
+              >
+                {t('Fetch Models')}
+              </Button>
+            </div>
+          ) : null}
+          {!(!activeChannel && !customFetcher) &&
+          !isFetching &&
+          !(fetchedModels.length === 0 && removedModels.length === 0) ? (
             <div className='space-y-4'>
               {/* Search Bar */}
               <div className='relative'>
@@ -428,13 +451,7 @@ export function FetchModelsDialog({
               {/* Tabs for New vs Existing vs Removed */}
               <Tabs
                 key={`${activeChannel?.id ?? 'custom'}-${fetchedModels.length}-${removedModels.length}`}
-                defaultValue={
-                  newModels.length > 0
-                    ? 'new'
-                    : removedModels.length > 0
-                      ? 'removed'
-                      : 'existing'
-                }
+                defaultValue={defaultTab}
               >
                 <TabsList
                   className={`grid w-full ${removedModels.length > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}
@@ -499,23 +516,9 @@ export function FetchModelsDialog({
                 {t('{{n}} model(s) selected', { n: selectedModels.length })}
               </div>
             </div>
-
-            <DialogFooter>
-              <Button
-                variant='outline'
-                onClick={handleClose}
-                disabled={isSaving}
-              >
-                {t('Cancel')}
-              </Button>
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
-                {isSaving ? t('Saving...') : t('Save Models')}
-              </Button>
-            </DialogFooter>
-          </>
-        )}
-      </DialogContent>
+          ) : null}
+        </>
+      }
     </Dialog>
   )
 }

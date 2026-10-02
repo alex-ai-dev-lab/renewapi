@@ -137,12 +137,11 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
   58: {
     id: 58,
     name: CHANNEL_TYPES[58],
-    icon: 'openai',
-    defaultBaseUrl: 'http://mock.local',
+    icon: 'newapi',
     hints: {
-      key: 'Any non-empty value',
-      models: 'mock-ok,mock-error',
-      other: '{"mock_status_code":200,"mock_content":"mock response"}',
+      baseUrl: 'Fallback base URL',
+      key: 'Used by route auth templates',
+      models: 'Models exposed by this channel',
     },
   },
 }

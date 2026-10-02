@@ -27,7 +27,7 @@ export const THEME_PRESETS = [
   {
     value: 'default',
     name: 'Default',
-    swatches: ['#f7f8fa', '#252b34'],
+    swatches: ['oklch(0.72 0.18 250)', 'oklch(0.7 0.12 280)'],
   },
   {
     // Inspired by Anthropic's official brand language: warm cream canvas
@@ -113,77 +113,19 @@ export type ThemeCustomization = {
   radius: ThemeRadius
   scale: ThemeScale
   contentLayout: ContentLayout
-  customAccentEnabled: boolean
-  customAccentColor: string
-  customPaletteEnabled: boolean
-  customBackgroundColor: string
-  customSurfaceColor: string
-  customSidebarColor: string
-  customChartColor: string
 }
 
 export const DEFAULT_THEME_CUSTOMIZATION: ThemeCustomization = {
-  preset: 'default',
-  font: 'default',
+  preset: 'anthropic',
+  font: 'serif',
   radius: 'default',
   scale: 'default',
   contentLayout: 'full',
-  customAccentEnabled: false,
-  customAccentColor: '#1f1f1f',
-  customPaletteEnabled: false,
-  customBackgroundColor: '#ffffff',
-  customSurfaceColor: '#f7f7f7',
-  customSidebarColor: '#f7f7f7',
-  customChartColor: '#f06a3d',
 }
 
 export const THEME_PRESET_VALUES = new Set(
   THEME_PRESETS.map((p) => p.value)
 ) as ReadonlySet<ThemePreset>
-
-export const THEME_FONTS: Array<{
-  value: ThemeFont
-  label: string
-  description: string
-}> = [
-  {
-    value: 'default',
-    label: 'Auto',
-    description: 'Resolve from the selected theme preset.',
-  },
-  {
-    value: 'sans',
-    label: 'Sans',
-    description: 'Use the compact Public Sans interface font.',
-  },
-  {
-    value: 'serif',
-    label: 'Serif',
-    description: 'Use the editorial serif font for a softer interface.',
-  },
-]
-
-export const THEME_RADII: Array<{
-  value: ThemeRadius
-  label: string
-}> = [
-  { value: 'default', label: 'Auto' },
-  { value: 'none', label: 'None' },
-  { value: 'sm', label: 'Small' },
-  { value: 'md', label: 'Medium' },
-  { value: 'lg', label: 'Large' },
-  { value: 'xl', label: 'Extra large' },
-]
-
-export const THEME_SCALES: Array<{
-  value: ThemeScale
-  label: string
-}> = [
-  { value: 'default', label: 'Auto' },
-  { value: 'sm', label: 'Compact' },
-  { value: 'lg', label: 'Comfortable' },
-  { value: 'xl', label: 'Spacious' },
-]
 
 export const THEME_FONT_VALUES: ReadonlySet<ThemeFont> = new Set([
   'default',

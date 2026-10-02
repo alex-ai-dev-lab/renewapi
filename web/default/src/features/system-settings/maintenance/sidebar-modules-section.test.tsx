@@ -224,6 +224,6 @@ test('personal task controls cannot enable globally disabled legacy sections', a
   ) as HTMLButtonElement
   expect(keys.hasAttribute('data-disabled')).toBe(true)
   expect(keys.getAttribute('aria-checked')).toBe('false')
-  expect(container.textContent).toContain('Access & debugging')
+  expect(container.textContent).toContain('Console Area')
   expect(container.textContent).not.toContain('Models & channels')
 })

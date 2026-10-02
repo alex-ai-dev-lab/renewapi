@@ -26,6 +26,10 @@ import type {
   SubscriptionPayResponse,
   SubscriptionPayRequest,
   SelfSubscriptionData,
+  ResetUserSubscriptionsRequest,
+  ResetPlanSubscriptionsRequest,
+  SubscriptionResetResult,
+  SubscriptionBalanceQuote,
 } from './types'
 
 // ============================================================================
@@ -230,5 +234,36 @@ export async function updateBillingPreference(
 // （无尾斜杠）而 users 模块是 `/api/group/`；建议后续收拢到共享层。
 export async function getGroups(): Promise<ApiResponse<string[]>> {
   const res = await api.get('/api/group')
+  return res.data
+}
+
+export async function resetUserSubscriptionsByPlan(
+  userId: number,
+  data: ResetUserSubscriptionsRequest
+): Promise<ApiResponse<SubscriptionResetResult>> {
+  const res = await api.post(
+    `/api/subscription/admin/users/${userId}/subscriptions/reset`,
+    data
+  )
+  return res.data
+}
+
+export async function resetPlanSubscriptions(
+  planId: number,
+  data: ResetPlanSubscriptionsRequest
+): Promise<ApiResponse<SubscriptionResetResult>> {
+  const res = await api.post(
+    `/api/subscription/admin/plans/${planId}/subscriptions/reset`,
+    data
+  )
+  return res.data
+}
+
+export async function getSubscriptionBalanceQuote(
+  planId: number
+): Promise<ApiResponse<SubscriptionBalanceQuote>> {
+  const res = await api.get('/api/subscription/balance/quote', {
+    params: { plan_id: planId },
+  })
   return res.data
 }

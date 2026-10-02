@@ -29,6 +29,9 @@ export const redemptionSchema = z.object({
   key: z.string(),
   status: z.number(), // 1: enabled, 2: disabled, 3: used
   quota: z.number(),
+  type: z.enum(['quota', 'group']).optional(),
+  group_name: z.string().optional(),
+  group_duration_minutes: z.number().optional(),
   created_time: z.number(),
   redeemed_time: z.number(),
   expired_time: z.number(), // 0 for never expires
@@ -65,6 +68,7 @@ export interface GetRedemptionsResponse {
 
 export interface SearchRedemptionsParams {
   keyword?: string
+  status?: string
   p?: number
   page_size?: number
 }
@@ -73,6 +77,9 @@ export interface RedemptionFormData {
   id?: number
   name: string
   quota: number
+  type?: 'quota' | 'group'
+  group_name?: string
+  group_duration_minutes?: number
   expired_time: number
   count?: number // Only for create
   status?: number // Only for status update

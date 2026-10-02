@@ -16,12 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import '@/styles/obsidian-admin.css'
 import { useTranslation } from 'react-i18next'
 import { SectionPageLayout } from '@/components/layout'
+import { BillingHistoryDialog } from '@/features/wallet/components/dialogs/billing-history-dialog'
 import { UsersDeleteDialog } from './components/users-delete-dialog'
 import { UsersMutateDrawer } from './components/users-mutate-drawer'
+import { UsersPrimaryButtons } from './components/users-primary-buttons'
 import { UsersProvider, useUsers } from './components/users-provider'
+import { UsersSubscriptionDialog } from './components/users-subscription-dialog'
 import { UsersTable } from './components/users-table'
 
 function UsersContent() {
@@ -30,12 +32,13 @@ function UsersContent() {
 
   return (
     <>
-      <SectionPageLayout>
+      <SectionPageLayout fixedContent>
         <SectionPageLayout.Title>{t('Users')}</SectionPageLayout.Title>
+        <SectionPageLayout.Actions>
+          <UsersPrimaryButtons />
+        </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <div className='obsidian-admin'>
-            <UsersTable />
-          </div>
+          <UsersTable />
         </SectionPageLayout.Content>
       </SectionPageLayout>
 
@@ -45,6 +48,21 @@ function UsersContent() {
         currentRow={open === 'update' ? currentRow || undefined : undefined}
       />
       <UsersDeleteDialog />
+      {open === 'wallet' && currentRow && (
+        <BillingHistoryDialog
+          key={currentRow.id}
+          open
+          targetUser={currentRow}
+          onOpenChange={(isOpen) => !isOpen && setOpen(null)}
+        />
+      )}
+      {open === 'subscription' && currentRow && (
+        <UsersSubscriptionDialog
+          key={currentRow.id}
+          user={currentRow}
+          onClose={() => setOpen(null)}
+        />
+      )}
     </>
   )
 }

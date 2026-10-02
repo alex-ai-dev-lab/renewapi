@@ -46,7 +46,6 @@ export function LongText({
 
   useEffect(() => {
     if (checkOverflow(ref.current)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsOverflown(true)
       return
     }
@@ -54,12 +53,13 @@ export function LongText({
     setIsOverflown(false)
   }, [])
 
-  if (!isOverflown)
+  if (!isOverflown) {
     return (
       <div ref={ref} className={cn('truncate', className)}>
         {children}
       </div>
     )
+  }
 
   return (
     <>

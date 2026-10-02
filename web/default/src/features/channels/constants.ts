@@ -24,18 +24,16 @@ For commercial licensing, please contact support@quantumnous.com
 export const CHANNEL_TYPES = {
   0: 'Unknown',
   1: 'OpenAI',
-  2: 'Midjourney',
   3: 'Azure',
   4: 'Ollama',
-  5: 'MidjourneyPlus',
-  6: 'OpenAIMax',
+  // 6: 'OpenAIMax',
   7: 'OhMyGPT',
   8: 'Custom',
-  9: 'AILS',
-  10: 'AI Proxy',
-  11: 'PaLM',
-  12: 'API2GPT',
-  13: 'AIGC2D',
+  // 9: 'AILS',
+  // 10: 'AI Proxy',
+  // 11: 'PaLM',
+  // 12: 'API2GPT',
+  // 13: 'AIGC2D',
   14: 'Anthropic',
   15: 'Baidu',
   16: 'Zhipu',
@@ -43,7 +41,7 @@ export const CHANNEL_TYPES = {
   18: 'Xunfei',
   19: '360',
   20: 'OpenRouter',
-  21: 'AI Proxy Library',
+  // 21: 'AI Proxy Library',
   22: 'FastGPT',
   23: 'Tencent',
   24: 'Gemini',
@@ -54,7 +52,6 @@ export const CHANNEL_TYPES = {
   33: 'AWS',
   34: 'Cohere',
   35: 'MiniMax',
-  36: 'SunoAPI',
   37: 'Dify',
   38: 'Jina',
   39: 'Cloudflare',
@@ -75,14 +72,14 @@ export const CHANNEL_TYPES = {
   54: 'DoubaoVideo',
   55: 'Sora',
   56: 'Replicate',
-  57: 'Codex',
-  58: 'Mock',
+  57: 'ChatGPT Subscription (Codex)',
+  58: 'Advanced Custom',
 } as const
 
 const CHANNEL_TYPE_DISPLAY_ORDER: number[] = [
-  1, 14, 33, 24, 43, 3, 41, 48, 42, 34, 20, 4, 40, 27, 25, 17, 26, 15, 46, 23,
-  18, 45, 31, 35, 49, 19, 47, 37, 38, 39, 11, 8, 57, 58, 22, 21, 44, 2, 5, 36, 50,
-  51, 52, 53, 54, 55, 56,
+  1, 14, 33, 24, 43, 3, 41, 48, 58, 42, 34, 20, 4, 40, 27, 25, 17, 26, 15, 46,
+  23, 18, 45, 31, 35, 49, 19, 47, 37, 38, 39, 11, 8, 57, 22, 21, 44, 50, 51, 52,
+  53, 54, 55, 56,
 ]
 
 export const CHANNEL_TYPE_OPTIONS: { value: number; label: string }[] = (() => {
@@ -90,14 +87,14 @@ export const CHANNEL_TYPE_OPTIONS: { value: number; label: string }[] = (() => {
   const seen = new Set<number>()
   for (const id of CHANNEL_TYPE_DISPLAY_ORDER) {
     const label = CHANNEL_TYPES[id as keyof typeof CHANNEL_TYPES]
-    if (label) {
+    if (label && id !== 58) {
       ordered.push({ value: id, label })
       seen.add(id)
     }
   }
   for (const [key, label] of Object.entries(CHANNEL_TYPES)) {
     const id = Number(key)
-    if (id !== 0 && !seen.has(id)) {
+    if (id !== 0 && id !== 58 && !seen.has(id)) {
       ordered.push({ value: id, label })
     }
   }
@@ -265,7 +262,7 @@ export const SUCCESS_MESSAGES = {
 // Default Values
 // ============================================================================
 
-export const DEFAULT_PAGE_SIZE = 100
+export const DEFAULT_PAGE_SIZE = 20
 
 export const DEFAULT_CHANNEL_VALUES = {
   name: '',
@@ -273,7 +270,7 @@ export const DEFAULT_CHANNEL_VALUES = {
   base_url: '',
   key: '',
   models: '',
-  group: 'default',
+  group: 'Free',
   status: CHANNEL_STATUS.ENABLED,
   priority: 0,
   weight: 0,
@@ -322,7 +319,7 @@ export const RESPONSE_TIME_THRESHOLDS = {
 
 export const RESPONSE_TIME_CONFIG = {
   EXCELLENT: { variant: 'success' as const, label: 'Excellent' },
-  GOOD: { variant: 'info' as const, label: 'Good' },
+  GOOD: { variant: 'success' as const, label: 'Good' },
   FAIR: { variant: 'warning' as const, label: 'Fair' },
   POOR: { variant: 'danger' as const, label: 'Poor' },
   UNKNOWN: { variant: 'neutral' as const, label: 'Not tested' },
@@ -348,6 +345,7 @@ export const FIELD_PLACEHOLDERS = {
 } as const
 
 export const FIELD_DESCRIPTIONS = {
+  AUTO_TEST_AND_RECOVER: 'Automatically test and recover this channel',
   NAME: 'Friendly name to identify this channel',
   TYPE: 'Provider type (OpenAI, Anthropic, etc.)',
   BASE_URL: 'Custom API base URL. Leave empty to use provider default.',
@@ -361,8 +359,6 @@ export const FIELD_DESCRIPTIONS = {
   WEIGHT: 'Used for load balancing. Higher weight = more requests',
   TEST_MODEL: 'Model to use when testing channel connectivity',
   AUTO_BAN: 'Automatically disable channel on repeated failures',
-  AUTO_TEST_AND_RECOVER:
-    'Allow scheduled channel testing and automatic recovery. Turn this off to keep the channel disabled until you manually enable it.',
   STATUS_CODE_MAPPING: 'Map response status codes (JSON format)',
   TAG: 'Group channels by tag for batch operations',
   REMARK: 'Internal notes (not shown to users)',

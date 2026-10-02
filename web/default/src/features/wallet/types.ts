@@ -24,6 +24,7 @@ For commercial licensing, please contact support@quantumnous.com
  * Generic API response
  */
 export interface ApiResponse<T = unknown> {
+  code?: string
   success?: boolean
   message?: string
   data?: T
@@ -120,6 +121,7 @@ export interface WaffoPayMethod {
  * Topup configuration information
  */
 export interface TopupInfo {
+  payment_enabled?: boolean
   /** Whether online topup is enabled */
   enable_online_topup: boolean
   /** Whether Stripe topup is enabled */
@@ -247,7 +249,7 @@ export interface UserWalletData {
 /**
  * Topup record status
  */
-export type TopupStatus = 'success' | 'pending' | 'expired'
+export type TopupStatus = 'failed' | 'success' | 'pending' | 'expired'
 
 /**
  * Topup billing record
@@ -286,4 +288,16 @@ export interface BillingHistoryResponse {
  */
 export interface CompleteOrderRequest {
   trade_no: string
+}
+
+export interface RedemptionResult {
+  type: 'quota' | 'group'
+  quota: number
+  group_name?: string
+  group_expires_at?: number
+}
+
+export interface EpayFormData extends Record<string, unknown> {
+  out_trade_no?: string
+  trade_no?: string
 }

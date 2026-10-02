@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import {
+  extractApiErrorMessage,
   extractVerificationInfo,
   isVerificationRequiredError,
 } from '@/lib/secure-verification'
@@ -39,7 +40,7 @@ interface InternalState extends SecureVerificationState {
 }
 
 const defaultMethods: VerificationMethods = {
-  has2FA: false,
+  hasPassword: false,
   hasPasskey: false,
   passkeySupported: false,
 }
@@ -69,7 +70,17 @@ export function useSecureVerification(
   }, [])
 
   useEffect(() => {
-    fetchVerificationMethods()
+    let cleanup: (() => void) | undefined
+    const timer = setTimeout(() => {
+      const effectCleanup = (() => {
+        fetchVerificationMethods()
+      })()
+      if (typeof effectCleanup === 'function') cleanup = effectCleanup
+    }, 0)
+    return () => {
+      clearTimeout(timer)
+      cleanup?.()
+    }
   }, [fetchVerificationMethods])
 
   const reset = useCallback(() => {
@@ -85,15 +96,13 @@ export function useSecureVerification(
       const { preferredMethod, title, description } = config
       const availableMethods = await fetchVerificationMethods()
 
-      if (!availableMethods.has2FA && !availableMethods.hasPasskey) {
+      if (!availableMethods.hasPassword && !availableMethods.hasPasskey) {
         toast.error(
-          i18next.t(
-            'Please enable Two-factor Authentication or Passkey before proceeding'
-          )
+          i18next.t('Please set a password or enable Passkey before proceeding')
         )
         onError?.(
           new Error(
-            'No verification methods available. Enable 2FA or Passkey to continue.'
+            'No verification methods available. Set a password or enable Passkey to continue.'
           )
         )
         return false
@@ -103,8 +112,8 @@ export function useSecureVerification(
       if (!defaultMethod) {
         if (availableMethods.hasPasskey && availableMethods.passkeySupported) {
           defaultMethod = 'passkey'
-        } else if (availableMethods.has2FA) {
-          defaultMethod = '2fa'
+        } else if (availableMethods.hasPassword) {
+          defaultMethod = 'password'
         }
       }
 
@@ -152,10 +161,10 @@ export function useSecureVerification(
 
         return result
       } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : i18next.t('Verification failed')
+        const message = extractApiErrorMessage(
+          error,
+          i18next.t('Verification failed')
+        )
         toast.error(message)
         onError?.(error)
         throw error
@@ -200,7 +209,7 @@ export function useSecureVerification(
 
   const canUseMethod = useCallback(
     (method: VerificationMethod) => {
-      if (method === '2fa') return methods.has2FA
+      if (method === 'password') return methods.hasPassword
       if (method === 'passkey') {
         return methods.hasPasskey && methods.passkeySupported
       }
@@ -211,7 +220,7 @@ export function useSecureVerification(
 
   const recommendedMethod = useMemo<VerificationMethod | null>(() => {
     if (methods.hasPasskey && methods.passkeySupported) return 'passkey'
-    if (methods.has2FA) return '2fa'
+    if (methods.hasPassword) return 'password'
     return null
   }, [methods])
 
@@ -230,7 +239,7 @@ export function useSecureVerification(
     fetchVerificationMethods,
     canUseMethod,
     recommendedMethod,
-    hasAnyMethod: methods.has2FA || methods.hasPasskey,
+    hasAnyMethod: methods.hasPassword || methods.hasPasskey,
     isLoading: state.loading,
     currentMethod: state.method,
     code: state.code,

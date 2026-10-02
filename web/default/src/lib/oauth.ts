@@ -22,21 +22,11 @@ import { api } from './api'
 // OAuth URL Builders
 // ============================================================================
 
-// 所有 builder 统一用 URL + searchParams 构造，避免手写字符串拼接时漏掉
-// encodeURIComponent 导致 clientId / state 里的 & # = 破坏查询串结构。
-
 /**
  * Build GitHub OAuth URL
- *
- * 注意：GitHub 的回调地址由 OAuth App 配置决定，这里不传 redirect_uri。
- * scope 序列化后为 user%3Aemail，GitHub 侧会正常百分号解码。
  */
 export function buildGitHubOAuthUrl(clientId: string, state: string): string {
-  const url = new URL('https://github.com/login/oauth/authorize')
-  url.searchParams.set('client_id', clientId)
-  url.searchParams.set('state', state)
-  url.searchParams.set('scope', 'user:email')
-  return url.toString()
+  return `https://github.com/login/oauth/authorize?client_id=${clientId}&state=${state}&scope=user:email`
 }
 
 /**
@@ -50,10 +40,7 @@ export function buildDiscordOAuthUrl(clientId: string, state: string): string {
     `${window.location.origin}/oauth/discord`
   )
   url.searchParams.set('response_type', 'code')
-  // OAuth2 的 scope 是空格分隔。这里原本写成 'identify+openid'，
-  // 而 URLSearchParams 会把 '+' 编码成 %2B，最终请求的是一个名为
-  // "identify+openid" 的单个 scope，Discord 侧并不存在。
-  url.searchParams.set('scope', 'identify openid')
+  url.searchParams.set('scope', 'identify+openid')
   url.searchParams.set('state', state)
   return url.toString()
 }
@@ -79,11 +66,7 @@ export function buildOIDCOAuthUrl(
  * Build LinuxDO OAuth URL
  */
 export function buildLinuxDOOAuthUrl(clientId: string, state: string): string {
-  const url = new URL('https://connect.linux.do/oauth2/authorize')
-  url.searchParams.set('response_type', 'code')
-  url.searchParams.set('client_id', clientId)
-  url.searchParams.set('state', state)
-  return url.toString()
+  return `https://connect.linux.do/oauth2/authorize?response_type=code&client_id=${clientId}&state=${state}`
 }
 
 // ============================================================================
@@ -91,28 +74,11 @@ export function buildLinuxDOOAuthUrl(clientId: string, state: string): string {
 // ============================================================================
 
 /**
- * 打开 OAuth 授权页。
- *
- * 必须带 noopener：否则被打开的第三方页面可以通过 window.opener 把本站
- * 当前标签页导航到钓鱼页（reverse tabnabbing）。
- */
-function openOAuthWindow(url: string): void {
-  window.open(url, '_blank', 'noopener,noreferrer')
-}
-
-/**
  * Get OAuth state token
- * Includes affiliate code from localStorage if available
  */
 export async function getOAuthState(): Promise<string | null> {
   try {
-    let path = '/api/oauth/state'
-    const affCode = localStorage.getItem('aff')
-    if (affCode && affCode.length > 0) {
-      // aff 来自 localStorage，可被用户任意写入，必须编码后再拼进查询串
-      path += `?aff=${encodeURIComponent(affCode)}`
-    }
-    const res = await api.get(path)
+    const res = await api.get('/api/oauth/state')
     if (res.data.success) {
       return res.data.data
     }
@@ -131,7 +97,8 @@ export async function handleGitHubOAuth(clientId: string): Promise<void> {
   const state = await getOAuthState()
   if (!state) return
 
-  openOAuthWindow(buildGitHubOAuthUrl(clientId, state))
+  const url = buildGitHubOAuthUrl(clientId, state)
+  window.open(url, '_blank')
 }
 
 /**
@@ -141,7 +108,8 @@ export async function handleDiscordOAuth(clientId: string): Promise<void> {
   const state = await getOAuthState()
   if (!state) return
 
-  openOAuthWindow(buildDiscordOAuthUrl(clientId, state))
+  const url = buildDiscordOAuthUrl(clientId, state)
+  window.open(url, '_blank')
 }
 
 /**
@@ -154,7 +122,8 @@ export async function handleOIDCOAuth(
   const state = await getOAuthState()
   if (!state) return
 
-  openOAuthWindow(buildOIDCOAuthUrl(authUrl, clientId, state))
+  const url = buildOIDCOAuthUrl(authUrl, clientId, state)
+  window.open(url, '_blank')
 }
 
 /**
@@ -164,5 +133,6 @@ export async function handleLinuxDOOAuth(clientId: string): Promise<void> {
   const state = await getOAuthState()
   if (!state) return
 
-  openOAuthWindow(buildLinuxDOOAuthUrl(clientId, state))
+  const url = buildLinuxDOOAuthUrl(clientId, state)
+  window.open(url, '_blank')
 }

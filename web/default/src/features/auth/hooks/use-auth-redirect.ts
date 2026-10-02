@@ -16,86 +16,61 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { normalizeInterfaceLanguage } from '@/i18n/languages'
 import i18n from 'i18next'
 import { useAuthStore } from '@/stores/auth-store'
+import { useLoginTransition } from '@/stores/login-transition-store'
 import { getSelf } from '@/lib/api'
+import { resolveInternalRedirect } from '@/lib/dom-utils'
 import type { User } from '@/features/users/types'
 import { saveUserId } from '../lib/storage'
-
-function getSavedLanguage(user: User): string | undefined {
-  const userData = user as Record<string, unknown>
-  if (typeof userData.language === 'string') {
-    return userData.language
-  }
-
-  if (typeof userData.setting !== 'string') {
-    return undefined
-  }
-
-  try {
-    const setting = JSON.parse(userData.setting) as { language?: unknown }
-    return typeof setting.language === 'string' ? setting.language : undefined
-  } catch {
-    return undefined
-  }
-}
 
 /**
  * Hook for handling authentication redirects and user data management
  */
 export function useAuthRedirect() {
   const navigate = useNavigate()
-  const { auth } = useAuthStore()
+  const setUser = useAuthStore((state) => state.auth.setUser)
 
   /**
    * Handle successful login
    * @param userData - Optional user data from login response
    * @param redirectTo - Redirect path after login
    */
-  const handleLoginSuccess = async (
-    userData?: { id?: number } | null,
-    redirectTo?: string
-  ) => {
-    // Save user ID if available
-    if (userData?.id) {
-      saveUserId(userData.id)
-    }
-
-    // Fetch and set user data
-    try {
-      const self = await getSelf()
-      if (self?.success && self.data) {
-        const user = self.data as User
-        auth.setUser(user)
-
-        // Update user ID if not already set
-        if (user.id) {
-          saveUserId(user.id)
-        }
-
-        // Restore saved language preference
-        const savedLang = getSavedLanguage(user)
-        if (savedLang && savedLang !== i18n.language) {
-          i18n.changeLanguage(savedLang)
-        }
+  const handleLoginSuccess = useCallback(
+    async (userData?: { id?: number } | null, redirectTo?: string) => {
+      const language = normalizeInterfaceLanguage(i18n.language)
+      // Save user ID if available
+      if (userData?.id) {
+        saveUserId(userData.id)
       }
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to fetch user data:', error)
-    }
 
-    // Navigate to target page
-    const targetPath = redirectTo || '/dashboard'
-    navigate({ to: targetPath, replace: true })
-  }
+      const self = await getSelf()
+      if (!self?.success || !self.data) {
+        throw new Error(i18n.t('Failed to load user profile'))
+      }
+      const user = self.data as User
+      setUser(user)
+      if (user.id) saveUserId(user.id)
+      // The language selected on this device wins over an old account setting.
+      await i18n.changeLanguage(language)
+      const transition = useLoginTransition.getState()
+      await transition.start(user.username || user.display_name || '')
 
-  /**
-   * Redirect to 2FA page
-   */
-  const redirectTo2FA = () => {
-    navigate({ to: '/otp', replace: true })
-  }
+      // Navigate to target page
+      const targetPath = resolveInternalRedirect(redirectTo)
+      try {
+        await navigate({ to: targetPath, replace: true })
+        transition.leave()
+      } catch (error) {
+        transition.reset()
+        throw error
+      }
+    },
+    [navigate, setUser]
+  )
 
   /**
    * Redirect to login page
@@ -113,7 +88,6 @@ export function useAuthRedirect() {
 
   return {
     handleLoginSuccess,
-    redirectTo2FA,
     redirectToLogin,
     redirectToRegister,
   }

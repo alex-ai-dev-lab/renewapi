@@ -16,142 +16,220 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { FileWarning } from 'lucide-react'
+import { useCallback, useMemo } from 'react'
+import { skipToken, useQuery } from '@tanstack/react-query'
+import { useRouter } from '@tanstack/react-router'
+import { ArrowLeft01Icon, ArrowUpRight01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
-import { sanitizeHtml } from '@/lib/sanitize-html'
+import { isHttpUrl, isLikelyHtml } from '@/lib/content-format'
+import { appPath } from '@/lib/deployment-mode'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Markdown } from '@/components/ui/markdown'
-import { Skeleton } from '@/components/ui/skeleton'
-import { PublicLayout } from '@/components/layout'
+import { MinimalPublicShell } from '@/components/layout'
+import { LoadingState } from '@/components/loading-state'
+import { RichContent } from '@/components/rich-content'
+import type { BuiltInLegalDocument } from './legal-documents'
+import './legal.css'
 import type { LegalDocumentResponse } from './types'
 
 type LegalDocumentProps = {
   title: string
   queryKey: string
-  fetchDocument: () => Promise<LegalDocumentResponse>
-  emptyMessage: string
+  fetchDocument?: () => Promise<LegalDocumentResponse>
+  builtInDocument?: BuiltInLegalDocument
+  sections?: RenderedLegalSection[]
+  loading?: boolean
+  emptyMessage?: string
 }
 
-function isValidUrl(value: string) {
-  try {
-    const url = new URL(value)
-    return url.protocol === 'http:' || url.protocol === 'https:'
-  } catch {
-    return false
-  }
+type RenderedLegalSection = {
+  id: string
+  title: string
+  paragraphs?: string[]
+  markdown?: string
 }
 
-function isLikelyHtml(value: string) {
-  return /<\/?[a-z][\s\S]*>/i.test(value)
+type LegalSectionCardProps = {
+  section: RenderedLegalSection
+  index: number
 }
 
-export function LegalDocument({
-  title,
-  queryKey,
-  fetchDocument,
-  emptyMessage,
-}: LegalDocumentProps) {
-  const { t } = useTranslation()
-  const { data, isLoading } = useQuery({
-    queryKey: [queryKey],
-    queryFn: fetchDocument,
-    staleTime: 10 * 60 * 1000,
-  })
-
-  const rawContent = data?.data?.trim() ?? ''
-  const hasContent = rawContent.length > 0
-  const isUrl = hasContent && isValidUrl(rawContent)
-  const isHtml = hasContent && !isUrl && isLikelyHtml(rawContent)
-  const success = data?.success ?? false
-  const safeHtmlContent = isHtml ? sanitizeHtml(rawContent) : ''
-
-  if (isLoading) {
-    return (
-      <PublicLayout>
-        <div className='mx-auto flex max-w-4xl flex-col gap-4 py-8'>
-          <Skeleton className='h-8 w-[45%]' />
-          <Skeleton className='h-4 w-full' />
-          <Skeleton className='h-4 w-[90%]' />
-          <Skeleton className='h-4 w-[80%]' />
-        </div>
-      </PublicLayout>
-    )
-  }
-
-  if (!success || !hasContent) {
-    return (
-      <PublicLayout>
-        <div className='mx-auto max-w-2xl py-8'>
-          <Card className='rounded-md'>
-            <CardHeader className='flex flex-row items-center gap-4'>
-              <div className='bg-muted rounded-lg p-2'>
-                <FileWarning className='text-muted-foreground h-5 w-5' />
-              </div>
-              <div className='space-y-1'>
-                <CardTitle className='text-lg font-semibold'>{title}</CardTitle>
-                <p className='text-muted-foreground text-sm'>
-                  {data?.message || emptyMessage}
-                </p>
-              </div>
-            </CardHeader>
-          </Card>
-        </div>
-      </PublicLayout>
-    )
-  }
-
-  if (isUrl) {
-    return (
-      <PublicLayout>
-        <div className='mx-auto max-w-2xl py-8'>
-          <Card>
-            <CardHeader>
-              <CardTitle>{title}</CardTitle>
-            </CardHeader>
-            <CardContent className='space-y-4'>
-              <p className='text-muted-foreground text-sm'>
-                {t(
-                  'The administrator configured an external link for this document.'
-                )}
-              </p>
-              <Button
-                render={
-                  <a
-                    href={rawContent}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                  />
-                }
-              >
-                {t('View document')}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </PublicLayout>
-    )
-  }
-
+function LegalSectionCard(props: LegalSectionCardProps) {
   return (
-    <PublicLayout>
-      <div className='mx-auto max-w-4xl space-y-6 py-8'>
-        <div className='space-y-2'>
-          <h1 className='text-[26px] font-semibold'>{title}</h1>
-        </div>
-
-        {isHtml ? (
-          <div
-            className='prose prose-neutral dark:prose-invert max-w-none'
-            dangerouslySetInnerHTML={{ __html: safeHtmlContent }}
+    <section className='snowapi-legal-section rounded-2xl px-5 py-6 sm:px-8 sm:py-8'>
+      <div className='flex items-baseline gap-4'>
+        <span className='text-muted-foreground/60 font-mono text-[0.68rem]'>
+          {String(props.index + 1).padStart(2, '0')}
+        </span>
+        <h2 className='text-lg font-semibold tracking-tight sm:text-xl'>
+          {props.section.title}
+        </h2>
+      </div>
+      <div className='text-muted-foreground mt-5 flex flex-col gap-4 text-sm leading-7 sm:text-[0.94rem] sm:leading-7'>
+        {props.section.markdown !== undefined ? (
+          <RichContent
+            mode='markdown'
+            content={props.section.markdown}
+            className='prose-neutral dark:prose-invert max-w-none'
           />
         ) : (
-          <Markdown className='prose-neutral dark:prose-invert max-w-none'>
-            {rawContent}
-          </Markdown>
+          props.section.paragraphs?.map((paragraph) => (
+            <p key={paragraph}>{paragraph}</p>
+          ))
         )}
       </div>
-    </PublicLayout>
+    </section>
+  )
+}
+
+function parseCustomMarkdown(title: string, content: string) {
+  const lines = content.split(/\r?\n/)
+  const sections: RenderedLegalSection[] = []
+  let currentTitle = title
+  let currentLines: string[] = []
+
+  const commit = () => {
+    const markdown = currentLines.join('\n').trim()
+    if (!markdown && sections.length > 0) return
+    sections.push({
+      id: `custom-${sections.length + 1}`,
+      title: currentTitle,
+      markdown,
+    })
+  }
+
+  lines.forEach((line) => {
+    const heading = /^##\s+(.+)$/.exec(line)
+    if (!heading) {
+      currentLines.push(line)
+      return
+    }
+
+    if (currentLines.some((item) => item.trim()) || sections.length > 0) {
+      commit()
+    }
+    currentTitle = heading[1].trim()
+    currentLines = []
+  })
+  commit()
+  return sections
+}
+
+export function LegalDocument(props: LegalDocumentProps) {
+  const { t } = useTranslation()
+  const { history } = useRouter()
+  const { data, isLoading: documentLoading } = useQuery({
+    queryKey: [props.queryKey],
+    queryFn: props.fetchDocument ?? skipToken,
+    enabled: Boolean(props.fetchDocument) && !props.sections,
+    staleTime: 10 * 60 * 1000,
+  })
+  const isLoading = props.loading ?? documentLoading
+
+  const rawContent = data?.data?.trim() ?? ''
+  const isExternal = rawContent.length > 0 && isHttpUrl(rawContent)
+  const contentIsHtml = rawContent.length > 0 && isLikelyHtml(rawContent)
+  const sections = useMemo<RenderedLegalSection[]>(() => {
+    if (props.sections) return props.sections
+    if (rawContent && !isExternal && !contentIsHtml) {
+      return parseCustomMarkdown(props.title, rawContent)
+    }
+
+    return (props.builtInDocument?.sections ?? []).map((section) => ({
+      id: section.id,
+      title: t(section.titleKey),
+      paragraphs: section.contentKeys.map((key) => t(key)),
+    }))
+  }, [
+    contentIsHtml,
+    isExternal,
+    props.builtInDocument?.sections,
+    props.sections,
+    props.title,
+    rawContent,
+    t,
+  ])
+
+  const goBack = useCallback(() => {
+    if (window.history.length > 1) {
+      history.go(-1)
+      return
+    }
+    window.location.assign(appPath('/'))
+  }, [history])
+
+  return (
+    <MinimalPublicShell className='snowapi-legal-page' logoOnly>
+      <div className='mx-auto w-full max-w-4xl pb-20 sm:pb-24'>
+        <Button
+          type='button'
+          variant='ghost'
+          className='mt-3 -ml-2 rounded-full px-3 text-xs'
+          onClick={goBack}
+        >
+          <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} />
+          {t('Back')}
+        </Button>
+
+        <header className='max-w-3xl pt-10 pb-12 sm:pt-16 sm:pb-16'>
+          <h1 className='text-3xl font-semibold tracking-[-0.035em] sm:text-5xl'>
+            {props.title}
+          </h1>
+        </header>
+
+        {isLoading ? <LoadingState className='min-h-[42svh]' /> : null}
+        {!isLoading && sections.length === 0 && props.emptyMessage ? (
+          <p className='text-muted-foreground'>{props.emptyMessage}</p>
+        ) : null}
+
+        {!isLoading && isExternal ? (
+          <section className='snowapi-legal-section rounded-2xl p-6 sm:p-8'>
+            <h2 className='text-xl font-semibold tracking-tight'>
+              {props.title}
+            </h2>
+            <p className='text-muted-foreground mt-3 text-sm leading-7'>
+              {t(
+                'The administrator configured an external link for this document.'
+              )}
+            </p>
+            <Button
+              className='mt-6 rounded-full'
+              render={
+                <a
+                  href={rawContent}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                />
+              }
+            >
+              {t('View document')}
+              <HugeiconsIcon icon={ArrowUpRight01Icon} strokeWidth={2} />
+            </Button>
+          </section>
+        ) : null}
+
+        {!isLoading && contentIsHtml ? (
+          <div className='snowapi-legal-section overflow-hidden rounded-2xl p-1'>
+            <RichContent
+              mode='html'
+              htmlVariant='isolated'
+              content={rawContent}
+            />
+          </div>
+        ) : null}
+
+        {!isLoading && !isExternal && !contentIsHtml ? (
+          <article className='snowapi-legal-stack'>
+            {sections.map((section, index) => (
+              <LegalSectionCard
+                key={section.id}
+                section={section}
+                index={index}
+              />
+            ))}
+          </article>
+        ) : null}
+      </div>
+    </MinimalPublicShell>
   )
 }

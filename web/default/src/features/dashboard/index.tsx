@@ -16,36 +16,32 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  useState,
-  useCallback,
-  useEffect,
-  useMemo,
-  lazy,
-  Suspense,
-} from 'react'
+import { useState, useCallback, useMemo, lazy, Suspense } from 'react'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
-import '@/styles/obsidian-dashboard.css'
+import { Eye, EyeOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
-import { useSystemConfigStore } from '@/stores/system-config-store'
 import { ROLE } from '@/lib/roles'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { SectionPageLayout } from '@/components/layout'
-import { SegmentedTabs } from '@/components/page-primitives'
 import { FadeIn } from '@/components/page-transition'
-import { ChannelAnalyticsDashboard } from './components/channels/channel-analytics-dashboard'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
-import {
-  DASHBOARD_CHART_PREFERENCES_STORAGE_KEY,
-  DEFAULT_TIME_GRANULARITY,
-  TIME_GRANULARITY_STORAGE_KEY,
-} from './constants'
+import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
   buildDefaultDashboardFilters,
+  getDefaultDays,
   getSavedChartPreferences,
+  getSavedGranularity,
   saveChartPreferences,
 } from './lib'
 import {
@@ -53,13 +49,31 @@ import {
   DASHBOARD_DEFAULT_SECTION,
   DASHBOARD_SECTION_IDS,
 } from './section-registry'
-import {
-  type DashboardChartPreferences,
-  type DashboardFilters,
-  type QuotaDataItem,
+import type {
+  DashboardChartPreferences,
+  DashboardFilters,
+  QuotaDataItem,
+  UserChartsFilters,
 } from './types'
 
 const route = getRouteApi('/_authenticated/dashboard/$section')
+
+const LOG_STAT_CARD_FALLBACK_KEYS = [
+  'count',
+  'quota',
+  'tokens',
+  'average-rpm',
+  'average-tpm',
+] as const
+const PERFORMANCE_METRIC_FALLBACK_KEYS = [
+  'success-rate',
+  'average-latency',
+  'throughput',
+] as const
+const PERFORMANCE_MODEL_FALLBACK_KEYS = [
+  'primary-model',
+  'secondary-model',
+] as const
 
 const LazyLogStatCards = lazy(() =>
   import('./components/models/log-stat-cards').then((m) => ({
@@ -70,12 +84,6 @@ const LazyLogStatCards = lazy(() =>
 const LazyModelCharts = lazy(() =>
   import('./components/models/model-charts').then((m) => ({
     default: m.ModelCharts,
-  }))
-)
-
-const LazyModelAnalyticsDashboard = lazy(() =>
-  import('./model-analytics-dashboard').then((m) => ({
-    default: m.ModelAnalyticsDashboard,
   }))
 )
 
@@ -91,27 +99,43 @@ const LazyPerformanceOverview = lazy(() =>
   }))
 )
 
+const LazyGlobalTokenUsagePanel = lazy(() =>
+  import('./components/overview/global-token-usage-panel').then((m) => ({
+    default: m.GlobalTokenUsagePanel,
+  }))
+)
+
 const LazyUserCharts = lazy(() =>
   import('./components/users/user-charts').then((m) => ({
     default: m.UserCharts,
   }))
 )
 
-const LazyUserOperationsPanel = lazy(() =>
-  import('./components/users/user-operations-panel').then((m) => ({
-    default: m.UserOperationsPanel,
+const LazyFlowCharts = lazy(() =>
+  import('./components/flow/flow-charts').then((m) => ({
+    default: m.FlowCharts,
   }))
 )
 
 function LogStatCardsFallback() {
   return (
-    <div className='overflow-hidden rounded-lg border'>
+    <div className='snowapi-rainflow-panel overflow-hidden'>
       <div className='divide-border/60 grid grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className='px-4 py-3.5 sm:px-5 sm:py-4'>
-            <Skeleton className='h-3.5 w-16' />
-            <Skeleton className='mt-2 h-7 w-20' />
-            <Skeleton className='mt-1.5 h-3.5 w-28' />
+        {LOG_STAT_CARD_FALLBACK_KEYS.map((key, index) => (
+          <div
+            key={key}
+            className={cn(
+              'px-2.5 py-1.5 sm:px-5 sm:py-4',
+              index === LOG_STAT_CARD_FALLBACK_KEYS.length - 1 &&
+                'col-span-2 sm:col-span-1'
+            )}
+          >
+            <div className='flex items-center gap-1.5 sm:gap-2'>
+              <Skeleton className='size-4 rounded-sm sm:size-7 sm:rounded-md' />
+              <Skeleton className='h-4 w-16' />
+            </div>
+            <Skeleton className='mt-1 h-5 w-16 sm:mt-2 sm:h-7 sm:w-20' />
+            <Skeleton className='mt-1 hidden h-3.5 w-28 md:block' />
           </div>
         ))}
       </div>
@@ -121,7 +145,7 @@ function LogStatCardsFallback() {
 
 function ModelChartsFallback() {
   return (
-    <div className='overflow-hidden rounded-lg border'>
+    <div className='snowapi-rainflow-panel overflow-hidden'>
       <div className='flex items-center justify-between border-b px-4 py-3 sm:px-5'>
         <Skeleton className='h-5 w-32' />
         <Skeleton className='h-8 w-72' />
@@ -135,20 +159,20 @@ function ModelChartsFallback() {
 
 function PerformanceOverviewFallback() {
   return (
-    <div className='overflow-hidden rounded-lg border'>
+    <div className='snowapi-rainflow-panel overflow-hidden'>
       <div className='flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-5'>
         <div className='flex items-center gap-2'>
           <Skeleton className='h-4 w-24' />
         </div>
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className='flex items-center gap-1.5'>
+        {PERFORMANCE_METRIC_FALLBACK_KEYS.map((key) => (
+          <div key={key} className='flex items-center gap-1.5'>
             <Skeleton className='h-3 w-14' />
             <Skeleton className='h-4 w-16' />
           </div>
         ))}
         <div className='ml-auto flex items-center gap-2'>
-          {Array.from({ length: 2 }).map((_, i) => (
-            <Skeleton key={i} className='h-5 w-28 rounded-full' />
+          {PERFORMANCE_MODEL_FALLBACK_KEYS.map((key) => (
+            <Skeleton key={key} className='h-5 w-28 rounded-full' />
           ))}
         </div>
       </div>
@@ -163,11 +187,11 @@ const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   models: {
     titleKey: 'Model Call Analytics',
   },
-  channels: {
-    titleKey: 'Channel Analytics',
+  flow: {
+    titleKey: 'Flow',
   },
   users: {
-    titleKey: 'User Analytics',
+    titleKey: 'User Token Consumption',
   },
 }
 
@@ -175,65 +199,29 @@ export function Dashboard() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const params = route.useParams()
-  const search = route.useSearch()
-  const userRole = useAuthStore((state) => state.auth.user?.role)
-  const dashboardDefaults = useSystemConfigStore(
-    (state) => state.config.dashboardDefaults
-  )
-  const systemConfigLoading = useSystemConfigStore((state) => state.loading)
+  const user = useAuthStore((state) => state.auth.user)
+  const userRole = user?.role
   const activeSection = (params.section ??
     DASHBOARD_DEFAULT_SECTION) as DashboardSectionId
-  const defaultChartPreferences = useMemo<DashboardChartPreferences>(
-    () => ({
-      consumptionDistributionChart: dashboardDefaults.consumptionChart,
-      modelAnalyticsChart: dashboardDefaults.modelAnalyticsChart,
-      defaultTimeRangeDays: dashboardDefaults.chartTimeRangeDays,
-      defaultTimeGranularity: dashboardDefaults.chartTimeGranularity,
-    }),
-    [
-      dashboardDefaults.chartTimeGranularity,
-      dashboardDefaults.chartTimeRangeDays,
-      dashboardDefaults.consumptionChart,
-      dashboardDefaults.modelAnalyticsChart,
-    ]
-  )
 
   const [modelData, setModelData] = useState<QuotaDataItem[]>([])
   const [dataLoading, setDataLoading] = useState(false)
   const [chartPreferences, setChartPreferences] =
-    useState<DashboardChartPreferences>(() =>
-      getSavedChartPreferences(defaultChartPreferences)
-    )
+    useState<DashboardChartPreferences>(() => getSavedChartPreferences())
   const [modelFilters, setModelFilters] = useState<DashboardFilters>(() =>
-    buildDefaultDashboardFilters(
-      getSavedChartPreferences(defaultChartPreferences)
-    )
+    buildDefaultDashboardFilters(getSavedChartPreferences())
   )
-
-  const [hasSavedChartPreferences, setHasSavedChartPreferences] = useState(
+  const [userChartsFilters, setUserChartsFilters] = useState<UserChartsFilters>(
     () => {
-      if (typeof window === 'undefined') return false
-      try {
-        return (
-          window.localStorage.getItem(
-            DASHBOARD_CHART_PREFERENCES_STORAGE_KEY
-          ) != null ||
-          window.localStorage.getItem(TIME_GRANULARITY_STORAGE_KEY) != null
-        )
-      } catch {
-        return false
+      const granularity = getSavedGranularity()
+      return {
+        timeGranularity: granularity,
+        selectedRange: getDefaultDays(granularity),
+        topUserLimit: 10,
       }
     }
   )
-  const [appliedDefaults, setAppliedDefaults] =
-    useState<DashboardChartPreferences | null>(null)
-  if (!systemConfigLoading && appliedDefaults !== defaultChartPreferences) {
-    setAppliedDefaults(defaultChartPreferences)
-    if (!hasSavedChartPreferences) {
-      setChartPreferences(defaultChartPreferences)
-      setModelFilters(buildDefaultDashboardFilters(defaultChartPreferences))
-    }
-  }
+  const [flowSensitiveVisible, setFlowSensitiveVisible] = useState(true)
 
   const handleFilterChange = useCallback((filters: DashboardFilters) => {
     setModelFilters(filters)
@@ -255,7 +243,6 @@ export function Dashboard() {
     (preferences: DashboardChartPreferences) => {
       setChartPreferences(preferences)
       setModelFilters(buildDefaultDashboardFilters(preferences))
-      setHasSavedChartPreferences(true)
       saveChartPreferences(preferences)
     },
     []
@@ -263,46 +250,24 @@ export function Dashboard() {
 
   const meta = SECTION_META[activeSection] ?? SECTION_META.overview
   const isAdmin = Boolean(userRole && userRole >= ROLE.ADMIN)
-  const visibleSections = useMemo(() => {
-    const configured = dashboardDefaults.visibleSections.filter(
-      (section): section is DashboardSectionId =>
-        DASHBOARD_SECTION_IDS.includes(section as DashboardSectionId)
-    )
-    const allowed = configured.filter(
-      (section) => !['channels', 'users'].includes(section) || isAdmin
-    )
-    return allowed.length > 0 ? allowed : (['overview'] as DashboardSectionId[])
-  }, [dashboardDefaults.visibleSections, isAdmin])
-  useEffect(() => {
-    if (systemConfigLoading || visibleSections.includes(activeSection)) return
-    void navigate({
-      to: '/dashboard/$section',
-      params: { section: visibleSections[0] },
-      search: {
-        time_range: search.time_range,
-      },
-      replace: true,
-    })
-  }, [
-    activeSection,
-    navigate,
-    search.time_range,
-    systemConfigLoading,
-    visibleSections,
-  ])
+  const visibleSections = useMemo(
+    () =>
+      DASHBOARD_SECTION_IDS.filter(
+        (section) => section !== 'overview' && (section !== 'users' || isAdmin)
+      ),
+    [isAdmin]
+  )
   const handleSectionChange = useCallback(
     (section: string) => {
       void navigate({
         to: '/dashboard/$section',
         params: { section: section as DashboardSectionId },
-        search: {
-          time_range: search.time_range,
-        },
       })
     },
-    [navigate, search.time_range]
+    [navigate]
   )
-  const showSectionTabs = visibleSections.length > 1
+  const showSectionTabs =
+    activeSection !== 'overview' && visibleSections.length > 1
   const modelActions =
     activeSection === 'models' ? (
       <>
@@ -312,34 +277,83 @@ export function Dashboard() {
         />
         <ModelsFilter
           preferences={chartPreferences}
+          currentFilters={modelFilters}
           onFilterChange={handleFilterChange}
           onReset={handleResetFilters}
         />
       </>
     ) : null
+  const flowActions =
+    activeSection === 'flow' ? (
+      <>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant='ghost'
+                size='icon'
+                onClick={() => setFlowSensitiveVisible((prev) => !prev)}
+                aria-label={
+                  flowSensitiveVisible
+                    ? t('Hide sensitive data')
+                    : t('Show sensitive data')
+                }
+                className='text-muted-foreground hover:text-foreground size-8'
+              />
+            }
+          >
+            {flowSensitiveVisible ? <Eye /> : <EyeOff />}
+          </TooltipTrigger>
+          <TooltipContent>
+            {flowSensitiveVisible
+              ? t('Hide sensitive data')
+              : t('Show sensitive data')}
+          </TooltipContent>
+        </Tooltip>
+        <ModelsFilter
+          preferences={chartPreferences}
+          currentFilters={modelFilters}
+          onFilterChange={handleFilterChange}
+          onReset={handleResetFilters}
+          titleKey='Flow Filters'
+          descriptionKey='Filter the traffic flow view by time range and user.'
+        />
+      </>
+    ) : null
+  const sectionActions = modelActions ?? flowActions
 
   return (
     <SectionPageLayout>
-      <SectionPageLayout.Title>{t(meta.titleKey)}</SectionPageLayout.Title>
+      <SectionPageLayout.Title>
+        {activeSection === 'overview'
+          ? user?.display_name || user?.username || t(meta.titleKey)
+          : t(meta.titleKey)}
+      </SectionPageLayout.Title>
+      {activeSection === 'overview' ? (
+        <SectionPageLayout.Description>
+          {t('Monitor balance, usage, and request volume')}
+        </SectionPageLayout.Description>
+      ) : null}
       <SectionPageLayout.Content>
-        <div className='obsidian-dashboard space-y-3 sm:space-y-4'>
-          {(showSectionTabs || modelActions != null) && (
+        <div className='space-y-3 sm:space-y-4'>
+          {activeSection !== 'overview' && (
             <div className='flex flex-wrap items-center justify-between gap-1.5 sm:gap-2'>
               {showSectionTabs ? (
-                <SegmentedTabs
-                  value={activeSection}
-                  onValueChange={handleSectionChange}
-                  options={visibleSections.map((section) => ({
-                    value: section,
-                    label: t(SECTION_META[section].titleKey),
-                  }))}
-                />
+                <Tabs value={activeSection} onValueChange={handleSectionChange}>
+                  <TabsList className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'>
+                    {visibleSections.map((section) => (
+                      <TabsTrigger key={section} value={section}>
+                        {t(SECTION_META[section].titleKey)}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
               ) : (
                 <div />
               )}
-              {modelActions != null && (
+              {sectionActions != null && (
                 <div className='flex shrink-0 flex-wrap items-center gap-1.5 sm:gap-2'>
-                  {modelActions}
+                  {sectionActions}
                 </div>
               )}
             </div>
@@ -347,13 +361,6 @@ export function Dashboard() {
           {activeSection === 'overview' && <OverviewDashboard />}
           {activeSection === 'models' && (
             <>
-              {isAdmin && (
-                <FadeIn>
-                  <Suspense fallback={<ModelChartsFallback />}>
-                    <LazyModelAnalyticsDashboard />
-                  </Suspense>
-                </FadeIn>
-              )}
               <FadeIn>
                 <Suspense fallback={<LogStatCardsFallback />}>
                   <LazyLogStatCards
@@ -364,12 +371,19 @@ export function Dashboard() {
               </FadeIn>
               {isAdmin && (
                 <FadeIn delay={0.05}>
+                  <Suspense fallback={<ModelChartsFallback />}>
+                    <LazyGlobalTokenUsagePanel />
+                  </Suspense>
+                </FadeIn>
+              )}
+              {isAdmin && (
+                <FadeIn delay={0.1}>
                   <Suspense fallback={<PerformanceOverviewFallback />}>
                     <LazyPerformanceOverview />
                   </Suspense>
                 </FadeIn>
               )}
-              <FadeIn delay={0.1}>
+              <FadeIn delay={0.15}>
                 <Suspense fallback={<ModelChartsFallback />}>
                   <LazyConsumptionDistributionChart
                     data={modelData}
@@ -383,7 +397,7 @@ export function Dashboard() {
                   />
                 </Suspense>
               </FadeIn>
-              <FadeIn delay={0.15}>
+              <FadeIn delay={0.2}>
                 <Suspense fallback={<ModelChartsFallback />}>
                   <LazyModelCharts
                     data={modelData}
@@ -397,24 +411,25 @@ export function Dashboard() {
               </FadeIn>
             </>
           )}
-          {activeSection === 'channels' && isAdmin && (
+          {activeSection === 'users' && (
             <FadeIn>
-              <ChannelAnalyticsDashboard />
+              <Suspense fallback={<ModelChartsFallback />}>
+                <LazyUserCharts
+                  filters={userChartsFilters}
+                  onFiltersChange={setUserChartsFilters}
+                />
+              </Suspense>
             </FadeIn>
           )}
-          {activeSection === 'users' && isAdmin && (
-            <>
-              <FadeIn>
-                <Suspense fallback={<ModelChartsFallback />}>
-                  <LazyUserOperationsPanel />
-                </Suspense>
-              </FadeIn>
-              <FadeIn delay={0.1}>
-                <Suspense fallback={<ModelChartsFallback />}>
-                  <LazyUserCharts />
-                </Suspense>
-              </FadeIn>
-            </>
+          {activeSection === 'flow' && (
+            <FadeIn>
+              <Suspense fallback={<ModelChartsFallback />}>
+                <LazyFlowCharts
+                  filters={modelFilters}
+                  sensitiveVisible={flowSensitiveVisible}
+                />
+              </Suspense>
+            </FadeIn>
           )}
         </div>
       </SectionPageLayout.Content>

@@ -22,6 +22,7 @@ import * as React from 'react'
 import { Dialog as SheetPrimitive } from '@base-ui/react/dialog'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -46,7 +47,7 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
     <SheetPrimitive.Backdrop
       data-slot='sheet-overlay'
       className={cn(
-        'fixed inset-0 z-50 bg-black/10 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-xs',
+        'snowapi-sheet-overlay fixed inset-0 z-50 bg-black/25 supports-backdrop-filter:backdrop-blur-xs',
         className
       )}
       {...props}
@@ -59,11 +60,14 @@ function SheetContent({
   children,
   side = 'right',
   showCloseButton = true,
+  overlayClassName,
   ...props
 }: SheetPrimitive.Popup.Props & {
   side?: 'top' | 'right' | 'bottom' | 'left'
   showCloseButton?: boolean
+  overlayClassName?: string
 }) {
+  const { t } = useTranslation()
   // Side-specific classes are emitted via JS conditionals (rather than
   // `data-[side=*]:` variants) so consumer-provided width overrides such as
   // `sm:max-w-2xl` can be correctly merged by `tailwind-merge` and the CSS
@@ -71,7 +75,7 @@ function SheetContent({
   // and trap the panel at the default `sm:max-w-sm` width.
   return (
     <SheetPortal>
-      <SheetOverlay />
+      <SheetOverlay className={overlayClassName} />
       <SheetPrimitive.Popup
         data-slot='sheet-content'
         data-side={side}
@@ -102,7 +106,7 @@ function SheetContent({
             }
           >
             <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
-            <span className='sr-only'>Close</span>
+            <span className='sr-only'>{t('Close')}</span>
           </SheetPrimitive.Close>
         )}
       </SheetPrimitive.Popup>

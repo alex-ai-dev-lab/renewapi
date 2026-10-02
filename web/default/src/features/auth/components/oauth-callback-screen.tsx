@@ -20,7 +20,7 @@ import { useMemo } from 'react'
 import { Loader2, Send, Shield, UserRound, type LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { SiGithub, SiLinux, SiWechat } from 'react-icons/si'
-import { AuthLayout } from '../auth-layout'
+import { MinimalPublicShell } from '@/components/layout'
 
 type OAuthCallbackScreenProps = {
   provider: string
@@ -90,31 +90,43 @@ export function OAuthCallbackScreen({
       )
 
   return (
-    <AuthLayout>
-      <div className='obsidian-auth-page'>
-        <div className='flex flex-col items-center space-y-4 text-center'>
-          <div className='bg-muted border-border flex size-12 items-center justify-center rounded border'>
-            <Icon className='size-6' />
+    <MinimalPublicShell
+      tone='dark'
+      contentClassName='flex items-center justify-center'
+    >
+      <section className='w-full max-w-lg rounded-2xl bg-[var(--snowapi-public-surface)] px-6 py-7 sm:px-9 sm:py-9'>
+        <div className='flex items-center gap-3'>
+          <div className='flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--snowapi-public-surface-strong)]'>
+            <Icon className='size-5' aria-hidden='true' />
           </div>
-          <div className='space-y-2'>
-            <h1 className='obsidian-auth-title'>{headline}</h1>
-            <p className='obsidian-auth-description'>{description}</p>
+          <div className='min-w-0'>
+            <p className='text-muted-foreground text-xs'>{providerLabel}</p>
+            <h1 className='mt-1 text-xl font-semibold tracking-[-0.03em] sm:text-2xl'>
+              {headline}
+            </h1>
           </div>
         </div>
 
-        <div className='space-y-4 text-center'>
-          <div className='flex items-center justify-center gap-2 text-sm font-medium'>
-            <Loader2 className='h-4 w-4 animate-spin' />
+        <p className='text-muted-foreground mt-5 text-sm leading-6'>
+          {description}
+        </p>
+
+        <div className='mt-7 rounded-xl bg-[var(--snowapi-public-surface-strong)] px-4 py-3.5'>
+          <div className='flex items-center gap-2 text-sm font-medium'>
+            <Loader2 className='size-4 animate-spin' aria-hidden='true' />
             <span>{t('Processing OAuth response...')}</span>
           </div>
-          <p className='text-muted-foreground text-sm'>{secondaryNote}</p>
-          <p className='text-muted-foreground text-xs'>
-            {t(
-              'This may take a few moments while we validate the request and update your session.'
-            )}
-          </p>
         </div>
-      </div>
-    </AuthLayout>
+
+        <p className='text-muted-foreground mt-5 text-xs leading-5'>
+          {secondaryNote}
+        </p>
+        <p className='text-muted-foreground mt-2 text-xs leading-5'>
+          {t(
+            'This may take a few moments while we validate the request and update your session.'
+          )}
+        </p>
+      </section>
+    </MinimalPublicShell>
   )
 }

@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
@@ -30,6 +31,7 @@ interface SignOutDialogProps {
 export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
   const { t } = useTranslation()
   const { auth } = useAuthStore()
+  const navigate = useNavigate()
 
   const handleSignOut = async () => {
     try {
@@ -46,10 +48,7 @@ export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
       /* empty */
     }
     toast.success(t('Signed out'))
-    // Refresh the page to clear all state and update UI
-    if (typeof window !== 'undefined') {
-      window.location.reload()
-    }
+    await navigate({ to: '/', replace: true })
   }
 
   return (

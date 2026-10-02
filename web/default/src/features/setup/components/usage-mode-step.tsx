@@ -82,7 +82,7 @@ export function UsageModeStep({ form }: UsageModeStepProps) {
                 form.clearErrors('usageMode')
                 field.onChange(value as SetupUsageMode)
               }}
-              className='grid min-w-0 gap-2'
+              className='grid gap-3 sm:grid-cols-3'
             >
               {USAGE_MODE_OPTIONS.map(
                 ({ value, titleKey, descriptionKey, icon: Icon }) => {
@@ -91,7 +91,7 @@ export function UsageModeStep({ form }: UsageModeStepProps) {
                       key={value}
                       htmlFor={`usage-mode-${value}`}
                       className={cn(
-                        'hover:border-primary focus-within:border-primary has-data-[checked]:border-primary has-data-[checked]:bg-accent group bg-card border-border flex min-w-0 cursor-pointer flex-col gap-2 rounded-md border p-3 font-normal transition-colors'
+                        'hover:border-primary/40 focus-within:border-primary/50 has-data-[checked]:border-primary has-data-[checked]:ring-primary/20 group bg-card border-muted flex cursor-pointer flex-col gap-3 rounded-xl border p-4 font-normal transition-all has-data-[checked]:ring-2'
                       )}
                     >
                       <div className='flex items-center gap-3'>
@@ -103,11 +103,11 @@ export function UsageModeStep({ form }: UsageModeStepProps) {
                         <div>
                           <Label
                             htmlFor={`usage-mode-${value}`}
-                            className='text-sm leading-none font-semibold'
+                            className='text-base leading-none font-semibold'
                           >
                             {t(titleKey)}
                           </Label>
-                          <p className='text-muted-foreground mt-1 text-xs'>
+                          <p className='text-muted-foreground mt-2 text-sm'>
                             {t(descriptionKey)}
                           </p>
                         </div>

@@ -19,22 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
-import {
-  type SortingState,
-  type VisibilityState,
-  type ColumnPinningState,
-  getCoreRowModel,
-  getFacetedRowModel,
-  getFacetedUniqueValues,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useReactTable,
-} from '@tanstack/react-table'
-import { useDebounce } from '@/hooks'
+import type { Table as TanstackTable } from '@tanstack/react-table'
 import { Database } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { shouldRetryQuery, unwrapApiResponse } from '@/lib/api-errors'
+import { toast } from 'sonner'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
@@ -51,6 +39,8 @@ import {
   DISABLED_ROW_DESKTOP,
   DISABLED_ROW_MOBILE,
   DataTablePage,
+  useDebouncedColumnFilter,
+  useDataTable,
 } from '@/components/data-table'
 import { StatusBadge } from '@/components/status-badge'
 import { getApiKeys, searchApiKeys } from '../api'
@@ -58,16 +48,21 @@ import {
   API_KEY_STATUS,
   API_KEY_STATUS_OPTIONS,
   API_KEY_STATUSES,
+  ERROR_MESSAGES,
 } from '../constants'
-import { type ApiKey } from '../types'
+import type { ApiKey } from '../types'
 import { ApiKeyCell } from './api-keys-cells'
 import { useApiKeysColumns } from './api-keys-columns'
 import { useApiKeys } from './api-keys-provider'
-import { ApiKeysStats } from './api-keys-stats'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { DataTableRowActions } from './data-table-row-actions'
 
 const route = getRouteApi('/_authenticated/keys/')
+const API_KEYS_COLUMN_VISIBILITY_STORAGE_KEY = 'api-keys:column-visibility:v2'
+const API_KEYS_MOBILE_SKELETON_IDS = Array.from(
+  { length: 5 },
+  (_, index) => `api-key-mobile-skeleton-${index + 1}`
+)
 
 function isDisabledApiKeyRow(apiKey: ApiKey) {
   return apiKey.status !== API_KEY_STATUS.ENABLED
@@ -76,9 +71,9 @@ function isDisabledApiKeyRow(apiKey: ApiKey) {
 function ApiKeysMobileSkeleton() {
   return (
     <div className='divide-border overflow-hidden rounded-lg border'>
-      {Array.from({ length: 5 }).map((_, index) => (
+      {API_KEYS_MOBILE_SKELETON_IDS.map((id) => (
         <div
-          key={index}
+          key={id}
           className='space-y-2 border-b px-3 py-2.5 last:border-b-0'
         >
           <div className='flex items-center justify-between'>
@@ -100,7 +95,7 @@ function ApiKeysMobileList({
   table,
   isLoading,
 }: {
-  table: ReturnType<typeof useReactTable<ApiKey>>
+  table: TanstackTable<ApiKey>
   isLoading: boolean
 }) {
   const { t } = useTranslation()
@@ -167,6 +162,7 @@ function ApiKeysMobileList({
               </div>
               <DataTableRowActions row={row} />
             </div>
+
             <div className='flex items-center justify-between gap-2 text-xs'>
               <span className='text-muted-foreground'>{t('Quota')}</span>
               {apiKey.unlimited_quota ? (
@@ -191,14 +187,16 @@ function ApiKeysMobileList({
 export function ApiKeysTable() {
   const { t } = useTranslation()
   const { refreshTrigger } = useApiKeys()
-  const columns = useApiKeysColumns()
-  const [rowSelection, setRowSelection] = useState({})
-  const [sorting, setSorting] = useState<SortingState>([])
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
-  const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({
-    left: ['select', 'name'],
-    right: ['actions'],
-  })
+  const [now, setNow] = useState(() => Date.now())
+  const columns = useApiKeysColumns(now)
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setNow(Date.now())
+    }, 30_000)
+
+    return () => window.clearInterval(intervalId)
+  }, [])
 
   const {
     globalFilter,
@@ -219,31 +217,20 @@ export function ApiKeysTable() {
     ],
   })
 
-  const tokenFilterFromUrl =
-    (columnFilters.find((f) => f.id === '_tokenSearch')?.value as string) || ''
-  const [tokenFilterInput, setTokenFilterInput] = useState(tokenFilterFromUrl)
-  const debouncedTokenFilter = useDebounce(tokenFilterInput, 500)
-
-  useEffect(() => {
-    setTokenFilterInput(tokenFilterFromUrl)
-  }, [tokenFilterFromUrl])
-
-  useEffect(() => {
-    if (debouncedTokenFilter !== tokenFilterFromUrl) {
-      onColumnFiltersChange((prev) => {
-        const filtered = prev.filter((f) => f.id !== '_tokenSearch')
-        return debouncedTokenFilter
-          ? [...filtered, { id: '_tokenSearch', value: debouncedTokenFilter }]
-          : filtered
-      })
-    }
-  }, [debouncedTokenFilter, tokenFilterFromUrl, onColumnFiltersChange])
-
-  const tokenFilter = tokenFilterFromUrl
+  const {
+    value: tokenFilter,
+    inputValue: tokenFilterInput,
+    setInputValue: setTokenFilterInput,
+  } = useDebouncedColumnFilter({
+    columnFilters,
+    columnId: '_tokenSearch',
+    onColumnFiltersChange,
+  })
   const shouldSearch = Boolean(globalFilter?.trim() || tokenFilter.trim())
 
+  // Fetch data with React Query
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const { data, isLoading, isFetching, isError, error } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: [
       'keys',
       pagination.pageIndex + 1,
@@ -253,113 +240,104 @@ export function ApiKeysTable() {
       refreshTrigger,
     ],
     queryFn: async () => {
-      const result = unwrapApiResponse(
-        shouldSearch
-          ? await searchApiKeys({
-              keyword: globalFilter,
-              token: tokenFilter,
-              p: pagination.pageIndex + 1,
-              size: pagination.pageSize,
-            })
-          : await getApiKeys({
-              p: pagination.pageIndex + 1,
-              size: pagination.pageSize,
-            })
-      )
+      const result = shouldSearch
+        ? await searchApiKeys({
+            keyword: globalFilter,
+            token: tokenFilter,
+            p: pagination.pageIndex + 1,
+            size: pagination.pageSize,
+          })
+        : await getApiKeys({
+            p: pagination.pageIndex + 1,
+            size: pagination.pageSize,
+          })
+
+      if (!result.success) {
+        toast.error(
+          result.message ||
+            t(
+              shouldSearch
+                ? ERROR_MESSAGES.SEARCH_FAILED
+                : ERROR_MESSAGES.LOAD_FAILED
+            )
+        )
+        return { items: [], total: 0 }
+      }
 
       return {
         items: result.data?.items || [],
         total: result.data?.total || 0,
       }
     },
-    retry: shouldRetryQuery,
     placeholderData: (previousData) => previousData,
   })
 
   const apiKeys = data?.items || []
 
-  const table = useReactTable({
+  const { table } = useDataTable({
     data: apiKeys,
     columns,
-    state: {
-      sorting,
-      columnVisibility,
-      columnPinning,
-      rowSelection,
-      columnFilters,
-      globalFilter,
-      pagination,
-    },
     enableRowSelection: true,
-    onRowSelectionChange: setRowSelection,
-    onSortingChange: setSorting,
-    onColumnVisibilityChange: setColumnVisibility,
-    onColumnPinningChange: setColumnPinning,
+    initialColumnVisibility: {
+      group: false,
+      model_limits: false,
+      allow_ips: false,
+      created_time: false,
+      accessed_time: false,
+      expired_time: false,
+    },
+    columnFilters,
+    columnVisibilityStorageKey: API_KEYS_COLUMN_VISIBILITY_STORAGE_KEY,
+    globalFilter,
+    pagination,
     globalFilterFn: () => true,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFacetedRowModel: getFacetedRowModel(),
-    getFacetedUniqueValues: getFacetedUniqueValues(),
     onPaginationChange,
     onGlobalFilterChange,
     onColumnFiltersChange,
     manualPagination: true,
-    pageCount: Math.ceil((data?.total || 0) / pagination.pageSize),
+    totalCount: data?.total || 0,
+    ensurePageInRange,
   })
 
-  const pageCount = table.getPageCount()
-  useEffect(() => {
-    ensurePageInRange(pageCount)
-  }, [pageCount, ensurePageInRange])
-
   return (
-    <div className='min-w-0 space-y-4'>
-      <ApiKeysStats apiKeys={apiKeys} />
-
-      <DataTablePage
-        verticalScroll={{ mode: 'page' }}
-        applyHeaderSize
-        table={table}
-        columns={columns}
-        isLoading={isLoading}
-        isFetching={isFetching}
-        isError={isError}
-        errorDescription={error instanceof Error ? error.message : undefined}
-        tableHeaderClassName='sticky top-0 z-10 bg-card'
-        tableClassName='[&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
-        emptyTitle={t('No API Keys Found')}
-        emptyDescription={t(
-          'No API keys available. Create your first API key to get started.'
-        )}
-        skeletonKeyPrefix='api-keys-skeleton'
-        toolbarProps={{
-          searchPlaceholder: t('Filter by name...'),
-          additionalSearch: (
-            <Input
-              placeholder={t('Filter by API key...')}
-              aria-label={t('Filter by API key...')}
-              value={tokenFilterInput}
-              onChange={(e) => setTokenFilterInput(e.target.value)}
-              className='w-full sm:w-50 lg:w-60'
-            />
-          ),
-          filters: [
-            {
-              columnId: 'status',
-              title: t('Status'),
-              options: API_KEY_STATUS_OPTIONS,
-              singleSelect: true,
-            },
-          ],
-        }}
-        mobile={<ApiKeysMobileList table={table} isLoading={isLoading} />}
-        getRowClassName={(row) =>
-          isDisabledApiKeyRow(row.original) ? DISABLED_ROW_DESKTOP : undefined
-        }
-        bulkActions={<DataTableBulkActions table={table} />}
-      />
-    </div>
+    <DataTablePage
+      table={table}
+      columns={columns}
+      isLoading={isLoading}
+      isFetching={isFetching}
+      emptyTitle={t('No API Keys Found')}
+      emptyDescription={t(
+        'No API keys available. Create your first API key to get started.'
+      )}
+      skeletonKeyPrefix='api-keys-skeleton'
+      applyHeaderSize
+      tableClassName='border-0 bg-[color-mix(in_oklch,var(--foreground)_1.25%,var(--background))] shadow-none'
+      tableHeaderClassName='bg-[color-mix(in_oklch,var(--foreground)_2.5%,var(--background))]'
+      toolbarProps={{
+        searchPlaceholder: t('Filter by name...'),
+        additionalSearch: (
+          <Input
+            placeholder={t('Filter by API key...')}
+            aria-label={t('Filter by API key...')}
+            value={tokenFilterInput}
+            onChange={(e) => setTokenFilterInput(e.target.value)}
+            className='w-full sm:w-50 lg:w-60'
+          />
+        ),
+        filters: [
+          {
+            columnId: 'status',
+            title: t('Status'),
+            options: API_KEY_STATUS_OPTIONS,
+            singleSelect: true,
+          },
+        ],
+      }}
+      mobile={<ApiKeysMobileList table={table} isLoading={isLoading} />}
+      getRowClassName={(row) =>
+        isDisabledApiKeyRow(row.original) ? DISABLED_ROW_DESKTOP : undefined
+      }
+      bulkActions={<DataTableBulkActions table={table} />}
+    />
   )
 }

@@ -18,6 +18,24 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { User } from '@/features/users/types'
 
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
 // ============================================================================
 // API Payloads
 // ============================================================================
@@ -28,21 +46,19 @@ export interface LoginPayload {
   turnstile?: string
 }
 
-export interface TwoFAPayload {
-  code: string
-}
-
 export interface RegisterPayload {
+  aff_code?: string
   username: string
   password: string
   email?: string
   verification_code?: string
-  aff_code?: string
   turnstile?: string
 }
 
-export interface PasswordResetPayload {
-  email: string
+export interface InvitationRegisterPayload {
+  invitation_code: string
+  username: string
+  password: string
   turnstile?: string
 }
 
@@ -69,12 +85,6 @@ export interface LoginResponse {
   }
 }
 
-export interface Login2FAResponse {
-  success: boolean
-  message: string
-  data?: User
-}
-
 export interface ApiResponse {
   success: boolean
   message: string
@@ -89,6 +99,7 @@ export interface SystemStatus {
   success?: boolean
   message?: string
   data?: {
+    home_design?: 'poolside' | 'snowflake'
     version?: string
     system_name?: string
     logo?: string
@@ -100,6 +111,7 @@ export interface SystemStatus {
     oidc_authorization_endpoint?: string
     oidc_client_id?: string
     linuxdo_oauth?: boolean
+    linuxdo_oauth_invitation_required?: boolean
     linuxdo_client_id?: string
     telegram_oauth?: boolean
     passkey_login?: boolean
@@ -128,10 +140,12 @@ export interface SystemStatus {
     register_enabled?: boolean
     password_login_enabled?: boolean
     password_register_enabled?: boolean
+    invitation_registration_enabled?: boolean
     custom_oauth_providers?: CustomOAuthProviderInfo[]
     [key: string]: unknown
   }
   // Allow direct access to common properties
+  home_design?: 'poolside' | 'snowflake'
   version?: string
   system_name?: string
   logo?: string
@@ -143,6 +157,7 @@ export interface SystemStatus {
   oidc_authorization_endpoint?: string
   oidc_client_id?: string
   linuxdo_oauth?: boolean
+  linuxdo_oauth_invitation_required?: boolean
   linuxdo_client_id?: string
   telegram_oauth?: boolean
   passkey_login?: boolean
@@ -171,6 +186,7 @@ export interface SystemStatus {
   register_enabled?: boolean
   password_login_enabled?: boolean
   password_register_enabled?: boolean
+  invitation_registration_enabled?: boolean
   custom_oauth_providers?: CustomOAuthProviderInfo[]
   [key: string]: unknown
 }
@@ -203,4 +219,19 @@ export interface CustomOAuthProviderInfo {
 
 export interface AuthFormProps extends React.HTMLAttributes<HTMLFormElement> {
   redirectTo?: string
+}
+
+export interface TwoFAPayload {
+  code: string
+}
+
+export interface PasswordResetPayload {
+  email: string
+  turnstile?: string
+}
+
+export interface Login2FAResponse {
+  success: boolean
+  message: string
+  data?: User
 }

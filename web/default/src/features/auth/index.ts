@@ -22,10 +22,8 @@ For commercial licensing, please contact support@quantumnous.com
 
 export {
   login,
-  login2fa,
   logout,
   register,
-  sendPasswordResetEmail,
   sendEmailVerification,
   bindEmail,
   getOAuthState,
@@ -40,10 +38,7 @@ export {
 export type {
   LoginPayload,
   LoginResponse,
-  Login2FAResponse,
-  TwoFAPayload,
   RegisterPayload,
-  PasswordResetPayload,
   EmailVerificationPayload,
   BindEmailPayload,
   ApiResponse,
@@ -59,16 +54,9 @@ export type {
 export {
   loginFormSchema,
   registerFormSchema,
-  forgotPasswordFormSchema,
-  otpFormSchema,
   PASSWORD_MIN_LENGTH,
   PASSWORD_MAX_LENGTH,
-  OTP_LENGTH,
-  BACKUP_CODE_LENGTH,
-  BACKUP_CODE_REGEX,
-  OTP_REGEX,
   EMAIL_VERIFICATION_COUNTDOWN,
-  PASSWORD_RESET_COUNTDOWN,
 } from './constants'
 
 // ============================================================================
@@ -84,21 +72,9 @@ export {
   hasOAuthProviders,
 } from './lib/oauth'
 
-export {
-  saveUserId,
-  getUserId,
-  removeUserId,
-  getAffiliateCode,
-  saveAffiliateCode,
-} from './lib/storage'
+export { saveUserId, getUserId, removeUserId } from './lib/storage'
 
-export {
-  isValidOTP,
-  isValidBackupCode,
-  formatBackupCode,
-  cleanBackupCode,
-  isValidEmail,
-} from './lib/validation'
+export { isValidEmail } from './lib/validation'
 
 // ============================================================================
 // Hooks
@@ -119,5 +95,3 @@ export { TermsFooter } from './components/terms-footer'
 export { LegalConsent } from './components/legal-consent'
 export { SignIn } from './sign-in'
 export { SignUp } from './sign-up'
-export { ForgotPassword } from './forgot-password'
-export { Otp } from './otp'

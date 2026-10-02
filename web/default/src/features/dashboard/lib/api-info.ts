@@ -23,18 +23,21 @@ import type { PingStatus } from '@/features/dashboard/types'
  */
 export function getLatencyColorClass(latency: number): string {
   if (latency < 200) {
-    return 'text-success'
+    return 'text-green-600 dark:text-green-400'
   }
   if (latency < 500) {
-    return 'text-warning'
+    return 'text-yellow-600 dark:text-yellow-400'
   }
-  return 'text-destructive'
+  return 'text-red-600 dark:text-red-400'
 }
 
 /**
  * Test URL latency
  */
 export async function testUrlLatency(url: string): Promise<PingStatus> {
+  if (import.meta.env.VITE_SNOWAPI_DEMO === 'true') {
+    return { latency: 180, testing: false, error: false }
+  }
   try {
     const startTime = performance.now()
     await fetch(url, {
@@ -46,7 +49,7 @@ export async function testUrlLatency(url: string): Promise<PingStatus> {
     const latency = Math.round(endTime - startTime)
 
     return { latency, testing: false, error: false }
-  } catch (_error) {
+  } catch {
     return { latency: null, testing: false, error: true }
   }
 }
@@ -55,6 +58,7 @@ export async function testUrlLatency(url: string): Promise<PingStatus> {
  * Open external speed test link
  */
 export function openExternalSpeedTest(url: string): void {
+  if (import.meta.env.VITE_SNOWAPI_DEMO === 'true') return
   const encodedUrl = encodeURIComponent(url)
   const speedTestUrl = `https://www.tcptest.cn/http/${encodedUrl}`
   window.open(speedTestUrl, '_blank', 'noopener,noreferrer')

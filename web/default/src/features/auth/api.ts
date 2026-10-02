@@ -20,13 +20,12 @@ import { api } from '@/lib/api'
 import type {
   LoginPayload,
   LoginResponse,
+  RegisterPayload,
+  InvitationRegisterPayload,
+  ApiResponse,
   Login2FAResponse,
   TwoFAPayload,
-  RegisterPayload,
-  ApiResponse,
 } from './types'
-
-const GITHUB_OAUTH_AUTHORIZE_URL = 'https://github.com/login/oauth/authorize'
 
 // ============================================================================
 // Authentication APIs
@@ -38,22 +37,26 @@ const GITHUB_OAUTH_AUTHORIZE_URL = 'https://github.com/login/oauth/authorize'
 
 // User login with username and password
 export async function login(payload: LoginPayload) {
+  const turnstile = payload.turnstile ?? ''
   const res = await api.post<LoginResponse>(
-    '/api/user/login',
+    `/api/user/login?turnstile=${turnstile}`,
     {
       username: payload.username,
       password: payload.password,
-    },
-    // Use axios params so the token is percent-encoded, matching register().
-    // The previous template string interpolated it into the query verbatim.
-    { params: { turnstile: payload.turnstile ?? '' } }
+    }
   )
   return res.data
 }
 
-// Two-factor authentication login
-export async function login2fa(payload: TwoFAPayload) {
-  const res = await api.post<Login2FAResponse>('/api/user/login/2fa', payload)
+export async function invitationLogin(payload: LoginPayload) {
+  const turnstile = payload.turnstile ?? ''
+  const res = await api.post<LoginResponse>(
+    `/api/user/invitation-login?turnstile=${turnstile}`,
+    {
+      username: payload.username,
+      password: payload.password,
+    }
+  )
   return res.data
 }
 
@@ -64,50 +67,33 @@ export async function logout(): Promise<ApiResponse> {
 }
 
 // ----------------------------------------------------------------------------
-// Password Management
-// ----------------------------------------------------------------------------
-
-// Send password reset email
-export async function sendPasswordResetEmail(
-  email: string,
-  turnstile?: string
-): Promise<ApiResponse> {
-  const res = await api.get('/api/reset_password', {
-    params: { email, turnstile },
-  })
-  return res.data
-}
-
-// ----------------------------------------------------------------------------
 // OAuth
 // ----------------------------------------------------------------------------
 
-/**
- * Start GitHub OAuth flow
- *
- * Deprecated: this duplicates buildGitHubOAuthUrl + handleGitHubOAuth in
- * `@/lib/oauth`, which is the implementation the sign-in screen uses. Kept as a
- * thin wrapper so existing callers keep working; migrate them to `@/lib/oauth`
- * and delete this function.
- */
+// Start GitHub OAuth flow
 export async function githubOAuthStart(clientId: string, state: string) {
-  // Build with URL/searchParams instead of string concatenation: clientId and
-  // state went into the query unencoded before.
-  const url = new URL(GITHUB_OAUTH_AUTHORIZE_URL)
-  url.searchParams.set('client_id', clientId)
-  url.searchParams.set('state', state)
-  url.searchParams.set('scope', 'user:email')
+  const url = `https://github.com/login/oauth/authorize?client_id=${clientId}&state=${state}&scope=user:email`
+  window.open(url)
+}
 
-  // noopener/noreferrer: without them the opened page can reach back through
-  // window.opener and navigate this tab (reverse tabnabbing).
-  window.open(url.toString(), '_blank', 'noopener,noreferrer')
+type OAuthStateOptions = {
+  provider?: string
+  invitationCode?: string
 }
 
 // Get OAuth state for CSRF protection
-export async function getOAuthState(): Promise<string> {
+export async function getOAuthState(
+  options: OAuthStateOptions = {}
+): Promise<string> {
   const aff =
     typeof window !== 'undefined' ? (localStorage.getItem('aff') ?? '') : ''
-  const res = await api.get('/api/oauth/state', { params: { aff } })
+  const res = await api.get('/api/oauth/state', {
+    params: {
+      aff,
+      provider: options.provider,
+      invitation_code: options.invitationCode?.trim() || undefined,
+    },
+  })
   if (res.data?.success) return res.data.data
   return ''
 }
@@ -125,6 +111,15 @@ export async function wechatLoginByCode(code: string): Promise<ApiResponse> {
 // User registration
 export async function register(payload: RegisterPayload): Promise<ApiResponse> {
   const res = await api.post(`/api/user/register`, payload, {
+    params: { turnstile: payload.turnstile ?? '' },
+  })
+  return res.data
+}
+
+export async function invitationRegister(
+  payload: InvitationRegisterPayload
+): Promise<ApiResponse> {
+  const res = await api.post('/api/user/invitation-register', payload, {
     params: { turnstile: payload.turnstile ?? '' },
   })
   return res.data
@@ -149,6 +144,27 @@ export async function bindEmail(
   const res = await api.post('/api/oauth/email/bind', {
     email,
     code,
+  })
+  return res.data
+}
+
+// Two-factor authentication login
+export async function login2fa(payload: TwoFAPayload) {
+  const res = await api.post<Login2FAResponse>('/api/user/login/2fa', payload)
+  return res.data
+}
+
+// ----------------------------------------------------------------------------
+// Password Management
+// ----------------------------------------------------------------------------
+
+// Send password reset email
+export async function sendPasswordResetEmail(
+  email: string,
+  turnstile?: string
+): Promise<ApiResponse> {
+  const res = await api.get('/api/reset_password', {
+    params: { email, turnstile },
   })
   return res.data
 }

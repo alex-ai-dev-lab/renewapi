@@ -16,15 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-  type ColumnDef,
-  type RowSelectionState,
-} from '@tanstack/react-table'
+import type { ColumnDef, RowSelectionState } from '@tanstack/react-table'
 import {
   Search,
   Info,
@@ -37,14 +31,6 @@ import { toast } from 'sonner'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import {
   Popover,
@@ -59,14 +45,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { DataTableView, useDataTable } from '@/components/data-table'
+import { Dialog } from '@/components/dialog'
 import { StatusBadge } from '@/components/status-badge'
 import { applyUpstreamOverwrite } from '../../api'
 import { modelsQueryKeys, vendorsQueryKeys } from '../../lib'
@@ -84,6 +64,8 @@ const FIELD_LABELS: Record<string, string> = {
   quota_types: 'Quota Types',
   enable_groups: 'Enable Groups',
 }
+
+const PAGE_SIZE_OPTIONS = [5, 10, 20, 50] as const
 
 const formatValue = (value: unknown) => {
   if (value === null || value === undefined) return '—'
@@ -135,16 +117,26 @@ export function UpstreamConflictDialog({
   const [search, setSearch] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
-  const [pageSize, setPageSize] = useState(100)
-  const [pageIndex, setPageIndex] = useState(0)
+  const [pageSize, setPageSize] = useState(10)
+  const [pageIndexOverride, setPageIndex] = useState(0)
 
-  useEffect(() => {
-    if (open) {
-      setRowSelection({})
-      setSearch('')
-      setPageIndex(0)
-    }
-  }, [open, upstreamConflicts])
+  const [previousInputs3674, setPreviousInputs3674] = useState(() => [
+    open,
+    upstreamConflicts,
+  ])
+  if (
+    !Object.is(previousInputs3674[0], open) ||
+    !Object.is(previousInputs3674[1], upstreamConflicts)
+  ) {
+    setPreviousInputs3674([open, upstreamConflicts])
+    ;(() => {
+      if (open) {
+        setRowSelection({})
+        setSearch('')
+        setPageIndex(0)
+      }
+    })()
+  }
 
   const conflictRows = useMemo<ConflictFieldRow[]>(() => {
     return upstreamConflicts.flatMap((conflict) => {
@@ -156,12 +148,12 @@ export function UpstreamConflictDialog({
         id: `${conflict.model_name}-${field.field}`,
         modelName: conflict.model_name,
         fieldKey: field.field,
-        fieldLabel: FIELD_LABELS[field.field] || field.field,
+        fieldLabel: t(FIELD_LABELS[field.field] || field.field),
         localValue: field.local,
         upstreamValue: field.upstream,
       }))
     })
-  }, [upstreamConflicts])
+  }, [upstreamConflicts, t])
 
   const totalModels = upstreamConflicts.length
   const totalFields = conflictRows.length
@@ -184,7 +176,7 @@ export function UpstreamConflictDialog({
       }
 
       const fieldMatch = conflict.fields?.some((field) => {
-        const label = FIELD_LABELS[field.field] || field.field
+        const label = t(FIELD_LABELS[field.field] || field.field)
         return (
           label.toLowerCase().includes(normalizedSearch) ||
           field.field.toLowerCase().includes(normalizedSearch)
@@ -208,19 +200,19 @@ export function UpstreamConflictDialog({
     })
 
     return { matchingModelNames: modelMatches, visibleRowIds: rowIdSet }
-  }, [normalizedSearch, upstreamConflicts, conflictRows])
+  }, [normalizedSearch, upstreamConflicts, conflictRows, t])
 
   const columns = useMemo<ColumnDef<ConflictFieldRow>[]>(() => {
     const modelColumn: ColumnDef<ConflictFieldRow> = {
       accessorKey: 'modelName',
-      header: 'Model',
+      header: t('Model'),
       cell: ({ row }) => (
         <div className='flex items-start gap-3'>
           {isMobile ? (
             <Checkbox
               checked={row.getIsSelected()}
               onCheckedChange={(value) => row.toggleSelected(!!value)}
-              aria-label='Select row'
+              aria-label={t('Select row')}
             />
           ) : null}
           <div className='space-y-1'>
@@ -244,7 +236,7 @@ export function UpstreamConflictDialog({
 
     const diffColumn: ColumnDef<ConflictFieldRow> = {
       id: 'actions',
-      header: 'Diff',
+      header: t('Diff'),
       enableSorting: false,
       enableHiding: false,
       cell: ({ row }) => (
@@ -259,12 +251,12 @@ export function UpstreamConflictDialog({
             }
           >
             <MousePointerClick className='h-3.5 w-3.5' />
-            {!isMobile && 'View diff'}
+            {!isMobile && t('View diff')}
           </PopoverTrigger>
           <PopoverContent className='w-[min(90vw,24rem)] space-y-4 text-sm'>
             <div>
               <StatusBadge
-                label='Local'
+                label={t('Local')}
                 variant='neutral'
                 size='sm'
                 copyable={false}
@@ -276,7 +268,7 @@ export function UpstreamConflictDialog({
             </div>
             <div>
               <StatusBadge
-                label='Upstream'
+                label={t('Upstream')}
                 variant='info'
                 size='sm'
                 copyable={false}
@@ -303,14 +295,14 @@ export function UpstreamConflictDialog({
           checked={table.getIsAllPageRowsSelected()}
           indeterminate={table.getIsSomePageRowsSelected()}
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label='Select all'
+          aria-label={t('Select all')}
         />
       ),
       cell: ({ row }) => (
         <Checkbox
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label='Select row'
+          aria-label={t('Select row')}
         />
       ),
       enableSorting: false,
@@ -323,7 +315,7 @@ export function UpstreamConflictDialog({
       modelColumn,
       {
         accessorKey: 'fieldLabel',
-        header: 'Field',
+        header: t('Field'),
         cell: ({ row }) => (
           <StatusBadge
             label={row.original.fieldLabel}
@@ -337,27 +329,28 @@ export function UpstreamConflictDialog({
       },
       {
         accessorKey: 'localValue',
-        header: 'Local Value',
+        header: t('Local Value'),
         cell: ({ row }) => <ValuePreview value={row.original.localValue} />,
       },
       {
         accessorKey: 'upstreamValue',
-        header: 'Upstream Value',
+        header: t('Upstream Value'),
         cell: ({ row }) => <ValuePreview value={row.original.upstreamValue} />,
       },
     ]
-  }, [isMobile])
+  }, [isMobile, t])
 
-  const table = useReactTable({
+  const { table } = useDataTable({
     data: conflictRows,
     columns,
-    state: {
-      rowSelection,
-    },
+    rowSelection,
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
-    getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.id,
+    withFilteredRowModel: false,
+    withPaginationRowModel: false,
+    withSortedRowModel: false,
+    withFacetedRowModel: false,
   })
 
   const totalSelectedFields = table.getSelectedRowModel().rows.length
@@ -371,9 +364,7 @@ export function UpstreamConflictDialog({
   const totalPages =
     totalFilteredFields === 0 ? 1 : Math.ceil(totalFilteredFields / pageSize)
 
-  useEffect(() => {
-    setPageIndex((prev) => Math.min(prev, Math.max(0, totalPages - 1)))
-  }, [totalPages])
+  const pageIndex = Math.min(pageIndexOverride, Math.max(0, totalPages - 1))
 
   const pageStart = pageIndex * pageSize
   const paginatedRows = filteredRows.slice(pageStart, pageStart + pageSize)
@@ -411,7 +402,7 @@ export function UpstreamConflictDialog({
     const payload: SyncOverwritePayload[] = Object.entries(groupedSelections)
       .map(([modelName, fields]) => ({
         model_name: modelName,
-        fields: Array.from(fields),
+        fields: [...fields],
       }))
       .filter((item) => item.fields.length > 0)
 
@@ -453,222 +444,186 @@ export function UpstreamConflictDialog({
         }
         onOpenChange(nextOpen)
       }}
-    >
-      <DialogContent
-        className='flex max-h-[90vh] w-full flex-col gap-4 p-4 sm:max-w-5xl sm:p-6'
-        initialFocus={!isMobile}
-      >
-        <div className='flex min-h-0 flex-1 flex-col gap-4 overflow-hidden'>
-          <DialogHeader className='flex-shrink-0 text-start'>
-            <DialogTitle>{t('Resolve Conflicts')}</DialogTitle>
-            <DialogDescription>
+      title={t('Resolve Conflicts')}
+      description={t(
+        'Select the fields you want to overwrite with upstream data. Unselected fields keep their local values.'
+      )}
+      contentClassName='w-full sm:max-w-5xl'
+      contentHeight='min(72vh, 720px)'
+      bodyClassName='flex flex-col gap-4'
+      initialFocus={!isMobile}
+      footerClassName='sm:justify-between'
+      footer={
+        <div className='flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+          <div className='text-muted-foreground flex flex-1 items-start gap-2 text-xs'>
+            <Info className='h-4 w-4 flex-shrink-0' />
+            <span>
               {t(
-                'Select the fields you want to overwrite with upstream data. Unselected fields keep their local values.'
+                'Only selected fields will be overwritten. You can re-run the sync wizard if new conflicts appear.'
               )}
-            </DialogDescription>
-          </DialogHeader>
-
-          {!hasConflicts ? (
-            <div className='text-muted-foreground flex flex-1 items-center justify-center rounded-md border border-dashed p-8 text-center text-sm'>
-              {t('No conflict entries available.')}
-            </div>
-          ) : (
-            <div className='flex min-h-0 flex-1 flex-col gap-4 overflow-hidden'>
-              <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-                <div className='space-y-1'>
-                  <div className='text-sm font-medium'>
-                    {visibleModelCount} {t('model')}
-                    {visibleModelCount === 1 ? '' : 's'} {t('with conflicts')}
-                  </div>
-                  <div className='text-muted-foreground text-xs'>
-                    {visibleFieldCount} {t('field')}
-                    {visibleFieldCount === 1 ? '' : 's'} {t('showing •')}{' '}
-                    {totalSelectedFields} {t('selected')}
-                  </div>
+            </span>
+          </div>
+          <div className='flex flex-col gap-2 sm:flex-row sm:justify-end'>
+            <Button
+              variant='outline'
+              onClick={() => {
+                setUpstreamConflicts([])
+                onOpenChange(false)
+              }}
+            >
+              {t('Cancel')}
+            </Button>
+            <Button
+              onClick={handleApplyOverwrite}
+              disabled={isSubmitting || !hasSelection}
+            >
+              {isSubmitting ? t('Applying...') : t('Apply Overwrite')}
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div className='flex min-h-0 flex-1 flex-col gap-4'>
+        {!hasConflicts ? (
+          <div className='text-muted-foreground flex flex-1 items-center justify-center rounded-md border border-dashed p-8 text-center text-sm'>
+            {t('No conflict entries available.')}
+          </div>
+        ) : (
+          <div className='flex min-h-0 flex-1 flex-col gap-4 overflow-hidden'>
+            <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+              <div className='space-y-1'>
+                <div className='text-sm font-medium'>
+                  {visibleModelCount} {t('model')}
+                  {visibleModelCount === 1 ? '' : 's'} {t('with conflicts')}
                 </div>
-                <div className='flex w-full flex-col gap-2 sm:w-auto sm:flex-row'>
-                  <div className='relative flex-1'>
-                    <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2' />
-                    <Input
-                      value={search}
-                      onChange={(event) => {
-                        setSearch(event.target.value)
-                        setPageIndex(0)
-                      }}
-                      placeholder={t('Search models or fields...')}
-                      className='pl-9'
-                      aria-label={t('Search conflicting models or fields')}
-                    />
-                  </div>
-                  <Button
-                    variant='ghost'
-                    size='sm'
-                    onClick={clearSelections}
-                    disabled={!hasSelection}
-                  >
-                    {t('Clear selection')}
-                  </Button>
+                <div className='text-muted-foreground text-xs'>
+                  {visibleFieldCount} {t('field')}
+                  {visibleFieldCount === 1 ? '' : 's'} {t('showing •')}{' '}
+                  {totalSelectedFields} {t('selected')}
                 </div>
               </div>
-
-              {showSearchEmptyState ? (
-                <div className='text-muted-foreground flex flex-1 items-center justify-center rounded-md border border-dashed p-8 text-center text-sm'>
-                  {t('No conflicts match your search.')}
+              <div className='flex w-full flex-col gap-2 sm:w-auto sm:flex-row'>
+                <div className='relative flex-1'>
+                  <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2' />
+                  <Input
+                    value={search}
+                    onChange={(event) => {
+                      setSearch(event.target.value)
+                      setPageIndex(0)
+                    }}
+                    placeholder={t('Search models or fields...')}
+                    className='pl-9'
+                    aria-label={t('Search conflicting models or fields')}
+                  />
                 </div>
-              ) : (
-                <div className='flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border'>
-                  <div className='flex-1 overflow-auto'>
-                    <div className={isMobile ? 'min-w-full' : 'min-w-[720px]'}>
-                      <Table>
-                        <TableHeader>
-                          {table.getHeaderGroups().map((headerGroup) => (
-                            <TableRow key={headerGroup.id}>
-                              {headerGroup.headers.map((header) => (
-                                <TableHead key={header.id}>
-                                  {header.isPlaceholder
-                                    ? null
-                                    : flexRender(
-                                        header.column.columnDef.header,
-                                        header.getContext()
-                                      )}
-                                </TableHead>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableHeader>
-                        <TableBody>
-                          {paginatedRows.map((row) => (
-                            <TableRow
-                              key={row.id}
-                              data-state={row.getIsSelected() && 'selected'}
-                            >
-                              {row.getVisibleCells().map((cell) => (
-                                <TableCell key={cell.id}>
-                                  {flexRender(
-                                    cell.column.columnDef.cell,
-                                    cell.getContext()
-                                  )}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  onClick={clearSelections}
+                  disabled={!hasSelection}
+                >
+                  {t('Clear selection')}
+                </Button>
+              </div>
+            </div>
 
-                  <div className='bg-muted/40 flex flex-col gap-2 border-t px-2 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-3 sm:py-2'>
-                    <div className='text-muted-foreground text-xs'>
-                      {t('Showing')} {displayStart}-{displayEnd} {t('of')}{' '}
-                      {visibleFieldCount} {t('field')}
-                      {visibleFieldCount === 1 ? '' : 's'}
+            {showSearchEmptyState ? (
+              <div className='text-muted-foreground flex flex-1 items-center justify-center rounded-md border border-dashed p-8 text-center text-sm'>
+                {t('No conflicts match your search.')}
+              </div>
+            ) : (
+              <div className='flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border'>
+                <div className='flex-1 overflow-auto'>
+                  <DataTableView
+                    table={table}
+                    rows={paginatedRows}
+                    containerClassName='border-0'
+                    tableContainerClassName={
+                      isMobile ? 'min-w-full' : 'min-w-[720px]'
+                    }
+                  />
+                </div>
+
+                <div className='bg-muted/40 flex flex-col gap-2 border-t px-2 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-3 sm:py-2'>
+                  <div className='text-muted-foreground text-xs'>
+                    {t('Showing')} {displayStart}-{displayEnd} {t('of')}{' '}
+                    {visibleFieldCount} {t('field')}
+                    {visibleFieldCount === 1 ? '' : 's'}
+                  </div>
+                  <div className='flex items-center justify-between gap-2 sm:flex-wrap sm:gap-3'>
+                    <div className='flex items-center gap-1.5 text-xs sm:gap-2'>
+                      <span className='hidden sm:inline'>
+                        {t('Rows per page')}
+                      </span>
+                      <Select
+                        items={PAGE_SIZE_OPTIONS.map((size) => ({
+                          value: String(size),
+                          label: size,
+                        }))}
+                        value={String(pageSize)}
+                        onValueChange={(value) => {
+                          setPageSize(Number(value))
+                          setPageIndex(0)
+                        }}
+                      >
+                        <SelectTrigger className='h-8 w-[70px] text-xs sm:h-8 sm:w-[72px]'>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent alignItemWithTrigger={false}>
+                          <SelectGroup>
+                            {PAGE_SIZE_OPTIONS.map((size) => (
+                              <SelectItem key={size} value={String(size)}>
+                                {size}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div className='flex items-center justify-between gap-2 sm:flex-wrap sm:gap-3'>
-                      <div className='flex items-center gap-1.5 text-xs sm:gap-2'>
-                        <span className='hidden sm:inline'>
-                          {t('Rows per page')}
-                        </span>
-                        <Select
-                          items={[
-                            ...[5, 10, 20, 50].map((size) => ({
-                              value: String(size),
-                              label: size,
-                            })),
-                          ]}
-                          value={String(pageSize)}
-                          onValueChange={(value) => {
-                            setPageSize(Number(value))
-                            setPageIndex(0)
-                          }}
-                        >
-                          <SelectTrigger className='h-8 w-[70px] text-xs sm:h-8 sm:w-[72px]'>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent alignItemWithTrigger={false}>
-                            <SelectGroup>
-                              {[5, 10, 20, 50].map((size) => (
-                                <SelectItem key={size} value={String(size)}>
-                                  {size}
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className='flex items-center gap-1'>
-                        <Button
-                          variant='outline'
-                          size='icon'
-                          className='h-7 w-7 sm:h-8 sm:w-8'
-                          onClick={() =>
-                            setPageIndex((prev) => Math.max(0, prev - 1))
-                          }
-                          disabled={pageIndex === 0}
-                          aria-label={t('Previous page')}
-                        >
-                          <ChevronLeft className='h-3.5 w-3.5 sm:h-4 sm:w-4' />
-                        </Button>
-                        <span className='text-xs font-medium'>
-                          {t('Page {{current}} of {{total}}', {
-                            current: currentPageDisplay,
-                            total: totalPagesDisplay,
-                          })}
-                        </span>
-                        <Button
-                          variant='outline'
-                          size='icon'
-                          className='h-7 w-7 sm:h-8 sm:w-8'
-                          onClick={() =>
-                            setPageIndex((prev) =>
-                              Math.min(totalPages - 1, prev + 1)
-                            )
-                          }
-                          disabled={
-                            pageIndex >= totalPages - 1 ||
-                            totalFilteredFields === 0
-                          }
-                          aria-label={t('Next page')}
-                        >
-                          <ChevronRight className='h-3.5 w-3.5 sm:h-4 sm:w-4' />
-                        </Button>
-                      </div>
+                    <div className='flex items-center gap-1'>
+                      <Button
+                        variant='outline'
+                        size='icon'
+                        className='h-7 w-7 sm:h-8 sm:w-8'
+                        onClick={() =>
+                          setPageIndex((prev) => Math.max(0, prev - 1))
+                        }
+                        disabled={pageIndex === 0}
+                        aria-label={t('Previous page')}
+                      >
+                        <ChevronLeft className='h-3.5 w-3.5 sm:h-4 sm:w-4' />
+                      </Button>
+                      <span className='text-xs font-medium'>
+                        {t('Page {{current}} of {{total}}', {
+                          current: currentPageDisplay,
+                          total: totalPagesDisplay,
+                        })}
+                      </span>
+                      <Button
+                        variant='outline'
+                        size='icon'
+                        className='h-7 w-7 sm:h-8 sm:w-8'
+                        onClick={() =>
+                          setPageIndex((prev) =>
+                            Math.min(totalPages - 1, prev + 1)
+                          )
+                        }
+                        disabled={
+                          pageIndex >= totalPages - 1 ||
+                          totalFilteredFields === 0
+                        }
+                        aria-label={t('Next page')}
+                      >
+                        <ChevronRight className='h-3.5 w-3.5 sm:h-4 sm:w-4' />
+                      </Button>
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-        <DialogFooter className='flex-shrink-0'>
-          <div className='flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-            <div className='text-muted-foreground flex flex-1 items-start gap-2 text-xs'>
-              <Info className='h-4 w-4 flex-shrink-0' />
-              <span>
-                {t(
-                  'Only selected fields will be overwritten. You can re-run the sync wizard if new conflicts appear.'
-                )}
-              </span>
-            </div>
-            <div className='flex flex-col gap-2 sm:flex-row sm:justify-end'>
-              <Button
-                variant='outline'
-                onClick={() => {
-                  setUpstreamConflicts([])
-                  onOpenChange(false)
-                }}
-              >
-                {t('Cancel')}
-              </Button>
-              <Button
-                onClick={handleApplyOverwrite}
-                disabled={isSubmitting || !hasSelection}
-              >
-                {isSubmitting ? t('Applying...') : t('Apply Overwrite')}
-              </Button>
-            </div>
+              </div>
+            )}
           </div>
-        </DialogFooter>
-      </DialogContent>
+        )}
+      </div>
     </Dialog>
   )
 }

@@ -25,12 +25,12 @@ import type { AnnouncementItem, ApiInfoItem, FAQItem } from '../types'
 export function useStatusData<T = unknown>(
   enabledKey: string,
   dataKey: string
-): { items: T[]; loading: boolean } {
+): { items: T[]; loading: boolean; enabled: boolean } {
   const { status, loading } = useStatus()
   const enabled = status ? status[enabledKey] !== false : false
   const items = (enabled ? status?.[dataKey] || [] : []) as T[]
 
-  return { items, loading }
+  return { items, loading, enabled }
 }
 
 /**
@@ -41,7 +41,7 @@ export function useApiInfo() {
 }
 
 /**
- * Get announcements list
+ * Get dashboard announcements
  */
 export function useAnnouncements() {
   return useStatusData<AnnouncementItem>(
@@ -66,8 +66,6 @@ export function useDashboardContentVisibility() {
 
   return {
     apiInfo: hasStatus && status?.api_info_enabled !== false,
-    announcements: hasStatus && status?.announcements_enabled !== false,
     faq: hasStatus && status?.faq_enabled !== false,
-    uptimeKuma: hasStatus && status?.uptime_kuma_enabled !== false,
   }
 }

@@ -16,9 +16,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { useAuthStore } from '@/stores/auth-store'
+import { DASHBOARD_DEFAULT_SECTION } from '@/features/dashboard/section-registry'
 import { Home } from '@/features/home'
 
 export const Route = createFileRoute('/')({
+  beforeLoad: () => {
+    const user = useAuthStore.getState().auth.user
+    if (user) {
+      throw redirect({
+        to: '/dashboard/$section',
+        params: { section: DASHBOARD_DEFAULT_SECTION },
+      })
+    }
+  },
   component: Home,
 })

@@ -43,28 +43,30 @@ export interface UserProfile {
   role: number
   /** Email address */
   email?: string
+  /** Whether the account has a local password, independent of OAuth bindings. */
+  has_password?: boolean
   /** User group */
   group: string
+  group_expires_at?: number
+  group_policy?: {
+    max_requests: number
+    max_successful_requests: number
+    period_minutes: number
+    concurrency_limit: number
+    tpm_limit: number
+  }
   /** Current quota balance */
   quota: number
   /** Total used quota */
   used_quota: number
   /** Total request count */
   request_count: number
+  /** Total quota credited by successful online top-ups */
+  total_topup?: number
   /** Account status (1=启用, 2=禁用, 3=待审核, 4=已删除) */
   status: number
   /** Access token (system token) */
   access_token?: string
-  /** Affiliate code */
-  aff_code?: string
-  /** Number of successful affiliate invites */
-  aff_count: number
-  /** Affiliate quota (pending rewards) */
-  aff_quota: number
-  /** Total affiliate quota earned (historical) */
-  aff_history_quota: number
-  /** Invite user ID */
-  invite_user_id?: number
   /** Account creation timestamp */
   created_time: number
   /** User settings (JSON string) */
@@ -165,24 +167,6 @@ export interface BindingItem {
   isBound: boolean
   isEnabled: boolean
   onBind: () => void
-}
-
-/**
- * Two-Factor Authentication Status
- */
-export interface TwoFAStatus {
-  enabled: boolean
-  locked: boolean
-  backup_codes_remaining: number
-}
-
-/**
- * Two-Factor Authentication Setup Data
- */
-export interface TwoFASetupData {
-  secret: string
-  qr_code_data: string
-  backup_codes: string[]
 }
 
 // ============================================================================

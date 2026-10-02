@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type {
   ColumnFiltersState,
   OnChangeFn,
@@ -24,6 +24,30 @@ import type {
 } from '@tanstack/react-table'
 
 type SearchRecord = Record<string, unknown>
+
+// Page size persists globally under the classic theme's key (raw number
+// string), so the choice is remembered and carries over from classic.
+const PAGE_SIZE_STORAGE_KEY = 'page-size'
+
+function getStoredPageSize(): number | undefined {
+  try {
+    const n = Number.parseInt(
+      localStorage.getItem(PAGE_SIZE_STORAGE_KEY) ?? '',
+      10
+    )
+    return n > 0 ? n : undefined // n > 0 also rejects NaN
+  } catch {
+    return undefined
+  }
+}
+
+function setStoredPageSize(size: number) {
+  try {
+    localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(size))
+  } catch {
+    /* ignore */
+  }
+}
 
 export type NavigateFn = (opts: {
   search:
@@ -129,17 +153,23 @@ export function useTableUrlState(
     useState<ColumnFiltersState>(initialColumnFilters)
 
   // URL 为单一数据源：仅当 search（URL）变化时同步，避免依赖 initialColumnFilters 造成死循环（config 常为内联引用）
-  useEffect(() => {
-    setColumnFilters(initialColumnFilters)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search])
+  const [previousInputs4625, setPreviousInputs4625] = useState(() => [search])
+  if (!Object.is(previousInputs4625[0], search)) {
+    setPreviousInputs4625([search])
+    ;(() => {
+      setColumnFilters(initialColumnFilters)
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    })()
+  }
 
   const pagination: PaginationState = useMemo(() => {
     const rawPage = (search as SearchRecord)[pageKey]
     const rawPageSize = (search as SearchRecord)[pageSizeKey]
     const pageNum = typeof rawPage === 'number' ? rawPage : defaultPage
     const pageSizeNum =
-      typeof rawPageSize === 'number' ? rawPageSize : defaultPageSize
+      typeof rawPageSize === 'number'
+        ? rawPageSize
+        : (getStoredPageSize() ?? defaultPageSize)
     return { pageIndex: Math.max(0, pageNum - 1), pageSize: pageSizeNum }
   }, [search, pageKey, pageSizeKey, defaultPage, defaultPageSize])
 
@@ -147,6 +177,7 @@ export function useTableUrlState(
     const next = typeof updater === 'function' ? updater(pagination) : updater
     const nextPage = next.pageIndex + 1
     const nextPageSize = next.pageSize
+    if (nextPageSize !== pagination.pageSize) setStoredPageSize(nextPageSize)
     navigate({
       search: (prev) => ({
         ...(prev as SearchRecord),
@@ -198,7 +229,7 @@ export function useTableUrlState(
           value.trim() !== '' ? serialize(value) : undefined
       } else {
         const value = Array.isArray(found?.value)
-          ? (found!.value as unknown[])
+          ? (found?.value as unknown[])
           : []
         patch[cfg.searchKey] = value.length > 0 ? serialize(value) : undefined
       }

@@ -25,6 +25,7 @@ import {
   CardHeader,
   CardTitle,
 } from './card'
+import { IconBadge, type IconBadgeTone } from './icon-badge'
 
 type TitledCardProps = {
   title: ReactNode
@@ -32,10 +33,12 @@ type TitledCardProps = {
   icon?: ReactNode
   action?: ReactNode
   children?: ReactNode
+  disableHoverEffect?: boolean
   className?: string
   headerClassName?: string
   contentClassName?: string
   iconClassName?: string
+  iconTone?: IconBadgeTone
   titleClassName?: string
   descriptionClassName?: string
 }
@@ -46,37 +49,45 @@ export function TitledCard({
   icon,
   action,
   children,
+  disableHoverEffect,
   className,
   headerClassName,
   contentClassName,
   iconClassName,
+  iconTone,
   titleClassName,
   descriptionClassName,
 }: TitledCardProps) {
   return (
-    <Card className={cn('gap-0 overflow-hidden rounded-xl py-0', className)}>
+    <Card
+      data-visual-region='titled-panel'
+      data-card-hover={disableHoverEffect ? 'false' : undefined}
+      className={cn(
+        'snowapi-rainflow-panel gap-0 overflow-hidden py-0',
+        className
+      )}
+    >
       <CardHeader
-        className={cn(
-          'border-b border-border p-5 !pb-5 sm:p-6 sm:!pb-6',
-          headerClassName
-        )}
+        className={cn('border-border/50 border-b p-4 !pb-4', headerClassName)}
       >
         <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
           <div className='flex min-w-0 items-center gap-3'>
             {icon != null && (
-              <div
+              <IconBadge
+                size='sm'
+                tone={iconTone}
                 className={cn(
-                  'bg-muted flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:h-9 sm:w-9',
+                  'text-muted-foreground bg-transparent',
                   iconClassName
                 )}
               >
                 {icon}
-              </div>
+              </IconBadge>
             )}
             <div className='min-w-0'>
               <CardTitle
                 className={cn(
-                  'text-lg tracking-tight sm:text-xl',
+                  'text-sm leading-5 font-medium tracking-normal',
                   titleClassName
                 )}
               >
@@ -84,7 +95,7 @@ export function TitledCard({
               </CardTitle>
               {description != null && (
                 <CardDescription
-                  className={cn('text-xs sm:text-sm', descriptionClassName)}
+                  className={cn('mt-0.5 text-xs', descriptionClassName)}
                 >
                   {description}
                 </CardDescription>
@@ -96,7 +107,7 @@ export function TitledCard({
           )}
         </div>
       </CardHeader>
-      <CardContent className={cn('p-5 sm:p-6', contentClassName)}>
+      <CardContent className={cn('p-4', contentClassName)}>
         {children}
       </CardContent>
     </Card>

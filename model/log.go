@@ -353,16 +353,20 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	return getAllLogs(context.Background(), logType, startTimestamp, endTimestamp, modelName, username, tokenName, startIdx, num, channel, group, requestId, upstreamRequestId)
 }
 
-func GetAllLogsWithContext(ctx context.Context, logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
-	return getAllLogs(ctx, logType, startTimestamp, endTimestamp, modelName, username, tokenName, startIdx, num, channel, group, requestId, upstreamRequestId)
+func GetAllLogsWithContext(ctx context.Context, logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string, logTypes ...int) (logs []*Log, total int64, err error) {
+	return getAllLogs(ctx, logType, startTimestamp, endTimestamp, modelName, username, tokenName, startIdx, num, channel, group, requestId, upstreamRequestId, logTypes...)
 }
 
-func getAllLogs(ctx context.Context, logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
+func getAllLogs(ctx context.Context, logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string, logTypes ...int) (logs []*Log, total int64, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
 		tx = LOG_DB.WithContext(ctx)
 	} else {
 		tx = LOG_DB.WithContext(ctx).Where("logs.type = ?", logType)
+	}
+
+	if len(logTypes) > 0 {
+		tx = tx.Where("logs.type IN ?", logTypes)
 	}
 
 	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", modelName); err != nil {
@@ -450,16 +454,20 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	return getUserLogs(context.Background(), userId, logType, startTimestamp, endTimestamp, modelName, tokenName, startIdx, num, group, requestId, upstreamRequestId)
 }
 
-func GetUserLogsWithContext(ctx context.Context, userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
-	return getUserLogs(ctx, userId, logType, startTimestamp, endTimestamp, modelName, tokenName, startIdx, num, group, requestId, upstreamRequestId)
+func GetUserLogsWithContext(ctx context.Context, userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string, logTypes ...int) (logs []*Log, total int64, err error) {
+	return getUserLogs(ctx, userId, logType, startTimestamp, endTimestamp, modelName, tokenName, startIdx, num, group, requestId, upstreamRequestId, logTypes...)
 }
 
-func getUserLogs(ctx context.Context, userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
+func getUserLogs(ctx context.Context, userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string, logTypes ...int) (logs []*Log, total int64, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
 		tx = LOG_DB.WithContext(ctx).Where("logs.user_id = ?", userId)
 	} else {
 		tx = LOG_DB.WithContext(ctx).Where("logs.user_id = ? and logs.type = ?", userId, logType)
+	}
+
+	if len(logTypes) > 0 {
+		tx = tx.Where("logs.type IN ?", logTypes)
 	}
 
 	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", modelName); err != nil {

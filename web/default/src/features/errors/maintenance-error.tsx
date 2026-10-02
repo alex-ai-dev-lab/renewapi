@@ -18,26 +18,25 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { SystemStatePage } from './system-state-page'
 
 export function MaintenanceError() {
   const { t } = useTranslation()
   return (
-    <div className='flex min-h-svh items-center justify-center px-4 py-8'>
-      <div className='bg-card border-border flex w-full max-w-xl flex-col items-start gap-3 rounded-md border p-6 text-left'>
-        <h1 className='text-muted-foreground font-mono text-[29px] leading-tight font-semibold tabular-nums'>
-          503
-        </h1>
-        <span className='text-base font-semibold'>
-          {t('Website is under maintenance!')}
-        </span>
-        <p className='text-muted-foreground text-left'>
-          {t('The site is not available at the moment.')} <br />
+    <SystemStatePage
+      code={503}
+      title={t('Website is under maintenance!')}
+      description={
+        <>
+          {t('The site is not available at the moment.')}{' '}
           {t("We'll be back online shortly.")}
-        </p>
-        <div className='mt-3 flex flex-wrap gap-2'>
-          <Button variant='outline'>{t('Learn more')}</Button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+      actions={
+        <Button variant='outline' onClick={() => window.location.reload()}>
+          {t('Retry')}
+        </Button>
+      }
+    />
   )
 }

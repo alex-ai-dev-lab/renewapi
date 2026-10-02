@@ -35,12 +35,16 @@ export const subscriptionPlanSchema = z.object({
   quota_reset_custom_seconds: z.number().optional(),
   enabled: z.boolean(),
   sort_order: z.number(),
+  allow_balance_pay: z.boolean().optional().default(true),
+  allow_wallet_overflow: z.boolean().optional().default(true),
   max_purchase_per_user: z.number(),
   total_amount: z.number(),
+  five_hour_quota: z.number().optional().default(0),
   upgrade_group: z.string().optional(),
   stripe_price_id: z.string().optional(),
   creem_product_id: z.string().optional(),
   waffo_pancake_product_id: z.string().optional(),
+  downgrade_group: z.string().optional(),
 })
 
 export type SubscriptionPlan = z.infer<typeof subscriptionPlanSchema>
@@ -63,13 +67,26 @@ export const userSubscriptionSchema = z.object({
   end_time: z.number(),
   amount_total: z.number(),
   amount_used: z.number(),
+  five_hour_quota: z.number().optional().default(0),
   next_reset_time: z.number().optional(),
 })
 
 export type UserSubscription = z.infer<typeof userSubscriptionSchema>
 
+export interface SubscriptionQuotaWindowSummary {
+  state: 'idle' | 'active' | 'expired'
+  window_id?: number
+  sequence?: number
+  amount_total: number
+  amount_used: number
+  remaining: number
+  start_time?: number
+  end_time?: number
+}
+
 export interface UserSubscriptionRecord {
   subscription: UserSubscription
+  five_hour_window?: SubscriptionQuotaWindowSummary | null
 }
 
 // ============================================================================
@@ -88,6 +105,7 @@ export interface PlanPayload {
 
 export interface SubscriptionPayRequest {
   plan_id: number
+  expected_quota?: number
   payment_method?: string
 }
 
@@ -95,12 +113,8 @@ export interface SubscriptionPayResponse {
   success: boolean
   message?: string
   data?: {
-    // Stripe-style hosted checkout link.
     pay_link?: string
-    // Waffo Pancake / Creem hosted checkout URL.
     checkout_url?: string
-    // Pancake-only: order metadata + self-service buyer session token,
-    // surfaced for future flows (refund / cancel from new-api's own UI).
     session_id?: string
     expires_at?: number | string
     order_id?: string
@@ -110,8 +124,44 @@ export interface SubscriptionPayResponse {
   url?: string
 }
 
+export interface SubscriptionBalanceQuote {
+  plan_id: number
+  original_price: number
+  upgrade_credit: number
+  amount_due: number
+  required_quota: number
+  is_upgrade: boolean
+  current_subscription_id?: number
+  current_plan_id?: number
+  current_plan_title?: string
+  current_end_time?: number
+}
+
 export interface CreateUserSubscriptionRequest {
   plan_id: number
+}
+
+export interface ResetUserSubscriptionsRequest {
+  plan_id: number
+  advance_reset_time: boolean
+  reset_periodic: boolean
+  reset_five_hour_window: boolean
+}
+
+export interface ResetPlanSubscriptionsRequest {
+  advance_reset_time: boolean
+  reset_periodic: boolean
+  reset_five_hour_window: boolean
+}
+
+export interface SubscriptionResetResult {
+  plan_id: number
+  matched_count: number
+  reset_count: number
+  user_count: number
+  advance_reset_time: boolean
+  reset_periodic: boolean
+  reset_five_hour_window: boolean
 }
 
 // ============================================================================
@@ -119,6 +169,7 @@ export interface CreateUserSubscriptionRequest {
 // ============================================================================
 
 export interface SelfSubscriptionData {
+  server_time?: number
   billing_preference: string
   subscriptions: UserSubscriptionRecord[]
   all_subscriptions: UserSubscriptionRecord[]
@@ -128,4 +179,8 @@ export interface SelfSubscriptionData {
 // Dialog Types
 // ============================================================================
 
-export type SubscriptionsDialogType = 'create' | 'update' | 'toggle-status'
+export type SubscriptionsDialogType =
+  | 'create'
+  | 'update'
+  | 'toggle-status'
+  | 'reset-subscriptions'

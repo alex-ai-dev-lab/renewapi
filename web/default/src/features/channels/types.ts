@@ -35,6 +35,7 @@ export const channelInfoSchema = z.object({
 export type ChannelInfo = z.infer<typeof channelInfoSchema>
 
 export const channelSchema = z.object({
+  max_input_tokens: z.number().default(0),
   id: z.number(),
   config_version: z.number().int().positive(),
   type: z.number(),
@@ -65,7 +66,6 @@ export const channelSchema = z.object({
   param_override: z.string().nullish(),
   header_override: z.string().nullish(),
   remark: z.string().default(''),
-  max_input_tokens: z.number().default(0),
   channel_info: channelInfoSchema.default({
     is_multi_key: false,
     multi_key_size: 0,
@@ -146,6 +146,8 @@ export interface ChannelSettings {
 }
 
 export interface ChannelOtherSettings {
+  advanced_custom?: AdvancedCustomConfig
+  disable_task_polling_sleep?: boolean
   azure_responses_version?: string
   vertex_key_type?: 'json' | 'api_key'
   openrouter_enterprise?: boolean
@@ -507,4 +509,42 @@ export interface AddChannelRequest {
   multi_key_mode?: 'random' | 'polling'
   batch_add_set_key_prefix_2_name?: boolean
   channel: Partial<Channel>
+}
+
+export interface AdvancedCustomConfig {
+  advanced_routes?: AdvancedCustomRoute[]
+}
+
+export interface AdvancedCustomRoute {
+  incoming_path?: string
+  upstream_path?: string
+  converter?: AdvancedCustomConverter
+  models?: string[]
+  auth?: AdvancedCustomRouteAuth
+}
+
+export interface AdvancedCustomRouteAuth {
+  type?: AdvancedCustomAuthType
+  name?: string
+  value?: string
+}
+
+export type AdvancedCustomConverter =
+  | 'none'
+  | 'anthropic_messages_to_openai_chat_completions'
+  | 'openai_chat_completions_to_anthropic_messages'
+  | 'openai_chat_completions_to_openai_responses'
+  | 'openai_responses_to_openai_chat_completions'
+  | 'openai_responses_to_gemini_generate_content'
+  | 'gemini_generate_content_to_openai_chat_completions'
+  | 'openai_chat_completions_to_gemini_generate_content'
+
+export type AdvancedCustomAuthType = 'none' | 'header' | 'query'
+
+export interface ChannelOpsResponse {
+  success: boolean
+  message?: string
+  data?: {
+    retry_times: number
+  }
 }

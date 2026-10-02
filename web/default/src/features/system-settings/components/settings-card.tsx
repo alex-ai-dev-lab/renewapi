@@ -40,7 +40,7 @@ export const SettingsCard = memo(function SettingsCard({
   className,
 }: SettingsCardProps) {
   return (
-    <Card className={cn('obsidian-settings-card', className)}>
+    <Card className={cn('snowapi-rainflow-panel', className)}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         {description && <CardDescription>{description}</CardDescription>}

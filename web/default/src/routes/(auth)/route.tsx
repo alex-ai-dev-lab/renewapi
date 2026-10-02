@@ -16,6 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Outlet } from '@tanstack/react-router'
 
-export const Route = createFileRoute('/(auth)')({})
+function AuthRouteLayout() {
+  return (
+    <main className='snowapi-auth-route min-h-svh bg-black text-white'>
+      <Outlet />
+    </main>
+  )
+}
+
+export const Route = createFileRoute('/(auth)')({
+  component: AuthRouteLayout,
+})

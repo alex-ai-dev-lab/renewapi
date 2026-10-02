@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, type ReactNode } from 'react'
-import '@/styles/obsidian-admin.css'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -279,7 +278,7 @@ export function SettingsLanding() {
         })}
       </SectionPageLayout.Description>
       <SectionPageLayout.Content>
-        <div className='obsidian-admin obsidian-settings-landing flex min-w-0 flex-col gap-4'>
+        <div className='flex min-w-0 flex-col gap-4'>
           <SettingsSearch />
 
           <div>
@@ -318,7 +317,7 @@ export function SettingsLanding() {
                 disabled={controlsDisabled}
               />
 
-              <Card className='obsidian-settings-foundation border-border col-span-12 min-w-0 overflow-hidden py-0'>
+              <Card className='border-border col-span-12 min-w-0 overflow-hidden py-0'>
                 <div className='flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3'>
                   <h2 className='text-[13px] font-semibold'>
                     {t('aurora.settings.foundation.title', {
@@ -489,7 +488,7 @@ function SettingsTogglePanel(props: {
 }) {
   return (
     <Card
-      className={`obsidian-settings-toggles border-border min-w-0 overflow-hidden py-0 ${props.className ?? ''}`}
+      className={`border-border min-w-0 overflow-hidden py-0 ${props.className ?? ''}`}
     >
       <div className='flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3'>
         <h2 className='text-[13px] font-semibold'>{props.title}</h2>

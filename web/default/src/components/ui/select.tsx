@@ -113,7 +113,7 @@ function SelectContent({
         data-slot='select-content'
         data-align-trigger={alignItemWithTrigger}
         className={cn(
-          'bg-popover text-popover-foreground ring-foreground/10 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg shadow-md ring-1 duration-100 data-[align-trigger=true]:animate-none',
+          'bg-popover text-popover-foreground ring-foreground/10 data-[side=bottom]:slide-in-from-top-1 data-[side=inline-end]:slide-in-from-left-1 data-[side=inline-start]:slide-in-from-right-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-[10px] shadow-md ring-1 duration-[200ms] motion-reduce:duration-0',
           className
         )}
         {...props}
@@ -159,7 +159,10 @@ function SelectItem({
       )}
       {...props}
     >
-      <SelectPrimitive.ItemText className='flex flex-1 shrink-0 gap-2 whitespace-nowrap'>
+      <SelectPrimitive.ItemText
+        data-slot='select-item-text'
+        className='flex flex-1 shrink-0 gap-2 whitespace-nowrap'
+      >
         {children}
       </SelectPrimitive.ItemText>
       <SelectPrimitive.ItemIndicator

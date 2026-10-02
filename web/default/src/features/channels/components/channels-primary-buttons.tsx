@@ -18,32 +18,41 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
 import {
-  ArrowUpFromLine,
-  DollarSign,
-  MoreHorizontal,
   Plus,
-  RefreshCw,
+  MoreHorizontal,
   Settings2,
-  SortAsc,
+  Trash2,
   Tags,
   TestTube,
-  Trash2,
+  DollarSign,
+  ListChecks,
+  SortAsc,
+  RefreshCw,
+  ArrowUpFromLine,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAuthStore } from '@/stores/auth-store'
+import {
+  ADMIN_PERMISSION_ACTIONS,
+  ADMIN_PERMISSION_RESOURCES,
+  hasPermission,
+} from '@/lib/admin-permissions'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuCheckboxItem,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   handleDeleteAllDisabled,
@@ -53,21 +62,29 @@ import {
 } from '../lib'
 import { useChannels } from './channels-provider'
 
-type ChannelsPrimaryButtonsProps = {
-  variant?: 'all' | 'create' | 'tools'
-}
-
-export function ChannelsPrimaryButtons(props: ChannelsPrimaryButtonsProps) {
-  const { t, i18n } = useTranslation()
-  const navigate = useNavigate()
-  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
-  const { enableTagMode, setEnableTagMode, idSort, setIdSort, upstream } =
-    useChannels()
+export function ChannelsPrimaryButtons() {
+  const { t } = useTranslation()
+  const {
+    setOpen,
+    setCurrentRow,
+    enableTagMode,
+    setEnableTagMode,
+    idSort,
+    setIdSort,
+    batchMode,
+    setBatchMode,
+    upstream,
+  } = useChannels()
   const queryClient = useQueryClient()
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const variant = props.variant ?? 'all'
-  const showCreate = variant !== 'tools'
-  const showTools = variant !== 'create'
+  const [showConsistencyDialog, setShowConsistencyDialog] = useState(false)
+  const [isRepairingConsistency, setIsRepairingConsistency] = useState(false)
+  const currentUser = useAuthStore((s) => s.auth.user)
+  const canEditSensitive = hasPermission(
+    currentUser,
+    ADMIN_PERMISSION_RESOURCES.CHANNEL,
+    ADMIN_PERMISSION_ACTIONS.SENSITIVE_WRITE
+  )
 
   const handleTagModeToggle = (checked: boolean) => {
     localStorage.setItem('enable-tag-mode', String(checked))
@@ -79,185 +96,192 @@ export function ChannelsPrimaryButtons(props: ChannelsPrimaryButtonsProps) {
     setIdSort(checked)
   }
 
+  const handleBatchModeToggle = (checked: boolean) => {
+    setBatchMode(checked)
+  }
+
   return (
     <>
-      <div className='flex flex-wrap items-center gap-2'>
-        {showTools ? (
-          <>
-            <div className='hidden items-center gap-2 rounded-md border px-2.5 py-1 sm:flex'>
-              <Tags className='text-muted-foreground size-3.5' />
-              <Label htmlFor='tag-mode' className='cursor-pointer text-xs'>
-                {t('Tag Mode')}
-              </Label>
-              <Switch
-                id='tag-mode'
-                checked={enableTagMode}
-                onCheckedChange={handleTagModeToggle}
-              />
-            </div>
-
-            <div className='hidden items-center gap-2 rounded-md border px-2.5 py-1 sm:flex'>
-              <SortAsc className='text-muted-foreground size-3.5' />
-              <Label htmlFor='id-sort' className='cursor-pointer text-xs'>
-                {t('Sort by ID')}
-              </Label>
-              <Switch
-                id='id-sort'
-                checked={idSort}
-                onCheckedChange={handleIdSortToggle}
-              />
-            </div>
-          </>
-        ) : null}
-
-        {showCreate ? (
-          <Button
-            onClick={() => {
-              void navigate({ to: '/channels/new' })
-            }}
-            size='sm'
-          >
-            <Plus className='size-4' />
-            <span className='max-sm:hidden'>
-              {t('aurora.channels.create', {
-                defaultValue: isChinese ? '新增渠道' : 'Create Channel',
-              })}
-            </span>
-            <span className='sm:hidden'>{t('Create')}</span>
-          </Button>
-        ) : null}
-
-        {showTools ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant='outline'
-                  size='sm'
-                  aria-label={t('Open menu')}
-                />
-              }
+      <div className='flex items-center gap-2'>
+        {/* Create Channel */}
+        <Tooltip>
+          <TooltipTrigger render={<span className='inline-flex' />}>
+            <Button
+              onClick={() => {
+                if (!canEditSensitive) return
+                setCurrentRow(null)
+                setOpen('create-channel')
+              }}
+              size='sm'
+              className='rounded-full px-3 text-xs shadow-none'
+              disabled={!canEditSensitive}
             >
-              <MoreHorizontal className='size-4' />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align='end' className='w-56'>
-              <DropdownMenuCheckboxItem
-                className='sm:hidden'
-                checked={enableTagMode}
-                onCheckedChange={handleTagModeToggle}
-              >
-                <Tags className='mr-2 size-4' />
-                {t('Tag Mode')}
-              </DropdownMenuCheckboxItem>
+              <Plus className='h-4 w-4' />
+              <span className='max-sm:hidden'>{t('Create Channel')}</span>
+              <span className='sm:hidden'>{t('Create')}</span>
+            </Button>
+          </TooltipTrigger>
+          {!canEditSensitive && (
+            <TooltipContent>
+              {t('No permission to perform this action')}
+            </TooltipContent>
+          )}
+        </Tooltip>
 
-              <DropdownMenuCheckboxItem
-                className='sm:hidden'
-                checked={idSort}
-                onCheckedChange={handleIdSortToggle}
-              >
-                <SortAsc className='mr-2 size-4' />
-                {t('Sort by ID')}
-              </DropdownMenuCheckboxItem>
+        {/* More Actions */}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button variant='ghost' size='icon-sm' aria-label={t('More')} />
+            }
+          >
+            <MoreHorizontal className='h-4 w-4' />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align='end' className='w-56'>
+            <DropdownMenuCheckboxItem
+              checked={batchMode}
+              onCheckedChange={handleBatchModeToggle}
+            >
+              <ListChecks className='mr-2 h-4 w-4' />
+              {t('Batch Operations')}
+            </DropdownMenuCheckboxItem>
 
-              <DropdownMenuSeparator className='sm:hidden' />
+            <DropdownMenuCheckboxItem
+              checked={enableTagMode}
+              onCheckedChange={handleTagModeToggle}
+            >
+              <Tags className='mr-2 h-4 w-4' />
+              {t('Tag Mode')}
+            </DropdownMenuCheckboxItem>
 
-              <DropdownMenuItem
-                onClick={() => {
-                  handleTestAllChannels(queryClient)
-                }}
-              >
-                {t('Test All Channels')}
-                <DropdownMenuShortcut>
-                  <TestTube className='size-4' />
-                </DropdownMenuShortcut>
-              </DropdownMenuItem>
+            <DropdownMenuCheckboxItem
+              checked={idSort}
+              onCheckedChange={handleIdSortToggle}
+            >
+              <SortAsc className='mr-2 h-4 w-4' />
+              {t('Sort by ID')}
+            </DropdownMenuCheckboxItem>
 
-              <DropdownMenuItem
-                onClick={() => {
-                  handleUpdateAllBalances(queryClient)
-                }}
-              >
-                {t('Update All Balances')}
-                <DropdownMenuShortcut>
-                  <DollarSign className='size-4' />
-                </DropdownMenuShortcut>
-              </DropdownMenuItem>
+            <DropdownMenuSeparator />
 
-              <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => {
+                handleTestAllChannels(queryClient)
+              }}
+            >
+              {t('Test All Channels')}
+              <DropdownMenuShortcut>
+                <TestTube className='h-4 w-4' />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
 
-              <DropdownMenuItem
-                onClick={() => upstream.detectAllUpdates()}
-                disabled={upstream.detectAllLoading}
-              >
-                {t('Detect All Upstream Updates')}
-                <DropdownMenuShortcut>
-                  <RefreshCw className='size-4' />
-                </DropdownMenuShortcut>
-              </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                handleUpdateAllBalances(queryClient)
+              }}
+            >
+              {t('Update All Balances')}
+              <DropdownMenuShortcut>
+                <DollarSign className='h-4 w-4' />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
 
-              <DropdownMenuItem
-                onClick={() => upstream.applyAllUpdates()}
-                disabled={upstream.applyAllLoading}
-              >
-                {t('Apply All Upstream Updates')}
-                <DropdownMenuShortcut>
-                  <ArrowUpFromLine className='size-4' />
-                </DropdownMenuShortcut>
-              </DropdownMenuItem>
+            <DropdownMenuSeparator />
 
-              <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => upstream.detectAllUpdates()}
+              disabled={upstream.detectAllLoading}
+            >
+              {t('Detect All Upstream Updates')}
+              <DropdownMenuShortcut>
+                <RefreshCw className='h-4 w-4' />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
 
-              <DropdownMenuItem
-                onClick={() => {
-                  handleFixAbilities(queryClient, (_result) => {
-                    // eslint-disable-next-line no-console
-                    console.log('Fix abilities result:', _result)
-                  })
-                }}
-              >
-                {t('Fix Abilities')}
-                <DropdownMenuShortcut>
-                  <Settings2 className='size-4' />
-                </DropdownMenuShortcut>
-              </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => upstream.applyAllUpdates()}
+              disabled={upstream.applyAllLoading}
+            >
+              {t('Apply All Upstream Updates')}
+              <DropdownMenuShortcut>
+                <ArrowUpFromLine className='h-4 w-4' />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
 
-              <DropdownMenuSeparator />
+            <DropdownMenuSeparator />
 
-              <DropdownMenuItem
-                onSelect={(event) => {
-                  event.preventDefault()
-                  setShowDeleteDialog(true)
-                }}
-                className='text-destructive focus:text-destructive'
-              >
-                {t('Delete All Disabled')}
-                <DropdownMenuShortcut>
-                  <Trash2 className='size-4' />
-                </DropdownMenuShortcut>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault()
+                setShowConsistencyDialog(true)
+              }}
+            >
+              {t('Repair Channel Consistency')}
+              <DropdownMenuShortcut>
+                <Settings2 className='h-4 w-4' />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault()
+                if (!canEditSensitive) return
+                setShowDeleteDialog(true)
+              }}
+              disabled={!canEditSensitive}
+              className='text-destructive focus:text-destructive'
+            >
+              {t('Delete All Disabled')}
+              <DropdownMenuShortcut>
+                <Trash2 className='h-4 w-4' />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
-      {showTools ? (
-        <ConfirmDialog
-          open={showDeleteDialog}
-          onOpenChange={setShowDeleteDialog}
-          title={t('Delete All Disabled Channels?')}
-          desc={t(
-            'This will permanently delete all manually and automatically disabled channels. This action cannot be undone.'
-          )}
-          destructive
-          handleConfirm={() => {
-            handleDeleteAllDisabled(queryClient, (_count) => {
+      <ConfirmDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        title={t('Delete All Disabled Channels?')}
+        desc={t(
+          'This will permanently delete all manually and automatically disabled channels. This action cannot be undone.'
+        )}
+        destructive
+        handleConfirm={() => {
+          if (!canEditSensitive) return
+          handleDeleteAllDisabled(queryClient, (_count) => {
+            // eslint-disable-next-line no-console
+            console.log(`Deleted ${_count} channels`)
+          })
+          setShowDeleteDialog(false)
+        }}
+      />
+
+      <ConfirmDialog
+        open={showConsistencyDialog}
+        onOpenChange={setShowConsistencyDialog}
+        title={t('Repair channel consistency?')}
+        desc={t(
+          'This will rebuild the channel routing index from every channel configuration, including supported models, groups, priorities, and weights. Routing may be briefly incomplete while the rebuild is running. Continue?'
+        )}
+        confirmText={t('Repair')}
+        isLoading={isRepairingConsistency}
+        handleConfirm={async () => {
+          setIsRepairingConsistency(true)
+          try {
+            await handleFixAbilities(queryClient, (_result) => {
               // eslint-disable-next-line no-console
-              console.log(`Deleted ${_count} channels`)
+              console.log('Repair channel consistency result:', _result)
             })
-            setShowDeleteDialog(false)
-          }}
-        />
-      ) : null}
+            setShowConsistencyDialog(false)
+          } finally {
+            setIsRepairingConsistency(false)
+          }
+        }}
+      />
     </>
   )
 }

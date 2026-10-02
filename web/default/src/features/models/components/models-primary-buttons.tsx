@@ -76,7 +76,7 @@ export function ModelsPrimaryButtons() {
             <Button
               variant='outline'
               size='sm'
-              aria-label={t('More actions')}
+              aria-label={t('More options')}
             />
           }
         >

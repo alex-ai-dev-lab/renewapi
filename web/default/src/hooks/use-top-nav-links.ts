@@ -18,12 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useAuthStore } from '@/stores/auth-store'
-import {
-  HEADER_NAV_ORDER_DEFAULT,
-  normalizeHeaderNavOrder,
-  parseHeaderNavModulesFromStatus,
-} from '@/lib/nav-modules'
+import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
 import { useStatus } from '@/hooks/use-status'
 
 export type TopNavLink = {
@@ -34,24 +29,18 @@ export type TopNavLink = {
   external?: boolean
 }
 
-type TopNavModuleKey = (typeof HEADER_NAV_ORDER_DEFAULT)[number]
-
 /**
  * Generate top navigation links based on HeaderNavModules configuration from backend /api/status
  * Backend format example (stringified JSON):
  * {
  *   home: true,
  *   console: true,
- *   pricing: { enabled: true, requireAuth: false },
- *   rankings: { enabled: true, requireAuth: false },
  *   docs: true,
- *   about: true
  * }
  */
 export function useTopNavLinks(): TopNavLink[] {
   const { t } = useTranslation()
   const { status } = useStatus()
-  const { auth } = useAuthStore()
 
   // Parse HeaderNavModules
   const modules = useMemo(() => {
@@ -63,56 +52,26 @@ export function useTopNavLinks(): TopNavLink[] {
   // Documentation link (may be external)
   const docsLink: string | undefined = status?.docs_link as string | undefined
 
-  const isAuthed = !!auth?.user
+  const links: TopNavLink[] = []
 
-  const linkByModule = new Map<TopNavModuleKey, TopNavLink>()
-
+  // Home
   if (modules?.home !== false) {
-    linkByModule.set('home', { title: t('Home'), href: '/' })
+    links.push({ title: t('Home'), href: '/' })
   }
 
+  // Console -> /dashboard (new console path)
   if (modules?.console !== false) {
-    linkByModule.set('console', { title: t('Console'), href: '/dashboard' })
+    links.push({ title: t('Console'), href: '/dashboard' })
   }
 
-  const pricing = modules?.pricing
-  if (pricing && typeof pricing === 'object' && pricing.enabled) {
-    const requiresAuth = pricing.requireAuth && !isAuthed
-    linkByModule.set('pricing', {
-      title: t('Model Plaza'),
-      href: '/pricing',
-      requiresAuth,
-    })
-  }
-
-  const rankings = modules?.rankings
-  if (rankings && typeof rankings === 'object' && rankings.enabled) {
-    const requiresAuth = rankings.requireAuth && !isAuthed
-    linkByModule.set('rankings', {
-      title: t('Rankings'),
-      href: '/rankings',
-      requiresAuth,
-    })
-  }
-
+  // Docs (supports external links)
   if (modules?.docs !== false) {
     if (docsLink) {
-      linkByModule.set('docs', {
-        title: t('Docs'),
-        href: docsLink,
-        external: true,
-      })
+      links.push({ title: t('Docs'), href: docsLink, external: true })
     } else {
-      linkByModule.set('docs', { title: t('Docs'), href: '/docs' })
+      links.push({ title: t('Docs'), href: '/docs' })
     }
   }
 
-  if (modules?.about !== false) {
-    linkByModule.set('about', { title: t('About'), href: '/about' })
-  }
-
-  return normalizeHeaderNavOrder(modules.order).flatMap((moduleKey) => {
-    const link = linkByModule.get(moduleKey)
-    return link ? [link] : []
-  })
+  return links
 }

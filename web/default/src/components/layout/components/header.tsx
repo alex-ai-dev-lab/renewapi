@@ -25,13 +25,13 @@ export function Header({ className, children, ...props }: HeaderProps) {
   return (
     <header
       className={cn(
-        'obsidian-app-header bg-background border-border z-30 h-14 w-full shrink-0 border-b',
+        'sticky top-0 z-40 h-[var(--app-header-height,3rem)] w-full shrink-0 bg-transparent',
         className
       )}
       {...props}
     >
-      <div className='flex h-full min-w-0 items-center gap-2 px-3 md:px-4'>
-        <SidebarTrigger variant='ghost' className='size-8 shrink-0' />
+      <div className='flex h-full items-center gap-1.5 px-2 sm:gap-2 sm:px-3'>
+        <SidebarTrigger variant='ghost' className='size-8' />
         {children}
       </div>
     </header>

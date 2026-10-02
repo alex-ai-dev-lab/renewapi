@@ -17,25 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import z from 'zod'
 import { Dashboard } from '@/features/dashboard'
 import {
   DASHBOARD_SECTION_IDS,
   DASHBOARD_DEFAULT_SECTION,
 } from '@/features/dashboard/section-registry'
-import { isDashboardTimeRange } from '@/features/dashboard/time-range-utils'
-
-const dashboardSearchSchema = z.object({
-  channel_id: z.number().optional().catch(undefined),
-  user_id: z.number().optional().catch(undefined),
-  model_name: z.string().optional().catch(undefined),
-  time_range: z
-    .preprocess(
-      (value) => (isDashboardTimeRange(value) ? value : undefined),
-      z.enum(['1d', '7d', '30d', '1y', 'all']).optional()
-    )
-    .catch(undefined),
-})
 
 export const Route = createFileRoute('/_authenticated/dashboard/$section')({
   beforeLoad: ({ params }) => {
@@ -47,6 +33,5 @@ export const Route = createFileRoute('/_authenticated/dashboard/$section')({
       })
     }
   },
-  validateSearch: dashboardSearchSchema,
   component: Dashboard,
 })

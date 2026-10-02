@@ -16,14 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-export { IzClosing } from './sections/iz-closing'
-export { IzFaq } from './sections/iz-faq'
-export { IzFooter } from './sections/iz-footer'
-export { IzHeader } from './sections/iz-header'
-export { IzHero } from './sections/iz-hero'
-export { IzLive } from './sections/iz-live'
-export { IzModels } from './sections/iz-models'
-export { IzPillars } from './sections/iz-pillars'
-export { IzProtocols } from './sections/iz-protocols'
-export { IzQuickstart } from './sections/iz-quickstart'
-export { IzRouting } from './sections/iz-routing'
+export { CTA } from './sections/cta'
+export { Features } from './sections/features'
+export { Hero } from './sections/hero'
+export { HowItWorks } from './sections/how-it-works'
+export { Stats } from './sections/stats'

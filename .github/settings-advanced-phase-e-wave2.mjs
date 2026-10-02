@@ -515,7 +515,7 @@ async function runRequestGuardCreateEdit(context, user) {
     await page.getByRole('button', { name: 'Add Endpoint' }).click()
     await page.getByLabel('Endpoint ID').fill('wave2-primary')
     await page.getByLabel('Base URL').fill('https://guard.example.test/v1')
-    await page.getByLabel('Model').fill('guard-v1')
+    await page.getByLabel('Model', { exact: true }).fill('guard-v1')
     await page.getByLabel('API Key').fill(requestGuardSecret)
     await page.getByRole('button', { name: 'Save Changes' }).click()
 
@@ -549,7 +549,7 @@ async function runRequestGuardCreateEdit(context, user) {
     )
     observations.push({ type: 'request-guard-secret-check', configured: true })
 
-    await page.getByLabel('Model').fill('guard-v2')
+    await page.getByLabel('Model', { exact: true }).fill('guard-v2')
     await page.getByRole('button', { name: 'Save Changes' }).click()
     await waitForRequestGuard(
       context,
@@ -593,7 +593,7 @@ async function verifyRequestGuardRestartAndDelete(context, user) {
       'Request Guard endpoint did not survive restart'
     )
     assert(
-      (await page.getByLabel('Model').inputValue()) === 'guard-v2',
+      (await page.getByLabel('Model', { exact: true }).inputValue()) === 'guard-v2',
       'Request Guard edit did not survive restart'
     )
     await page.getByText('Secret configured').waitFor({
@@ -755,7 +755,7 @@ async function runGroupPricing(context, user) {
   )
   try {
     await page.getByRole('button', { name: 'Switch to JSON' }).click()
-    const groupRatio = page.getByLabel('Group ratios')
+    const groupRatio = page.getByLabel('Group ratios', { exact: true })
     const autoGroups = page.getByLabel('Auto assignment order')
 
     await groupRatio.fill('{"broken":}')

@@ -29,7 +29,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Skeleton } from '@/components/ui/skeleton'
 import { DEFAULT_DISCOUNT_RATE } from '../../constants'
 import { formatCurrency, getPaymentIcon } from '../../lib'
 import type { PaymentMethod } from '../../types'
@@ -95,7 +94,10 @@ export function PaymentConfirmDialog({
               {t('You Pay')}
             </span>
             {calculating ? (
-              <Skeleton className='h-6 w-24' />
+              <Loader2
+                className='text-muted-foreground size-5 animate-spin'
+                aria-label={t('Loading...')}
+              />
             ) : (
               <div className='flex items-baseline gap-2'>
                 <span className='text-2xl font-semibold'>
@@ -114,7 +116,7 @@ export function PaymentConfirmDialog({
             <div className='bg-muted/50 rounded-lg p-3'>
               <div className='flex items-center justify-between text-sm'>
                 <span className='text-muted-foreground'>{t('You save')}</span>
-                <span className='font-semibold text-success'>
+                <span className='font-semibold text-green-600'>
                   {formatCurrency(discountAmount)}
                 </span>
               </div>

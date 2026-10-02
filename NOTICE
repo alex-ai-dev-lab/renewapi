@@ -1,5 +1,14 @@
 new-api Notices
 
+==== SnowAPI Frontend Adaptation ====
+
+RenewAPI's frontend is adapted from Ooxygen7/SnowAPI
+(https://github.com/Ooxygen7/SnowAPI), revision
+fe0afe6c9d388b2fcf0659ffc05c07925477c470, under AGPL-3.0.
+RenewAPI contributors modified the integration to retain RenewAPI's
+authentication, channel configuration, model mapping and billing behavior.
+Original source notices and third-party licenses are preserved.
+
 new-api
 Copyright (c) QuantumNous and contributors.
 

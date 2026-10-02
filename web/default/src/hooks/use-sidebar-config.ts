@@ -38,3 +38,9 @@ export function useSidebarConfig(navGroups: NavGroup[]): NavGroup[] {
     role: user?.role ?? 0,
   })
 }
+
+export function useIsSidebarModuleVisible(url: string) {
+  return useSidebarConfig([{ title: '', items: [{ title: '', url }] }]).some(
+    (group) => group.items.length > 0
+  )
+}

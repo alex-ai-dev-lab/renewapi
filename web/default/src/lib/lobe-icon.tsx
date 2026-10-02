@@ -25,29 +25,21 @@ For commercial licensing, please contact support@quantumnous.com
  * - Chained properties: "OpenAI.Avatar.type={'platform'}"
  * - Size parameter: getLobeIcon("OpenAI", 20)
  */
-import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
-import { COMMON_LOBE_ICONS } from './lobe-icon-common'
+import { lazy, Suspense, type ComponentType } from 'react'
+import { ProviderIconFallback } from '@/components/provider-icon-fallback'
+import { lobeIconLoaders } from './lobe-icon-loaders'
 
-type IconComponent = ComponentType<Record<string, unknown>>
-type IconRegistry = Record<string, unknown>
+const lazyIcons = new Map<
+  string,
+  ReturnType<typeof lazy<ComponentType<Record<string, unknown>>>>
+>()
 
-let extensionIcons: IconRegistry | null = null
-let extensionIconsPromise: Promise<IconRegistry> | null = null
-
-function loadExtensionIcons(): Promise<IconRegistry> {
-  if (!extensionIconsPromise) {
-    extensionIconsPromise = import('@lobehub/icons').then((icons) => {
-      extensionIcons = icons as IconRegistry
-      return extensionIcons
-    })
-  }
-  return extensionIconsPromise
-}
-
-function getIconEntry(icons: IconRegistry, key: string): unknown {
-  return Object.prototype.hasOwnProperty.call(icons, key)
-    ? icons[key]
-    : undefined
+/** Return the human-readable provider name represented by a Lobe icon key. */
+export function getLobeIconName(
+  iconName: string | undefined | null
+): string | null {
+  const baseKey = iconName?.trim().split('.')[0]?.trim()
+  return baseKey || null
 }
 
 /**
@@ -95,41 +87,50 @@ function parseValue(raw: string | undefined | null): string | number | boolean {
  * getLobeIcon("OpenAI.Color", 20)
  * getLobeIcon("Claude.Avatar.type={'platform'}", 32)
  */
-function renderFallback(label: string, size: number): ReactNode {
-  return (
-    <div
-      className='bg-muted text-muted-foreground flex items-center justify-center rounded-full text-xs font-medium'
-      style={{ width: size, height: size }}
-    >
-      {label}
-    </div>
-  )
-}
+export function getLobeIcon(
+  iconName: string | undefined | null,
+  size: number = 20
+): React.ReactNode {
+  if (!iconName || typeof iconName !== 'string') {
+    return (
+      <div
+        className='bg-muted text-muted-foreground flex items-center justify-center rounded-full text-xs font-medium'
+        style={{ width: size, height: size }}
+      >
+        ?
+      </div>
+    )
+  }
 
-function renderIcon(
-  trimmedName: string,
-  size: number,
-  icons: IconRegistry
-): ReactNode {
+  const trimmedName = iconName.trim()
+  if (!trimmedName) {
+    return (
+      <div
+        className='bg-muted text-muted-foreground flex items-center justify-center rounded-full text-xs font-medium'
+        style={{ width: size, height: size }}
+      >
+        ?
+      </div>
+    )
+  }
+
   // Parse component path and chained properties
   const segments = trimmedName.split('.')
   const baseKey = segments[0]
-  const BaseIcon = getIconEntry(icons, baseKey)
-  const variantKey = segments[1]
-  const VariantIcon =
-    BaseIcon && variantKey
-      ? getIconEntry(BaseIcon as IconRegistry, variantKey)
-      : undefined
-
-  let IconComponent: IconComponent | undefined
-  let propStartIndex: number
-
-  if (VariantIcon) {
-    IconComponent = VariantIcon as IconComponent
-    propStartIndex = 2
-  } else {
-    IconComponent = BaseIcon as IconComponent | undefined
-    propStartIndex = segments.length > 1 && /^[A-Z]/.test(segments[1]) ? 2 : 1
+  const variant =
+    segments.length > 1 && /^[A-Z]/.test(segments[1]) ? segments[1] : 'Mono'
+  const propStartIndex = variant === 'Mono' && segments[1] !== 'Mono' ? 1 : 2
+  const iconKey = `${baseKey}.${variant}`
+  const loader = lobeIconLoaders[iconKey as keyof typeof lobeIconLoaders]
+  let IconComponent = lazyIcons.get(iconKey)
+  if (!IconComponent && loader) {
+    const loadIcon = loader as () => Promise<{
+      default: ComponentType<Record<string, unknown>>
+    }>
+    IconComponent = lazy(() =>
+      loadIcon().catch(() => ({ default: ProviderIconFallback }))
+    )
+    lazyIcons.set(iconKey, IconComponent)
   }
 
   // Fallback if icon not found
@@ -138,7 +139,14 @@ function renderIcon(
     (typeof IconComponent !== 'function' && typeof IconComponent !== 'object')
   ) {
     const firstLetter = trimmedName.charAt(0).toUpperCase()
-    return renderFallback(firstLetter, size)
+    return (
+      <div
+        className='bg-muted text-muted-foreground flex items-center justify-center rounded-full text-xs font-medium'
+        style={{ width: size, height: size }}
+      >
+        {firstLetter}
+      </div>
+    )
   }
 
   // Parse chained properties (e.g., "type={'platform'}", "shape='square'")
@@ -164,53 +172,17 @@ function renderIcon(
     props.size = size
   }
 
-  return <IconComponent {...props} />
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-function LobeIconRenderer(props: { iconName: string; size: number }) {
-  const baseKey = props.iconName.split('.')[0]
-  const commonIcon = getIconEntry(COMMON_LOBE_ICONS, baseKey)
-  const [loadedExtensionIcons, setLoadedExtensionIcons] =
-    useState<IconRegistry | null>(() => extensionIcons)
-
-  useEffect(() => {
-    if (commonIcon || loadedExtensionIcons) return
-
-    let active = true
-    void loadExtensionIcons()
-      .then((icons) => {
-        if (active) setLoadedExtensionIcons(icons)
-      })
-      .catch(() => {
-        if (active) setLoadedExtensionIcons({})
-      })
-
-    return () => {
-      active = false
-    }
-  }, [commonIcon, loadedExtensionIcons])
-
-  const icons = commonIcon ? COMMON_LOBE_ICONS : loadedExtensionIcons
-  if (!icons) {
-    return renderFallback(props.iconName.charAt(0).toUpperCase(), props.size)
-  }
-
-  return renderIcon(props.iconName, props.size, icons)
-}
-
-export function getLobeIcon(
-  iconName: string | undefined | null,
-  size: number = 20
-): ReactNode {
-  if (!iconName || typeof iconName !== 'string') {
-    return renderFallback('?', size)
-  }
-
-  const trimmedName = iconName.trim()
-  if (!trimmedName) {
-    return renderFallback('?', size)
-  }
-
-  return <LobeIconRenderer iconName={trimmedName} size={size} />
+  return (
+    <Suspense
+      fallback={
+        <span
+          aria-hidden='true'
+          className='inline-block shrink-0'
+          style={{ width: size, height: size }}
+        />
+      }
+    >
+      <IconComponent {...props} />
+    </Suspense>
+  )
 }

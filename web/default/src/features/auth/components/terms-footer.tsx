@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
+import { appPath } from '@/lib/deployment-mode'
 import { cn } from '@/lib/utils'
 import type { SystemStatus } from '../types'
 
@@ -65,13 +66,13 @@ export function TermsFooter({
 
   return (
     <p className={cn('text-muted-foreground text-center text-xs', className)}>
-      {text}{' '}
+      {t(text)}{' '}
       {firstLink && (
         <a
-          href={firstLink.href}
+          href={appPath(firstLink.href)}
           className='hover:text-primary underline underline-offset-4'
         >
-          {firstLink.label}
+          {t(firstLink.label)}
         </a>
       )}
       {secondLink && (
@@ -79,10 +80,10 @@ export function TermsFooter({
           {' '}
           {t('and')}{' '}
           <a
-            href={secondLink.href}
+            href={appPath(secondLink.href)}
             className='hover:text-primary underline underline-offset-4'
           >
-            {secondLink.label}
+            {t(secondLink.label)}
           </a>
         </>
       )}

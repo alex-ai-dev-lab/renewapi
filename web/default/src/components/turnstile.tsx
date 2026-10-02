@@ -16,7 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 
 declare global {
   interface Window {
@@ -25,7 +28,7 @@ declare global {
         element: HTMLElement,
         options: Record<string, unknown>
       ) => string | undefined
-      remove?: (widgetId: string) => void
+      remove: (widgetId: string) => void
     }
   }
 }
@@ -35,6 +38,50 @@ interface TurnstileProps {
   onVerify: (token: string) => void
   onExpire?: () => void
   className?: string
+  action?: string
+  cData?: string
+  language?: string
+  theme?: 'light' | 'dark' | 'auto'
+  appearance?: 'always' | 'execute' | 'interaction-only'
+  onError?: (code: string) => void
+  singleAttempt?: boolean
+  showError?: boolean
+}
+
+let scriptLoading: Promise<void> | null = null
+
+function loadTurnstile(): Promise<void> {
+  if (window.turnstile) return Promise.resolve()
+  if (scriptLoading) return scriptLoading
+  scriptLoading = new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('#cf-turnstile')
+    const script = existing ?? document.createElement('script')
+    const finish = (failed: boolean) => {
+      clearTimeout(timeout)
+      script.removeEventListener('load', loaded)
+      script.removeEventListener('error', errored)
+      if (failed) {
+        script.remove()
+        scriptLoading = null
+        reject(new Error('Turnstile could not load'))
+      } else {
+        resolve()
+      }
+    }
+    const loaded = () => finish(!window.turnstile)
+    const errored = () => finish(true)
+    const timeout = setTimeout(errored, 15000)
+    script.addEventListener('load', loaded)
+    script.addEventListener('error', errored)
+    if (!existing) {
+      script.id = 'cf-turnstile'
+      script.src =
+        'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+      script.async = true
+      document.head.appendChild(script)
+    }
+  })
+  return scriptLoading
 }
 
 export function Turnstile({
@@ -42,67 +89,120 @@ export function Turnstile({
   onVerify,
   onExpire,
   className,
+  action,
+  cData,
+  language: languageOverride,
+  theme = 'auto',
+  appearance = 'always',
+  onError,
+  singleAttempt = false,
+  showError = true,
 }: TurnstileProps) {
+  const { t, i18n } = useTranslation(undefined, { lng: languageOverride })
   const ref = useRef<HTMLDivElement | null>(null)
-  const widgetIdRef = useRef<string | undefined>(undefined)
-  const onVerifyRef = useRef(onVerify)
-  const onExpireRef = useRef(onExpire)
-
+  const callbacks = useRef({ onVerify, onExpire, onError })
   useEffect(() => {
-    onVerifyRef.current = onVerify
-    onExpireRef.current = onExpire
-  }, [onVerify, onExpire])
+    callbacks.current = { onVerify, onExpire, onError }
+  }, [onVerify, onExpire, onError])
+  const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  const requestedLanguage = languageOverride ?? i18n.language
+  const language = requestedLanguage.startsWith('zh')
+    ? 'zh-cn'
+    : requestedLanguage
 
   useEffect(() => {
     let cancelled = false
-    const render = () => {
-      if (cancelled || !ref.current || !window.turnstile || widgetIdRef.current)
-        return
-      try {
-        widgetIdRef.current = window.turnstile.render(ref.current, {
+    let widgetId: string | undefined
+    let attemptEnded = false
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    callbacks.current.onVerify('')
+    const fail = (code = 'widget_failed') => {
+      if (cancelled || (singleAttempt && attemptEnded)) return
+      attemptEnded = true
+      clearTimeout(timeout)
+      callbacks.current.onVerify('')
+      setFailed(true)
+      callbacks.current.onError?.(code)
+      return true
+    }
+    // Do not leave a silent automatic challenge spinning indefinitely. Once
+    // Cloudflare asks for interaction, its own interaction timeout takes over.
+    if (singleAttempt) timeout = setTimeout(() => fail('widget_timeout'), 45000)
+    void loadTurnstile()
+      .then(() => {
+        if (cancelled || !ref.current || !window.turnstile) return
+        widgetId = window.turnstile.render(ref.current, {
           sitekey: siteKey,
-          callback: (token: string) => onVerifyRef.current(token),
-          'error-callback': () => onExpireRef.current?.(),
-          'expired-callback': () => onExpireRef.current?.(),
+          language,
+          theme,
+          appearance,
+          action,
+          cData,
+          ...(singleAttempt && {
+            retry: 'never',
+            // End this attempt on failure or expiry instead of retrying.
+            // "never" also works with legacy Invisible keys.
+            'refresh-expired': 'never',
+            'refresh-timeout': 'never',
+          }),
+          callback: (token: string) => {
+            if (cancelled || (singleAttempt && attemptEnded)) return
+            attemptEnded = true
+            clearTimeout(timeout)
+            setFailed(false)
+            callbacks.current.onVerify(token)
+          },
+          'error-callback': fail,
+          'before-interactive-callback': () => clearTimeout(timeout),
+          'unsupported-callback': () => fail('unsupported_browser'),
+          'expired-callback': () => {
+            attemptEnded = false
+            fail('token_expired')
+            if (!cancelled) callbacks.current.onExpire?.()
+          },
+          'timeout-callback': () => fail('interaction_timeout'),
         })
-      } catch {
-        /* empty */
-      }
-    }
-    const cleanup = () => {
-      cancelled = true
-      if (widgetIdRef.current && window.turnstile?.remove) {
-        window.turnstile.remove(widgetIdRef.current)
-      }
-      widgetIdRef.current = undefined
-    }
-
-    if (window.turnstile) {
-      render()
-      return cleanup
-    }
-    const scriptId = 'cf-turnstile'
-    const existingScript = document.getElementById(scriptId)
-    if (existingScript) {
-      existingScript.addEventListener('load', render)
-      return () => {
-        existingScript.removeEventListener('load', render)
-        cleanup()
-      }
-    }
-    const s = document.createElement('script')
-    s.id = scriptId
-    s.src =
-      'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
-    s.async = true
-    s.defer = true
-    s.addEventListener('load', render)
-    document.head.appendChild(s)
+        if (widgetId === undefined) fail('widget_render_failed')
+      })
+      .catch(() => fail('script_load_failed'))
     return () => {
-      s.removeEventListener('load', render)
-      cleanup()
+      cancelled = true
+      clearTimeout(timeout)
+      if (widgetId) window.turnstile?.remove(widgetId)
     }
-  }, [siteKey])
+  }, [
+    siteKey,
+    attempt,
+    language,
+    theme,
+    appearance,
+    action,
+    cData,
+    singleAttempt,
+  ])
 
-  return <div ref={ref} className={className} />
+  return (
+    <div className={cn('flex w-full flex-col items-center gap-2', className)}>
+      <div ref={ref} />
+      {failed && showError && (
+        <div
+          role='alert'
+          className='flex flex-col items-center gap-2 text-center text-sm'
+        >
+          <p>{t('Security verification failed. Please try again.')}</p>
+          <Button
+            type='button'
+            variant='outline'
+            onClick={() => {
+              setFailed(false)
+              setAttempt((value) => value + 1)
+            }}
+          >
+            {t('Retry verification')}
+          </Button>
+        </div>
+      )}
+    </div>
+  )
 }

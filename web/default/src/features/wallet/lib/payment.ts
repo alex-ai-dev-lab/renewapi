@@ -23,7 +23,12 @@ import {
   DEFAULT_PAYMENT_TYPE,
   DEFAULT_MIN_TOPUP,
 } from '../constants'
-import type { PresetAmount, TopupInfo } from '../types'
+import type {
+  PresetAmount,
+  TopupInfo,
+  EpayFormData,
+  TopupStatus,
+} from '../types'
 
 // ============================================================================
 // Payment Processing Functions
@@ -65,7 +70,8 @@ function isSafariBrowser(): boolean {
  */
 export function submitPaymentForm(
   url: string,
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  targetName?: string
 ): boolean {
   const paymentUrl = resolveHttpRedirect(url)
   if (!paymentUrl) return false
@@ -75,7 +81,10 @@ export function submitPaymentForm(
   form.method = 'POST'
 
   // Don't open in new tab for Safari
-  if (!isSafariBrowser()) {
+  if (targetName) {
+    form.target = targetName
+    form.rel = 'noopener noreferrer'
+  } else if (!isSafariBrowser()) {
     form.target = '_blank'
     // HTMLFormElement.rel is honoured for target=_blank submissions, but
     // support is newer than window.open's noopener feature string.
@@ -240,4 +249,131 @@ export function mergePresetAmounts(
     // which the backend does not model today.
     discount: discounts[amount] || 1.0,
   }))
+}
+
+// ============================================================================
+// Payment Processing Functions
+// ============================================================================
+
+// An empty draft is an editing state, not a request to restore the minimum.
+export function parseTopupAmount(value: string, minimum = 1): number | null {
+  if (!value || /[^0-9]/.test(value)) return null
+  const amount = Number(value)
+  return Number.isSafeInteger(amount) && amount >= Math.max(1, minimum)
+    ? amount
+    : null
+}
+
+export interface PaymentPopup {
+  readonly closed: boolean
+  close: () => void
+}
+
+export interface PaymentWindowTarget {
+  popup: Window
+  targetName: string
+}
+
+export type PaymentMonitorResult =
+  | 'success'
+  | 'failed'
+  | 'cancelled'
+  | 'pending'
+
+interface PaymentMonitorOptions {
+  popup: PaymentPopup
+  getStatus: () => Promise<TopupStatus | null>
+  signal?: AbortSignal
+  pollIntervalMs?: number
+  maxChecks?: number
+  closureGraceChecks?: number
+  wait?: (durationMs: number) => Promise<void>
+}
+
+/**
+ * Open the payment destination synchronously from the user's click so browser
+ * popup protection does not discard the checkout window while the order API is
+ * still running.
+ */
+export function openPaymentWindow(): PaymentWindowTarget | null {
+  const targetName = `snowapi-payment-${Date.now()}`
+  const width = Math.min(560, window.screen.availWidth)
+  const height = Math.min(760, window.screen.availHeight)
+  const left = Math.max(0, Math.round((window.screen.availWidth - width) / 2))
+  const top = Math.max(0, Math.round((window.screen.availHeight - height) / 2))
+  const popup = window.open(
+    '',
+    targetName,
+    `popup=yes,width=${width},height=${height},left=${left},top=${top}`
+  )
+
+  if (!popup) {
+    return null
+  }
+
+  try {
+    popup.document.documentElement.style.background = '#000'
+    popup.document.body.style.background = '#000'
+    popup.opener = null
+  } catch {
+    // The window can become cross-origin immediately in some browsers.
+  }
+
+  return { popup, targetName }
+}
+
+export function getPaymentTradeNo(params: EpayFormData): string | null {
+  const tradeNo = params.out_trade_no ?? params.trade_no
+  return typeof tradeNo === 'string' && tradeNo.trim() !== ''
+    ? tradeNo.trim()
+    : null
+}
+
+/**
+ * Poll the user-scoped order status while observing the checkout window. A
+ * short grace period after the popup closes avoids racing the payment webhook.
+ */
+export async function monitorPaymentWindow(
+  options: PaymentMonitorOptions
+): Promise<PaymentMonitorResult> {
+  const pollIntervalMs = options.pollIntervalMs ?? 2000
+  const maxChecks = options.maxChecks ?? 300
+  const closureGraceChecks = options.closureGraceChecks ?? 2
+  const wait =
+    options.wait ??
+    ((durationMs: number) =>
+      new Promise<void>((resolve) => window.setTimeout(resolve, durationMs)))
+  let remainingClosureChecks: number | null = null
+
+  for (let check = 0; check < maxChecks; check += 1) {
+    if (options.signal?.aborted) {
+      return 'cancelled'
+    }
+
+    try {
+      const status = await options.getStatus()
+      if (status === 'success') {
+        return 'success'
+      }
+      if (status === 'failed' || status === 'expired') {
+        return 'failed'
+      }
+    } catch {
+      // A transient status request failure should not terminate checkout.
+    }
+
+    if (options.popup.closed) {
+      if (remainingClosureChecks === null) {
+        remainingClosureChecks = closureGraceChecks
+      } else if (remainingClosureChecks <= 0) {
+        return 'pending'
+      } else {
+        remainingClosureChecks -= 1
+      }
+    }
+
+    await wait(pollIntervalMs)
+  }
+
+  return options.signal?.aborted ? 'cancelled' : 'pending'
 }

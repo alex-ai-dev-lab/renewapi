@@ -69,6 +69,14 @@ function resolveDatabaseMeta(type?: string) {
 export function DatabaseStep({ status }: DatabaseStepProps) {
   const { t } = useTranslation()
   const meta = resolveDatabaseMeta(status?.database_type)
+  const electronApi =
+    typeof window !== 'undefined'
+      ? ((window as unknown as Record<string, unknown>)?.electron as
+          | Record<string, unknown>
+          | undefined)
+      : undefined
+  const isElectron = Boolean(electronApi?.isElectron)
+  const electronDataDir = electronApi?.dataDir as string | undefined
 
   return (
     <div className='space-y-4'>
@@ -97,9 +105,9 @@ export function DatabaseStep({ status }: DatabaseStepProps) {
       </div>
 
       {status?.database_type === 'sqlite' && (
-        <Alert className='border-warning/30 bg-warning/10'>
+        <Alert className='border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/40'>
           <AlertTitle className='flex items-center gap-2'>
-            <HardDrive className='text-warning size-4' />
+            <HardDrive className='size-4 text-amber-500' />
             {t('Persist your data file')}
           </AlertTitle>
           <AlertDescription>
@@ -108,14 +116,26 @@ export function DatabaseStep({ status }: DatabaseStepProps) {
                 'When running in containers or ephemeral environments, ensure the SQLite file is mapped to persistent storage to avoid data loss on restart.'
               )}
             </p>
+            {isElectron && electronDataDir && (
+              <p className='mt-3 rounded-md bg-amber-100/70 px-3 py-2 font-mono text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-200'>
+                {t('Data directory:')} {electronDataDir}
+              </p>
+            )}
+            {isElectron && !electronDataDir && (
+              <p className='text-muted-foreground mt-3 text-xs'>
+                {t(
+                  'Data is stored locally on this device. Use system backups to keep a safe copy.'
+                )}
+              </p>
+            )}
           </AlertDescription>
         </Alert>
       )}
 
       {status?.database_type === 'mysql' && (
-        <Alert className='border-success/30 bg-success/10'>
+        <Alert className='border-emerald-200 bg-emerald-50 dark:border-emerald-900/60 dark:bg-emerald-950/40'>
           <AlertTitle className='flex items-center gap-2'>
-            <Server className='text-success size-4' />
+            <Server className='size-4 text-emerald-500' />
             {t('MySQL detected')}
           </AlertTitle>
           <AlertDescription>
@@ -127,9 +147,9 @@ export function DatabaseStep({ status }: DatabaseStepProps) {
       )}
 
       {status?.database_type === 'postgres' && (
-        <Alert className='border-border bg-muted'>
+        <Alert className='border-sky-200 bg-sky-50 dark:border-sky-900/60 dark:bg-sky-950/40'>
           <AlertTitle className='flex items-center gap-2'>
-            <Server className='text-chart-1 size-4' />
+            <Server className='size-4 text-sky-500' />
             {t('PostgreSQL detected')}
           </AlertTitle>
           <AlertDescription>

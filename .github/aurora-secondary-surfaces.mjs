@@ -272,37 +272,17 @@ async function seedClientState(context, theme, user = null) {
 async function loginContext(context) {
   const page = await context.newPage()
   try {
-    await page.goto(`${baseURL}/sign-in`, { waitUntil: 'domcontentloaded' })
-    const result = await page.evaluate(
-      async ({ loginUsername, loginPassword }) => {
-        const response = await fetch('/api/user/login', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: loginUsername,
-            password: loginPassword,
-          }),
-        })
-        const text = await response.text()
-        let body = null
-        try {
-          body = JSON.parse(text)
-        } catch {
-          body = { success: false, message: text.slice(0, 300) }
-        }
-        return { status: response.status, body }
-      },
-      { loginUsername: username, loginPassword: password }
-    )
-    if (
-      result.status !== 200 ||
-      result.body?.success !== true ||
-      !result.body?.data?.id
-    ) {
-      throw new Error(`Root login failed: ${JSON.stringify(result)}`)
-    }
-    return result.body.data
+    await page.goto(`${baseURL}/sign-in`, {waitUntil:'domcontentloaded'})
+    await page.getByRole('button', {name:'Continue with password', exact:true}).click()
+    await page.locator('input[name="username"]').fill(username)
+    await page.locator('input[name="password"]').fill(password)
+    const loginResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/user/login' && response.request().method() === 'POST')
+    await page.locator('form button[type="submit"]').click()
+    const response = await loginResponse
+    const result = await readJson(response)
+    if (!response.ok() || !result.success || !result.data?.id) throw new Error('Root login failed through the sign-in form')
+    await page.waitForURL(/\/dashboard(?:\/|$)/, {timeout:30000})
+    return result.data
   } finally {
     await page.close()
   }
@@ -367,7 +347,7 @@ async function auditPage(context, testCase, theme, viewportName, authRequired) {
   try {
     // 等待真实统计响应，避免在慢请求的加载态截图后漏掉空数据渲染错误。
     const overviewResponse = id === 'dashboard'
-      ? page.waitForResponse((response) => new URL(response.url()).pathname === '/api/stats/overview', { timeout: 20000 }).catch(() => null)
+      ? page.waitForResponse((response) => new URL(response.url()).pathname === '/api/data/self', { timeout: 20000 }).catch(() => null)
       : null
     const response = await page.goto(`${baseURL}${route}`, {
       waitUntil: 'domcontentloaded',
@@ -375,7 +355,7 @@ async function auditPage(context, testCase, theme, viewportName, authRequired) {
     if (overviewResponse) {
       const overview = await overviewResponse
       const payload = overview ? await readJson(overview) : null
-      if (!payload?.success || !Array.isArray(payload.data?.trend)) {
+      if (!payload?.success || !Array.isArray(payload.data)) {
         failures.push({ label, type: 'overview-array-contract', status: overview?.status() ?? null })
       }
     }
@@ -394,7 +374,7 @@ async function auditPage(context, testCase, theme, viewportName, authRequired) {
 
     const currentURL = page.url()
     const currentPathname = normalizePathname(new URL(currentURL).pathname)
-    const expectedPathname = normalizePathname(route)
+    const expectedPathname = normalizePathname(id === 'system-settings' ? '/system-settings/site/system-info' : route)
     if (currentPathname !== expectedPathname) {
       failures.push({
         label,
@@ -437,53 +417,17 @@ async function auditPage(context, testCase, theme, viewportName, authRequired) {
     }
 
     if (id === 'channel-create') {
-      const editorPageCount = await page
-        .locator('[data-ui="channel-editor-page"]')
-        .count()
-      if (editorPageCount === 0) {
-        failures.push({
-          label,
-          type: 'channel-editor-page-missing',
-          routeIdentity,
-          currentURL,
-        })
-      }
-      const sheetCount = await page.locator('[data-slot="sheet-content"]').count()
-      if (sheetCount > 0) {
-        failures.push({ label, type: 'channel-editor-rendered-as-sheet' })
+      const sheet = page.locator('[data-slot="sheet-content"]')
+      await sheet.getByLabel(/^Name(?:\s*\*)?$/).waitFor({state:'visible',timeout:20000})
+      if (await sheet.count() !== 1) {
+        failures.push({label, type:'channel-editor-missing', routeIdentity, currentURL})
       }
     }
-
-    if (
-      viewportName === 'desktop' &&
-      (id === 'channels' || id === 'usage-logs')
-    ) {
-      const pageModeCount = await page
-        .locator('[data-ui="data-table-page"][data-scroll-mode="page"]')
-        .count()
-      if (pageModeCount === 0) {
-        failures.push({ label, type: 'data-table-page-scroll-contract-missing' })
-      }
-      const tableScroll = page.locator('[data-ui="data-table-scroll"]').first()
-      if ((await tableScroll.count()) > 0) {
-        const tableScrollMetrics = await tableScroll.evaluate((element) => ({
-          clientHeight: element.clientHeight,
-          scrollHeight: element.scrollHeight,
-          overflowY: getComputedStyle(element).overflowY,
-          maxHeight: getComputedStyle(element).maxHeight,
-        }))
-        if (
-          tableScrollMetrics.scrollHeight > tableScrollMetrics.clientHeight + 1 ||
-          tableScrollMetrics.overflowY === 'scroll' ||
-          tableScrollMetrics.maxHeight !== 'none'
-        ) {
-          failures.push({
-            label,
-            type: 'unexpected-data-table-vertical-scroll',
-            tableScrollMetrics,
-          })
-        }
-      }
+    if (viewportName === 'desktop' && (id === 'channels' || id === 'usage-logs')) {
+      const tablePage = page.locator('[data-ui="data-table-page"]')
+      if (!(await tablePage.isVisible())) failures.push({label,type:'data-table-missing'})
+      const layout = await tablePage.getAttribute('data-scroll-mode')
+      if (!['contained','page'].includes(layout)) failures.push({label,type:'unknown-table-scroll-layout',layout})
     }
 
     const overflow = await page.evaluate(() => {
@@ -736,51 +680,65 @@ async function auditRecoveryCases(browser) {
       })
       await page.goto(`${baseURL}/`, { waitUntil: 'domcontentloaded' })
       await page
-        .locator('.obsidian-home')
+        .locator('.snowapi-deeix-home')
         .waitFor({ state: 'visible', timeout: 20000 })
       check(
         (await page.locator('a[href="/sign-up"]').count()) === 0,
         '关闭注册时不应显示注册入口'
       )
-      check(
-        (await page.locator('a[href="/pricing"]').count()) > 0,
-        '浏览模型应进入实际模型广场'
-      )
-      check(
-        (await page.getByRole('link', { name: 'Go to home', exact: true }).first().innerText()).includes(
-          'QA Gateway'
-        ),
-        '首页应使用配置的站点名称'
-      )
-      const home = await page.locator('.obsidian-home').innerText()
-      check(
-        home.includes('https://gateway.example.test/api/v1') &&
-          !/184 QPS|99\.91%|fallback stream/.test(home),
-        '首页应展示配置的 API 地址，不得捏造实时指标'
-      )
-      const example = page.getByLabel('Example cURL command', { exact: true })
-      await example.focus()
-      check(
-        await example.evaluate(element => element === document.activeElement),
-        '代码示例应允许键盘聚焦和滚动'
-      )
-      check(
-        (await example.innerText()).includes('YOUR_MODEL'),
-        '示例不应假设站点启用了固定模型'
-      )
-      await context.grantPermissions(['clipboard-read', 'clipboard-write'])
-      await page.getByRole('button', { name: 'Copy', exact: true }).click()
-      const copied = await page.evaluate(() => navigator.clipboard.readText())
-      check(copied.includes('https://gateway.example.test/api/v1/chat/completions') && copied.includes('$API_KEY'), '复制应包含配置的端点与密钥占位符')
+      const home = await page.locator('.snowapi-deeix-home').innerText()
+      check(home.includes('QA Gateway'), '首页应使用配置的站点名称')
+      check(!/184 QPS|99\.91%|fallback stream/.test(home), '首页不得捏造实时指标')
+      check(await page.locator('canvas').count() > 0, 'Snowflake 首页画布应存在')
+      check(await page.locator('a[href="https://github.com/QuantumNous/new-api"]').count() > 0, '保留可见 New API 来源链接')
+      check(await page.locator('a[href="/sign-in"]').count() > 0, '首页应保留登录入口')
       unavailable = true
       await page.reload({ waitUntil: 'domcontentloaded' })
-      await page.locator('.obsidian-home').waitFor({ state: 'visible', timeout: 20000 })
+      await page.locator('.snowapi-deeix-home').waitFor({ state: 'visible', timeout: 20000 })
       check(
         new URL(page.url()).pathname === '/' && (await page.locator('a[href="/sign-up"]').count()) === 0,
         '状态接口故障应保留首页且不得显示未经确认的注册入口'
       )
     }
   )
+  return passed
+}
+
+async function auditUserRoles(browser) {
+  const rootContext = await createContext(browser, 'light', {width:1440,height:1000})
+  const userContext = await createContext(browser, 'light', {width:1440,height:1000})
+  let passed = 0
+  try {
+    const rootUser = await loginContext(rootContext)
+    const headers = {'New-Api-User': String(rootUser.id)}
+    const readerName = 'snow_ui_role_reader'
+    const readerPassword = 'QaReader123!'
+    const created = await readJson(await rootContext.request.post(`${baseURL}/api/user/`, {headers, data:{username:readerName,password:readerPassword,role:1,group:'default'}}))
+    if (!created.success) throw new Error('Unable to create isolated role-check account')
+    const login = await readJson(await userContext.request.post(`${baseURL}/api/user/login`, {data:{username:readerName,password:readerPassword}}))
+    if (!login.success || login.data?.role !== 1) throw new Error('Role-check login failed')
+    await seedClientState(userContext, 'light', login.data)
+    const page = await userContext.newPage()
+    attachDiagnostics(page, 'ordinary-user-roles')
+    await page.goto(`${baseURL}/wallet`, {waitUntil:'domcontentloaded'})
+    await waitForSurface(page)
+    const deniedMenus = ['/channels','/users','/subscriptions','/system-settings/site','/group-settings']
+    for (const href of deniedMenus) {
+      if (await page.locator(`.snowapi-astryx-side-nav a[href="${href}"]`).count()) failures.push({label:'ordinary-user-roles',type:'privileged-menu-visible',href})
+      else passed += 1
+    }
+    for (const route of ['/channels','/system-settings/site','/group-settings']) {
+      await page.goto(`${baseURL}${route}`, {waitUntil:'domcontentloaded'})
+      await waitForSurface(page)
+      if (normalizePathname(new URL(page.url()).pathname) !== '/403') failures.push({label:'ordinary-user-roles',type:'privileged-route-accessible',route})
+      else passed += 1
+    }
+    observations.push({type:'role-checks',passed,total:8})
+    await page.close()
+  } finally {
+    await userContext.close()
+    await rootContext.close()
+  }
   return passed
 }
 
@@ -811,9 +769,12 @@ async function main() {
       }
     }
 
+    const roleCasesPassed = await auditUserRoles(browser)
     const recoveryCasesPassed = await auditRecoveryCases(browser)
 
     const summary = {
+      roleCases: 8,
+      roleCasesPassed,
       recoveryCases: 4,
       recoveryCasesPassed,
       passed: failures.length === 0,

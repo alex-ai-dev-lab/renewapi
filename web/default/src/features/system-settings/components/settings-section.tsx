@@ -37,7 +37,7 @@ export function SettingsSection({
 
   return (
     <SectionCard
-      className={cn('obsidian-settings-section', className)}
+      className={cn('', className)}
       title={
         suppressHeader ? undefined : (
           <span {...titleProps} className={cn(titleProps?.className)}>

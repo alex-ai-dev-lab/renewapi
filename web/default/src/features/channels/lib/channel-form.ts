@@ -119,6 +119,9 @@ function addRequiredIssue(
 
 export const channelFormSchema = z
   .object({
+    advanced_custom: z.string().optional(),
+    disable_task_polling_sleep: z.boolean().optional(),
+    max_input_tokens: z.number().optional(),
     name: z.string().min(1, ERROR_MESSAGES.REQUIRED_NAME),
     type: z.number().min(0, ERROR_MESSAGES.REQUIRED_TYPE),
     base_url: z.string().optional(),

@@ -16,22 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useLocation } from '@tanstack/react-router'
-import { useTranslation } from 'react-i18next'
-import { useNotifications } from '@/hooks/use-notifications'
-import { useSidebarView } from '@/hooks/use-sidebar-view'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitcher } from '@/components/language-switcher'
-import { NotificationPopover } from '@/components/notification-popover'
 import { ProfileDropdown } from '@/components/profile-dropdown'
-import { ThemeSwitch } from '@/components/theme-switch'
+import { Search } from '@/components/search'
 import { defaultTopNavLinks } from '../config/top-nav.config'
-import { checkIsActive } from '../lib/url-utils'
-import { type TopNavLink } from '../types'
-import { CommandPaletteTrigger } from './command-palette-trigger'
+import type { TopNavLink } from '../types'
 import { Header } from './header'
-import { TopNav } from './top-nav'
+import { NavigationDock } from './navigation-dock'
+import { SystemBrand } from './system-brand'
 
 /**
  * General application Header component
@@ -80,11 +74,6 @@ type AppHeaderProps = {
    */
   rightContent?: React.ReactNode
   /**
-   * Whether to show notification button
-   * @default true
-   */
-  showNotifications?: boolean
-  /**
    * Whether to show config drawer
    * @default true
    */
@@ -102,7 +91,6 @@ export function AppHeader({
   leftContent,
   showSearch = true,
   rightContent,
-  showNotifications = true,
   showConfigDrawer = true,
   showProfileDropdown = true,
 }: AppHeaderProps) {
@@ -110,80 +98,25 @@ export function AppHeader({
   const dynamicLinks = useTopNavLinks()
   const links = dynamicLinks.length > 0 ? dynamicLinks : navLinks
 
-  const { t } = useTranslation()
-  const { href, pathname } = useLocation()
-  const { navGroups } = useSidebarView()
-  const currentGroup = navGroups.find((group) =>
-    group.items.some((item) => checkIsActive(href, item))
-  )
-  const currentItem = currentGroup?.items.find((item) =>
-    checkIsActive(href, item)
-  )
-  const currentChild = currentItem?.items?.find((item) =>
-    checkIsActive(href, item)
-  )
-  const currentTitle = currentChild?.title ?? currentItem?.title ?? pathname
-
-  const notifications = useNotifications()
-
   return (
-    <Header>
-      <div className='min-w-0 flex-1'>
-        {leftContent ?? (
-          <nav
-            aria-label={t('Current location')}
-            className='flex min-w-0 items-center gap-2 text-[13px]'
-          >
-            {currentGroup && (
-              <>
-                <span className='text-muted-foreground hidden truncate lg:block'>
-                  {currentGroup.title}
-                </span>
-                <span
-                  aria-hidden='true'
-                  className='text-muted-foreground hidden lg:block'
-                >
-                  /
-                </span>
-              </>
-            )}
-            <span
-              aria-current='page'
-              className='truncate font-medium'
-              title={currentTitle}
-            >
-              {currentTitle}
-            </span>
-          </nav>
-        )}
-      </div>
+    <>
+      <Header>
+        <SystemBrand variant='inline' />
 
-      {rightContent ?? (
-        <div className='obsidian-header-actions ms-auto flex shrink-0 items-center gap-1'>
-          {showTopNav && (
-            <div className='me-1 hidden xl:block'>
-              <TopNav links={links} />
-            </div>
-          )}
-          {showSearch && <CommandPaletteTrigger />}
-          {showNotifications && (
-            <NotificationPopover
-              open={notifications.popoverOpen}
-              onOpenChange={notifications.setPopoverOpen}
-              unreadCount={notifications.unreadCount}
-              activeTab={notifications.activeTab}
-              onTabChange={notifications.setActiveTab}
-              notice={notifications.notice}
-              announcements={notifications.announcements}
-              loading={notifications.loading}
-            />
-          )}
-          <LanguageSwitcher />
-          <ThemeSwitch />
-          {showConfigDrawer && <ConfigDrawer />}
-          {showProfileDropdown && <ProfileDropdown />}
-        </div>
-      )}
-    </Header>
+        {leftContent ? (
+          <div className='ms-2 flex items-center'>{leftContent}</div>
+        ) : null}
+
+        {rightContent ?? (
+          <div className='ms-auto flex items-center gap-1 sm:gap-2'>
+            {showSearch && <Search />}
+            <LanguageSwitcher />
+            {showConfigDrawer && <ConfigDrawer />}
+            {showProfileDropdown && <ProfileDropdown />}
+          </div>
+        )}
+      </Header>
+      {showTopNav && <NavigationDock links={links} activeTarget='console' />}
+    </>
   )
 }

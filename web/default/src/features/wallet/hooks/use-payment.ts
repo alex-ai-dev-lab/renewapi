@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import { resolveHttpRedirect } from '@/lib/dom-utils'
@@ -24,16 +24,28 @@ import {
   calculateAmount,
   calculateStripeAmount,
   calculateWaffoPancakeAmount,
-  requestPayment,
   requestStripePayment,
+  getPaymentStatus,
+  requestPayment,
   isApiSuccess,
 } from '../api'
 import {
+  getPaymentTradeNo,
   isStripePayment,
   isWaffoPancakePayment,
-  openPaymentRedirect,
+  monitorPaymentWindow,
+  openPaymentWindow,
   submitPaymentForm,
 } from '../lib'
+
+interface PaymentCallbacks {
+  onSuccess?: () => void | Promise<void>
+}
+
+interface ActivePaymentMonitor {
+  controller: AbortController
+  popup: Window
+}
 
 // ============================================================================
 // Payment Hook
@@ -43,51 +55,64 @@ export function usePayment() {
   const [amount, setAmount] = useState<number>(0)
   const [calculating, setCalculating] = useState(false)
   const [processing, setProcessing] = useState(false)
-  // processing 是异步 state，同一个 tick 内连续调用看不到更新；
-  // 下单属于资金操作，必须用 ref 做同步重入防护。
+  const [channelClosed, setChannelClosed] = useState(false)
+  const activeMonitorRef = useRef<ActivePaymentMonitor | null>(null)
+  const quoteRequestRef = useRef(0)
   const processingRef = useRef(false)
+
+  const stopActiveMonitor = useCallback((closePopup: boolean) => {
+    const activeMonitor = activeMonitorRef.current
+    if (!activeMonitor) {
+      return
+    }
+
+    activeMonitor.controller.abort()
+    if (closePopup && !activeMonitor.popup.closed) {
+      activeMonitor.popup.close()
+    }
+    activeMonitorRef.current = null
+  }, [])
+
+  useEffect(() => {
+    return () => stopActiveMonitor(false)
+  }, [stopActiveMonitor])
 
   // Calculate payment amount
   const calculatePaymentAmount = useCallback(
     async (topupAmount: number, paymentType: string) => {
+      const requestId = ++quoteRequestRef.current
+      if (!Number.isSafeInteger(topupAmount) || topupAmount <= 0) {
+        setAmount(0)
+        setCalculating(false)
+        return 0
+      }
       try {
         setCalculating(true)
 
-        const isStripe = isStripePayment(paymentType)
-        const isPancake = isWaffoPancakePayment(paymentType)
-        const response = isStripe
-          ? await calculateStripeAmount({ amount: topupAmount })
-          : isPancake
-            ? await calculateWaffoPancakeAmount({ amount: topupAmount })
-            : await calculateAmount({ amount: topupAmount })
+        const calculate = isStripePayment(paymentType)
+          ? calculateStripeAmount
+          : isWaffoPancakePayment(paymentType)
+            ? calculateWaffoPancakeAmount
+            : calculateAmount
+        const response = await calculate({ amount: topupAmount })
+        if (requestId !== quoteRequestRef.current) return 0
 
         if (isApiSuccess(response) && response.data) {
-          const calculatedAmount = parseFloat(response.data)
-          // parseFloat 失败会得到 NaN，直接 setAmount(NaN) 会让界面渲染出 NaN
-          if (!Number.isFinite(calculatedAmount) || calculatedAmount < 0) {
-            setAmount(0)
-            toast.error(i18next.t('Failed to calculate amount'))
-            return 0
-          }
+          const calculatedAmount = Number.parseFloat(response.data)
+          if (!Number.isFinite(calculatedAmount) || calculatedAmount <= 0)
+            throw new Error('Invalid payment amount')
           setAmount(calculatedAmount)
           return calculatedAmount
         }
 
-        // 原实现在计价失败时静默 setAmount(0)，界面会展示「0 元」，
-        // 用户可能误以为免费或折扣异常；至少要给出提示。
+        // Don't show error for calculation, just set to 0
         setAmount(0)
-        toast.error(
-          response?.message || i18next.t('Failed to calculate amount')
-        )
         return 0
-      } catch (error) {
-        setAmount(0)
-        // eslint-disable-next-line no-console
-        console.error('[wallet] calculate amount failed', error)
-        toast.error(i18next.t('Failed to calculate amount'))
+      } catch {
+        if (requestId === quoteRequestRef.current) setAmount(0)
         return 0
       } finally {
-        setCalculating(false)
+        if (requestId === quoteRequestRef.current) setCalculating(false)
       }
     },
     []
@@ -95,91 +120,125 @@ export function usePayment() {
 
   // Process payment
   const processPayment = useCallback(
-    async (topupAmount: number, paymentType: string) => {
-      if (processingRef.current) return false
-
-      // The backend accepts integer top-up amounts. The recharge form normalizes
-      // fractional input before reaching this hook; keep this final guard for
-      // callers that use the hook directly.
-      const orderAmount = Math.floor(topupAmount)
-      if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
-        toast.error(i18next.t('Payment request failed'))
+    async (
+      topupAmount: number,
+      paymentType: string,
+      callbacks?: PaymentCallbacks
+    ) => {
+      if (processingRef.current || activeMonitorRef.current) return false
+      if (!Number.isSafeInteger(topupAmount) || topupAmount <= 0) return false
+      processingRef.current = true
+      stopActiveMonitor(true)
+      const paymentWindow = openPaymentWindow()
+      if (!paymentWindow) {
+        processingRef.current = false
+        toast.error(i18next.t('Payment failed'))
         return false
       }
 
-      processingRef.current = true
       try {
         setProcessing(true)
 
-        const isStripe = isStripePayment(paymentType)
-
-        const response = isStripe
-          ? await requestStripePayment({
-              amount: orderAmount,
-              payment_method: 'stripe',
-            })
-          : await requestPayment({
-              amount: orderAmount,
-              payment_method: paymentType,
-            })
+        const amount = Math.floor(topupAmount)
+        const request = isStripePayment(paymentType)
+          ? requestStripePayment
+          : requestPayment
+        const response = await request({
+          amount,
+          payment_method: paymentType,
+        })
 
         if (!isApiSuccess(response)) {
+          paymentWindow.popup.close()
+          if (response.code === 'payment_channel_closed') {
+            setChannelClosed(true)
+            return false
+          }
           toast.error(response.message || i18next.t('Payment request failed'))
           return false
         }
 
-        // Handle Stripe payment
-        if (isStripe) {
-          const payLink = response.data?.pay_link
-          if (!payLink) {
-            toast.error(i18next.t('Invalid payment redirect URL'))
-            return false
-          }
-          const paymentUrl = resolveHttpRedirect(payLink as string)
-          if (!paymentUrl) {
-            toast.error(i18next.t('Invalid payment redirect URL'))
-            return false
-          }
-          openPaymentRedirect(paymentUrl)
-          toast.success(i18next.t('Redirecting to payment page...'))
+        if (isStripePayment(paymentType)) {
+          const url = resolveHttpRedirect(
+            (response.data as { pay_link?: string })?.pay_link
+          )
+          if (!url) throw new Error('Invalid payment URL')
+          paymentWindow.popup.location.href = url
           return true
         }
 
-        // Handle non-Stripe payment
-        const url = (response as unknown as { url?: string }).url
-        if (!response.data || !url) {
-          // 原实现走到这里会直接 `return false`，无任何提示：
-          // 接口说成功但没给跳转信息时，用户点了支付但页面毫无反应。
-          toast.error(i18next.t('Invalid payment redirect URL'))
-          return false
+        if (response.data) {
+          const url = (response as unknown as { url?: string }).url
+          const tradeNo = getPaymentTradeNo(response.data)
+          if (url && tradeNo) {
+            if (
+              !submitPaymentForm(url, response.data, paymentWindow.targetName)
+            )
+              throw new Error('Invalid payment URL')
+            toast.success(i18next.t('Redirecting to payment page...'))
+
+            const controller = new AbortController()
+            const activeMonitor = {
+              controller,
+              popup: paymentWindow.popup,
+            }
+            activeMonitorRef.current = activeMonitor
+
+            void monitorPaymentWindow({
+              popup: paymentWindow.popup,
+              signal: controller.signal,
+              getStatus: () => getPaymentStatus(tradeNo),
+            })
+              .then(async (result) => {
+                if (activeMonitorRef.current !== activeMonitor) {
+                  return
+                }
+
+                activeMonitorRef.current = null
+                if (result === 'success') {
+                  if (!paymentWindow.popup.closed) {
+                    paymentWindow.popup.close()
+                  }
+                  toast.success(i18next.t('Payment successful'))
+                  await callbacks?.onSuccess?.()
+                } else if (result === 'failed') {
+                  toast.error(i18next.t('Payment failed'))
+                } else if (result === 'pending') {
+                  toast.info(
+                    i18next.t(
+                      'Payment is awaiting confirmation. Check order history before paying again.'
+                    )
+                  )
+                }
+              })
+              .catch(() =>
+                toast.error(i18next.t('Failed to refresh payment status'))
+              )
+            return true
+          }
         }
-        if (!submitPaymentForm(url, response.data)) {
-          toast.error(i18next.t('Invalid payment redirect URL'))
-          return false
-        }
-        toast.success(i18next.t('Redirecting to payment page...'))
-        return true
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('[wallet] payment request failed', error)
-        toast.error(
-          error instanceof Error && error.message
-            ? error.message
-            : i18next.t('Payment request failed')
-        )
+
+        paymentWindow.popup.close()
+        toast.error(i18next.t('Payment failed'))
+        return false
+      } catch {
+        paymentWindow.popup.close()
+        toast.error(i18next.t('Payment request failed'))
         return false
       } finally {
         processingRef.current = false
         setProcessing(false)
       }
     },
-    []
+    [stopActiveMonitor]
   )
 
   return {
     amount,
     calculating,
     processing,
+    channelClosed,
+    setChannelClosed,
     calculatePaymentAmount,
     processPayment,
     setAmount,

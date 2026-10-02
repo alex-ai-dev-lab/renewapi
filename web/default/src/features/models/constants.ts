@@ -16,14 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type TFunction } from 'i18next'
+import type { TFunction } from 'i18next'
 import type { NameRule, ModelStatus, SyncSource } from './types'
 
 // ============================================================================
 // Pagination
 // ============================================================================
 
-export const DEFAULT_PAGE_SIZE = 100
+export const DEFAULT_PAGE_SIZE = 20
 
 // ============================================================================
 // Name Rule Options
@@ -59,7 +59,7 @@ export function getNameRuleConfig(
     },
     3: {
       label: t('Suffix'),
-      color: 'accent',
+      color: 'purple',
       description: t('Match models ending with this name'),
     },
   }
@@ -146,7 +146,7 @@ export function getQuotaTypeConfig(
   t: TFunction
 ): Record<number, { label: string; color: string }> {
   return {
-    0: { label: t('Usage-based'), color: 'accent' },
+    0: { label: t('Usage-based'), color: 'violet' },
     1: { label: t('Per-call'), color: 'teal' },
   }
 }

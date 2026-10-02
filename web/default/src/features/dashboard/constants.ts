@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { DEFAULT_DASHBOARD_DEFAULTS } from '@/lib/dashboard-defaults'
 import type { DashboardChartPreferences, DashboardFilters } from './types'
 
 export const TIME_GRANULARITY_STORAGE_KEY = 'data_export_default_time'
@@ -26,10 +25,10 @@ export const DEFAULT_TIME_GRANULARITY = 'hour' as const
 export const MAX_CHART_TREND_POINTS = 7
 
 export const DEFAULT_DASHBOARD_CHART_PREFERENCES: DashboardChartPreferences = {
-  consumptionDistributionChart: DEFAULT_DASHBOARD_DEFAULTS.consumptionChart,
-  modelAnalyticsChart: DEFAULT_DASHBOARD_DEFAULTS.modelAnalyticsChart,
-  defaultTimeRangeDays: DEFAULT_DASHBOARD_DEFAULTS.chartTimeRangeDays,
-  defaultTimeGranularity: DEFAULT_DASHBOARD_DEFAULTS.chartTimeGranularity,
+  consumptionDistributionChart: 'bar',
+  modelAnalyticsChart: 'trend',
+  defaultTimeRangeDays: 1,
+  defaultTimeGranularity: DEFAULT_TIME_GRANULARITY,
 }
 
 export const TIME_RANGE_BY_GRANULARITY = {

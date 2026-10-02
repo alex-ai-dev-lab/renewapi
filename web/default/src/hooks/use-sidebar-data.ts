@@ -16,19 +16,155 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import {
+  Activity,
+  Box,
+  CreditCard,
+  FileText,
+  Key,
+  LayoutDashboard,
+  Layers3,
+  List,
+  Radio,
+  ScanSearch,
+  Settings,
+  Ticket,
+  TicketCheck,
+  User,
+  Users,
+  Wallet,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { MENU_ITEMS } from '@/components/layout/lib/sidebar-navigation'
+import { backendCapabilities } from '@/lib/backend-capabilities'
+import { ROLE } from '@/lib/roles'
 import type { SidebarData } from '@/components/layout/types'
 
-/** Metadata carries identity and permissions; grouping is applied after filtering. */
+/**
+ * Root navigation groups for the application sidebar.
+ *
+ * These are shown when the URL does not match any nested sidebar view
+ * registered in `layout/lib/sidebar-view-registry.ts`.
+ */
 export function useSidebarData(): SidebarData {
   const { t } = useTranslation()
+
   return {
     navGroups: [
       {
-        id: 'root',
-        title: '',
-        items: MENU_ITEMS.map((item) => ({ ...item, title: t(item.titleKey) })),
+        id: 'general',
+        title: t('General'),
+        items: [
+          {
+            title: t('Overview'),
+            url: '/dashboard/overview',
+            icon: Activity,
+          },
+          {
+            title: t('Model List'),
+            url: '/model-list',
+            icon: List,
+          },
+          {
+            title: t('API Keys'),
+            url: '/keys',
+            icon: Key,
+          },
+          {
+            title: t('Usage Logs'),
+            icon: FileText,
+            items: [
+              { title: t('Common Logs'), url: '/usage-logs/common' },
+              { title: t('Drawing Logs'), url: '/usage-logs/drawing' },
+              { title: t('Task Logs'), url: '/usage-logs/task' },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'personal',
+        title: t('Personal'),
+        items: [
+          {
+            title: t('Wallet'),
+            url: '/wallet',
+            icon: Wallet,
+          },
+          {
+            title: t('Playground'),
+            url: '/playground',
+            icon: FileText,
+          },
+          {
+            title: t('Profile'),
+            url: '/profile',
+            icon: User,
+          },
+        ],
+      },
+      {
+        id: 'admin',
+        title: t('Admin'),
+        items: [
+          {
+            title: t('Dashboard'),
+            url: '/dashboard/models',
+            icon: LayoutDashboard,
+          },
+          {
+            title: t('Channels'),
+            url: '/channels',
+            icon: Radio,
+          },
+          {
+            title: t('Models'),
+            url: '/models/metadata',
+            icon: Box,
+          },
+          {
+            title: t('Users'),
+            url: '/users',
+            icon: Users,
+          },
+          {
+            title: t('Group Settings'),
+            url: '/group-settings',
+            permissions: [{ section: 'admin', module: 'setting' }],
+            icon: Layers3,
+            requiredRole: ROLE.SUPER_ADMIN,
+          },
+          {
+            title: t('IP Audit'),
+            url: '/ip-audit',
+            icon: ScanSearch,
+          },
+          {
+            title: t('Redemption Codes'),
+            url: '/redemption-codes',
+            icon: Ticket,
+          },
+          {
+            title: t('Invitation codes'),
+            url: '/invitation-codes',
+            icon: TicketCheck,
+          },
+          {
+            title: t('Subscriptions'),
+            url: '/subscriptions',
+            icon: CreditCard,
+          },
+          {
+            title: t('System Settings'),
+            url: '/system-settings/site',
+            activeUrls: ['/system-settings'],
+            icon: Settings,
+            requiredRole: ROLE.SUPER_ADMIN,
+          },
+        ].filter(
+          (item) =>
+            (item.url !== '/ip-audit' || backendCapabilities.ipAudit) &&
+            (item.url !== '/invitation-codes' ||
+              backendCapabilities.invitationCodes)
+        ),
       },
     ],
   }

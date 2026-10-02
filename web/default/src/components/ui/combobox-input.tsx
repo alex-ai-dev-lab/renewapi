@@ -37,6 +37,7 @@ interface ComboboxInputProps {
   className?: string
   id?: string
   allowCustomValue?: boolean
+  openOnFocus?: boolean
 }
 
 export function ComboboxInput({
@@ -48,6 +49,7 @@ export function ComboboxInput({
   className,
   id,
   allowCustomValue = false,
+  openOnFocus = false,
 }: ComboboxInputProps) {
   const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
@@ -56,6 +58,7 @@ export function ComboboxInput({
   const containerRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
   const listRef = React.useRef<HTMLUListElement>(null)
+  const pointerFocusRef = React.useRef(false)
   const selectedOption = React.useMemo(
     () => options.find((option) => option.value === value),
     [options, value]
@@ -73,9 +76,15 @@ export function ComboboxInput({
   }, [options, searchValue])
 
   // Reset highlight when filtered options change
-  React.useEffect(() => {
-    setHighlightedIndex(-1)
-  }, [filteredOptions])
+  const [previousInputs2556, setPreviousInputs2556] = React.useState(() => [
+    filteredOptions,
+  ])
+  if (!Object.is(previousInputs2556[0], filteredOptions)) {
+    setPreviousInputs2556([filteredOptions])
+    ;(() => {
+      setHighlightedIndex(-1)
+    })()
+  }
 
   // Handle click outside to close
   React.useEffect(() => {
@@ -175,10 +184,20 @@ export function ComboboxInput({
           }
           if (!open) setOpen(true)
         }}
-        onFocus={() => {
-          setSearchValue(allowCustomValue && !selectedOption ? value : '')
+        onPointerDown={() => {
+          pointerFocusRef.current = true
+          if (document.activeElement === inputRef.current && !open) {
+            setOpen(true)
+          }
         }}
         onClick={() => setOpen(true)}
+        onFocus={() => {
+          setSearchValue(allowCustomValue && !selectedOption ? value : '')
+          if (openOnFocus || pointerFocusRef.current) {
+            setOpen(true)
+          }
+          pointerFocusRef.current = false
+        }}
         onKeyDown={handleKeyDown}
         className={cn('pr-9', className)}
       />

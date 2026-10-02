@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AxiosRequestConfig } from 'axios'
 import {
   createFileRoute,
@@ -24,13 +24,14 @@ import {
   useParams,
   useSearch,
 } from '@tanstack/react-router'
+import { localizeApiMessage } from '@/i18n/api-messages'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import { useAuthStore, type AuthUser } from '@/stores/auth-store'
 import { api, getSelf } from '@/lib/api'
-import { resolveInternalRedirect } from '@/lib/dom-utils'
 import { OAuthCallbackScreen } from '@/features/auth/components/oauth-callback-screen'
 import { OAUTH_BIND_STORAGE_KEY } from '@/features/auth/constants'
+import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 
 type OAuthRequestConfig = AxiosRequestConfig & {
   skipBusinessError?: boolean
@@ -38,6 +39,8 @@ type OAuthRequestConfig = AxiosRequestConfig & {
 
 function OAuthCallback() {
   const navigate = useNavigate()
+  const { handleLoginSuccess } = useAuthRedirect()
+  const startedRef = useRef('')
   const { provider } = useParams({ from: '/oauth/$provider' }) as {
     provider: string
   }
@@ -58,20 +61,24 @@ function OAuthCallback() {
   }, [])
 
   useEffect(() => {
+    const callbackKey = `${provider}:${search?.code}:${search?.state}`
+    if (startedRef.current === callbackKey) return
+    startedRef.current = callbackKey
     ;(async () => {
       const safeNavigate = (target: string) => {
-        const safeTarget = resolveInternalRedirect(target, '/dashboard')
-        navigate({ to: safeTarget as never, replace: true })
+        navigate({ to: target as never, replace: true })
         if (typeof window !== 'undefined') {
           setTimeout(() => {
-            const normalizedTarget = safeTarget
+            const normalizedTarget = target.startsWith('/')
+              ? target
+              : `/${target}`
             const currentPath =
               window.location.pathname + window.location.search
             if (
               currentPath !== normalizedTarget &&
               currentPath !== `${normalizedTarget}/`
             ) {
-              window.location.replace(safeTarget)
+              window.location.replace(target)
             }
           }, 100)
         }
@@ -142,10 +149,9 @@ function OAuthCallback() {
         return false
       }
 
-      const redirectAfterLogin = (target?: string) => {
+      const redirectAfterLogin = async (target?: string) => {
         const to = target || search?.redirect || '/dashboard'
-        safeNavigate(to)
-        toast.success(i18next.t('Signed in successfully!'))
+        await handleLoginSuccess(useAuthStore.getState().auth.user, to)
       }
 
       const handleBindingFailure = (message: string) => {
@@ -155,7 +161,7 @@ function OAuthCallback() {
 
       const handleLoginFailure = async (message: string) => {
         if (await finalizeLogin()) {
-          redirectAfterLogin()
+          await redirectAfterLogin()
           return
         }
         toast.error(message)
@@ -193,11 +199,11 @@ function OAuthCallback() {
             } catch (_error) {
               void _error
             }
-            redirectAfterLogin()
+            await redirectAfterLogin()
             return
           }
           if (await finalizeLogin()) {
-            redirectAfterLogin()
+            await redirectAfterLogin()
             return
           }
           toast.error(res?.data?.message || i18next.t('OAuth failed'))
@@ -207,9 +213,9 @@ function OAuthCallback() {
         const message = res?.data?.message || 'OAuth failed'
         if (!res?.data?.success && !isBindingFlow) {
           // When logging in with an already bound GitHub account, backend may return this message
-          if (message === '该 GitHub 账户已被绑定') {
+          if (message === localizeApiMessage('该 GitHub 账户已被绑定')) {
             if (await finalizeLogin()) {
-              redirectAfterLogin()
+              await redirectAfterLogin()
               return
             }
           }
@@ -237,7 +243,7 @@ function OAuthCallback() {
         return
       }
     })()
-  }, [mode, navigate, provider, search])
+  }, [mode, navigate, provider, search, handleLoginSuccess])
 
   return <OAuthCallbackScreen provider={provider} mode={mode} />
 }

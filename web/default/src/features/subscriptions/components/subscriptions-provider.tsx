@@ -22,7 +22,7 @@ import {
   getOptionValue,
   useSystemOptions,
 } from '@/features/system-settings/hooks/use-system-options'
-import { type PlanRecord, type SubscriptionsDialogType } from '../types'
+import type { PlanRecord, SubscriptionsDialogType } from '../types'
 
 const CURRENT_COMPLIANCE_TERMS_VERSION = 'v1'
 
@@ -34,7 +34,6 @@ type SubscriptionsContextType = {
   refreshTrigger: number
   triggerRefresh: () => void
   complianceConfirmed: boolean
-  complianceLoading: boolean
 }
 
 const SubscriptionsContext =
@@ -48,7 +47,7 @@ export function SubscriptionsProvider({
   const [open, setOpen] = useDialogState<SubscriptionsDialogType>(null)
   const [currentRow, setCurrentRow] = useState<PlanRecord | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const { data, isPending: complianceLoading } = useSystemOptions()
+  const { data } = useSystemOptions()
   const complianceOptions = getOptionValue(data?.data, {
     'payment_setting.compliance_confirmed': false,
     'payment_setting.compliance_terms_version': '',
@@ -70,7 +69,6 @@ export function SubscriptionsProvider({
         refreshTrigger,
         triggerRefresh,
         complianceConfirmed,
-        complianceLoading,
       }}
     >
       {children}

@@ -70,7 +70,7 @@ export function ModelCardGrid(props: ModelCardGridProps) {
 
   return (
     <div className='space-y-4 sm:space-y-5'>
-      <div className='obsidian-model-grid'>
+      <div className=''>
         {pagedModels.map((model) => (
           <ModelCard
             key={model.id ?? model.model_name}

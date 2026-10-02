@@ -33,6 +33,7 @@ import type { TopupRecord } from '../types'
 // ============================================================================
 
 interface UseBillingHistoryOptions {
+  enabled?: boolean
   /** Initial page number */
   initialPage?: number
   /** Initial page size */
@@ -51,9 +52,12 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
   const [pageSize, setPageSize] = useState(initialPageSize)
   const [keyword, setKeyword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [completing, setCompleting] = useState(false)
   // 哪一行正在补单：原实现只有一个全局 boolean，列表上无法区分是哪笔订单在处理。
-  const [completingTradeNo, setCompletingTradeNo] = useState<string | null>(null)
+  const [completingTradeNo, setCompletingTradeNo] = useState<string | null>(
+    null
+  )
 
   // 竞态保护：翻页 / 改页大小 / 搜索会连续触发请求，旧请求晚返回时
   // 会把旧数据写到新页码上；同时避开组件卸载后再 setState。
@@ -66,7 +70,9 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
    * Fetch billing history
    */
   const fetchBillingHistory = useCallback(async () => {
+    if (options.enabled === false) return
     const requestId = ++requestIdRef.current
+    setError(null)
     const isStale = () =>
       !mountedRef.current || requestId !== requestIdRef.current
 
@@ -82,6 +88,9 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
       // 后者的 response.message 很可能就是 'success'，用户会看到一个写着
       // “success” 的红色报错（参见 #30 对 isApiSuccess 的修正）。
       if (!isApiSuccess(response)) {
+        setError(
+          response.message || i18next.t('Failed to load billing history')
+        )
         toast.error(
           response.message || i18next.t('Failed to load billing history')
         )
@@ -94,6 +103,7 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
       setTotal(response.data?.total || 0)
     } catch (error) {
       if (isStale()) return
+      setError(i18next.t('Failed to load billing history'))
       // eslint-disable-next-line no-console
       console.error('Failed to fetch billing history:', error)
       toast.error(i18next.t('Failed to load billing history'))
@@ -104,7 +114,7 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
         setLoading(false)
       }
     }
-  }, [isAdmin, page, pageSize, keyword])
+  }, [options.enabled, isAdmin, page, pageSize, keyword])
 
   /**
    * Complete a pending order (admin only)
@@ -186,15 +196,26 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
 
   // Fetch data when dependencies change
   useEffect(() => {
-    mountedRef.current = true
-    fetchBillingHistory()
+    let cleanup: (() => void) | undefined
+    const timer = setTimeout(() => {
+      const effectCleanup = (() => {
+        mountedRef.current = true
+        fetchBillingHistory()
 
+        return () => {
+          mountedRef.current = false
+        }
+      })()
+      if (typeof effectCleanup === 'function') cleanup = effectCleanup
+    }, 0)
     return () => {
-      mountedRef.current = false
+      clearTimeout(timer)
+      cleanup?.()
     }
   }, [fetchBillingHistory])
 
   return {
+    error,
     records,
     total,
     page,

@@ -20,42 +20,34 @@ import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { formatLogQuota } from '@/lib/format'
-import { cn } from '@/lib/utils'
-import { useIsAdmin } from '@/hooks/use-admin'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getLogStats, getUserLogStats } from '../api'
 import { DEFAULT_LOG_STATS } from '../constants'
 import { buildApiParams } from '../lib/utils'
-import { useUsageLogsContext } from './usage-logs-provider'
+import { useLogsViewScope, useUsageLogsContext } from './usage-logs-provider'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 
-function CompactStat(props: {
-  label: string
-  value: string | number
-  accent: string
-}) {
+function StatBadge(props: { label: string; value: string | number }) {
   return (
-    <span className='border-border bg-card inline-flex h-7 items-center gap-2 rounded-md border px-2.5 text-xs'>
-      <span className={cn('h-3.5 w-0.5 rounded-full', props.accent)} />
+    <span className='bg-muted/25 inline-flex h-7 items-center gap-2 rounded-md px-2.5 text-xs'>
       <span className='text-muted-foreground'>{props.label}</span>
-      <span className='text-foreground/85 font-mono font-semibold tabular-nums'>
+      <span className='text-foreground/85 font-medium tabular-nums'>
         {props.value}
       </span>
     </span>
   )
 }
 
-export function CommonLogsStats(props: { variant?: 'compact' | 'bento' }) {
+export function CommonLogsStats() {
   const { t } = useTranslation()
-  const isAdmin = useIsAdmin()
+  const { isAdminView: isAdmin } = useLogsViewScope()
   const searchParams = route.useSearch()
   const { sensitiveVisible } = useUsageLogsContext()
-  const variant = props.variant ?? 'compact'
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['usage-logs-stats', isAdmin, searchParams],
-    queryFn: async ({ signal }) => {
+    queryFn: async () => {
       const params = buildApiParams({
         page: 1,
         pageSize: 1,
@@ -63,9 +55,11 @@ export function CommonLogsStats(props: { variant?: 'compact' | 'bento' }) {
         columnFilters: [],
         isAdmin,
       })
+
       const result = isAdmin
-        ? await getLogStats(params, { signal })
-        : await getUserLogStats(params, { signal })
+        ? await getLogStats(params)
+        : await getUserLogStats(params)
+
       return result.success
         ? result.data || DEFAULT_LOG_STATS
         : DEFAULT_LOG_STATS
@@ -73,83 +67,24 @@ export function CommonLogsStats(props: { variant?: 'compact' | 'bento' }) {
     placeholderData: (previousData) => previousData,
   })
 
-  const values = {
-    usage: sensitiveVisible ? formatLogQuota(stats?.quota || 0) : '••••',
-    rpm: stats?.rpm || 0,
-    tpm: stats?.tpm || 0,
-  }
-
-  if (variant === 'compact') {
-    if (isLoading) {
-      return (
-        <div className='flex items-center gap-2'>
-          <Skeleton className='h-7 w-[150px] rounded-md' />
-          <Skeleton className='h-7 w-[100px] rounded-md' />
-          <Skeleton className='h-7 w-[120px] rounded-md' />
-        </div>
-      )
-    }
-
-    return (
-      <div className='flex flex-wrap items-center gap-2'>
-        <CompactStat
-          label={t('Usage')}
-          value={values.usage}
-          accent='bg-success'
-        />
-        <CompactStat
-          label={t('RPM')}
-          value={values.rpm}
-          accent='bg-destructive'
-        />
-        <CompactStat label={t('TPM')} value={values.tpm} accent='bg-warning' />
-      </div>
-    )
-  }
-
   if (isLoading) {
     return (
-      <div className='obsidian-user-metrics' aria-busy='true'>
-        {Array.from({ length: 3 }).map((_, index) => (
-          <div key={index} className='obsidian-user-metric'>
-            <Skeleton className='h-4 w-20' />
-            <Skeleton className='mt-2 h-9 w-28' />
-          </div>
-        ))}
+      <div className='flex items-center gap-2'>
+        <Skeleton className='h-7 w-[150px] rounded-md' />
+        <Skeleton className='h-7 w-[100px] rounded-md' />
+        <Skeleton className='h-7 w-[120px] rounded-md' />
       </div>
     )
   }
 
-  const items = [
-    {
-      label: t('Usage'),
-      value: values.usage,
-      detail: t('Quota consumed in the current filter window'),
-    },
-    {
-      label: t('RPM'),
-      value: values.rpm,
-      detail: t('Requests per minute'),
-    },
-    {
-      label: t('TPM'),
-      value: values.tpm,
-      detail: t('Tokens per minute'),
-    },
-  ]
-
   return (
-    <div className='space-y-4'>
-      <dl className='obsidian-user-metrics'>
-        {items.map((item) => (
-          <div key={item.label} className='obsidian-user-metric'>
-            <dt className='obsidian-user-metric-label'>{item.label}</dt>
-            <dd className='obsidian-user-metric-value'>{item.value}</dd>
-            <dd className='obsidian-user-metric-detail'>{item.detail}</dd>
-          </div>
-        ))}
-      </dl>
-      <h2 className='obsidian-user-section-heading'>{t('Usage Logs')}</h2>
+    <div className='flex flex-wrap items-center gap-2'>
+      <StatBadge
+        label={t('Usage')}
+        value={sensitiveVisible ? formatLogQuota(stats?.quota || 0) : '••••'}
+      />
+      <StatBadge label={t('RPM')} value={stats?.rpm || 0} />
+      <StatBadge label={t('TPM')} value={stats?.tpm || 0} />
     </div>
   )
 }

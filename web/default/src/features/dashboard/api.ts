@@ -16,8 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api, type ApiRequestConfig } from '@/lib/api'
-import type { QuotaDataItem, UptimeGroupResult } from './types'
+import { api } from '@/lib/api'
+import type {
+  FlowQuotaDataItem,
+  GlobalTokenUsageSummary,
+  QuotaDataItem,
+} from './types'
 
 // ============================================================================
 // Dashboard APIs
@@ -37,7 +41,7 @@ export async function getUserQuotaDates(
     username?: string
   },
   isAdmin = false,
-  config: ApiRequestConfig = {}
+  config: import('axios').AxiosRequestConfig = {}
 ) {
   const endpoint = isAdmin ? '/api/data' : '/api/data/self'
   const res = await api.get<{ success: boolean; data: QuotaDataItem[] }>(
@@ -62,11 +66,29 @@ export async function getUserQuotaDataByUsers(params: {
   return res.data
 }
 
-// Get uptime monitoring status for all services
-export async function getUptimeStatus(config: ApiRequestConfig = {}) {
-  const res = await api.get<{ success: boolean; data: UptimeGroupResult[] }>(
-    '/api/uptime/status',
-    config
-  )
+export async function getGlobalTokenUsageOverview() {
+  const res = await api.get<{
+    success: boolean
+    data?: GlobalTokenUsageSummary
+    message?: string
+  }>('/api/data/token-usage/overview')
+  return res.data
+}
+
+export async function getFlowQuotaDates(
+  params: {
+    start_timestamp: number
+    end_timestamp: number
+    default_time?: string
+    username?: string
+  },
+  isAdmin = false
+) {
+  const endpoint = isAdmin ? '/api/data/flow' : '/api/data/flow/self'
+  const res = await api.get<{
+    success: boolean
+    data?: FlowQuotaDataItem[]
+    message?: string
+  }>(endpoint, { params })
   return res.data
 }

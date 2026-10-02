@@ -20,6 +20,7 @@ import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
 import {
   DASHBOARD_CHART_PREFERENCES_STORAGE_KEY,
   DEFAULT_DASHBOARD_CHART_PREFERENCES,
+  DEFAULT_TIME_GRANULARITY,
   EMPTY_DASHBOARD_FILTERS,
   TIME_GRANULARITY_STORAGE_KEY,
   TIME_RANGE_PRESETS,
@@ -36,10 +37,10 @@ function isTimeGranularity(value: unknown): value is TimeGranularity {
   return value === 'hour' || value === 'day' || value === 'week'
 }
 
-function getLegacySavedGranularity(fallback: TimeGranularity): TimeGranularity {
-  if (typeof window === 'undefined') return fallback
+function getLegacySavedGranularity(): TimeGranularity {
+  if (typeof window === 'undefined') return DEFAULT_TIME_GRANULARITY
   const saved = localStorage.getItem(TIME_GRANULARITY_STORAGE_KEY)
-  return isTimeGranularity(saved) ? saved : fallback
+  return isTimeGranularity(saved) ? saved : DEFAULT_TIME_GRANULARITY
 }
 
 function isConsumptionDistributionChartType(
@@ -90,16 +91,12 @@ export function saveGranularity(granularity: TimeGranularity): void {
   localStorage.setItem(TIME_GRANULARITY_STORAGE_KEY, granularity)
 }
 
-export function getSavedChartPreferences(
-  fallback: DashboardChartPreferences = DEFAULT_DASHBOARD_CHART_PREFERENCES
-): DashboardChartPreferences {
-  if (typeof window === 'undefined') return fallback
+export function getSavedChartPreferences(): DashboardChartPreferences {
+  if (typeof window === 'undefined') return DEFAULT_DASHBOARD_CHART_PREFERENCES
 
   const fallbackPreferences = {
-    ...fallback,
-    defaultTimeGranularity: getLegacySavedGranularity(
-      fallback.defaultTimeGranularity
-    ),
+    ...DEFAULT_DASHBOARD_CHART_PREFERENCES,
+    defaultTimeGranularity: getLegacySavedGranularity(),
   }
 
   try {
@@ -138,12 +135,8 @@ export function saveChartPreferences(
   )
 }
 
-export function getDefaultDays(
-  granularity?: TimeGranularity,
-  fallback?: DashboardChartPreferences
-): number {
-  if (!granularity)
-    return getSavedChartPreferences(fallback).defaultTimeRangeDays
+export function getDefaultDays(granularity?: TimeGranularity): number {
+  if (!granularity) return getSavedChartPreferences().defaultTimeRangeDays
   return TIME_RANGE_BY_GRANULARITY[getSavedGranularity(granularity)]
 }
 

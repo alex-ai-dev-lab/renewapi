@@ -19,31 +19,32 @@ For commercial licensing, please contact support@quantumnous.com
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { SystemStatePage } from './system-state-page'
 
 export function ForbiddenError() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { history } = useRouter()
   return (
-    <div className='flex min-h-svh items-center justify-center px-4 py-8'>
-      <div className='bg-card border-border flex w-full max-w-xl flex-col items-start gap-3 rounded-md border p-6 text-left'>
-        <h1 className='text-muted-foreground font-mono text-[29px] leading-tight font-semibold tabular-nums'>
-          403
-        </h1>
-        <span className='text-base font-semibold'>{t('Access Forbidden')}</span>
-        <p className='text-muted-foreground text-left'>
-          {t("You don't have necessary permission")} <br />
+    <SystemStatePage
+      code={403}
+      title={t('Access Forbidden')}
+      description={
+        <>
+          {t("You don't have necessary permission")}{' '}
           {t('to view this resource.')}
-        </p>
-        <div className='mt-3 flex flex-wrap gap-2'>
+        </>
+      }
+      actions={
+        <>
           <Button variant='outline' onClick={() => history.go(-1)}>
             {t('Go Back')}
           </Button>
           <Button onClick={() => navigate({ to: '/' })}>
             {t('Back to Home')}
           </Button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   )
 }

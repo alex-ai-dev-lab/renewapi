@@ -17,10 +17,34 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { z } from 'zod'
+import type { AdminPermissionMatrix } from '@/lib/admin-permissions'
 
 // ============================================================================
 // User Schema & Types
 // ============================================================================
+
+export const adminSubscriptionSchema = z.object({
+  subscription_id: z.number(),
+  plan_id: z.number(),
+  plan_title: z.string(),
+  source: z.string(),
+  group: z.string(),
+  period_total: z.number(),
+  period_remaining: z.number(),
+  five_hour_total: z.number(),
+  five_hour_remaining: z.number(),
+  end_time: z.number(),
+  version: z.number(),
+})
+export type AdminSubscriptionState = z.infer<typeof adminSubscriptionSchema>
+export interface AdminSubscriptionChange {
+  action: 'balance' | 'plan' | 'free'
+  subscription_id: number
+  expected_version: number
+  plan_id?: number
+  period_remaining?: number
+  five_hour_remaining?: number
+}
 
 /** User status: 1 = enabled, 2 = disabled, 3+ = other states */
 export const userStatusSchema = z.number()
@@ -32,6 +56,7 @@ export type UserRole = z.infer<typeof userRoleSchema>
 
 export const userSchema = z.object({
   id: z.number(),
+  subscription: adminSubscriptionSchema.nullable().optional(),
   username: z.string(),
   display_name: z.string(),
   password: z.string().optional(),
@@ -44,11 +69,6 @@ export const userSchema = z.object({
   used_quota: z.number(),
   request_count: z.number(),
   group: z.string(),
-  aff_code: z.string().optional(),
-  aff_count: z.number().optional(),
-  aff_quota: z.number().optional(),
-  aff_history_quota: z.number().optional(),
-  inviter_id: z.number().optional(),
   linux_do_id: z.string().optional(),
   status: userStatusSchema,
   role: userRoleSchema,
@@ -57,6 +77,9 @@ export const userSchema = z.object({
   last_login_at: z.number().optional(),
   DeletedAt: z.any().nullable().optional(),
   remark: z.string().optional(),
+  admin_permissions: z
+    .record(z.string(), z.record(z.string(), z.boolean()))
+    .optional(),
 })
 export type User = z.infer<typeof userSchema>
 
@@ -106,6 +129,7 @@ export interface UserFormData {
   quota?: number // Only used when updating user
   group?: string // Only used when updating user
   remark?: string // Only used when updating user
+  admin_permissions?: AdminPermissionMatrix
 }
 
 export type ManageUserAction =
@@ -129,4 +153,9 @@ export interface ManageUserQuotaPayload {
 // Dialog Types
 // ============================================================================
 
-export type UsersDialogType = 'create' | 'update' | 'delete'
+export type UsersDialogType =
+  | 'create'
+  | 'update'
+  | 'delete'
+  | 'subscription'
+  | 'wallet'

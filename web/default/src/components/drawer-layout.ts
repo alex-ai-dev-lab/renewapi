@@ -18,40 +18,38 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { createElement, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 
 export const sideDrawerContentClassName = (className?: string) =>
   cn(
-    'bg-card text-card-foreground flex h-dvh w-full flex-col gap-0 overflow-hidden p-0 shadow-none',
+    'snowapi-centered-sheet bg-background text-foreground flex max-h-[88dvh] w-full flex-col gap-0 overflow-hidden rounded-xl p-0 shadow-none',
     className
   )
 
 export const sideDrawerHeaderClassName = (className?: string) =>
-  cn(
-    'border-border bg-card border-b px-4 py-3 text-start sm:px-5 sm:py-4',
-    className
-  )
+  cn('bg-background px-4 py-4 text-start sm:px-6 sm:py-5', className)
 
 export const sideDrawerFormClassName = (className?: string) =>
   cn(
-    'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-4 sm:gap-5 sm:px-6 sm:py-5',
+    'flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5',
     className
   )
 
 export const sideDrawerFooterClassName = (className?: string) =>
   cn(
-    'border-border bg-card grid grid-cols-2 gap-2 border-t px-4 py-3 sm:flex sm:flex-row sm:justify-end sm:px-5 sm:py-4',
+    'bg-background grid grid-cols-2 gap-2 px-4 py-4 sm:flex sm:flex-row sm:justify-end sm:px-6 sm:py-5',
     className
   )
 
 export const sideDrawerSectionClassName = (className?: string) =>
   cn(
-    'border-border bg-card flex flex-col gap-4 rounded-lg border p-4 shadow-none',
+    'border-border/60 flex flex-col gap-4 border-b pb-6 last:border-b-0 last:pb-0',
     className
   )
 
 export const sideDrawerSwitchItemClassName = (className?: string) =>
   cn(
-    'border-border/60 bg-muted/20 flex min-h-16 flex-row items-center justify-between gap-3 rounded-[calc(var(--radius)*0.75)] border px-3 py-3',
+    'border-border/60 flex min-h-16 flex-row items-center justify-between gap-3 border-y py-3',
     className
   )
 
@@ -70,6 +68,7 @@ export function SideDrawerSectionHeader(props: {
   title: ReactNode
   description?: ReactNode
   icon?: ReactNode
+  iconTone?: IconBadgeTone
   className?: string
 }) {
   return createElement(
@@ -77,11 +76,8 @@ export function SideDrawerSectionHeader(props: {
     { className: cn('flex items-start gap-3', props.className) },
     props.icon
       ? createElement(
-          'span',
-          {
-            className:
-              'bg-primary/10 text-primary ring-primary/10 flex size-8 shrink-0 items-center justify-center rounded-[calc(var(--radius)*0.75)] ring-1',
-          },
+          IconBadge,
+          { tone: props.iconTone, size: 'md' },
           props.icon
         )
       : null,
@@ -90,15 +86,13 @@ export function SideDrawerSectionHeader(props: {
       { className: 'min-w-0 flex-1' },
       createElement(
         'h3',
-        {
-          className: 'text-sm leading-none font-semibold tracking-[-0.01em]',
-        },
+        { className: 'text-sm leading-none font-semibold tracking-tight' },
         props.title
       ),
       props.description
         ? createElement(
             'p',
-            { className: 'text-muted-foreground mt-1.5 text-xs leading-5' },
+            { className: 'text-muted-foreground mt-1 text-xs leading-5' },
             props.description
           )
         : null

@@ -39,6 +39,7 @@ import type {
   SearchChannelsResponse,
   TagOperationParams,
   UserAgentOption,
+  ChannelOpsResponse,
 } from './types'
 
 const channelActionConfig = (
@@ -794,5 +795,66 @@ export async function getPrefillGroups(
     ...config,
     params: { type },
   })
+  return res.data
+}
+
+export type CodexResetCreditsResponse = CodexUsageResponse
+
+export type CodexUsageResetResponse = CodexUsageResponse
+
+/**
+ * Get channel operations summary for administrators
+ */
+export async function getChannelOps(): Promise<ChannelOpsResponse> {
+  const res = await api.get('/api/channel/ops', channelActionConfig())
+  return res.data
+}
+
+/**
+ * Update channel enabled/disabled status.
+ */
+export async function updateChannelStatus(
+  id: number,
+  status: number
+): Promise<{ success: boolean; message?: string; data?: boolean }> {
+  const res = await updateChannel(id, { status })
+  return { success: res.success, message: res.message, data: res.success }
+}
+
+/**
+ * Batch update channel enabled/disabled status.
+ */
+export async function batchUpdateChannelStatus(
+  ids: number[],
+  status: number
+): Promise<{ success: boolean; message?: string; data?: number }> {
+  let updated = 0
+  for (const id of ids) {
+    const result = await updateChannelStatus(id, status)
+    if (!result.success)
+      return { success: false, message: result.message, data: updated }
+    updated += 1
+  }
+  return { success: true, data: updated }
+}
+
+export async function getCodexResetCredits(
+  channelId: number
+): Promise<CodexResetCreditsResponse> {
+  const res = await api.get(
+    `/api/channel/${channelId}/codex/usage/reset-credits`,
+    channelActionConfig({ disableDuplicate: true })
+  )
+  return res.data
+}
+
+export async function resetCodexUsage(
+  channelId: number
+): Promise<CodexUsageResetResponse> {
+  const res = await api.post(
+    `/api/channel/${channelId}/codex/usage/reset`,
+    {},
+    channelActionConfig({ disableDuplicate: true })
+  )
   return res.data
 }

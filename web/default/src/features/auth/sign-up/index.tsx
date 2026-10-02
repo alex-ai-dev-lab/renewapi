@@ -29,10 +29,12 @@ export function SignUp() {
 
   return (
     <AuthLayout>
-      <div className='obsidian-auth-page'>
-        <div className='obsidian-auth-page-header'>
-          <h1 className='obsidian-auth-title'>{t('Create an account')}</h1>
-          <p className='obsidian-auth-description'>
+      <div className='w-full space-y-8'>
+        <div className='space-y-2'>
+          <h1 className='text-2xl font-semibold tracking-tight'>
+            {t('Create an account')}
+          </h1>
+          <p className='text-muted-foreground text-sm'>
             {t('Already have an account?')}{' '}
             <Link
               to='/sign-in'

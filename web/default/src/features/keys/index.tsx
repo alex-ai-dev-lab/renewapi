@@ -16,31 +16,33 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import '@/styles/obsidian-user.css'
 import { useTranslation } from 'react-i18next'
 import { SectionPageLayout } from '@/components/layout'
-import { ApiKeysAuroraOverview } from './components/api-keys-aurora-overview'
 import { ApiKeysDialogs } from './components/api-keys-dialogs'
+import { ApiKeysPrimaryButtons } from './components/api-keys-primary-buttons'
 import { ApiKeysProvider } from './components/api-keys-provider'
 import { ApiKeysTable } from './components/api-keys-table'
 
 export function ApiKeys() {
   const { t } = useTranslation()
-
   return (
     <ApiKeysProvider>
-      <SectionPageLayout>
+      <SectionPageLayout fixedContent>
         <SectionPageLayout.Title>{t('API Keys')}</SectionPageLayout.Title>
         <SectionPageLayout.Description>
-          {t(
-            'Control quotas, IP allowlists and model access for your API keys.'
-          )}
+          {t('Generate and manage your API access token')}
         </SectionPageLayout.Description>
+        <SectionPageLayout.Actions>
+          <ApiKeysPrimaryButtons />
+        </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <div className='space-y-4'>
-            <ApiKeysAuroraOverview />
-            <ApiKeysTable />
+          <div
+            role='note'
+            className='bg-muted text-muted-foreground mb-3 shrink-0 rounded-lg px-3 py-2 text-xs'
+          >
+            {t('Create a new API key after upgrading your subscription.')}
           </div>
+          <ApiKeysTable />
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

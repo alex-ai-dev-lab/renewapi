@@ -19,17 +19,9 @@ For commercial licensing, please contact support@quantumnous.com
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* 优化的字体栈 - 优先使用系统字体以获得最佳性能和一致性 */
   --font-sans:
-    'Segoe UI', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont,
-    'PingFang SC', 'Noto Sans', sans-serif, 'Apple Color Emoji',
-    'Segoe UI Emoji', 'Noto Color Emoji';
-
-  /* 等宽字体栈 - 用于代码显示 */
-  --font-mono:
-    'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', 'Consolas',
-    'Liberation Mono', 'Courier New', monospace;
-
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   /* Editorial serif token — the body face used by the `serif` font axis
    * and by presets that opt in (currently Anthropic). Lora carries only
    * Latin glyphs, so the stack walks through CJK serifs (Noto / Source Han
@@ -82,6 +74,9 @@ For commercial licensing, please contact support@quantumnous.com
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-overview-accent-1: var(--overview-accent-1);
+  --color-overview-accent-2: var(--overview-accent-2);
+  --color-overview-accent-3: var(--overview-accent-3);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -101,140 +96,158 @@ For commercial licensing, please contact support@quantumnous.com
 }
 
 :root {
-  --paper: var(--background);
-  --white: var(--card);
-  --paper-2: var(--secondary);
-  --paper-3: var(--border);
-  --ink: var(--foreground);
-  --ink-2: var(--muted-foreground);
-  --ink-3: var(--muted-foreground);
-  --ink-4: var(--border);
-  --line: var(--border);
-  --line-soft: color-mix(in srgb, var(--border) 60%, transparent);
-  --wline: var(--border);
-  --wline-soft: var(--line-soft);
-  --maxw: 1600px;
-  --gutter: 24px;
-  --display: Bahnschrift, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-  --sans: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-  --mono: 'Cascadia Code', Consolas, ui-monospace, monospace;
-  --radius: 0.25rem;
-  --app-header-height: 3.5rem;
-  --font-size-base: 13px;
-  --overlay-backdrop: rgb(24 30 39 / 38%);
-  --z-sticky-header: 200;
-  --z-floating: 400;
-  --z-overlay-backdrop: 500;
-  --z-dialog: 510;
-  --z-drawer: 520;
-  --z-toast: 600;
-  --z-tooltip: 800;
-  --app-rev: 'obsidian-20261001';
+  --radius: 1rem;
+  --app-header-height: 3rem;
+  /* Static build-channel fallback consumed when JS hasn't booted yet. */
+  --app-rev: '2k6e8r7p';
+  /* Currently active body font. The font axis swaps this between
+   * `--font-sans` and `--font-serif` via `[data-theme-font='...']` blocks
+   * in theme-presets.css. Default mirrors `--font-sans` so behavior is
+   * identical when no font preference is set. */
   --font-body: var(--font-sans);
-
-  /* Bright neutral surfaces; color is reserved for actions and status. */
-  --background: #f7f8fa;
-  --foreground: #252b34;
-  --card: #ffffff;
-  --card-foreground: #252b34;
-  --popover: #ffffff;
-  --popover-foreground: #252b34;
-  --primary: #252b34;
-  --primary-foreground: #ffffff;
-  --secondary: #eef1f5;
-  --secondary-foreground: #394351;
-  --muted: #f1f3f6;
-  --muted-foreground: #5d6878;
-  --accent: #e9edf2;
-  --accent-foreground: #252b34;
-  --destructive: #b44040;
-  --destructive-foreground: #ffffff;
-  --success: #286444;
-  --success-foreground: #ffffff;
-  --warning: #85551d;
-  --warning-foreground: #ffffff;
-  --info: #315e9b;
-  --info-foreground: #ffffff;
-  --neutral: #5d6878;
-  --neutral-foreground: #ffffff;
-  --border: #dce1e8;
-  --input: #a4aebb;
-  --ring: #58677b;
-  --chart-1: #2a78d6;
-  --chart-2: #eb6834;
-  --chart-3: #1baf7a;
-  --chart-4: #eda100;
-  --chart-5: #e87ba4;
-  --sidebar: #f0f2f5;
-  --sidebar-foreground: #46505e;
-  --sidebar-primary: #252b34;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ffffff;
-  --sidebar-accent-foreground: #252b34;
-  --sidebar-border: #d8dee7;
-  --sidebar-ring: #58677b;
-  --skeleton-base: #e9edf2;
-  --skeleton-highlight: #f8f9fb;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.145 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.95 0 0);
+  --secondary-foreground: oklch(0.2 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.49 0 0);
+  --accent: color-mix(in oklch, var(--primary) 12%, var(--background));
+  --accent-foreground: oklch(0.145 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.596 0.145 163.225);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.681 0.162 75.834);
+  --warning-foreground: oklch(0.145 0 0);
+  --info: oklch(0.588 0.158 241.966);
+  --info-foreground: oklch(0.985 0 0);
+  --neutral: oklch(0.708 0 0);
+  --neutral-foreground: oklch(0.145 0 0);
+  --border: oklch(0.93 0 0);
+  --input: oklch(0.93 0 0);
+  --ring: oklch(0.55 0 0);
+  --chart-1: oklch(0.72 0.18 250);
+  --chart-2: oklch(0.65 0.15 200);
+  --chart-3: oklch(0.7 0.12 280);
+  --chart-4: oklch(0.68 0.19 325);
+  --chart-5: oklch(0.68 0.16 155);
+  --overview-accent-1: oklch(0.72 0.18 250);
+  --overview-accent-2: oklch(0.65 0.15 200);
+  --overview-accent-3: oklch(0.7 0.12 280);
+  --sidebar: color-mix(in oklch, var(--foreground) 0.5%, var(--background));
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.145 0 0);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: color-mix(
+    in oklch,
+    var(--foreground) 6%,
+    var(--background)
+  );
+  --sidebar-accent-foreground: oklch(0.145 0 0);
+  --sidebar-border: oklch(0.93 0 0);
+  --sidebar-ring: oklch(0.58 0.2 250);
+  --skeleton-base: oklch(0.97 0 0);
+  --skeleton-highlight: oklch(0.985 0 0);
+  --table-row: var(--background);
+  --table-header: color-mix(
+    in oklch,
+    var(--foreground) 1.5%,
+    var(--background)
+  );
+  --table-header-hover: color-mix(
+    in oklch,
+    var(--foreground) 3%,
+    var(--background)
+  );
+  /* Disabled rows: kept subtle so they read as "quiet", not as a colored
+     alert state. */
+  --table-disabled: color-mix(
+    in oklch,
+    var(--foreground) 3%,
+    var(--background)
+  );
+  --table-disabled-hover: color-mix(
+    in oklch,
+    var(--foreground) 4.5%,
+    var(--background)
+  );
+  --table-disabled-border: color-mix(
+    in oklch,
+    var(--foreground) 16%,
+    var(--background)
+  );
 }
 
 .dark {
-  --overlay-backdrop: rgb(0 0 0 / 65%);
-  --background: #101213;
-  --foreground: #e4e9e8;
-  --card: #171a1c;
-  --card-foreground: #e4e9e8;
-  --popover: #1d2225;
-  --popover-foreground: #e4e9e8;
-  --primary: #8cd6b5;
-  --primary-foreground: #10271d;
-  --secondary: #1d2225;
-  --secondary-foreground: #e4e9e8;
-  --muted: #1d2225;
-  --muted-foreground: #9aa7a6;
-  --accent: #263832;
-  --accent-foreground: #a4e3c5;
-  --destructive: #f09090;
-  --destructive-foreground: #301717;
-  --success: #8cd6b5;
-  --success-foreground: #10271d;
-  --warning: #e7bd7a;
-  --warning-foreground: #2c2110;
-  --info: #95bdee;
-  --info-foreground: #14253b;
-  --neutral: #9aa7a6;
-  --neutral-foreground: #101213;
-  --border: #30383b;
-  --input: #53615f;
-  --ring: #8cd6b5;
-  --chart-1: #3987e5;
-  --chart-2: #d95926;
-  --chart-3: #199e70;
-  --chart-4: #c98500;
-  --chart-5: #d55181;
-  --sidebar: #121516;
-  --sidebar-foreground: #c2cecb;
-  --sidebar-primary: #8cd6b5;
-  --sidebar-primary-foreground: #10271d;
-  --sidebar-accent: #1d2225;
-  --sidebar-accent-foreground: #a4e3c5;
-  --sidebar-border: #30383b;
-  --sidebar-ring: #8cd6b5;
-  --skeleton-base: #252c2e;
-  --skeleton-highlight: #36413f;
-}
-
-[data-slot='dialog-overlay'] {
-  z-index: var(--z-overlay-backdrop);
-  background: var(--overlay-backdrop);
-  backdrop-filter: blur(2px);
-}
-
-[data-slot='dialog-content'] {
-  z-index: var(--z-dialog);
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  [data-slot='dialog-overlay'] {
-    backdrop-filter: none;
-  }
+  /* OpenAI-like dark mode with a crisp charcoal canvas. */
+  --background: oklch(0.235 0 0);
+  --foreground: oklch(0.965 0 0);
+  --card: oklch(0.285 0 0);
+  --card-foreground: oklch(0.965 0 0);
+  --popover: oklch(0.305 0 0);
+  --popover-foreground: oklch(0.965 0 0);
+  --primary: oklch(0.965 0 0);
+  --primary-foreground: oklch(0.18 0 0);
+  --secondary: oklch(0.335 0 0);
+  --secondary-foreground: oklch(0.9 0.05 250);
+  --muted: oklch(0.305 0 0);
+  --muted-foreground: oklch(0.78 0 0);
+  --accent: color-mix(in oklch, var(--primary) 20%, var(--background));
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.696 0.17 162.48);
+  --success-foreground: oklch(0.145 0 0);
+  --warning: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.145 0 0);
+  --info: oklch(0.613 0.14 239.919);
+  --info-foreground: oklch(0.145 0 0);
+  --neutral: oklch(0.76 0 0);
+  --neutral-foreground: oklch(0.155 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 17%);
+  --ring: oklch(0.554 0.148 250.726);
+  --chart-1: oklch(0.76 0.14 250);
+  --chart-2: oklch(0.76 0.13 200);
+  --chart-3: oklch(0.76 0.13 285);
+  --chart-4: oklch(0.75 0.16 325);
+  --chart-5: oklch(0.76 0.14 155);
+  --sidebar: oklch(0.225 0 0);
+  --sidebar-foreground: oklch(0.95 0 0);
+  --sidebar-primary: oklch(0.588 0.123 246.488);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: color-mix(in oklch, var(--primary) 20%, var(--background));
+  --sidebar-accent-foreground: oklch(0.9 0.05 250);
+  --sidebar-border: oklch(1 0 0 / 11%);
+  --sidebar-ring: oklch(0.7 0.17 250);
+  --skeleton-base: oklch(0.335 0 0);
+  --skeleton-highlight: oklch(0.44 0 0);
+  --table-row: var(--background);
+  --table-header: color-mix(in oklch, var(--foreground) 6%, var(--background));
+  --table-header-hover: color-mix(
+    in oklch,
+    var(--foreground) 9%,
+    var(--background)
+  );
+  --table-disabled: color-mix(
+    in oklch,
+    var(--foreground) 7%,
+    var(--background)
+  );
+  --table-disabled-hover: color-mix(
+    in oklch,
+    var(--foreground) 9.5%,
+    var(--background)
+  );
+  --table-disabled-border: color-mix(
+    in oklch,
+    var(--foreground) 24%,
+    var(--background)
+  );
 }

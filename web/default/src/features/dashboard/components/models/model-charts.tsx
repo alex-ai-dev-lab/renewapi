@@ -25,6 +25,7 @@ import type { TimeGranularity } from '@/lib/time'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { useTheme } from '@/context/theme-provider'
+import { IconBadge } from '@/components/ui/icon-badge'
 import {
   DEFAULT_TIME_GRANULARITY,
   MODEL_ANALYTICS_CHART_OPTIONS,
@@ -71,9 +72,15 @@ export function ModelCharts(props: ModelChartsProps) {
   >(null)
   const timeGranularity = props.timeGranularity ?? DEFAULT_TIME_GRANULARITY
 
-  useEffect(() => {
-    if (props.defaultChartTab) setActiveTab(props.defaultChartTab)
-  }, [props.defaultChartTab])
+  const [previousInputs2683, setPreviousInputs2683] = useState(() => [
+    props.defaultChartTab,
+  ])
+  if (!Object.is(previousInputs2683[0], props.defaultChartTab)) {
+    setPreviousInputs2683([props.defaultChartTab])
+    ;(() => {
+      if (props.defaultChartTab) setActiveTab(props.defaultChartTab)
+    })()
+  }
 
   useEffect(() => {
     const updateTheme = async () => {
@@ -100,10 +107,9 @@ export function ModelCharts(props: ModelChartsProps) {
         props.loading ? [] : props.data,
         timeGranularity,
         t,
-        resolvedTheme,
         chartRadius
       ),
-    [props.data, props.loading, timeGranularity, t, resolvedTheme, chartRadius]
+    [props.data, props.loading, timeGranularity, t, chartRadius]
   )
 
   const spec = chartData[CHART_SPEC_KEYS[activeTab]]
@@ -118,10 +124,12 @@ export function ModelCharts(props: ModelChartsProps) {
   ].join('-')
 
   return (
-    <div className='overflow-hidden rounded-lg border'>
+    <div className='snowapi-rainflow-panel overflow-hidden'>
       <div className='flex w-full flex-col gap-1.5 border-b px-3 py-2 sm:gap-3 sm:px-5 sm:py-3 lg:flex-row lg:items-center lg:justify-between'>
         <div className='flex items-center gap-2'>
-          <PieChartIcon className='text-muted-foreground/60 size-4' />
+          <IconBadge tone='chart-4' size='sm'>
+            <PieChartIcon />
+          </IconBadge>
           <div className='text-sm font-semibold'>
             {t('Model Call Analytics')}
           </div>
@@ -130,7 +138,7 @@ export function ModelCharts(props: ModelChartsProps) {
           </span>
         </div>
 
-        <div className='bg-muted/60 inline-flex h-7 w-full overflow-x-auto rounded-lg border p-0.5 sm:h-8 sm:w-auto'>
+        <div className='bg-muted/35 inline-flex h-7 w-full overflow-x-auto rounded-lg p-0.5 sm:h-8 sm:w-auto'>
           {MODEL_ANALYTICS_CHART_OPTIONS.map((tab) => (
             <button
               key={tab.value}

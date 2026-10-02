@@ -29,7 +29,7 @@ export type ConversationProps = ComponentProps<typeof StickToBottom>
 
 export const Conversation = ({ className, ...props }: ConversationProps) => (
   <StickToBottom
-    className={cn('relative flex-1 overflow-y-auto', className)}
+    className={cn('relative min-h-0 flex-1 overflow-hidden', className)}
     initial='smooth'
     resize='smooth'
     role='log'
@@ -98,6 +98,7 @@ export const ConversationScrollButton = ({
   className,
   ...props
 }: ConversationScrollButtonProps) => {
+  const { t } = useTranslation()
   const { isAtBottom, scrollToBottom } = useStickToBottomContext()
 
   const handleScrollToBottom = useCallback(() => {
@@ -115,7 +116,7 @@ export const ConversationScrollButton = ({
         size='icon'
         type='button'
         variant='outline'
-        aria-label='Scroll to bottom'
+        aria-label={t('Scroll to bottom')}
         {...props}
       >
         <ArrowDownIcon className='size-4' aria-hidden='true' />

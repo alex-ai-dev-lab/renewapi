@@ -55,37 +55,67 @@ function resolveModelProvider(modelName: string): ModelProvider | null {
     ]) ||
     /\bo[134](?:-|$)/.test(model)
   ) {
-    return { icon: 'OpenAI.Color', label: 'OpenAI' }
+    return { icon: 'OpenAI', label: 'OpenAI' }
   }
   if (hasAny(['claude-', 'anthropic'])) {
-    return { icon: 'Claude.Color', label: 'Claude' }
+    return { icon: 'Claude', label: 'Claude' }
   }
   if (hasAny(['gemini-', 'learnlm-'])) {
-    return { icon: 'Gemini.Color', label: 'Gemini' }
+    return { icon: 'Gemini', label: 'Gemini' }
   }
   if (hasAny(['grok-', 'xai-'])) {
-    return { icon: 'Grok.Color', label: 'Grok' }
+    return { icon: 'Grok', label: 'Grok' }
   }
   if (hasAny(['deepseek-'])) {
-    return { icon: 'DeepSeek.Color', label: 'DeepSeek' }
+    return { icon: 'DeepSeek', label: 'DeepSeek' }
   }
   if (hasAny(['qwen', 'qwq-'])) {
-    return { icon: 'Qwen.Color', label: 'Qwen' }
+    return { icon: 'Qwen', label: 'Qwen' }
   }
   if (hasAny(['doubao-', 'volcengine'])) {
-    return { icon: 'Doubao.Color', label: 'Doubao' }
+    return { icon: 'Doubao', label: 'Doubao' }
   }
   if (hasAny(['moonshot-', 'kimi-'])) {
-    return { icon: 'Moonshot.Color', label: 'Moonshot' }
+    return { icon: 'Moonshot', label: 'Moonshot' }
+  }
+  if (hasAny(['minimax', 'abab'])) {
+    return { icon: 'Minimax', label: 'MiniMax' }
+  }
+  if (hasAny(['glm-', 'chatglm', 'cogview', 'cogvideo'])) {
+    return { icon: 'Zhipu', label: 'Zhipu' }
+  }
+  if (hasAny(['mimo-'])) {
+    return { icon: 'XiaomiMiMo', label: 'MiMo' }
+  }
+  if (hasAny(['ernie'])) {
+    return { icon: 'Wenxin', label: 'Baidu' }
+  }
+  if (hasAny(['spark'])) {
+    return { icon: 'Spark', label: 'iFlyTek' }
+  }
+  if (hasAny(['hunyuan'])) {
+    return { icon: 'Hunyuan', label: 'Tencent' }
+  }
+  if (hasAny(['baichuan'])) {
+    return { icon: 'Baichuan', label: 'Baichuan' }
+  }
+  if (hasAny(['internlm'])) {
+    return { icon: 'InternLM', label: 'InternLM' }
+  }
+  if (hasAny(['step-'])) {
+    return { icon: 'Stepfun', label: 'StepFun' }
+  }
+  if (hasAny(['yi-'])) {
+    return { icon: 'Yi', label: 'Yi' }
   }
   if (hasAny(['mistral-', 'mixtral-'])) {
-    return { icon: 'Mistral.Color', label: 'Mistral' }
+    return { icon: 'Mistral', label: 'Mistral' }
   }
   if (hasAny(['llama-', 'meta-'])) {
-    return { icon: 'Meta.Color', label: 'Meta' }
+    return { icon: 'Meta', label: 'Meta' }
   }
   if (hasAny(['command-', 'cohere-'])) {
-    return { icon: 'Cohere.Color', label: 'Cohere' }
+    return { icon: 'Cohere', label: 'Cohere' }
   }
 
   return null
@@ -101,24 +131,22 @@ function ModelBadgeContent(props: ModelBadgeProps) {
       showDot={!provider}
       autoColor={provider ? undefined : props.modelName}
       className={cn(
-        'border-border/60 bg-muted/30 h-7 max-w-[260px] min-w-0 gap-1.5 border px-2.5 [font-family:var(--font-body)]',
+        'border-border/60 bg-muted/30 h-6 max-w-none gap-1.5 rounded-md border px-2 [font-family:var(--font-body)]',
         provider && 'text-foreground',
         props.className
       )}
     >
-      <span className='flex max-w-full min-w-0 items-center gap-1.5'>
+      <span className='flex max-w-none items-center gap-1.5'>
         {provider && (
           <span
-            className='flex size-3.5 shrink-0 items-center justify-center'
+            className='flex h-[18px] w-[18px] shrink-0 items-center justify-center'
             title={provider.label}
             aria-label={provider.label}
           >
-            {getLobeIcon(provider.icon, 14)}
+            {getLobeIcon(provider.icon, 18)}
           </span>
         )}
-        <span className='truncate font-mono' title={props.modelName}>
-          {props.modelName}
-        </span>
+        <span className='whitespace-nowrap'>{props.modelName}</span>
       </span>
     </StatusBadge>
   )

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useId, type ComponentProps, type ReactNode } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { FormItem } from '@/components/ui/form'
 import { Label } from '@/components/ui/label'
@@ -41,17 +41,23 @@ type SettingsSwitchFieldProps = SettingsSwitchRowProps & {
   label: ReactNode
   description?: ReactNode
   disabled?: boolean
-  switchId?: string
 }
 
 const settingsSwitchRowClassName =
-  'obsidian-settings-switch border-border bg-card flex min-w-0 flex-row items-start justify-between gap-4 rounded border px-3 py-3'
+  'flex min-w-0 flex-row items-center justify-between gap-4 py-2.5'
 
 export function SettingsFormGrid(props: SettingsFormGridProps) {
   return (
     <div
       data-settings-form-span='full'
-      className={cn('grid min-w-0 gap-4 lg:grid-cols-2', props.className)}
+      className={cn(
+        'grid min-w-0 gap-x-5 gap-y-6 lg:grid-cols-2',
+        'lg:[&>[data-settings-form-span=full]]:col-span-2',
+        '[&>[data-slot=form-item]]:min-w-0',
+        'lg:[&>[data-slot=form-item]:has(textarea)]:col-span-2',
+        'lg:[&>[data-slot=form-item]:has([data-slot=switch])]:col-span-2',
+        props.className
+      )}
     >
       {props.children}
     </div>
@@ -106,32 +112,20 @@ export function SettingsSwitchField({
   description,
   disabled,
   className,
-  switchId,
   ...props
 }: SettingsSwitchFieldProps) {
-  const generatedId = useId()
-  const controlId = switchId ?? generatedId
-  const descriptionId = `${controlId}-description`
-
   return (
     <SettingsSwitchRow className={className} {...props}>
       <SettingsSwitchContent>
-        <Label htmlFor={controlId} className='text-sm font-medium'>
-          {label}
-        </Label>
+        <Label className='text-sm font-medium'>{label}</Label>
         {description ? (
-          <p id={descriptionId} className='text-muted-foreground text-xs'>
-            {description}
-          </p>
+          <p className='text-muted-foreground text-xs'>{description}</p>
         ) : null}
       </SettingsSwitchContent>
       <Switch
-        id={controlId}
-        aria-describedby={description ? descriptionId : undefined}
         checked={checked}
         onCheckedChange={onCheckedChange}
         disabled={disabled}
-        className='mt-0.5'
       />
     </SettingsSwitchRow>
   )
@@ -139,7 +133,7 @@ export function SettingsSwitchField({
 
 export function SettingsSwitchContent(props: SettingsFormGridProps) {
   return (
-    <div className={cn('min-w-0 space-y-1', props.className)}>
+    <div className={cn('min-w-0 space-y-0.5', props.className)}>
       {props.children}
     </div>
   )
@@ -153,7 +147,7 @@ export function SettingsControlGroup({
     <div
       data-settings-form-span='full'
       className={cn(
-        'obsidian-settings-control border-border bg-card min-w-0 space-y-3 rounded border px-3 py-3',
+        'border-border/50 min-w-0 space-y-3 border-t pt-3',
         className
       )}
       {...props}
@@ -167,7 +161,7 @@ export function SettingsControlChildren({
 }: SettingsControlChildrenProps) {
   return (
     <div
-      className={cn('border-primary/15 ml-3 min-w-0 border-l pl-4', className)}
+      className={cn('border-border/70 ml-2 min-w-0 border-l pl-3', className)}
       {...props}
     />
   )
@@ -177,15 +171,13 @@ export function SettingsForm({ className, ...props }: ComponentProps<'form'>) {
   return (
     <form
       className={cn(
-        'obsidian-settings-form grid min-w-0 gap-4 lg:grid-cols-2',
+        'grid min-w-0 gap-x-5 gap-y-6 lg:grid-cols-2',
         'lg:[&>*:not([data-slot=form-item])]:col-span-2',
         'lg:[&>[data-settings-form-span=full]]:col-span-2',
         'lg:[&>[data-slot=alert]]:col-span-2',
         '[&>[data-slot=form-item]]:min-w-0',
         'lg:[&>[data-slot=form-item]:has(textarea)]:col-span-2',
         'lg:[&>[data-slot=form-item]:has([data-slot=switch])]:col-span-2',
-        '[&_[data-slot=form-item]]:space-y-2',
-        '[&_[data-slot=form-item]>label]:text-xs [&_[data-slot=form-item]>label]:font-medium',
         className
       )}
       {...props}

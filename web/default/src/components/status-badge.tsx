@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 /* eslint-disable react-refresh/only-export-components */
 import * as React from 'react'
-import { type LucideIcon } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { stringToColor } from '@/lib/colors'
 import { cn } from '@/lib/utils'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
@@ -27,21 +27,23 @@ export const dotColorMap = {
   success: 'bg-success',
   warning: 'bg-warning',
   danger: 'bg-destructive',
-  accent: 'bg-chart-1',
   info: 'bg-info',
   neutral: 'bg-neutral',
+  purple: 'bg-chart-4',
   amber: 'bg-warning',
   blue: 'bg-chart-1',
-  cyan: 'bg-chart-1',
+  cyan: 'bg-chart-2',
   green: 'bg-success',
   grey: 'bg-neutral',
+  indigo: 'bg-chart-1',
   'light-blue': 'bg-info',
-  'light-green': 'bg-success',
-  lime: 'bg-chart-1',
+  'light-green': 'bg-emerald-400',
+  lime: 'bg-chart-3',
   orange: 'bg-warning',
-  pink: 'bg-chart-1',
+  pink: 'bg-chart-5',
   red: 'bg-destructive',
-  teal: 'bg-chart-1',
+  teal: 'bg-chart-2',
+  violet: 'bg-chart-4',
   yellow: 'bg-warning',
 } as const
 
@@ -49,56 +51,50 @@ export const textColorMap = {
   success: 'text-success',
   warning: 'text-warning',
   danger: 'text-destructive',
-  accent: 'text-chart-1',
   info: 'text-info',
   neutral: 'text-muted-foreground',
+  purple: 'text-chart-4',
   amber: 'text-warning',
   blue: 'text-chart-1',
-  cyan: 'text-chart-1',
+  cyan: 'text-chart-2',
   green: 'text-success',
   grey: 'text-muted-foreground',
+  indigo: 'text-chart-1',
   'light-blue': 'text-info',
-  'light-green': 'text-success',
-  lime: 'text-chart-1',
+  'light-green': 'text-emerald-500 dark:text-emerald-300',
+  lime: 'text-chart-3',
   orange: 'text-warning',
-  pink: 'text-chart-1',
+  pink: 'text-chart-5',
   red: 'text-destructive',
-  teal: 'text-chart-1',
+  teal: 'text-chart-2',
+  violet: 'text-chart-4',
   yellow: 'text-warning',
-} as const
-
-const surfaceColorMap = {
-  success: 'border-success/18 bg-success/10 dark:border-success/24 dark:bg-success/14',
-  warning: 'border-warning/22 bg-warning/12 dark:border-warning/28 dark:bg-warning/14',
-  danger:
-    'border-destructive/18 bg-destructive/10 dark:border-destructive/24 dark:bg-destructive/14',
-  accent: 'border-chart-1/22 bg-chart-1/12 dark:border-chart-1/26 dark:bg-chart-1/16',
-  info: 'border-info/18 bg-info/10 dark:border-info/24 dark:bg-info/14',
-  neutral:
-    'border-border/70 bg-muted/55 text-muted-foreground dark:border-border/60 dark:bg-muted/28',
-  amber: 'border-warning/22 bg-warning/12 dark:border-warning/28 dark:bg-warning/14',
-  blue: 'border-chart-1/22 bg-chart-1/12 dark:border-chart-1/26 dark:bg-chart-1/16',
-  cyan: 'border-chart-1/22 bg-chart-1/12 dark:border-chart-1/26 dark:bg-chart-1/16',
-  green: 'border-success/18 bg-success/10 dark:border-success/24 dark:bg-success/14',
-  grey:
-    'border-border/70 bg-muted/55 text-muted-foreground dark:border-border/60 dark:bg-muted/28',
-  'light-blue': 'border-info/18 bg-info/10 dark:border-info/24 dark:bg-info/14',
-  'light-green':
-    'border-success/18 bg-success/10 dark:border-success/24 dark:bg-success/14',
-  lime: 'border-chart-1/22 bg-chart-1/12 dark:border-chart-1/26 dark:bg-chart-1/16',
-  orange: 'border-warning/22 bg-warning/12 dark:border-warning/28 dark:bg-warning/14',
-  pink: 'border-chart-1/22 bg-chart-1/12 dark:border-chart-1/26 dark:bg-chart-1/16',
-  red: 'border-destructive/18 bg-destructive/10 dark:border-destructive/24 dark:bg-destructive/14',
-  teal: 'border-chart-1/22 bg-chart-1/12 dark:border-chart-1/26 dark:bg-chart-1/16',
-  yellow: 'border-warning/22 bg-warning/12 dark:border-warning/28 dark:bg-warning/14',
 } as const
 
 export type StatusVariant = keyof typeof dotColorMap
 
+/** Controls the visual style of the badge.
+ * - `badge`    — default pill with background and padding (default)
+ * - `text`     — plain text, no background or padding, only color
+ * - `underline`— plain text with a bottom border underline
+ */
+export type StatusBadgeType = 'badge' | 'text' | 'underline'
+
+/** Context that lets ancestor components (e.g. MobileCardList field area)
+ *  override the badge type without modifying every call site. */
+export const StatusBadgeTypeContext =
+  React.createContext<StatusBadgeType>('badge')
+
 const sizeMap = {
-  sm: 'h-6 gap-1.5 px-2 text-[11px] leading-none',
-  md: 'h-6 gap-1.5 px-2 text-[11px] leading-none',
-  lg: 'h-7 gap-1.5 px-2.5 text-xs leading-none',
+  sm: 'h-5 gap-1 px-1.5 text-sm leading-none',
+  md: 'h-5 gap-1 px-1.5 text-sm leading-none',
+  lg: 'h-6 gap-1.5 px-2 text-sm leading-none',
+} as const
+
+const textSizeMap = {
+  sm: 'gap-1 text-sm leading-none',
+  md: 'gap-1 text-sm leading-none',
+  lg: 'gap-1.5 text-sm leading-none',
 } as const
 
 export interface StatusBadgeProps extends Omit<
@@ -116,7 +112,8 @@ export interface StatusBadgeProps extends Omit<
   copyable?: boolean
   copyText?: string
   autoColor?: string
-  truncateLabel?: boolean
+  /** Visual style. Defaults to 'badge'. Can be overridden via StatusBadgeTypeContext. */
+  type?: StatusBadgeType
 }
 
 export function StatusBadge({
@@ -126,16 +123,18 @@ export function StatusBadge({
   variant,
   size = 'sm',
   pulse = false,
-  showDot = true,
+  showDot = false,
   copyable = true,
   copyText,
   autoColor,
-  truncateLabel = true,
+  type: typeProp,
   className,
   onClick,
   ...props
 }: StatusBadgeProps) {
   const { copyToClipboard } = useCopyToClipboard()
+  const contextType = React.useContext(StatusBadgeTypeContext)
+  const type = typeProp ?? contextType
 
   const computedVariant: StatusVariant = autoColor
     ? (stringToColor(autoColor) as StatusVariant)
@@ -152,15 +151,25 @@ export function StatusBadge({
   const content =
     children ??
     (label ? (
-      <span className={truncateLabel ? 'truncate' : undefined}>{label}</span>
+      <span className='min-w-0 truncate leading-normal'>{label}</span>
     ) : null)
+
+  const isBadge = type === 'badge'
+  const title = copyable
+    ? `Click to copy: ${copyText || label || ''}`
+    : label || undefined
 
   return (
     <span
+      data-slot='status-badge'
       className={cn(
-        'inline-flex w-fit max-w-full shrink-0 items-center rounded-full border font-medium tracking-normal whitespace-nowrap transition-colors',
-        sizeMap[size ?? 'sm'],
-        surfaceColorMap[computedVariant],
+        'inline-flex w-fit max-w-full min-w-0 shrink items-center font-medium tracking-normal whitespace-nowrap transition-colors',
+        isBadge
+          ? cn('rounded-4xl', sizeMap[size ?? 'sm'])
+          : cn(
+              textSizeMap[size ?? 'sm'],
+              type === 'underline' && 'border-b border-current pb-px'
+            ),
         textColorMap[computedVariant],
         pulse && 'animate-pulse',
         copyable &&
@@ -168,7 +177,7 @@ export function StatusBadge({
         className
       )}
       onClick={handleClick}
-      title={copyable ? `Click to copy: ${copyText || label || ''}` : undefined}
+      title={title}
       {...props}
     >
       {showDot && (
@@ -220,7 +229,7 @@ export function StatusBadgeList<T>(props: StatusBadgeListProps<T>) {
   return (
     <div
       className={cn(
-        'flex max-w-full items-center gap-1 overflow-hidden',
+        'flex max-w-full min-w-0 items-center gap-1 overflow-hidden',
         className
       )}
       {...domProps}

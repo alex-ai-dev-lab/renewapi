@@ -27,10 +27,17 @@ export type PricingVendor = {
   description?: string
 }
 
+export type PricingEndpointInfo = {
+  path: string
+  method: string
+}
+
 export type PricingModel = {
   id: number
   model_name: string
+  funding_source?: 'subscription_only' | 'wallet_only'
   description?: string
+  icon?: string
   vendor_id?: number
   vendor_name?: string
   vendor_icon?: string
@@ -56,10 +63,8 @@ export type PricingModel = {
   /** Pricing version returned by backend, useful for cache busting */
   pricing_version?: string
   /**
-   * Optional model metadata fields. These are not yet returned by the backend
-   * and are populated client-side from {@link inferModelMetadata}.
-   * When the backend ships these fields, the inference layer becomes a
-   * fallback rather than the source of truth.
+   * Optional model metadata fields reserved for backend-provided catalog data.
+   * Keep them data-driven; do not synthesize display values on the client.
    */
   context_length?: number
   max_output_tokens?: number
@@ -94,9 +99,10 @@ export type PricingData = {
   message?: string
   data: PricingModel[]
   vendors: PricingVendor[]
+  current_group: string
   group_ratio: Record<string, number>
   usable_group: Record<string, { desc: string; ratio: number }>
-  supported_endpoint: Record<string, string>
+  supported_endpoint: Record<string, PricingEndpointInfo>
   auto_groups: string[]
 }
 

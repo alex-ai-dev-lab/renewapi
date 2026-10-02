@@ -23,7 +23,6 @@ import { useTranslation } from 'react-i18next'
 import type { AuthUser } from '@/stores/auth-store'
 import useDialogState from '@/hooks/use-dialog'
 import { useUserDisplay } from '@/hooks/use-user-display'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SignOutDialog } from '@/components/sign-out-dialog'
@@ -78,7 +77,7 @@ interface MobileUserProfileProps {
 function MobileUserProfile({ user, onNavigate }: MobileUserProfileProps) {
   const { t } = useTranslation()
   const [signOutOpen, setSignOutOpen] = useDialogState()
-  const { displayName, initials, roleLabel } = useUserDisplay(user)
+  const { displayName, roleLabel } = useUserDisplay(user)
 
   if (!user) return null
 
@@ -87,11 +86,7 @@ function MobileUserProfile({ user, onNavigate }: MobileUserProfileProps) {
       {/* User info section - compact style matching navigation */}
       <div className='flex flex-col text-sm'>
         {/* User header - simplified */}
-        <div className='border-border flex items-center gap-2.5 border-b p-2.5'>
-          <Avatar className='size-9'>
-            <AvatarImage src='/avatars/01.png' alt={`@${displayName}`} />
-            <AvatarFallback className='text-xs'>{initials}</AvatarFallback>
-          </Avatar>
+        <div className='border-border flex items-center border-b p-2.5'>
           <div className='flex flex-1 flex-col gap-0.5 overflow-hidden'>
             <p className='text-foreground truncate font-medium'>
               {displayName}
@@ -253,15 +248,15 @@ export function MobileDrawer({
               >
                 {loading ? (
                   <div className='flex flex-col gap-1 p-2'>
-                    {Array.from({ length: 4 }, (_, i) => (
-                      <Skeleton key={i} className='h-8 w-full' />
+                    {['nav-1', 'nav-2', 'nav-3', 'nav-4'].map((key) => (
+                      <Skeleton key={key} className='h-8 w-full' />
                     ))}
                   </div>
                 ) : (
                   <AnimatePresence>
-                    {mobileLinksList.map((link, index) => (
+                    {mobileLinksList.map((link) => (
                       <motion.div
-                        key={`${link.href}-${index}`}
+                        key={link.href}
                         className='border-border border-b p-2.5 last:border-b-0'
                         variants={MOBILE_DRAWER_ANIMATION.menuItem as Variants}
                       >

@@ -16,21 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect } from 'react'
-import { RefreshCw, Loader2 } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { ArrowUpRight, RefreshCw, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CopyButton } from '@/components/copy-button'
+import { Dialog } from '@/components/dialog'
 import { useAccessToken } from '../../hooks'
 
 // ============================================================================
@@ -38,64 +31,34 @@ import { useAccessToken } from '../../hooks'
 // ============================================================================
 
 interface AccessTokenDialogProps {
+  userId: number
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
 export function AccessTokenDialog({
+  userId,
   open,
   onOpenChange,
 }: AccessTokenDialogProps) {
   const { t } = useTranslation()
   const { token, generating, generate } = useAccessToken()
-
-  // Auto-generate token when dialog opens if no token exists
-  useEffect(() => {
-    if (open && !token) {
-      generate()
-    }
-  }, [open, token, generate])
+  let generateLabel = token ? t('Regenerate') : t('Generate')
+  if (generating) generateLabel = t('Generating...')
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-md'>
-        <DialogHeader>
-          <DialogTitle>{t('Access Token')}</DialogTitle>
-          <DialogDescription>
-            {t(
-              "Your system access token for API authentication. Keep it secure and don't share it with others."
-            )}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className='my-6 space-y-4'>
-          <div className='space-y-2'>
-            <Label htmlFor='token'>{t('Token')}</Label>
-            <div className='flex gap-2'>
-              <Input
-                id='token'
-                type='text'
-                value={token}
-                readOnly
-                className='font-mono text-xs'
-                placeholder={t('Click "Generate" to create a token')}
-              />
-              <CopyButton
-                value={token}
-                variant='outline'
-                className='size-9'
-                iconClassName='size-4'
-                tooltip={t('Copy token')}
-                aria-label={t('Copy token')}
-              />
-            </div>
-            <p className='text-muted-foreground text-xs'>
-              {t('Use this token for API authentication')}
-            </p>
-          </div>
-        </div>
-
-        <DialogFooter>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('Automatic Access')}
+      description={t(
+        'Use a management token to automate your account. Model calls still require an API key.'
+      )}
+      contentClassName='sm:max-w-md'
+      contentHeight='auto'
+      bodyClassName='space-y-4'
+      footer={
+        <>
           <Button
             type='button'
             variant='outline'
@@ -114,10 +77,58 @@ export function AccessTokenDialog({
             ) : (
               <RefreshCw className='h-4 w-4' />
             )}
-            {generating ? t('Generating...') : t('Regenerate')}
+            {generateLabel}
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </>
+      }
+    >
+      <div className='my-6 space-y-4'>
+        <div className='space-y-2'>
+          <Label htmlFor='token'>{t('Token')}</Label>
+          <div className='flex gap-2'>
+            <Input
+              id='token'
+              type='text'
+              value={token}
+              readOnly
+              className='font-mono text-xs'
+              placeholder={t('Click "Generate" to create a token')}
+            />
+            <CopyButton
+              value={token}
+              variant='outline'
+              className='size-9'
+              iconClassName='size-4'
+              tooltip={t('Copy token')}
+              aria-label={t('Copy token')}
+            />
+          </div>
+          <p className='text-muted-foreground text-xs'>
+            {t(
+              'Generating a token replaces the previous one. Keep it private; it has no automatic expiry.'
+            )}
+          </p>
+        </div>
+        <div className='bg-muted/50 flex flex-col gap-3 rounded-lg p-3 text-sm'>
+          <div className='flex flex-wrap items-center justify-between gap-2'>
+            <Label>{t('User ID')}</Label>
+            <code>{userId}</code>
+          </div>
+          <p className='text-muted-foreground font-mono text-xs break-all'>
+            {window.location.origin}/api
+          </p>
+          <Button
+            variant='outline'
+            nativeButton={false}
+            render={
+              <Link to='/auto-access' onClick={() => onOpenChange(false)} />
+            }
+          >
+            {t('Management API documentation')}
+            <ArrowUpRight aria-hidden='true' />
+          </Button>
+        </div>
+      </div>
     </Dialog>
   )
 }

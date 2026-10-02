@@ -24,10 +24,7 @@ import { z } from 'zod'
 
 export const loginFormSchema = z.object({
   username: z.string().min(1, 'Please enter your username or email'),
-  password: z
-    .string()
-    .min(1, 'Please enter your password')
-    .min(8, 'Password must be at least 8 characters long'),
+  password: z.string().min(1, 'Please enter your password'),
 })
 
 export const registerFormSchema = z
@@ -37,7 +34,7 @@ export const registerFormSchema = z
     password: z
       .string()
       .min(1, 'Please enter your password')
-      .min(8, 'Password must be at least 8 characters long')
+      .min(8, 'Password must be between 8 and 20 characters')
       .max(20, 'Password must be at most 20 characters long'),
     confirmPassword: z.string().min(1, 'Please confirm your password'),
   })
@@ -45,6 +42,42 @@ export const registerFormSchema = z
     message: "Passwords don't match.",
     path: ['confirmPassword'],
   })
+
+export const invitationRegisterFormSchema = z
+  .object({
+    invitationCode: z.string().min(1, 'Please enter your invitation code'),
+    username: z
+      .string()
+      .min(1, 'Please enter your username')
+      .max(20, 'Username must be at most 20 characters long'),
+    password: z
+      .string()
+      .min(8, 'Password must be between 8 and 20 characters')
+      .max(20, 'Password must be at most 20 characters long'),
+    confirmPassword: z.string().min(1, 'Please confirm your password'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match.",
+    path: ['confirmPassword'],
+  })
+
+// ============================================================================
+// Validation Constants
+// ============================================================================
+
+export const PASSWORD_MIN_LENGTH = 8
+export const PASSWORD_MAX_LENGTH = 20
+// ============================================================================
+// Countdown Constants
+// ============================================================================
+
+export const EMAIL_VERIFICATION_COUNTDOWN = 30 // seconds
+
+// ============================================================================
+// OAuth Constants
+// ============================================================================
+
+export const OAUTH_BIND_STORAGE_KEY = 'oauth:binding:result'
 
 export const forgotPasswordFormSchema = z.object({
   email: z.string().email({
@@ -56,26 +89,12 @@ export const otpFormSchema = z.object({
   otp: z.string().min(1, 'Please enter a code.'),
 })
 
-// ============================================================================
-// Validation Constants
-// ============================================================================
-
-export const PASSWORD_MIN_LENGTH = 8
-export const PASSWORD_MAX_LENGTH = 20
 export const OTP_LENGTH = 6
-export const BACKUP_CODE_LENGTH = 9 // XXXX-XXXX format
+
+export const BACKUP_CODE_LENGTH = 9
+// XXXX-XXXX format
 export const BACKUP_CODE_REGEX = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/i
+
 export const OTP_REGEX = /^\d{6}$/
-
-// ============================================================================
-// Countdown Constants
-// ============================================================================
-
-export const EMAIL_VERIFICATION_COUNTDOWN = 30 // seconds
-export const PASSWORD_RESET_COUNTDOWN = 30 // seconds
-
-// ============================================================================
-// OAuth Constants
-// ============================================================================
-
-export const OAUTH_BIND_STORAGE_KEY = 'oauth:binding:result'
+// seconds
+export const PASSWORD_RESET_COUNTDOWN = 30

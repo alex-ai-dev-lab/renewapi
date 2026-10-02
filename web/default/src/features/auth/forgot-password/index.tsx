@@ -25,15 +25,17 @@ export function ForgotPassword() {
   const { t } = useTranslation()
   return (
     <AuthLayout>
-      <div className='obsidian-auth-page'>
-        <div className='obsidian-auth-page-header'>
-          <h1 className='obsidian-auth-title'>{t('Forgot password')}</h1>
-          <p className='obsidian-auth-description'>
+      <div className='w-full space-y-8'>
+        <div className='space-y-2'>
+          <h1 className='text-2xl font-semibold tracking-tight'>
+            {t('Forgot password')}
+          </h1>
+          <p className='text-muted-foreground text-sm'>
             {t(
               'Enter your registered email and we will send you a link to reset your password.'
             )}
           </p>
-          <p className='obsidian-auth-description'>
+          <p className='text-muted-foreground text-sm'>
             {t("Don't have an account?")}{' '}
             <Link
               to='/sign-up'

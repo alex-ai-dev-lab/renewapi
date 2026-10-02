@@ -30,6 +30,7 @@ import { ThemeCustomizationProvider } from '@/context/theme-customization-provid
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { Toaster } from '@/components/ui/sonner'
 import { NavigationProgress } from '@/components/navigation-progress'
+import { LoginWelcomeBoundary } from '@/features/auth/components/login-welcome'
 import { saveAffiliateCode } from '@/features/auth/lib/storage'
 import { GeneralError } from '@/features/errors/general-error'
 import { NotFoundError } from '@/features/errors/not-found-error'
@@ -54,7 +55,9 @@ function RootComponent() {
     <ThemeCustomizationProvider>
       <span data-qa-route-id={routeId} hidden />
       <NavigationProgress />
-      <Outlet />
+      <LoginWelcomeBoundary>
+        <Outlet />
+      </LoginWelcomeBoundary>
       <Toaster closeButton duration={5000} position='top-center' richColors />
       {import.meta.env.MODE === 'development' && (
         <>

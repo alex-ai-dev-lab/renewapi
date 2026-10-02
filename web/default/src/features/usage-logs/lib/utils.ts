@@ -19,26 +19,14 @@ For commercial licensing, please contact support@quantumnous.com
 /**
  * Utility functions for usage logs feature
  */
-import {
-  getAllLogs,
-  getUserLogs,
-  getAllMidjourneyLogs,
-  getUserMidjourneyLogs,
-  getAllTaskLogs,
-  getUserTaskLogs,
-} from '../api'
+import { getAllLogs, getUserLogs } from '../api'
 import {
   LOG_TYPES,
   DISPLAYABLE_LOG_TYPES,
   TIMING_LOG_TYPES,
+  USAGE_LOG_VIEW_TYPES,
 } from '../constants'
-import type {
-  GetLogsParams,
-  GetLogsResponse,
-  FetchLogsConfig,
-  GetMidjourneyLogsParams,
-  GetTaskLogsParams,
-} from '../types'
+import type { GetLogsParams, GetLogsResponse, FetchLogsConfig } from '../types'
 
 // ============================================================================
 // Type Checkers & Utilities
@@ -94,20 +82,7 @@ function timestampToSeconds(ms: number): number {
 /**
  * Build query parameters from filters
  */
-export function buildQueryParams(
-  params: Record<string, unknown>
-): URLSearchParams {
-  const queryParams = new URLSearchParams()
-
-  Object.entries(params).forEach(([key, value]) => {
-    // Keep 0 as a valid value, only filter out undefined, null, and empty string
-    if (value !== undefined && value !== null && value !== '') {
-      queryParams.append(key, String(value))
-    }
-  })
-
-  return queryParams
-}
+export { buildQueryParams } from './query-params'
 
 /**
  * Build time range parameters with default values
@@ -138,36 +113,6 @@ function buildTimeRangeParams(
 }
 
 /**
- * Build base parameters with time range (for drawing and task logs)
- * @param useMilliseconds - Whether to use millisecond timestamps (true for drawing logs, false for task logs)
- */
-export function buildBaseParams(config: {
-  page: number
-  pageSize: number
-  searchParams: Record<string, unknown>
-  useMilliseconds?: boolean
-}): {
-  p: number
-  page_size: number
-  channel_id?: string
-  start_timestamp?: number
-  end_timestamp?: number
-} {
-  const { page, pageSize, searchParams, useMilliseconds = false } = config
-
-  return {
-    p: page,
-    page_size: pageSize,
-    ...(searchParams.channel
-      ? {
-          channel_id: String(searchParams.channel),
-        }
-      : {}),
-    ...buildTimeRangeParams(searchParams, useMilliseconds),
-  }
-}
-
-/**
  * Build API params from search params and column filters (for common logs)
  */
 export function buildApiParams(config: {
@@ -179,27 +124,10 @@ export function buildApiParams(config: {
 }): GetLogsParams {
   const { page, pageSize, searchParams, columnFilters = [], isAdmin } = config
 
-  // Helper to process type parameter (single value from array)
-  const processType = (value: unknown): number | undefined => {
-    const parseType = (raw: unknown): number | undefined => {
-      const type = Number(raw)
-      return Number.isFinite(type) ? type : undefined
-    }
-
-    if (Array.isArray(value) && value.length === 1) {
-      return parseType(value[0])
-    }
-    if (typeof value === 'string' && value !== '') {
-      return parseType(value)
-    }
-    return undefined
-  }
-
   // Build base params from search params
   const params: GetLogsParams = {
     p: page,
     page_size: pageSize,
-    ...(searchParams.type ? { type: processType(searchParams.type) } : {}),
     ...(searchParams.model ? { model_name: String(searchParams.model) } : {}),
     ...(searchParams.token ? { token_name: String(searchParams.token) } : {}),
     ...(searchParams.group ? { group: String(searchParams.group) } : {}),
@@ -224,9 +152,6 @@ export function buildApiParams(config: {
       if (value === undefined || value === null || value === '') return
 
       switch (id) {
-        case 'type':
-          params.type = processType(value)
-          break
         case 'model_name':
           params.model_name = String(value)
           break
@@ -254,68 +179,20 @@ export function buildApiParams(config: {
 // ============================================================================
 
 /**
- * Fetch logs based on category type
+ * Fetch logs for the selected usage-log view
  */
-export async function fetchLogsByCategory(
+export async function fetchUsageLogs(
   config: FetchLogsConfig
 ): Promise<GetLogsResponse> {
-  const {
-    logCategory,
-    isAdmin,
+  const { logView, isAdmin, page, pageSize, searchParams, columnFilters } =
+    config
+  const params = buildApiParams({
     page,
     pageSize,
     searchParams,
     columnFilters,
-    signal,
-  } = config
-
-  if (logCategory === 'common') {
-    const params = buildApiParams({
-      page,
-      pageSize,
-      searchParams,
-      columnFilters,
-      isAdmin,
-    })
-    return isAdmin
-      ? await getAllLogs(params, { signal })
-      : await getUserLogs(params, { signal })
-  }
-
-  // For drawing and task logs
-  const baseParams = buildBaseParams({
-    page,
-    pageSize,
-    searchParams,
-    useMilliseconds: logCategory === 'drawing',
+    isAdmin,
   })
-
-  const paramsWithFilter = {
-    ...baseParams,
-    ...(logCategory === 'drawing'
-      ? { mj_id: searchParams.filter as string | undefined }
-      : {}),
-    ...(logCategory === 'task'
-      ? { task_id: searchParams.filter as string | undefined }
-      : {}),
-  }
-
-  if (logCategory === 'drawing') {
-    return isAdmin
-      ? await getAllMidjourneyLogs(
-          paramsWithFilter as GetMidjourneyLogsParams,
-          { signal }
-        )
-      : await getUserMidjourneyLogs(
-          paramsWithFilter as GetMidjourneyLogsParams,
-          { signal }
-        )
-  }
-
-  // task logs
-  return isAdmin
-    ? await getAllTaskLogs(paramsWithFilter as GetTaskLogsParams, { signal })
-    : await getUserTaskLogs(paramsWithFilter as GetTaskLogsParams, {
-        signal,
-      })
+  params.types = USAGE_LOG_VIEW_TYPES[logView].join(',')
+  return isAdmin ? await getAllLogs(params) : await getUserLogs(params)
 }

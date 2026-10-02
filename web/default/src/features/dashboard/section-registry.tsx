@@ -18,10 +18,6 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { TFunction } from 'i18next'
 import { createSectionRegistry } from '@/features/system-settings/utils/section-registry'
-import { OverviewDashboard } from './overview-dashboard'
-import { ChannelAnalyticsDashboard } from './components/channels/channel-analytics-dashboard'
-import { ModelAnalyticsDashboard } from './model-analytics-dashboard'
-import { UserOperationsPanel } from './components/users/user-operations-panel'
 
 /**
  * Dashboard page section definitions
@@ -30,30 +26,29 @@ const DASHBOARD_SECTIONS = [
   {
     id: 'overview',
     titleKey: 'Overview',
-    build: () => <OverviewDashboard />,
+    build: () => null,
   },
   {
     id: 'models',
     titleKey: 'Model Call Analytics',
-    build: () => <ModelAnalyticsDashboard />,
+    build: () => null,
   },
   {
-    id: 'channels',
-    titleKey: 'Channel Analytics',
-    adminOnly: true,
-    build: () => <ChannelAnalyticsDashboard />,
+    id: 'flow',
+    titleKey: 'Flow',
+    build: () => null,
   },
   {
     id: 'users',
-    titleKey: 'User Analytics',
+    titleKey: 'User Token Consumption',
     adminOnly: true,
-    build: () => <UserOperationsPanel />,
+    build: () => null,
   },
 ] as const
 
 export type DashboardSectionId = (typeof DASHBOARD_SECTIONS)[number]['id']
 
-const ADMIN_ONLY_SECTIONS = new Set<string>(['channels', 'users'])
+const ADMIN_ONLY_SECTIONS = new Set<string>(['users'])
 
 const dashboardRegistry = createSectionRegistry<
   DashboardSectionId,

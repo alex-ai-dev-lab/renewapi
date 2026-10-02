@@ -19,8 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState } from 'react'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { SystemStatePage } from './system-state-page'
 
 const FEEDBACK_URL = 'https://github.com/alex-ai-dev-lab/renewapi/issues'
 
@@ -52,7 +52,7 @@ export function GeneralError({
     try {
       await router.invalidate()
     } catch {
-      // 路由错误仍保留在页面，用户可以继续重试或返回。
+      /* Keep the recoverable page. */
     } finally {
       setRetrying(false)
     }
@@ -61,40 +61,30 @@ export function GeneralError({
   const isRateLimited = status === 429
   const title = isRateLimited
     ? t('Too many requests')
-    : `${t('Oops! Something went wrong')} ${`:')`}`
+    : t('Oops! Something went wrong')
   const description = isRateLimited
     ? t('Please wait a moment before trying again.')
     : t('Please try again later.')
 
   return (
-    <div
-      className={cn(
-        'flex min-h-svh w-full items-center justify-center px-4 py-8',
-        className
-      )}
-    >
-      <div
-        className={cn(
-          'flex w-full flex-col items-start gap-3 text-left',
-          !minimal && 'bg-card border-border max-w-xl rounded-md border p-6'
-        )}
-      >
-        {!minimal && (
-          <h1 className='text-muted-foreground font-mono text-[29px] leading-tight font-semibold tabular-nums'>
-            {status ?? 500}
-          </h1>
-        )}
-        <span className='text-base font-semibold'>{title}</span>
-        <p className='text-muted-foreground text-left'>
-          {t('We apologize for the inconvenience.')} <br /> {description}
-        </p>
-        {!minimal && (
-          <p className='text-muted-foreground text-left text-sm'>
-            {t('If this keeps happening, please report it on GitHub Issues.')}
-          </p>
-        )}
-        {!minimal && (
-          <div className='mt-3 flex flex-wrap gap-2'>
+    <SystemStatePage
+      code={minimal ? undefined : (status ?? 500)}
+      title={title}
+      description={
+        <>
+          {t('We apologize for the inconvenience.')} {description}
+        </>
+      }
+      note={
+        minimal
+          ? undefined
+          : t('If this keeps happening, please report it on GitHub Issues.')
+      }
+      minimal={minimal}
+      className={className}
+      actions={
+        minimal ? undefined : (
+          <>
             {error != null && (
               <Button onClick={() => void retry()} disabled={retrying}>
                 {t('Retry')}
@@ -118,9 +108,9 @@ export function GeneralError({
             <Button onClick={() => navigate({ to: '/' })}>
               {t('Back to Home')}
             </Button>
-          </div>
-        )}
-      </div>
-    </div>
+          </>
+        )
+      }
+    />
   )
 }

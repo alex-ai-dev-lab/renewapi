@@ -16,40 +16,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
-import { useParams, useSearch } from '@tanstack/react-router'
-import '@/styles/obsidian-admin.css'
-import { getApiErrorMessage } from '@/lib/api-errors'
-import { ErrorState } from '@/components/error-state'
+import { useMemo, useState, type ReactNode } from 'react'
+import { useParams } from '@tanstack/react-router'
+import { useTranslation } from 'react-i18next'
 import { SectionPageLayout } from '@/components/layout'
 import { useSystemOptions, getOptionValue } from '../hooks/use-system-options'
-import { useSystemSettingsTranslation } from '../lib/i18n'
-import {
-  SETTINGS_CATEGORIES,
-  type SettingsCategoryId,
-} from '../settings-catalog'
 import type { SystemOption } from '../types'
 import { SettingsPageProvider } from './settings-page-context'
-import { SettingsSectionNav } from './settings-section-nav'
 
 type SettingsPageProps<
   TSettings extends Record<string, string | number | boolean | unknown[]>,
   TSectionId extends string,
   TExtraArgs extends unknown[] = [],
 > = {
+  categoryId?: string
   routePath: string
-  /**
-   * Settings category this page belongs to. When provided, the detail page
-   * renders a category section rail (desktop) / selector (mobile) derived
-   * from the same registry metadata as the settings catalog and search.
-   */
-  categoryId?: SettingsCategoryId
   defaultSettings: TSettings
   defaultSection: TSectionId
   getSectionContent: (
@@ -70,8 +51,6 @@ type SettingsPageProps<
 
 type SettingsPageFrameProps = {
   title: ReactNode
-  /** Optional category rail rendered left of the content on desktop. */
-  nav?: ReactNode
   children: ReactNode
 }
 
@@ -80,62 +59,49 @@ function SettingsPageFrame(props: SettingsPageFrameProps) {
     useState<HTMLDivElement | null>(null)
   const [titleStatusContainer, setTitleStatusContainer] =
     useState<HTMLSpanElement | null>(null)
-  const actionsContainerRef = useRef<HTMLDivElement | null>(null)
-  const titleStatusContainerRef = useRef<HTMLSpanElement | null>(null)
-
-  useLayoutEffect(() => {
-    setActionsContainer(actionsContainerRef.current)
-    setTitleStatusContainer(titleStatusContainerRef.current)
-  }, [])
 
   return (
     <SettingsPageProvider
       actionsContainer={actionsContainer}
-      actionsContainerReady={Boolean(actionsContainer)}
+      actionsContainerReady={actionsContainer !== null}
       titleStatusContainer={titleStatusContainer}
     >
       <SectionPageLayout>
         <SectionPageLayout.Title>
           <span className='inline-flex max-w-full min-w-0 items-center gap-2 align-middle'>
-            <span className='truncate font-semibold tracking-tight'>
-              {props.title}
-            </span>
+            <span className='truncate'>{props.title}</span>
             <span
-              ref={titleStatusContainerRef}
-              className='inline-flex shrink-0'
+              ref={setTitleStatusContainer}
+              className='inline-flex min-w-0 shrink-0 items-center'
             />
           </span>
         </SectionPageLayout.Title>
         <SectionPageLayout.Actions>
           <div
-            ref={actionsContainerRef}
+            ref={setActionsContainer}
             className='flex flex-wrap items-center justify-end gap-2'
           />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          {props.nav ? (
-            <div className='obsidian-admin obsidian-settings-page flex w-full min-w-0 flex-col gap-4 lg:flex-row lg:items-start'>
-              {props.nav}
-              <div className='flex w-full min-w-0 flex-1 flex-col gap-4'>
-                {props.children}
-              </div>
-            </div>
-          ) : (
-            <div className='obsidian-admin obsidian-settings-page flex w-full min-w-0 flex-col gap-4'>
-              {props.children}
-            </div>
-          )}
+          <div className='flex h-full min-h-0 w-full flex-col gap-4'>
+            {props.children}
+          </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>
     </SettingsPageProvider>
   )
 }
 
+/**
+ * Generic settings page component
+ * Handles loading state, data fetching, and section rendering
+ */
 export function SettingsPage<
   TSettings extends Record<string, string | number | boolean | unknown[]>,
   TSectionId extends string,
   TExtraArgs extends unknown[] = [],
 >({
+  routePath,
   defaultSettings,
   defaultSection,
   getSectionContent,
@@ -143,29 +109,13 @@ export function SettingsPage<
   extraArgs,
   loadingMessage = 'Loading settings...',
   resolveSettings,
-  categoryId,
 }: SettingsPageProps<TSettings, TSectionId, TExtraArgs>) {
-  const { t, ts } = useSystemSettingsTranslation()
-  const { data, error, isError, isLoading, refetch } = useSystemOptions()
-  const params = useParams({ strict: false }) as { section?: string }
-  const search = useSearch({ strict: false }) as { section?: string }
-  const activeSection = (params?.section ??
-    search?.section ??
-    defaultSection) as TSectionId
+  const { t } = useTranslation()
+  const { data, isLoading } = useSystemOptions()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const params = useParams({ from: routePath as any })
+  const activeSection = (params?.section ?? defaultSection) as TSectionId
   const sectionMeta = getSectionMeta(activeSection)
-
-  const category = categoryId
-    ? SETTINGS_CATEGORIES.find((item) => item.id === categoryId)
-    : undefined
-  const sectionNav = category ? (
-    <SettingsSectionNav
-      categoryTitle={t(category.titleKey, {
-        defaultValue: category.titleEn,
-      })}
-      items={category.getItems(t)}
-      activeUrl={`${category.basePath}/${activeSection}`}
-    />
-  ) : undefined
 
   const settings = useMemo(() => {
     const baseSettings = getOptionValue(
@@ -179,31 +129,10 @@ export function SettingsPage<
 
   if (isLoading) {
     return (
-      <SettingsPageFrame title={t(sectionMeta.titleKey)} nav={sectionNav}>
-        <div className='border-border bg-card text-muted-foreground flex min-h-32 items-center justify-center rounded border text-sm'>
-          {ts('settings.common.loading', {
-            defaultValue: loadingMessage,
-          })}
+      <SettingsPageFrame title={t(sectionMeta.titleKey)}>
+        <div className='text-muted-foreground flex min-h-40 items-center justify-center text-sm'>
+          {t(loadingMessage)}
         </div>
-      </SettingsPageFrame>
-    )
-  }
-
-  if (isError) {
-    return (
-      <SettingsPageFrame title={t(sectionMeta.titleKey)} nav={sectionNav}>
-        <ErrorState
-          title={ts('settings.common.loadErrorTitle', {
-            defaultValue: 'Unable to load settings',
-          })}
-          description={getApiErrorMessage(
-            error,
-            ts('settings.common.loadError', {
-              defaultValue: 'The settings could not be loaded. Please retry.',
-            })
-          )}
-          onRetry={() => void refetch()}
-        />
       </SettingsPageFrame>
     )
   }
@@ -215,7 +144,7 @@ export function SettingsPage<
   )
 
   return (
-    <SettingsPageFrame title={t(sectionMeta.titleKey)} nav={sectionNav}>
+    <SettingsPageFrame title={t(sectionMeta.titleKey)}>
       {sectionContent}
     </SettingsPageFrame>
   )

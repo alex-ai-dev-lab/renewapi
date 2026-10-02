@@ -16,76 +16,50 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
-import {
-  type Cell,
-  type ColumnDef,
-  flexRender,
-  getCoreRowModel,
-  getFacetedRowModel,
-  getFacetedUniqueValues,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  useReactTable,
-} from '@tanstack/react-table'
+import type { ColumnDef } from '@tanstack/react-table'
 import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
-import {
-  ApiBusinessError,
-  shouldRetryQuery,
-  unwrapApiResponse,
-} from '@/lib/api-errors'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { useIsAdmin } from '@/hooks/use-admin'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
-import { TableCell, TableRow } from '@/components/ui/table'
-import { DataTablePage } from '@/components/data-table'
 import {
-  DEFAULT_LOGS_DATA,
-  LOG_TYPE_ALL_VALUE,
-  LOG_TYPE_ENUM,
-} from '../constants'
-import { useColumnsByCategory } from '../lib/columns'
-import { fetchLogsByCategory } from '../lib/utils'
-import type { LogCategory } from '../types'
+  DataTablePage,
+  DataTableRow,
+  useDataTable,
+} from '@/components/data-table'
+import { DEFAULT_LOGS_DATA, LOG_TYPE_ENUM } from '../constants'
+import { parseLogOther } from '../lib/format'
+import { fetchUsageLogs } from '../lib/utils'
+import type { UsageLogView } from '../types'
+import { useCommonLogsColumns } from './columns/common-logs-columns'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
-import { TaskLogsFilterBar } from './task-logs-filter-bar'
 import { UsageLogsMobileList } from './usage-logs-mobile-card'
+import { useLogsViewScope } from './usage-logs-provider'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 
 const logTypeRowTint: Record<number, string> = {
-  [LOG_TYPE_ENUM.ERROR]: 'bg-destructive/5 dark:bg-destructive/10',
-  [LOG_TYPE_ENUM.REFUND]: 'bg-chart-1/10',
+  [LOG_TYPE_ENUM.ERROR]: 'bg-rose-50/40 dark:bg-rose-950/20',
+  [LOG_TYPE_ENUM.REFUND]: 'bg-blue-50/30 dark:bg-blue-950/15',
 }
 
-function deserializeLogTypeFilter(value: unknown): unknown[] {
-  const values = Array.isArray(value) ? value : value ? [value] : []
-  return values.filter((item) => String(item) !== LOG_TYPE_ALL_VALUE)
+// Warning tint for logs where a quota conversion saturated (admin-only marker).
+// Takes precedence over the per-type tint since it flags a billing anomaly.
+const quotaSaturationRowTint = 'bg-amber-50/60 dark:bg-amber-950/25'
+
+function getColumnVisibilityStorageKey(isAdmin: boolean): string {
+  return `usage-logs:common:${isAdmin ? 'admin' : 'user'}:column-visibility:v2`
 }
 
 interface UsageLogsTableProps {
-  logCategory: LogCategory
+  logView: UsageLogView
 }
 
-function getUsageLogCellStyle(cell: Cell<Record<string, unknown>, unknown>) {
-  const { columnDef } = cell.column
-
-  if (columnDef.size == null) {
-    return undefined
-  }
-
-  return {
-    width: cell.column.getSize(),
-    maxWidth: columnDef.maxSize != null ? `${columnDef.maxSize}px` : undefined,
-  }
-}
-
-export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
+export function UsageLogsTable({ logView }: UsageLogsTableProps) {
   const { t } = useTranslation()
-  const isAdmin = useIsAdmin()
+  const { isAdminView: isAdmin } = useLogsViewScope()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const searchParams = route.useSearch()
 
@@ -101,12 +75,6 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     pagination: { defaultPage: 1, defaultPageSize: isMobile ? 20 : 100 },
     globalFilter: { enabled: false },
     columnFilters: [
-      {
-        columnId: 'created_at',
-        searchKey: 'type',
-        type: 'array' as const,
-        deserialize: deserializeLogTypeFilter,
-      },
       { columnId: 'model_name', searchKey: 'model', type: 'string' as const },
       { columnId: 'token_name', searchKey: 'token', type: 'string' as const },
       { columnId: 'group', searchKey: 'group', type: 'string' as const },
@@ -127,10 +95,16 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     ],
   })
 
-  const { data, isLoading, isFetching, isError, error } = useQuery({
+  const {
+    data,
+    isLoading,
+    isFetching,
+    error: queryError,
+    refetch: retryQuery,
+  } = useQuery({
     queryKey: [
       'logs',
-      logCategory,
+      logView,
       isAdmin,
       pagination.pageIndex + 1,
       pagination.pageSize,
@@ -138,30 +112,25 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       searchParams,
       t,
     ],
-    queryFn: async ({ signal }) => {
-      const response = await fetchLogsByCategory({
-        logCategory,
+    queryFn: async () => {
+      const result = await fetchUsageLogs({
+        logView,
         isAdmin,
         page: pagination.pageIndex + 1,
         pageSize: pagination.pageSize,
         searchParams,
         columnFilters,
-        signal,
       })
 
-      if (!response) {
-        throw new ApiBusinessError({
-          success: false,
-          message: t('Failed to load logs'),
-        })
+      if (!result?.success) {
+        toast.error(result?.message || t('Failed to load logs'))
+        throw new Error(result?.message || 'Failed to load logs')
       }
 
-      const result = unwrapApiResponse(response)
       return result.data || DEFAULT_LOGS_DATA
     },
-    retry: shouldRetryQuery,
     placeholderData: (previousData, previousQuery) => {
-      if (previousQuery?.queryKey[1] === logCategory) {
+      if (previousQuery?.queryKey[1] === logView) {
         return previousData
       }
       return undefined
@@ -169,46 +138,38 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   })
 
   const logs = data?.items || []
-  const columns = useColumnsByCategory(logCategory, isAdmin)
+  const columns = useCommonLogsColumns(isAdmin)
   const isLoadingData = isLoading || (isFetching && !data)
 
-  const table = useReactTable({
-    data: logs as Record<string, unknown>[],
+  const { table } = useDataTable({
+    data: logs as unknown as Record<string, unknown>[],
     columns: columns as ColumnDef<Record<string, unknown>>[],
-    state: {
-      columnFilters,
-      pagination,
+    initialColumnVisibility: {
+      channel: false,
+      token_name: false,
+      is_stream: false,
+      use_time: false,
     },
+    columnFilters,
+    columnVisibilityStorageKey: getColumnVisibilityStorageKey(isAdmin),
+    pagination,
     enableRowSelection: false,
     onPaginationChange,
     onColumnFiltersChange,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getFacetedRowModel: getFacetedRowModel(),
-    getFacetedUniqueValues: getFacetedUniqueValues(),
     manualPagination: true,
     manualFiltering: true,
-    pageCount: Math.ceil((data?.total || 0) / pagination.pageSize),
+    totalCount: data?.total || 0,
+    ensurePageInRange,
   })
-
-  const pageCount = table.getPageCount()
-  useEffect(() => {
-    ensurePageInRange(pageCount)
-  }, [pageCount, ensurePageInRange])
-
-  const isCommon = logCategory === 'common'
 
   return (
     <DataTablePage
-      className='max-w-full min-w-0'
-      verticalScroll={{ mode: 'page' }}
+      error={queryError}
+      onRetry={() => void retryQuery()}
       table={table}
       columns={columns as ColumnDef<Record<string, unknown>>[]}
       isLoading={isLoadingData}
       isFetching={isFetching}
-      isError={isError}
-      errorDescription={error instanceof Error ? error.message : undefined}
       emptyTitle={t('No Logs Found')}
       emptyDescription={t(
         'No usage logs available. Logs will appear here once API calls are made.'
@@ -216,48 +177,31 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       skeletonKeyPrefix='usage-log-skeleton'
       applyHeaderSize
       tableClassName={cn(
-        'min-w-0 max-w-full [&_[data-slot=table]]:table-fixed [&_[data-slot=table]]:text-[13px] [&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[12px] [&_[data-slot=table]_th_*]:text-[12px]'
+        '[&_[data-slot=table]]:text-[13px] [&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[13px] [&_[data-slot=table]_th_*]:text-[13px]'
       )}
-      tableHeaderClassName='bg-card sticky top-0 z-10'
-      mobile={
-        <UsageLogsMobileList
-          table={table}
-          isLoading={isLoadingData}
-          logCategory={logCategory}
-        />
-      }
-      toolbar={
-        isCommon ? (
-          <CommonLogsFilterBar
-            key={JSON.stringify(searchParams)}
-            table={table}
-          />
-        ) : (
-          <TaskLogsFilterBar
-            key={`${logCategory}-${JSON.stringify(searchParams)}`}
-            table={table}
-            logCategory={logCategory}
-          />
-        )
-      }
+      mobile={<UsageLogsMobileList table={table} isLoading={isLoadingData} />}
+      toolbar={<CommonLogsFilterBar table={table} />}
       renderRow={(row) => {
         const logType = (row.original as Record<string, unknown>).type as
           | number
           | undefined
-        const tintClass =
-          isCommon && logType != null ? (logTypeRowTint[logType] ?? '') : ''
+        let tintClass = logType != null ? (logTypeRowTint[logType] ?? '') : ''
+        if (isAdmin) {
+          const other = parseLogOther(
+            ((row.original as Record<string, unknown>).other as string) ?? ''
+          )
+          if (other?.admin_info?.quota_saturation) {
+            tintClass = quotaSaturationRowTint
+          }
+        }
+
         return (
-          <TableRow key={row.id} className={cn('transition-colors', tintClass)}>
-            {row.getVisibleCells().map((cell) => (
-              <TableCell
-                key={cell.id}
-                className='py-2'
-                style={getUsageLogCellStyle(cell)}
-              >
-                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-              </TableCell>
-            ))}
-          </TableRow>
+          <DataTableRow
+            key={row.id}
+            row={row}
+            className={cn('transition-colors', tintClass)}
+            getColumnClassName={() => 'py-2'}
+          />
         )
       }}
     />

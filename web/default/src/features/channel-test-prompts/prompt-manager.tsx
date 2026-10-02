@@ -5,7 +5,6 @@ Copyright (C) 2026 RenewAPI 贡献者
 本程序不提供任何担保；许可证全文见仓库 LICENSE。
 */
 import { useState } from 'react'
-import '@/styles/obsidian-admin.css'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'

@@ -70,7 +70,17 @@ export function usePasskeyManagement(
   }, [onStatusChange])
 
   useEffect(() => {
-    fetchStatus()
+    let cleanup: (() => void) | undefined
+    const timer = setTimeout(() => {
+      const effectCleanup = (() => {
+        fetchStatus()
+      })()
+      if (typeof effectCleanup === 'function') cleanup = effectCleanup
+    }, 0)
+    return () => {
+      clearTimeout(timer)
+      cleanup?.()
+    }
   }, [fetchStatus])
 
   useEffect(() => {

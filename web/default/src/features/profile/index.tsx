@@ -16,75 +16,56 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import '@/styles/obsidian-user.css'
-import { useAuthStore } from '@/stores/auth-store'
+import { useTranslation } from 'react-i18next'
 import { useStatus } from '@/hooks/use-status'
-import { Main } from '@/components/layout'
-import {
-  CardStaggerContainer,
-  CardStaggerItem,
-} from '@/components/page-transition'
+import { ContentLoading, ContentReveal } from '@/components/content-loading'
+import { SectionPageLayout } from '@/components/layout'
 import { CheckinCalendarCard } from './components/checkin-calendar-card'
-import { LanguagePreferencesCard } from './components/language-preferences-card'
-import { PasskeyCard } from './components/passkey-card'
 import { ProfileHeader } from './components/profile-header'
+import { ProfilePreferencesCard } from './components/profile-preferences-card'
 import { ProfileSecurityCard } from './components/profile-security-card'
-import { ProfileSettingsCard } from './components/profile-settings-card'
-import { SidebarModulesCard } from './components/sidebar-modules-card'
-import { TwoFACard } from './components/two-fa-card'
 import { useProfile } from './hooks'
 
 export function Profile() {
-  const { profile, loading, refreshProfile } = useProfile()
+  const { t } = useTranslation()
+  const { profile, loading } = useProfile()
   const { status } = useStatus()
-  const permissions = useAuthStore((s) => s.auth.user?.permissions)
 
   const checkinEnabled = status?.checkin_enabled === true
   const turnstileEnabled = !!(
     status?.turnstile_check && status?.turnstile_site_key
   )
   const turnstileSiteKey = status?.turnstile_site_key || ''
-  const canConfigureSidebar = permissions?.sidebar_settings !== false
 
   return (
-    <Main>
-      <div className='min-h-0 min-w-0 flex-1 overflow-auto px-3 py-4 sm:px-4'>
-        <CardStaggerContainer className='mx-auto flex w-full max-w-[1600px] min-w-0 flex-col gap-4'>
-          <CardStaggerItem>
-            <ProfileHeader profile={profile} loading={loading} />
-          </CardStaggerItem>
+    <SectionPageLayout>
+      <SectionPageLayout.Title>{t('Profile')}</SectionPageLayout.Title>
+      <SectionPageLayout.Content>
+        {loading ? <ContentLoading /> : null}
+        {!loading && profile ? (
+          <ContentReveal className='flex w-full flex-col gap-4'>
+            <ProfileHeader profile={profile} />
+            <ProfilePreferencesCard />
 
-          <CardStaggerItem>
-            <div className='grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.65fr)] xl:items-start'>
-              <div className='min-w-0 space-y-4'>
-                <ProfileSettingsCard
-                  profile={profile}
-                  loading={loading}
-                  onProfileUpdate={refreshProfile}
+            <div
+              className={
+                checkinEnabled
+                  ? 'grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.42fr)] xl:items-start'
+                  : 'grid gap-4'
+              }
+            >
+              <ProfileSecurityCard profile={profile} />
+              {checkinEnabled ? (
+                <CheckinCalendarCard
+                  checkinEnabled={checkinEnabled}
+                  turnstileEnabled={turnstileEnabled}
+                  turnstileSiteKey={turnstileSiteKey}
                 />
-                <LanguagePreferencesCard
-                  profile={profile}
-                  onProfileUpdate={refreshProfile}
-                />
-                <ProfileSecurityCard profile={profile} loading={loading} />
-              </div>
-
-              <div className='min-w-0 space-y-4'>
-                {checkinEnabled && (
-                  <CheckinCalendarCard
-                    checkinEnabled={checkinEnabled}
-                    turnstileEnabled={turnstileEnabled}
-                    turnstileSiteKey={turnstileSiteKey}
-                  />
-                )}
-                {canConfigureSidebar && <SidebarModulesCard />}
-                <PasskeyCard loading={loading} />
-                <TwoFACard loading={loading} />
-              </div>
+              ) : null}
             </div>
-          </CardStaggerItem>
-        </CardStaggerContainer>
-      </div>
-    </Main>
+          </ContentReveal>
+        ) : null}
+      </SectionPageLayout.Content>
+    </SectionPageLayout>
   )
 }

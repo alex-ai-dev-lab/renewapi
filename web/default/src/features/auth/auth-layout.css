@@ -1,0 +1,138 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+.snowapi-auth-shell {
+  --background: oklch(0 0 0);
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.08 0 0);
+  --card-foreground: oklch(1 0 0);
+  --popover: oklch(0.08 0 0);
+  --popover-foreground: oklch(1 0 0);
+  --primary: oklch(0.24 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.12 0 0);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.12 0 0);
+  --muted-foreground: oklch(0.92 0 0);
+  --accent: oklch(0.18 0 0);
+  --accent-foreground: oklch(1 0 0);
+  --border: oklch(1 0 0 / 22%);
+  --input: oklch(1 0 0 / 26%);
+  --ring: oklch(1 0 0);
+  --skeleton-base: oklch(0.12 0 0);
+  --skeleton-highlight: oklch(0.24 0 0);
+
+  background: #000;
+  color: #fff;
+  animation: snowapi-auth-content-in 220ms ease-out both;
+  color-scheme: dark;
+}
+
+.snowapi-auth-route {
+  min-height: 100svh;
+  background: #000;
+  color: #fff;
+  color-scheme: dark;
+}
+
+html:has(.snowapi-auth-route),
+body:has(.snowapi-auth-route),
+html:has(.snowapi-auth-shell),
+body:has(.snowapi-auth-shell) {
+  background: #000;
+}
+
+.snowapi-auth-shell a {
+  color: #fff;
+}
+
+.snowapi-auth-shell [data-slot='input'] {
+  border-color: rgb(255 255 255 / 0.28);
+  background: rgb(255 255 255 / 0.035);
+  color: #fff;
+  caret-color: #fff;
+}
+
+.snowapi-auth-shell [data-slot='input']::placeholder {
+  color: rgb(255 255 255 / 0.58);
+}
+
+.snowapi-auth-shell [data-slot='input']:focus-visible {
+  border-color: rgb(255 255 255 / 0.82);
+}
+
+.snowapi-auth-shell [data-slot='button'] {
+  color: #fff;
+}
+
+.snowapi-auth-shell .snowapi-auth-brand-logo {
+  filter: invert(1);
+}
+
+@keyframes snowapi-auth-content-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.snowapi-password-fields {
+  animation: snowapi-password-reveal 260ms ease-out both;
+}
+
+@keyframes snowapi-password-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .snowapi-auth-shell {
+    animation: none;
+  }
+  .snowapi-password-fields {
+    animation: none;
+  }
+}
+
+/* The shared controls must stay readable on the reference's black auth canvas,
+   including recovery forms whose FormControl replaces the input data-slot. */
+.snowapi-auth-route {
+  --foreground: #fff;
+  --muted-foreground: #b7b7b7;
+}
+.snowapi-auth-route .text-muted-foreground,
+.snowapi-auth-route .text-muted-foreground a {
+  color: #b7b7b7;
+}
+.snowapi-auth-route input:not([type='checkbox']) {
+  color: #fff;
+  background: #111;
+  border-color: #626262;
+}
+.snowapi-auth-route input::placeholder {
+  color: #aaa;
+}

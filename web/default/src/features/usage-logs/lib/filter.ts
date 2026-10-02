@@ -37,7 +37,7 @@ import type {
  */
 export function buildSearchParams(
   filters: LogFilters,
-  logCategory: LogCategory
+  logCategory: LogCategory = 'common'
 ): Record<string, unknown> {
   const baseParams: Record<string, unknown> = {
     ...(filters.startTime && { startTime: filters.startTime.getTime() }),

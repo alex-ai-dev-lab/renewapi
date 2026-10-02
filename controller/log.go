@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -11,6 +13,11 @@ import (
 )
 
 func GetAllLogs(c *gin.Context) {
+	logTypes, err := parseLogTypeFilter(c.Query("types"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	pageInfo := common.GetPageQuery(c)
 	logType, _ := strconv.Atoi(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
@@ -22,7 +29,7 @@ func GetAllLogs(c *gin.Context) {
 	group := c.Query("group")
 	requestId := c.Query("request_id")
 	upstreamRequestId := c.Query("upstream_request_id")
-	logs, total, err := model.GetAllLogsWithContext(c.Request.Context(), logType, startTimestamp, endTimestamp, modelName, username, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), channel, group, requestId, upstreamRequestId)
+	logs, total, err := model.GetAllLogsWithContext(c.Request.Context(), logType, startTimestamp, endTimestamp, modelName, username, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), channel, group, requestId, upstreamRequestId, logTypes...)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -34,6 +41,11 @@ func GetAllLogs(c *gin.Context) {
 }
 
 func GetUserLogs(c *gin.Context) {
+	logTypes, err := parseLogTypeFilter(c.Query("types"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	pageInfo := common.GetPageQuery(c)
 	userId := c.GetInt("id")
 	logType, _ := strconv.Atoi(c.Query("type"))
@@ -44,7 +56,7 @@ func GetUserLogs(c *gin.Context) {
 	group := c.Query("group")
 	requestId := c.Query("request_id")
 	upstreamRequestId := c.Query("upstream_request_id")
-	logs, total, err := model.GetUserLogsWithContext(c.Request.Context(), userId, logType, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId, upstreamRequestId)
+	logs, total, err := model.GetUserLogsWithContext(c.Request.Context(), userId, logType, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId, upstreamRequestId, logTypes...)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -174,4 +186,29 @@ func DeleteHistoryLogs(c *gin.Context) {
 		"data":    count,
 	})
 	return
+}
+
+// A plural filter narrows the existing single-type filter; omitting it keeps
+// the legacy API unchanged. Values are parsed before reaching the SQL query.
+func parseLogTypeFilter(raw string) ([]int, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	parts := strings.Split(raw, ",")
+	if len(parts) > 8 {
+		return nil, fmt.Errorf("too many log types")
+	}
+	result := make([]int, 0, len(parts))
+	seen := map[int]bool{}
+	for _, part := range parts {
+		value, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil || value < 0 || value > 7 {
+			return nil, fmt.Errorf("invalid log type filter")
+		}
+		if !seen[value] {
+			result = append(result, value)
+			seen[value] = true
+		}
+	}
+	return result, nil
 }

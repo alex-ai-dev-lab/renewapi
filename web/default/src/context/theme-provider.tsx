@@ -20,7 +20,7 @@ import {
   createContext,
   useCallback,
   useContext,
-  useLayoutEffect,
+  useEffect,
   useMemo,
   useState,
 } from 'react'
@@ -50,7 +50,7 @@ type ThemeProviderState = {
 
 const initialState: ThemeProviderState = {
   defaultTheme: DEFAULT_THEME,
-  resolvedTheme: DEFAULT_THEME,
+  resolvedTheme: 'light',
   theme: DEFAULT_THEME,
   setTheme: () => null,
   resetTheme: () => null,
@@ -87,7 +87,7 @@ export function ThemeProvider({
     resolveTheme(getStoredTheme(storageKey, defaultTheme))
   )
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const root = window.document.documentElement
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
 

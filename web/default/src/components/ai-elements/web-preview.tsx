@@ -23,12 +23,12 @@ import {
   createContext,
   type ReactNode,
   useContext,
-  useEffect,
   useState,
 } from 'react'
 import { ChevronDownIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import dayjs from '@/lib/dayjs'
+import { getObjectKey } from '@/lib/object-key'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -164,10 +164,11 @@ export const WebPreviewUrl = ({
   const { url, setUrl } = useWebPreview()
   const [inputValue, setInputValue] = useState(url)
 
-  // Sync input value with context URL when it changes externally
-  useEffect(() => {
+  const [previousUrl, setPreviousUrl] = useState(url)
+  if (url !== previousUrl) {
+    setPreviousUrl(url)
     setInputValue(url)
-  }, [url])
+  }
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(event.target.value)
@@ -211,7 +212,7 @@ export const WebPreviewBody = ({
     <div className='flex-1'>
       <iframe
         className={cn('size-full', className)}
-        sandbox='allow-scripts allow-same-origin allow-forms allow-popups allow-presentation'
+        sandbox='allow-scripts allow-forms allow-popups allow-presentation'
         src={(src ?? url) || undefined}
         title={t('Preview')}
         {...props}
@@ -271,7 +272,7 @@ export const WebPreviewConsole = ({
           {logs.length === 0 ? (
             <p className='text-muted-foreground'>{t('No console output')}</p>
           ) : (
-            logs.map((log, index) => (
+            logs.map((log) => (
               <div
                 className={cn(
                   'text-xs',
@@ -279,7 +280,7 @@ export const WebPreviewConsole = ({
                   log.level === 'warn' && 'text-warning',
                   log.level === 'log' && 'text-foreground'
                 )}
-                key={`${log.timestamp.getTime()}-${index}`}
+                key={getObjectKey(log)}
               >
                 <span className='text-muted-foreground'>
                   {dayjs(log.timestamp).format('HH:mm:ss')}

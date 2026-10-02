@@ -16,10 +16,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import '@/styles/obsidian-admin.css'
+import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
+import { Settings2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAuthStore } from '@/stores/auth-store'
+import { backendCapabilities } from '@/lib/backend-capabilities'
+import { ROLE } from '@/lib/roles'
+import { Badge } from '@/components/ui/badge'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { SectionPageLayout } from '@/components/layout'
-import { ChannelsAuroraOverview } from './components/channels-aurora-overview'
+import { getChannelOps } from './api'
 import { ChannelsDialogs } from './components/channels-dialogs'
 import { ChannelsPrimaryButtons } from './components/channels-primary-buttons'
 import { ChannelsProvider } from './components/channels-provider'
@@ -27,23 +38,62 @@ import { ChannelsTable } from './components/channels-table'
 
 export function Channels() {
   const { t } = useTranslation()
+  const isRoot = useAuthStore(
+    (state) => state.auth.user?.role === ROLE.SUPER_ADMIN
+  )
+  const channelOpsQuery = useQuery({
+    queryKey: ['channel-ops'],
+    queryFn: getChannelOps,
+    enabled: backendCapabilities.channelOpsSummary,
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  })
+  const retryTimes = channelOpsQuery.data?.data?.retry_times
+  const retryLabel =
+    typeof retryTimes === 'number' ? `${t('Max Retries')}: ${retryTimes}` : null
+  let retryBadge = null
+  if (retryLabel) {
+    retryBadge = isRoot ? (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Badge
+              variant='outline'
+              className='shrink-0 cursor-pointer'
+              aria-label={t('Retry Settings')}
+              render={
+                <Link
+                  to='/system-settings/models/$section'
+                  params={{ section: 'routing-reliability' }}
+                />
+              }
+            />
+          }
+        >
+          <span>{retryLabel}</span>
+          <Settings2 data-icon='inline-end' />
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{t('Retry Settings')}</p>
+        </TooltipContent>
+      </Tooltip>
+    ) : (
+      <Badge variant='outline' className='shrink-0'>
+        {retryLabel}
+      </Badge>
+    )
+  }
 
   return (
     <ChannelsProvider>
-      <SectionPageLayout>
+      <SectionPageLayout fixedContent>
         <SectionPageLayout.Title>{t('Channels')}</SectionPageLayout.Title>
-        <SectionPageLayout.Description>
-          {t('Manage provider access, routing, and channel health.')}
-        </SectionPageLayout.Description>
+        <SectionPageLayout.Actions>
+          {retryBadge}
+          <ChannelsPrimaryButtons />
+        </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <div className='obsidian-admin obsidian-channels space-y-4'>
-            <ChannelsAuroraOverview />
-            <div className='obsidian-admin-toolbar'>
-              <h2 className='text-[13px] font-semibold'>{t('Channel list')}</h2>
-              <ChannelsPrimaryButtons variant='tools' />
-            </div>
-            <ChannelsTable />
-          </div>
+          <ChannelsTable />
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

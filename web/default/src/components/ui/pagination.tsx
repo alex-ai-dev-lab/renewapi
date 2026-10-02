@@ -28,10 +28,11 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
 function Pagination({ className, ...props }: React.ComponentProps<'nav'>) {
+  const { t } = useTranslation()
   return (
     <nav
       role='navigation'
-      aria-label='pagination'
+      aria-label={t('Pagination')}
       data-slot='pagination'
       className={cn('mx-auto flex w-full justify-center', className)}
       {...props}
@@ -87,15 +88,13 @@ function PaginationLink({
 
 function PaginationPrevious({
   className,
-  text,
+  text = 'Previous',
   ...props
 }: React.ComponentProps<typeof PaginationLink> & { text?: string }) {
   const { t } = useTranslation()
-  const resolvedText = text ?? t('Previous')
-
   return (
     <PaginationLink
-      aria-label={t('Go to previous page')}
+      aria-label={t('Previous page')}
       size='default'
       className={cn('pl-1.5!', className)}
       {...props}
@@ -105,27 +104,25 @@ function PaginationPrevious({
         strokeWidth={2}
         data-icon='inline-start'
       />
-      <span className='hidden sm:block'>{resolvedText}</span>
+      <span className='hidden sm:block'>{t(text)}</span>
     </PaginationLink>
   )
 }
 
 function PaginationNext({
   className,
-  text,
+  text = 'Next',
   ...props
 }: React.ComponentProps<typeof PaginationLink> & { text?: string }) {
   const { t } = useTranslation()
-  const resolvedText = text ?? t('Next')
-
   return (
     <PaginationLink
-      aria-label={t('Go to next page')}
+      aria-label={t('Next page')}
       size='default'
       className={cn('pr-1.5!', className)}
       {...props}
     >
-      <span className='hidden sm:block'>{resolvedText}</span>
+      <span className='hidden sm:block'>{t(text)}</span>
       <HugeiconsIcon
         icon={ArrowRight01Icon}
         strokeWidth={2}
@@ -140,7 +137,6 @@ function PaginationEllipsis({
   ...props
 }: React.ComponentProps<'span'>) {
   const { t } = useTranslation()
-
   return (
     <span
       aria-hidden

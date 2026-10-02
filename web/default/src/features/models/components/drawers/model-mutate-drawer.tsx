@@ -123,7 +123,8 @@ export function ModelMutateDrawer({
 }: ModelMutateDrawerProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const isEditing = Boolean(currentRow?.id)
+  const currentModelId = currentRow?.id
+  const isEditing = Boolean(currentModelId)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [pricingMode, setPricingMode] = useState<PricingMode>('per-token')
   const [pricingSubMode, setPricingSubMode] = useState<PricingSubMode>('ratio')
@@ -143,8 +144,13 @@ export function ModelMutateDrawer({
 
   // Fetch model detail if editing
   const { data: modelData } = useQuery({
-    queryKey: modelsQueryKeys.detail(currentRow?.id || 0),
-    queryFn: () => getModel(currentRow!.id),
+    queryKey: modelsQueryKeys.detail(currentModelId || 0),
+    queryFn: () => {
+      if (!currentModelId) {
+        throw new Error('Model ID is required')
+      }
+      return getModel(currentModelId)
+    },
     enabled: open && isEditing,
   })
 
@@ -229,13 +235,13 @@ export function ModelMutateDrawer({
 
   const validateNumber = (value: string) => {
     if (value === '') return true
-    return !isNaN(parseFloat(value))
+    return !Number.isNaN(Number.parseFloat(value))
   }
 
   const handlePromptPriceChange = (value: string) => {
     setPromptPrice(value)
-    if (value && !isNaN(parseFloat(value))) {
-      const ratio = parseFloat(value) / 2
+    if (value && !Number.isNaN(Number.parseFloat(value))) {
+      const ratio = Number.parseFloat(value) / 2
       form.setValue('ratio', ratio.toString())
     } else {
       form.setValue('ratio', '')
@@ -246,12 +252,13 @@ export function ModelMutateDrawer({
     setCompletionPrice(value)
     if (
       value &&
-      !isNaN(parseFloat(value)) &&
+      !Number.isNaN(Number.parseFloat(value)) &&
       promptPrice &&
-      !isNaN(parseFloat(promptPrice)) &&
-      parseFloat(promptPrice) > 0
+      !Number.isNaN(Number.parseFloat(promptPrice)) &&
+      Number.parseFloat(promptPrice) > 0
     ) {
-      const completionRatio = parseFloat(value) / parseFloat(promptPrice)
+      const completionRatio =
+        Number.parseFloat(value) / Number.parseFloat(promptPrice)
       form.setValue('completionRatio', completionRatio.toString())
     } else {
       form.setValue('completionRatio', '')
@@ -260,134 +267,149 @@ export function ModelMutateDrawer({
 
   // Load model data for editing and ratio configuration
   useEffect(() => {
-    if (open && isEditing && modelData?.data) {
-      const model = modelData.data
-      setOldModelName(model.model_name)
+    let cleanup: (() => void) | undefined
+    const timer = setTimeout(() => {
+      const result = (() => {
+        if (open && isEditing && modelData?.data) {
+          const model = modelData.data
+          setOldModelName(model.model_name)
 
-      // Base model data reset
-      const baseModelData = {
-        id: model.id,
-        model_name: model.model_name,
-        description: model.description || '',
-        icon: model.icon || '',
-        tags: parseModelTags(model.tags),
-        vendor_id: model.vendor_id,
-        endpoints: model.endpoints || '',
-        name_rule: model.name_rule || 0,
-        status: model.status === 1,
-        sync_official: model.sync_official === 1,
-        price: '',
-        ratio: '',
-        cacheRatio: '',
-        completionRatio: '',
-        imageRatio: '',
-        audioRatio: '',
-        audioCompletionRatio: '',
-      }
-
-      // Parse ratio configurations from system settings if available
-      if (modelSettings) {
-        const priceMap = safeJsonParse<Record<string, number>>(
-          modelSettings.ModelPrice,
-          { fallback: {}, silent: true }
-        )
-        const ratioMap = safeJsonParse<Record<string, number>>(
-          modelSettings.ModelRatio,
-          { fallback: {}, silent: true }
-        )
-        const cacheMap = safeJsonParse<Record<string, number>>(
-          modelSettings.CacheRatio,
-          { fallback: {}, silent: true }
-        )
-        const completionMap = safeJsonParse<Record<string, number>>(
-          modelSettings.CompletionRatio,
-          { fallback: {}, silent: true }
-        )
-        const imageMap = safeJsonParse<Record<string, number>>(
-          modelSettings.ImageRatio,
-          { fallback: {}, silent: true }
-        )
-        const audioMap = safeJsonParse<Record<string, number>>(
-          modelSettings.AudioRatio,
-          { fallback: {}, silent: true }
-        )
-        const audioCompletionMap = safeJsonParse<Record<string, number>>(
-          modelSettings.AudioCompletionRatio,
-          { fallback: {}, silent: true }
-        )
-
-        // Extract ratio config for this model
-        const modelName = model.model_name
-        const price = priceMap[modelName]
-        const ratio = ratioMap[modelName]
-        const cacheRatio = cacheMap[modelName]
-        const completionRatio = completionMap[modelName]
-        const imageRatio = imageMap[modelName]
-        const audioRatio = audioMap[modelName]
-        const audioCompletionRatio = audioCompletionMap[modelName]
-
-        // Determine pricing mode
-        if (price !== undefined && price !== null) {
-          setPricingMode('per-request')
-          form.reset({
-            ...baseModelData,
-            price: price.toString(),
-          })
-        } else {
-          setPricingMode('per-token')
-          if (ratio !== undefined && ratio !== null) {
-            const tokenPrice = ratio * 2
-            setPromptPrice(tokenPrice.toString())
-            if (completionRatio !== undefined && completionRatio !== null) {
-              const compPrice = tokenPrice * completionRatio
-              setCompletionPrice(compPrice.toString())
-            }
+          // Base model data reset
+          const baseModelData = {
+            id: model.id,
+            model_name: model.model_name,
+            description: model.description || '',
+            icon: model.icon || '',
+            tags: parseModelTags(model.tags),
+            vendor_id: model.vendor_id,
+            endpoints: model.endpoints || '',
+            name_rule: model.name_rule || 0,
+            status: model.status === 1,
+            sync_official: model.sync_official === 1,
+            price: '',
+            ratio: '',
+            cacheRatio: '',
+            completionRatio: '',
+            imageRatio: '',
+            audioRatio: '',
+            audioCompletionRatio: '',
           }
+
+          // Parse ratio configurations from system settings if available
+          if (modelSettings) {
+            const priceMap = safeJsonParse<Record<string, number>>(
+              modelSettings.ModelPrice,
+              { fallback: {}, silent: true }
+            )
+            const ratioMap = safeJsonParse<Record<string, number>>(
+              modelSettings.ModelRatio,
+              { fallback: {}, silent: true }
+            )
+            const cacheMap = safeJsonParse<Record<string, number>>(
+              modelSettings.CacheRatio,
+              { fallback: {}, silent: true }
+            )
+            const completionMap = safeJsonParse<Record<string, number>>(
+              modelSettings.CompletionRatio,
+              { fallback: {}, silent: true }
+            )
+            const imageMap = safeJsonParse<Record<string, number>>(
+              modelSettings.ImageRatio,
+              { fallback: {}, silent: true }
+            )
+            const audioMap = safeJsonParse<Record<string, number>>(
+              modelSettings.AudioRatio,
+              { fallback: {}, silent: true }
+            )
+            const audioCompletionMap = safeJsonParse<Record<string, number>>(
+              modelSettings.AudioCompletionRatio,
+              { fallback: {}, silent: true }
+            )
+
+            // Extract ratio config for this model
+            const modelName = model.model_name
+            const price = priceMap[modelName]
+            const ratio = ratioMap[modelName]
+            const cacheRatio = cacheMap[modelName]
+            const completionRatio = completionMap[modelName]
+            const imageRatio = imageMap[modelName]
+            const audioRatio = audioMap[modelName]
+            const audioCompletionRatio = audioCompletionMap[modelName]
+
+            // Determine pricing mode
+            if (price !== undefined && price !== null) {
+              setPricingMode('per-request')
+              form.reset({
+                ...baseModelData,
+                price: price.toString(),
+              })
+            } else {
+              setPricingMode('per-token')
+              if (ratio !== undefined && ratio !== null) {
+                const tokenPrice = ratio * 2
+                setPromptPrice(tokenPrice.toString())
+                if (completionRatio !== undefined && completionRatio !== null) {
+                  const compPrice = tokenPrice * completionRatio
+                  setCompletionPrice(compPrice.toString())
+                }
+              }
+              form.reset({
+                ...baseModelData,
+                ratio: ratio?.toString() || '',
+                cacheRatio: cacheRatio?.toString() || '',
+                completionRatio: completionRatio?.toString() || '',
+                imageRatio: imageRatio?.toString() || '',
+                audioRatio: audioRatio?.toString() || '',
+                audioCompletionRatio: audioCompletionRatio?.toString() || '',
+              })
+              setAdvancedOpen(
+                !!(
+                  cacheRatio ||
+                  imageRatio ||
+                  audioRatio ||
+                  audioCompletionRatio
+                )
+              )
+            }
+          } else {
+            // If system settings not loaded yet, just load base model data
+            setPricingMode('per-token')
+            form.reset(baseModelData)
+            setAdvancedOpen(false)
+          }
+        } else if (open && !isEditing) {
+          // Pre-fill model name if passed from missing models
+          setOldModelName('')
+          setPricingMode('per-token')
+          setPricingSubMode('ratio')
+          setPromptPrice('')
+          setCompletionPrice('')
+          setAdvancedOpen(false)
           form.reset({
-            ...baseModelData,
-            ratio: ratio?.toString() || '',
-            cacheRatio: cacheRatio?.toString() || '',
-            completionRatio: completionRatio?.toString() || '',
-            imageRatio: imageRatio?.toString() || '',
-            audioRatio: audioRatio?.toString() || '',
-            audioCompletionRatio: audioCompletionRatio?.toString() || '',
+            model_name: currentRow?.model_name || '',
+            description: '',
+            icon: '',
+            tags: [],
+            vendor_id: undefined,
+            endpoints: '',
+            name_rule: 0,
+            status: true,
+            sync_official: true,
+            price: '',
+            ratio: '',
+            cacheRatio: '',
+            completionRatio: '',
+            imageRatio: '',
+            audioRatio: '',
+            audioCompletionRatio: '',
           })
-          setAdvancedOpen(
-            !!(cacheRatio || imageRatio || audioRatio || audioCompletionRatio)
-          )
         }
-      } else {
-        // If system settings not loaded yet, just load base model data
-        setPricingMode('per-token')
-        form.reset(baseModelData)
-        setAdvancedOpen(false)
-      }
-    } else if (open && !isEditing) {
-      // Pre-fill model name if passed from missing models
-      setOldModelName('')
-      setPricingMode('per-token')
-      setPricingSubMode('ratio')
-      setPromptPrice('')
-      setCompletionPrice('')
-      setAdvancedOpen(false)
-      form.reset({
-        model_name: currentRow?.model_name || '',
-        description: '',
-        icon: '',
-        tags: [],
-        vendor_id: undefined,
-        endpoints: '',
-        name_rule: 0,
-        status: true,
-        sync_official: true,
-        price: '',
-        ratio: '',
-        cacheRatio: '',
-        completionRatio: '',
-        imageRatio: '',
-        audioRatio: '',
-        audioCompletionRatio: '',
-      })
+      })()
+      if (typeof result === 'function') cleanup = result
+    }, 0)
+    return () => {
+      clearTimeout(timer)
+      cleanup?.()
     }
   }, [open, isEditing, modelData, currentRow, form, modelSettings])
 
@@ -397,7 +419,7 @@ export function ModelMutateDrawer({
       try {
         const submitData = {
           ...values,
-          id: isEditing ? currentRow!.id : undefined,
+          id: isEditing ? currentModelId : undefined,
           tags: Array.isArray(values.tags) ? values.tags.join(',') : '',
           status: values.status ? 1 : 0,
           sync_official: values.sync_official ? 1 : 0,
@@ -415,9 +437,10 @@ export function ModelMutateDrawer({
           ...modelData
         } = submitData
 
-        const response = isEditing
-          ? await updateModel({ ...modelData, id: currentRow!.id })
-          : await createModel(modelData)
+        const response =
+          isEditing && currentModelId
+            ? await updateModel({ ...modelData, id: currentModelId })
+            : await createModel(modelData)
 
         if (response.success) {
           // Handle ratio configuration updates in system settings
@@ -495,30 +518,36 @@ export function ModelMutateDrawer({
                 values.price &&
                 values.price !== ''
               ) {
-                priceMap[finalModelName] = parseFloat(values.price)
+                priceMap[finalModelName] = Number.parseFloat(values.price)
               } else if (pricingMode === 'per-token') {
                 if (values.ratio && values.ratio !== '') {
-                  ratioMap[finalModelName] = parseFloat(values.ratio)
+                  ratioMap[finalModelName] = Number.parseFloat(values.ratio)
                 }
                 if (values.cacheRatio && values.cacheRatio !== '') {
-                  cacheMap[finalModelName] = parseFloat(values.cacheRatio)
+                  cacheMap[finalModelName] = Number.parseFloat(
+                    values.cacheRatio
+                  )
                 }
                 if (values.completionRatio && values.completionRatio !== '') {
-                  completionMap[finalModelName] = parseFloat(
+                  completionMap[finalModelName] = Number.parseFloat(
                     values.completionRatio
                   )
                 }
                 if (values.imageRatio && values.imageRatio !== '') {
-                  imageMap[finalModelName] = parseFloat(values.imageRatio)
+                  imageMap[finalModelName] = Number.parseFloat(
+                    values.imageRatio
+                  )
                 }
                 if (values.audioRatio && values.audioRatio !== '') {
-                  audioMap[finalModelName] = parseFloat(values.audioRatio)
+                  audioMap[finalModelName] = Number.parseFloat(
+                    values.audioRatio
+                  )
                 }
                 if (
                   values.audioCompletionRatio &&
                   values.audioCompletionRatio !== ''
                 ) {
-                  audioCompletionMap[finalModelName] = parseFloat(
+                  audioCompletionMap[finalModelName] = Number.parseFloat(
                     values.audioCompletionRatio
                   )
                 }
@@ -614,7 +643,7 @@ export function ModelMutateDrawer({
     },
     [
       isEditing,
-      currentRow,
+      currentModelId,
       queryClient,
       onOpenChange,
       pricingMode,
@@ -727,19 +756,19 @@ export function ModelMutateDrawer({
                   <FormItem>
                     <FormLabel>{t('Vendor')}</FormLabel>
                     <Select
-                      items={[
-                        ...vendors.map((vendor) => ({
-                          value: String(vendor.id),
-                          label: vendor.name,
-                        })),
-                      ]}
+                      items={vendors.map((vendor) => ({
+                        value: String(vendor.id),
+                        label: vendor.name,
+                      }))}
                       onValueChange={(value) =>
-                        field.onChange(value ? parseInt(value) : undefined)
+                        field.onChange(
+                          value ? Number.parseInt(value) : undefined
+                        )
                       }
                       value={field.value ? String(field.value) : undefined}
                     >
                       <FormControl>
-                        <SelectTrigger aria-label={t('Vendor')}>
+                        <SelectTrigger>
                           <SelectValue placeholder={t('Select vendor')} />
                         </SelectTrigger>
                       </FormControl>
@@ -796,7 +825,7 @@ export function ModelMutateDrawer({
                     <FormControl>
                       <RadioGroup
                         onValueChange={(value) =>
-                          field.onChange(parseInt(value))
+                          field.onChange(Number.parseInt(value))
                         }
                         value={String(field.value)}
                         className='grid grid-cols-2 gap-4'
@@ -834,21 +863,15 @@ export function ModelMutateDrawer({
               <div className='flex items-center justify-between'>
                 <h3 className='text-sm font-semibold'>{t('Endpoints')}</h3>
                 <Select<string>
-                  items={[
-                    ...Object.keys(ENDPOINT_TEMPLATES).map((key) => ({
-                      value: key,
-                      label: key,
-                    })),
-                  ]}
+                  items={Object.keys(ENDPOINT_TEMPLATES).map((key) => ({
+                    value: key,
+                    label: key,
+                  }))}
                   onValueChange={(v) =>
                     v !== null && handleFillEndpointTemplate(v)
                   }
                 >
-                  <SelectTrigger
-                    size='sm'
-                    className='w-[200px]'
-                    aria-label={t('Load template...')}
-                  >
+                  <SelectTrigger size='sm' className='w-[200px]'>
                     <SelectValue placeholder={t('Load template...')} />
                   </SelectTrigger>
                   <SelectContent alignItemWithTrigger={false}>
@@ -994,7 +1017,9 @@ export function ModelMutateDrawer({
                                     field.onChange(value)
                                     if (value) {
                                       setPromptPrice(
-                                        (parseFloat(value) * 2).toString()
+                                        (
+                                          Number.parseFloat(value) * 2
+                                        ).toString()
                                       )
                                     } else {
                                       setPromptPrice('')
@@ -1004,8 +1029,9 @@ export function ModelMutateDrawer({
                               />
                             </FormControl>
                             <FormDescription>
-                              {field.value && !isNaN(parseFloat(field.value))
-                                ? `Calculated price: $${(parseFloat(field.value) * 2).toFixed(4)} per 1M tokens`
+                              {field.value &&
+                              !Number.isNaN(Number.parseFloat(field.value))
+                                ? `Calculated price: $${(Number.parseFloat(field.value) * 2).toFixed(4)} per 1M tokens`
                                 : t('Multiplier for prompt tokens.')}
                             </FormDescription>
                             <FormMessage />
@@ -1031,9 +1057,9 @@ export function ModelMutateDrawer({
                                     const ratio = form.getValues('ratio')
                                     if (value && ratio) {
                                       const compPrice =
-                                        parseFloat(ratio) *
+                                        Number.parseFloat(ratio) *
                                         2 *
-                                        parseFloat(value)
+                                        Number.parseFloat(value)
                                       setCompletionPrice(compPrice.toString())
                                     } else {
                                       setCompletionPrice('')
@@ -1044,10 +1070,10 @@ export function ModelMutateDrawer({
                             </FormControl>
                             <FormDescription>
                               {field.value &&
-                              !isNaN(parseFloat(field.value)) &&
+                              !Number.isNaN(Number.parseFloat(field.value)) &&
                               promptPrice &&
-                              !isNaN(parseFloat(promptPrice))
-                                ? `Calculated price: $${(parseFloat(promptPrice) * parseFloat(field.value)).toFixed(4)} per 1M tokens`
+                              !Number.isNaN(Number.parseFloat(promptPrice))
+                                ? `Calculated price: $${(Number.parseFloat(promptPrice) * Number.parseFloat(field.value)).toFixed(4)} per 1M tokens`
                                 : t('Multiplier for completion tokens.')}
                             </FormDescription>
                             <FormMessage />
@@ -1056,47 +1082,46 @@ export function ModelMutateDrawer({
                       />
                     </>
                   ) : (
-                    <>
-                      <div className='space-y-4'>
-                        <div className='space-y-2'>
-                          <Label>{t('Prompt price ($/1M tokens)')}</Label>
-                          <Input
-                            type='text'
-                            placeholder='2.0'
-                            value={promptPrice}
-                            onChange={(e) =>
-                              handlePromptPriceChange(e.target.value)
-                            }
-                          />
-                          <p className='text-muted-foreground text-sm'>
-                            {promptPrice && !isNaN(parseFloat(promptPrice))
-                              ? `Calculated ratio: ${(parseFloat(promptPrice) / 2).toFixed(4)}`
-                              : t('Enter Input price to calculate ratio')}
-                          </p>
-                        </div>
-
-                        <div className='space-y-2'>
-                          <Label>{t('Completion price ($/1M tokens)')}</Label>
-                          <Input
-                            type='text'
-                            placeholder='4.0'
-                            value={completionPrice}
-                            onChange={(e) =>
-                              handleCompletionPriceChange(e.target.value)
-                            }
-                          />
-                          <p className='text-muted-foreground text-sm'>
-                            {completionPrice &&
-                            !isNaN(parseFloat(completionPrice)) &&
-                            promptPrice &&
-                            !isNaN(parseFloat(promptPrice)) &&
-                            parseFloat(promptPrice) > 0
-                              ? `Calculated ratio: ${(parseFloat(completionPrice) / parseFloat(promptPrice)).toFixed(4)}`
-                              : t('Enter Completion price to calculate ratio')}
-                          </p>
-                        </div>
+                    <div className='space-y-4'>
+                      <div className='space-y-2'>
+                        <Label>{t('Prompt price ($/1M tokens)')}</Label>
+                        <Input
+                          type='text'
+                          placeholder='2.0'
+                          value={promptPrice}
+                          onChange={(e) =>
+                            handlePromptPriceChange(e.target.value)
+                          }
+                        />
+                        <p className='text-muted-foreground text-sm'>
+                          {promptPrice &&
+                          !Number.isNaN(Number.parseFloat(promptPrice))
+                            ? `Calculated ratio: ${(Number.parseFloat(promptPrice) / 2).toFixed(4)}`
+                            : t('Enter Input price to calculate ratio')}
+                        </p>
                       </div>
-                    </>
+
+                      <div className='space-y-2'>
+                        <Label>{t('Completion price ($/1M tokens)')}</Label>
+                        <Input
+                          type='text'
+                          placeholder='4.0'
+                          value={completionPrice}
+                          onChange={(e) =>
+                            handleCompletionPriceChange(e.target.value)
+                          }
+                        />
+                        <p className='text-muted-foreground text-sm'>
+                          {completionPrice &&
+                          !Number.isNaN(Number.parseFloat(completionPrice)) &&
+                          promptPrice &&
+                          !Number.isNaN(Number.parseFloat(promptPrice)) &&
+                          Number.parseFloat(promptPrice) > 0
+                            ? `Calculated ratio: ${(Number.parseFloat(completionPrice) / Number.parseFloat(promptPrice)).toFixed(4)}`
+                            : t('Enter Completion price to calculate ratio')}
+                        </p>
+                      </div>
+                    </div>
                   )}
 
                   <Collapsible

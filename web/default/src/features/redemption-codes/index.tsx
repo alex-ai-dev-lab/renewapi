@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import '@/styles/obsidian-admin.css'
 import { useTranslation } from 'react-i18next'
 import { SectionPageLayout } from '@/components/layout'
 import { RedemptionsDialogs } from './components/redemptions-dialogs'
@@ -28,20 +27,15 @@ export function Redemptions() {
   const { t } = useTranslation()
   return (
     <RedemptionsProvider>
-      <SectionPageLayout>
+      <SectionPageLayout fixedContent>
         <SectionPageLayout.Title>
           {t('Redemption Codes')}
         </SectionPageLayout.Title>
-        <SectionPageLayout.Description>
-          {t('Track inventory, expiry, and redemption status in one ledger.')}
-        </SectionPageLayout.Description>
         <SectionPageLayout.Actions>
           <RedemptionsPrimaryButtons />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <div className='obsidian-admin'>
-            <RedemptionsTable />
-          </div>
+          <RedemptionsTable />
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

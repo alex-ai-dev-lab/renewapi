@@ -30,6 +30,9 @@ import type {
   UpdateOptionsBulkRequest,
   UpstreamChannelsResponse,
   UpstreamRatiosResponse,
+  LogCleanupTask,
+  SystemTaskListResponse,
+  SystemTaskResponse,
 } from './types'
 
 const SYSTEM_SETTINGS_REQUEST_CONFIG = {
@@ -115,5 +118,40 @@ export async function triggerOfficialPriceSync() {
   const res = await api.post<OfficialPriceSyncTriggerResponse>(
     '/api/pricing/official-sync/trigger'
   )
+  return res.data
+}
+
+export async function startLogCleanupTask(targetTimestamp: number) {
+  const res = await api.post<SystemTaskResponse<LogCleanupTask>>(
+    '/api/system-task/log-cleanup',
+    null,
+    {
+      params: { target_timestamp: targetTimestamp },
+    }
+  )
+  return res.data
+}
+
+export async function getCurrentLogCleanupTask() {
+  const res = await api.get<SystemTaskResponse<LogCleanupTask | null>>(
+    '/api/system-task/current',
+    {
+      params: { type: 'log_cleanup' },
+    }
+  )
+  return res.data
+}
+
+export async function getSystemTask(taskId: string) {
+  const res = await api.get<SystemTaskResponse<LogCleanupTask>>(
+    `/api/system-task/${taskId}`
+  )
+  return res.data
+}
+
+export async function listSystemTasks(limit = 20) {
+  const res = await api.get<SystemTaskListResponse>('/api/system-task/list', {
+    params: { limit },
+  })
   return res.data
 }

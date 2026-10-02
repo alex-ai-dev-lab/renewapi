@@ -36,7 +36,7 @@ export function sleep(ms: number = 1000) {
 export function sanitizeCssVariableName(name: string): string {
   // 将点号、空格、斜杠替换为连字符
   // 移除其他不允许在 CSS 变量名中的特殊字符
-  return name.replace(/[.\s/]/g, '-').replace(/[^\w-]/g, '')
+  return name.replaceAll(/[.\s/]/g, '-').replaceAll(/[^\w-]/g, '')
 }
 
 /**
@@ -46,42 +46,31 @@ export function sanitizeCssVariableName(name: string): string {
  * @returns Array of page numbers and ellipsis strings
  *
  * Examples:
- * - Small dataset (≤5 pages): [1, 2, 3, 4, 5]
- * - Near beginning: [1, 2, 3, 4, '...', 10]
- * - In middle: [1, '...', 4, 5, 6, '...', 10]
- * - Near end: [1, '...', 7, 8, 9, 10]
+ * - Small dataset (≤4 pages): [1, 2, 3, 4]
+ * - Near beginning: [1, 2, '...', 10]
+ * - In middle: [1, '...', 5, '...', 10]
+ * - Near end: [1, '...', 9, 10]
  */
 export function getPageNumbers(currentPage: number, totalPages: number) {
-  const maxVisiblePages = 5 // Maximum number of page buttons to show
+  const maxVisiblePages = 4
   const rangeWithDots = []
 
   if (totalPages <= maxVisiblePages) {
-    // If total pages is 5 or less, show all pages
     for (let i = 1; i <= totalPages; i++) {
       rangeWithDots.push(i)
     }
   } else {
-    // Always show first page
     rangeWithDots.push(1)
 
-    if (currentPage <= 3) {
-      // Near the beginning: [1] [2] [3] [4] ... [10]
-      for (let i = 2; i <= 4; i++) {
-        rangeWithDots.push(i)
-      }
+    if (currentPage <= 2) {
+      rangeWithDots.push(2)
       rangeWithDots.push('...', totalPages)
-    } else if (currentPage >= totalPages - 2) {
-      // Near the end: [1] ... [7] [8] [9] [10]
+    } else if (currentPage >= totalPages - 1) {
       rangeWithDots.push('...')
-      for (let i = totalPages - 3; i <= totalPages; i++) {
-        rangeWithDots.push(i)
-      }
+      rangeWithDots.push(totalPages - 1, totalPages)
     } else {
-      // In the middle: [1] ... [4] [5] [6] ... [10]
       rangeWithDots.push('...')
-      for (let i = currentPage - 1; i <= currentPage + 1; i++) {
-        rangeWithDots.push(i)
-      }
+      rangeWithDots.push(currentPage)
       rangeWithDots.push('...', totalPages)
     }
   }
@@ -94,7 +83,7 @@ export function getPageNumbers(currentPage: number, totalPages: number) {
  */
 export function truncateText(text: string, maxLength: number): string {
   if (!text || text.length <= maxLength) return text
-  return text.slice(0, maxLength) + '...'
+  return `${text.slice(0, maxLength)}...`
 }
 
 /**

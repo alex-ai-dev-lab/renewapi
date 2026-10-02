@@ -56,8 +56,12 @@ export function PageTransition(props: PageTransitionProps) {
 
 export function AnimatedOutlet() {
   const shouldReduce = useReducedMotion()
+  // Key the page transition by the matched route id, not the resolved pathname.
+  // Navigating between params of the same route (e.g. dashboard tabs served by
+  // /dashboard/$section) then re-renders in place instead of remounting the
+  // route component and discarding its state (such as the selected time range).
   const routeKey = useRouterState({
-    select: (s) => s.location.pathname,
+    select: (s) => s.matches.at(-1)?.routeId ?? s.location.pathname,
   })
 
   if (shouldReduce) {
@@ -73,7 +77,7 @@ export function AnimatedOutlet() {
       key={routeKey}
       initial={MOTION_VARIANTS.pageEnter.initial}
       animate={MOTION_VARIANTS.pageEnter.animate}
-      transition={MOTION_TRANSITION.fast}
+      transition={MOTION_TRANSITION.default}
       className='flex min-h-0 flex-1 flex-col'
     >
       <Outlet />
@@ -127,7 +131,7 @@ export function TableStaggerContainer(props: StaggerContainerProps) {
   const shouldReduce = useReducedMotion()
 
   if (shouldReduce) {
-    return <>{props.children}</>
+    return props.children
   }
 
   return (

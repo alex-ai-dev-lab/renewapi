@@ -16,85 +16,59 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { X } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import { useAuthStore } from '@/stores/auth-store'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { MOTION_TRANSITION, MOTION_VARIANTS } from '@/lib/motion'
 import { useLayout } from '@/context/layout-provider'
 import { useSidebarView } from '@/hooks/use-sidebar-view'
-import { useUserDisplay } from '@/hooks/use-user-display'
-import { Button } from '@/components/ui/button'
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarRail,
-  useSidebar,
-} from '@/components/ui/sidebar'
+import { Sidebar, SidebarContent, SidebarRail } from '@/components/ui/sidebar'
 import { NavGroup } from './nav-group'
 import { SidebarViewHeader } from './sidebar-view-header'
-import { SystemBrand } from './system-brand'
 
-/** URL-driven navigation; all module, role and contextual filtering lives in useSidebarView. */
+/**
+ * Application sidebar.
+ *
+ * Adopts the Vercel / Cloudflare "drill-in" pattern: the URL drives
+ * which sidebar *view* is rendered. Clicking a top-level entry like
+ * `System Settings` swaps the sidebar to a contextual workspace —
+ * with a `← Back to Dashboard` affordance — instead of stacking the
+ * sub-navigation inside the root tree.
+ *
+ * Architecture:
+ *   - View resolution + filtering: {@link useSidebarView}
+ *   - View registry: `layout/lib/sidebar-view-registry.ts`
+ *   - Per-view header: {@link SidebarViewHeader}
+ *
+ * Adding a new nested view only requires registering a {@link SidebarView}
+ * in the registry; this component requires no changes.
+ */
 export function AppSidebar() {
-  const { t } = useTranslation()
-  const { collapsible } = useLayout()
-  const { isMobile, setOpenMobile } = useSidebar()
-  const { view, navGroups } = useSidebarView()
-  const user = useAuthStore((state) => state.auth.user)
-  const { displayName, roleLabel, initials } = useUserDisplay(user)
+  const { collapsible, variant } = useLayout()
+  const { key, view, navGroups } = useSidebarView()
+  const shouldReduce = useReducedMotion()
 
   return (
-    <Sidebar
-      collapsible={isMobile ? 'offcanvas' : collapsible}
-      variant='sidebar'
-      className='obsidian-sidebar top-0 h-svh'
-    >
-      <SidebarHeader className='obsidian-sidebar-brand border-sidebar-border h-16 shrink-0 justify-center border-b px-3 py-0'>
-        <div className='flex min-w-0 items-center gap-2'>
-          <div className='min-w-0 flex-1'>
-            <SystemBrand />
-          </div>
-          {isMobile && (
-            <Button
-              variant='ghost'
-              size='icon-sm'
-              aria-label={t('Close navigation')}
-              onClick={() => setOpenMobile(false)}
-            >
-              <X className='size-4' aria-hidden='true' />
-            </Button>
-          )}
-        </div>
-      </SidebarHeader>
+    <Sidebar collapsible={collapsible} variant={variant}>
       {view && <SidebarViewHeader view={view} />}
 
-      <SidebarContent className='obsidian-sidebar-nav'>
-        <nav aria-label={t('Main navigation')} className='min-w-0'>
-          {navGroups.map((group) => (
-            <NavGroup key={group.id || group.title} {...group} />
-          ))}
-        </nav>
+      <SidebarContent className='py-2'>
+        <AnimatePresence mode='wait' initial={false}>
+          <motion.div
+            key={key}
+            initial={
+              shouldReduce ? false : MOTION_VARIANTS.sidebarSlide.initial
+            }
+            animate={MOTION_VARIANTS.sidebarSlide.animate}
+            exit={shouldReduce ? undefined : MOTION_VARIANTS.sidebarSlide.exit}
+            transition={MOTION_TRANSITION.fast}
+            className='flex flex-col'
+          >
+            {navGroups.map((props) => (
+              <NavGroup key={props.id || props.title} {...props} />
+            ))}
+          </motion.div>
+        </AnimatePresence>
       </SidebarContent>
 
-      {user && (
-        <SidebarFooter className='obsidian-sidebar-account border-sidebar-border min-w-0 flex-row items-center gap-3 border-t px-3 py-3'>
-          <span className='obsidian-sidebar-avatar' aria-hidden='true'>
-            {initials}
-          </span>
-          <div className='min-w-0 flex-1 space-y-1 group-data-[collapsible=icon]:hidden'>
-            <div className='truncate text-[13px] font-medium'>
-              {displayName}
-            </div>
-            <div className='text-muted-foreground flex min-w-0 items-center gap-2 text-[11px]'>
-              <span className='shrink-0'>{roleLabel}</span>
-              {user.group && (
-                <span className='truncate'>{String(user.group)}</span>
-              )}
-            </div>
-          </div>
-        </SidebarFooter>
-      )}
       <SidebarRail />
     </Sidebar>
   )

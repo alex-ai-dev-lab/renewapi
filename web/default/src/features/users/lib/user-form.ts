@@ -17,9 +17,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { z } from 'zod'
+import {
+  type PermissionCatalog,
+  type AdminPermissionMatrix,
+  normalizeAdminPermissions,
+} from '@/lib/admin-permissions'
 import { quotaUnitsToDollars } from '@/lib/format'
+import { ROLE } from '@/lib/roles'
 import { DEFAULT_GROUP } from '../constants'
-import { type UserFormData, type User } from '../types'
+import type { UserFormData, User } from '../types'
 
 // ============================================================================
 // Form Schema
@@ -33,6 +39,9 @@ export const userFormSchema = z.object({
   quota_dollars: z.number().min(0).optional(),
   group: z.string().optional(),
   remark: z.string().optional(),
+  admin_permissions: z
+    .record(z.string(), z.record(z.string(), z.boolean()))
+    .optional(),
 })
 
 export type UserFormValues = z.infer<typeof userFormSchema>
@@ -41,17 +50,16 @@ export type UserFormValues = z.infer<typeof userFormSchema>
 // Form Defaults
 // ============================================================================
 
-/** 默认角色：普通用户（USER_ROLE.USER === 1）。 */
-const DEFAULT_ROLE = 1
-
 export const USER_FORM_DEFAULT_VALUES: UserFormValues = {
   username: '',
   display_name: '',
   password: '',
-  role: DEFAULT_ROLE,
+  role: 1, // Default to common user
   quota_dollars: 0,
   group: DEFAULT_GROUP,
   remark: '',
+  // Filled against the backend catalog at render time; see UsersMutateDrawer.
+  admin_permissions: {},
 }
 
 // ============================================================================
@@ -60,34 +68,33 @@ export const USER_FORM_DEFAULT_VALUES: UserFormValues = {
 
 /**
  * Transform form data to API payload
- *
- * 字段拆分与 UI 一致：users-mutate-drawer 仅在新建时渲染角色选择器，
- * 仅在编辑时渲染分组/额度/备注，所以这里的分支不是遗漏。
  */
 export function transformFormDataToPayload(
   data: UserFormValues,
-  userId?: number
+  userId?: number,
+  catalog?: PermissionCatalog
 ): UserFormData & { id?: number } {
-  const isUpdate = userId !== undefined
-  const trimmedDisplayName = data.display_name?.trim() ?? ''
-
   const payload: UserFormData & { id?: number } = {
     username: data.username,
-    // 新建时未填显示名则回退为用户名；但编辑时不能回退 ——
-    // 原实现 `data.display_name || data.username` 会把「用户主动清空显示名」
-    // 静默改写成用户名，用户永远无法清空该字段。
-    display_name: isUpdate
-      ? trimmedDisplayName
-      : trimmedDisplayName || data.username,
-    // 空字串转 undefined 是有意为之：表示「不修改密码」。
+    display_name: data.display_name || data.username,
     password: data.password || undefined,
   }
 
+  const role = userId === undefined ? data.role || 1 : (data.role ?? 0)
+
+  // Only send the permission matrix when the target is an admin and the catalog
+  // is available; without the catalog we cannot build a full matrix, so we omit
+  // the field (the backend then leaves existing permissions untouched).
+  if (role >= ROLE.ADMIN && catalog) {
+    payload.admin_permissions = normalizeAdminPermissions(
+      data.admin_permissions as AdminPermissionMatrix | undefined,
+      catalog
+    )
+  }
+
   // For create: only send required fields
-  if (!isUpdate) {
-    // 不能用 `data.role || DEFAULT_ROLE`：role 合法值包含 0（游客，见 lib/roles.ts
-    // 的 ROLE.GUEST），falsy 判断会把「游客」静默提成「普通用户」。
-    payload.role = data.role ?? DEFAULT_ROLE
+  if (userId === undefined) {
+    payload.role = role
   } else {
     // For update: quota is adjusted atomically via /api/user/manage, not sent here
     payload.group = data.group
@@ -99,20 +106,19 @@ export function transformFormDataToPayload(
 }
 
 /**
- * Transform user data to form defaults
- *
- * quota_dollars 仅用于表单展示与「调整额度」弹窗预览，
- * 不会随更新请求提交（额度走 /api/user/manage 原子调整）。
+ * Transform user data to form defaults. The admin permission matrix is passed
+ * through as-is (the backend already returns a full matrix); it is filled against
+ * the catalog at render time in UsersMutateDrawer.
  */
 export function transformUserToFormDefaults(user: User): UserFormValues {
   return {
     username: user.username,
-    // display_name 在类型上可为 undefined，直接塑入受控输入框会触发 React 告警。
-    display_name: user.display_name || '',
+    display_name: user.display_name,
     password: '',
     role: user.role,
     quota_dollars: quotaUnitsToDollars(user.quota),
     group: user.group || DEFAULT_GROUP,
     remark: user.remark || '',
+    admin_permissions: user.admin_permissions ?? {},
   }
 }

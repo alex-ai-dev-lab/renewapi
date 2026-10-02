@@ -40,6 +40,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { IconBadge } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/status-badge'
 import { usePasskeyManagement } from '@/features/auth/passkey'
@@ -93,7 +94,8 @@ export function PasskeyCard({ loading: pageLoading }: PasskeyCardProps) {
     if (!restrictedMethod) return verificationMethods
     return {
       ...verificationMethods,
-      has2FA: restrictedMethod === '2fa' && verificationMethods.has2FA,
+      hasPassword:
+        restrictedMethod === 'password' && verificationMethods.hasPassword,
       hasPasskey:
         restrictedMethod === 'passkey' && verificationMethods.hasPasskey,
     }
@@ -105,37 +107,21 @@ export function PasskeyCard({ loading: pageLoading }: PasskeyCardProps) {
       return
     }
 
-    const methods = await fetchVerificationMethods()
-    if (!methods.has2FA) {
-      // Without 2FA enabled, register directly. The browser-level Passkey prompt
-      // is itself a strong proof of presence, so no extra verification is needed.
-      await register()
-      return
-    }
-
-    setRestrictedMethod('2fa')
-    await startVerification(register, {
-      preferredMethod: '2fa',
-      title: t('Security verification'),
-      description: t(
-        'Confirm your identity with Two-factor Authentication before registering a Passkey.'
-      ),
-    })
-  }, [fetchVerificationMethods, register, startVerification, supported, t])
+    await register()
+  }, [register, supported, t])
 
   const handleRemove = useCallback(async () => {
     const methods = await fetchVerificationMethods()
-    const required: VerificationMethod | null = methods.has2FA
-      ? '2fa'
-      : methods.hasPasskey
-        ? 'passkey'
-        : null
+    let required: VerificationMethod | null = null
+    if (methods.hasPasskey) {
+      required = 'passkey'
+    } else if (methods.hasPassword) {
+      required = 'password'
+    }
 
     if (!required) {
       toast.error(
-        t(
-          'Please enable Two-factor Authentication or Passkey before proceeding'
-        )
+        t('Please set a password or enable Passkey before proceeding')
       )
       return
     }
@@ -187,7 +173,7 @@ export function PasskeyCard({ loading: pageLoading }: PasskeyCardProps) {
 
   if (pageLoading || loading) {
     return (
-      <Card className='gap-0 overflow-hidden py-0'>
+      <Card data-card-hover='false' className='gap-0 overflow-hidden py-0'>
         <CardHeader className='p-3 sm:p-5'>
           <Skeleton className='h-6 w-48' />
           <Skeleton className='mt-2 h-4 w-64' />
@@ -205,10 +191,28 @@ export function PasskeyCard({ loading: pageLoading }: PasskeyCardProps) {
       : t('Not used yet')
 
   const showUnsupportedNotice = !supported && !enabled
+  let backupStatus: {
+    label: string
+    variant: 'success' | 'warning' | 'neutral'
+  } | null = null
+
+  if (status?.backup_eligible !== undefined) {
+    backupStatus = {
+      label: t('No backup'),
+      variant: 'neutral',
+    }
+
+    if (status.backup_eligible) {
+      backupStatus = {
+        label: status.backup_state ? t('Backed up') : t('Not backed up'),
+        variant: status.backup_state ? 'success' : 'warning',
+      }
+    }
+  }
 
   return (
     <>
-      <Card className='gap-0 overflow-hidden py-0'>
+      <Card data-card-hover='false' className='gap-0 overflow-hidden py-0'>
         <CardHeader className='p-3 sm:p-5'>
           <CardTitle className='text-lg tracking-tight sm:text-xl'>
             {t('Passkey Login')}
@@ -222,9 +226,9 @@ export function PasskeyCard({ loading: pageLoading }: PasskeyCardProps) {
           <div className='space-y-6'>
             <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between xl:flex-col 2xl:flex-row'>
               <div className='flex items-start gap-4'>
-                <div className='bg-muted rounded-md p-2'>
-                  <KeyRound className='h-5 w-5' />
-                </div>
+                <IconBadge tone='info' size='sm'>
+                  <KeyRound />
+                </IconBadge>
                 <div className='space-y-1'>
                   <div className='flex flex-wrap items-center gap-2'>
                     <p className='font-medium'>{t('Passkey Authentication')}</p>
@@ -234,22 +238,10 @@ export function PasskeyCard({ loading: pageLoading }: PasskeyCardProps) {
                       showDot
                       copyable={false}
                     />
-                    {status?.backup_eligible !== undefined && (
+                    {backupStatus && (
                       <StatusBadge
-                        label={
-                          status.backup_eligible
-                            ? status.backup_state
-                              ? t('Backed up')
-                              : t('Not backed up')
-                            : t('No backup')
-                        }
-                        variant={
-                          status.backup_eligible
-                            ? status.backup_state
-                              ? 'success'
-                              : 'warning'
-                            : 'neutral'
-                        }
+                        label={backupStatus.label}
+                        variant={backupStatus.variant}
                         showDot
                         copyable={false}
                       />
@@ -310,7 +302,7 @@ export function PasskeyCard({ loading: pageLoading }: PasskeyCardProps) {
                         {t('Cancel')}
                       </AlertDialogCancel>
                       <AlertDialogAction
-                        className='bg-destructive text-destructive-foreground hover:bg-destructive/90'
+                        variant='destructive'
                         disabled={removing}
                         onClick={(event) => {
                           event.preventDefault()
@@ -327,7 +319,7 @@ export function PasskeyCard({ loading: pageLoading }: PasskeyCardProps) {
 
             {showUnsupportedNotice && (
               <div className='bg-muted/60 text-muted-foreground flex items-start gap-3 rounded-md p-4 text-sm'>
-                <ShieldAlert className='text-warning mt-0.5 h-4 w-4 flex-shrink-0' />
+                <ShieldAlert className='mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500' />
                 <div>
                   <p className='text-foreground font-medium'>
                     {t('Passkey not supported on this device')}

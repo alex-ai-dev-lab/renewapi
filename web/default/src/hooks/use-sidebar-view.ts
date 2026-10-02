@@ -16,66 +16,60 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useMemo } from 'react'
 import { useLocation } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
-import { useSystemConfigStore } from '@/stores/system-config-store'
 import { ROLE } from '@/lib/roles'
-import {
-  projectTaskGroups,
-  resolveTaskSectionOrder,
-} from '@/components/layout/lib/sidebar-navigation'
 import { resolveSidebarView } from '@/components/layout/lib/sidebar-view-registry'
-import type { ResolvedSidebarView } from '@/components/layout/types'
+import type { NavGroup, ResolvedSidebarView } from '@/components/layout/types'
 import { useSidebarConfig } from './use-sidebar-config'
 import { useSidebarData } from './use-sidebar-data'
-import { useStatus } from './use-status'
 
 /** Sentinel key used for the root navigation in animation `key=` props */
 const ROOT_VIEW_KEY = '__root'
 
 /**
- * Apply item roles and admin × user permissions before projecting task groups.
- * Settings context additionally requires the visible root settings entry; its
- * internal sections retain the existing SystemSettingsNavigation filtering.
- * Route-level authorization remains independent of navigation visibility.
+ * Resolve the active sidebar view for the current location.
+ *
+ * - Returns the matching nested {@link SidebarView} (with its nav
+ *   groups) when the URL belongs to a registered drill-in workspace.
+ * - Otherwise returns the root navigation, narrowed by:
+ *     · admin-only group visibility (role-based);
+ *     · `useSidebarConfig` (admin × user `sidebar_modules` overlay).
+ *
+ * Nested views are intentionally NOT passed through `useSidebarConfig`
+ * — those filters target known dashboard URLs only, and gating is
+ * already enforced at the route level (`beforeLoad` redirects).
  */
-export function useSidebarView(pathnameOverride?: string): ResolvedSidebarView {
+export function useSidebarView(): ResolvedSidebarView {
   const { t } = useTranslation()
-  const currentPathname = useLocation({ select: (l) => l.pathname })
-  // Global command search can request the root view without duplicating its filters.
-  const pathname = pathnameOverride ?? currentPathname
+  const pathname = useLocation({ select: (l) => l.pathname })
   const userRole = useAuthStore((s) => s.auth.user?.role)
   const rootSidebarData = useSidebarData()
   const configFilteredRoot = useSidebarConfig(rootSidebarData.navGroups)
-  const systemSettingsNavigation = useSystemConfigStore(
-    (s) => s.config.systemSettingsNavigation
-  )
 
-  const { status } = useStatus()
-  const rootNavGroups = projectTaskGroups(
-    configFilteredRoot,
-    (key) => t(key),
-    resolveTaskSectionOrder(
-      status?.SidebarTaskSectionOrder as string | undefined,
-      status?.SidebarSectionOrder as string | undefined
-    ),
-    status?.SidebarModulesAdmin as string | undefined
-  )
+  const rootNavGroups = useMemo<NavGroup[]>(() => {
+    const role = userRole ?? ROLE.GUEST
+    const isAdmin = role >= ROLE.ADMIN
+    return configFilteredRoot
+      .filter((group) => (group.id === 'admin' ? isAdmin : true))
+      .map((group) => {
+        const items = group.items.filter(
+          (item) => item.requiredRole === undefined || role >= item.requiredRole
+        )
+        return items.length === group.items.length ? group : { ...group, items }
+      })
+  }, [configFilteredRoot, userRole])
 
   const view = resolveSidebarView(pathname)
-  void systemSettingsNavigation
+  const contextualGroups = useSidebarConfig(view?.getNavGroups(t) ?? [])
 
-  const canEnterSettings =
-    userRole === ROLE.SUPER_ADMIN &&
-    configFilteredRoot.some((group) =>
-      group.items.some((item) => item.id === 'settings')
-    )
-  if (view && (view.id !== 'system-settings' || canEnterSettings)) {
+  if (view) {
     return {
       key: view.id,
       view,
-      navGroups: view.getNavGroups(t),
+      navGroups: contextualGroups,
     }
   }
 

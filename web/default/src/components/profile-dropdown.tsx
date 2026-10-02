@@ -16,16 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { User, Wallet, LogOut, Settings } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
-import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { ROLE } from '@/lib/roles'
 import useDialogState from '@/hooks/use-dialog'
+import { useIsSidebarModuleVisible } from '@/hooks/use-sidebar-config'
 import { useUserDisplay } from '@/hooks/use-user-display'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -36,8 +34,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SignOutDialog } from '@/components/sign-out-dialog'
 
-const avatarFallbackClassName = 'font-semibold text-white'
-
 export function ProfileDropdown() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -45,12 +41,7 @@ export function ProfileDropdown() {
   const user = useAuthStore((state) => state.auth.user)
   const { displayName, roleLabel } = useUserDisplay(user)
   const isSuperAdmin = user?.role === ROLE.SUPER_ADMIN
-  const avatarName = user?.username || displayName
-  const avatarFallback = getUserAvatarFallback(avatarName)
-  const avatarFallbackStyle = useMemo(
-    () => getUserAvatarStyle(avatarName),
-    [avatarName]
-  )
+  const isWalletVisible = useIsSidebarModuleVisible('/wallet')
 
   return (
     <>
@@ -60,29 +51,14 @@ export function ProfileDropdown() {
             <Button
               variant='ghost'
               className='relative size-6 p-0'
-              aria-label={t('Open profile menu')}
+              aria-label={t('Profile')}
             />
           }
         >
-          <Avatar className='size-6'>
-            <AvatarFallback
-              className={`${avatarFallbackClassName} text-[11px]`}
-              style={avatarFallbackStyle}
-            >
-              {avatarFallback}
-            </AvatarFallback>
-          </Avatar>
+          <User className='size-4' aria-hidden='true' />
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end' sideOffset={8} className='w-56'>
-          <div className='flex items-center gap-2 px-1.5 py-1.5'>
-            <Avatar className='size-8'>
-              <AvatarFallback
-                className={`${avatarFallbackClassName} text-xs`}
-                style={avatarFallbackStyle}
-              >
-                {avatarFallback}
-              </AvatarFallback>
-            </Avatar>
+          <div className='px-1.5 py-1.5'>
             <div className='flex flex-1 flex-col gap-0.5 overflow-hidden'>
               <p className='text-foreground truncate text-sm font-medium'>
                 {displayName}
@@ -110,14 +86,21 @@ export function ProfileDropdown() {
             {t('Profile')}
           </DropdownMenuItem>
 
-          <DropdownMenuItem onClick={() => navigate({ to: '/wallet' })}>
-            <Wallet className='size-4' />
-            {t('Wallet')}
-          </DropdownMenuItem>
+          {isWalletVisible && (
+            <DropdownMenuItem onClick={() => navigate({ to: '/wallet' })}>
+              <Wallet className='size-4' />
+              {t('Wallet')}
+            </DropdownMenuItem>
+          )}
 
           {isSuperAdmin && (
             <DropdownMenuItem
-              onClick={() => navigate({ to: '/system-settings' })}
+              onClick={() =>
+                navigate({
+                  to: '/system-settings/site/$section',
+                  params: { section: 'system-info' },
+                })
+              }
             >
               <Settings className='size-4' />
               {t('System Settings')}

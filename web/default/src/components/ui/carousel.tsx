@@ -24,6 +24,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import useEmblaCarousel, {
   type UseEmblaCarouselType,
 } from 'embla-carousel-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -112,13 +113,23 @@ function Carousel({
   }, [api, setApi])
 
   React.useEffect(() => {
-    if (!api) return
-    onSelect(api)
-    api.on('reInit', onSelect)
-    api.on('select', onSelect)
+    let cleanup: (() => void) | undefined
+    const timer = setTimeout(() => {
+      const result = (() => {
+        if (!api) return
+        onSelect(api)
+        api.on('reInit', onSelect)
+        api.on('select', onSelect)
 
+        return () => {
+          api?.off('select', onSelect)
+        }
+      })()
+      if (typeof result === 'function') cleanup = result
+    }, 0)
     return () => {
-      api?.off('select', onSelect)
+      clearTimeout(timer)
+      cleanup?.()
     }
   }, [api, onSelect])
 
@@ -196,6 +207,7 @@ function CarouselPrevious({
   ...props
 }: React.ComponentProps<typeof Button>) {
   const { orientation, scrollPrev, canScrollPrev } = useCarousel()
+  const { t } = useTranslation()
 
   return (
     <Button
@@ -214,7 +226,7 @@ function CarouselPrevious({
       {...props}
     >
       <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} />
-      <span className='sr-only'>Previous slide</span>
+      <span className='sr-only'>{t('Previous slide')}</span>
     </Button>
   )
 }
@@ -226,6 +238,7 @@ function CarouselNext({
   ...props
 }: React.ComponentProps<typeof Button>) {
   const { orientation, scrollNext, canScrollNext } = useCarousel()
+  const { t } = useTranslation()
 
   return (
     <Button
@@ -244,7 +257,7 @@ function CarouselNext({
       {...props}
     >
       <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />
-      <span className='sr-only'>Next slide</span>
+      <span className='sr-only'>{t('Next slide')}</span>
     </Button>
   )
 }

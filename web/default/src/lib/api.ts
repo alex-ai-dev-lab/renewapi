@@ -17,15 +17,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import axios, { type AxiosRequestConfig } from 'axios'
-import { t } from 'i18next'
+import { localizeApiMessage } from '@/i18n/api-messages'
+import { toIntlLocale } from '@/i18n/languages'
+import i18next, { t } from 'i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { isRequestCanceled } from '@/lib/request-errors'
+import { SNOW_SHIELD_REQUIRED_EVENT } from '@/features/snow-shield/state'
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
     skipBusinessError?: boolean
     skipErrorHandler?: boolean
+    disableDuplicate?: boolean
+    accountScope?: string
     timeoutClass?: 'interactive' | 'background' | 'export' | 'upload'
   }
 }
@@ -48,6 +53,46 @@ export const api = axios.create({
   },
 })
 
+// The demo transport has no network fallback, including for unknown endpoints.
+// A compile-time flag keeps fixtures out of the normal production bundle.
+if (import.meta.env.VITE_SNOWAPI_DEMO === 'true') {
+  api.defaults.adapter = async (config) => {
+    const { demoAdapter } = await import('@/demo/adapter')
+    return demoAdapter(config)
+  }
+}
+
+// ============================================================================
+// Request Deduplication
+// ============================================================================
+
+// Deduplicate concurrent GET requests to the same URL
+// Prevents multiple identical requests from being sent simultaneously
+const inFlightGet = new Map<string, Promise<unknown>>()
+const originalGet = api.get.bind(api)
+
+function getAccountScope(): string {
+  return `${useAuthStore.getState().auth.sessionVersion}:${getUserId() ?? ''}`
+}
+
+api.get = ((url: string, config: ApiRequestConfig = {}) => {
+  config = { ...config, accountScope: getAccountScope() }
+  const disableDuplicate = config.disableDuplicate
+  if (disableDuplicate || config.signal) return originalGet(url, config)
+
+  const params = config.params ? JSON.stringify(config.params) : '{}'
+  const key = `${getAccountScope()}:${url}?${params}`
+
+  // Return existing in-flight request if available
+  const inFlightRequest = inFlightGet.get(key)
+  if (inFlightRequest) return inFlightRequest
+
+  // Create new request and clean up after completion
+  const req = originalGet(url, config).finally(() => inFlightGet.delete(key))
+  inFlightGet.set(key, req)
+  return req
+}) as typeof api.get
+
 // ============================================================================
 // Response Interceptor
 // ============================================================================
@@ -55,6 +100,12 @@ export const api = axios.create({
 // Handle business logic errors and HTTP errors globally
 api.interceptors.response.use(
   (response) => {
+    if (response.config.accountScope !== getAccountScope()) {
+      throw new axios.CanceledError('Account changed')
+    }
+    if (typeof response.data?.message === 'string') {
+      response.data.message = localizeApiMessage(response.data.message)
+    }
     const skipBusiness = response.config.skipBusinessError
 
     // Unified business response format: { success, message, data }
@@ -73,12 +124,22 @@ api.interceptors.response.use(
     return response
   },
   (error) => {
-    // Aborted requests are expected during navigation and query replacement.
-    // They must not surface as user-facing failures.
-    if (isRequestCanceled(error)) {
+    if (isRequestCanceled(error)) return Promise.reject(error)
+    if (
+      error?.config?.accountScope !== undefined &&
+      error.config.accountScope !== getAccountScope()
+    ) {
+      return Promise.reject(new axios.CanceledError('Account changed'))
+    }
+    if (error?.response?.data?.code === 'snow_shield_required') {
+      window.dispatchEvent(new Event(SNOW_SHIELD_REQUIRED_EVENT))
       return Promise.reject(error)
     }
-
+    if (typeof error?.response?.data?.message === 'string') {
+      error.response.data.message = localizeApiMessage(
+        error.response.data.message
+      )
+    }
     const skip = error?.config?.skipErrorHandler
     const status = error?.response?.status
 
@@ -147,10 +208,17 @@ api.interceptors.request.use((config) => {
     background: 60_000,
     export: 120_000,
     upload: 300_000,
-  } as const
-  if (!config.timeout && config.timeoutClass) {
-    config.timeout = timeoutByClass[config.timeoutClass]
   }
+  if (!config.timeout && config.timeoutClass)
+    config.timeout = timeoutByClass[config.timeoutClass]
+  if (
+    config.accountScope !== undefined &&
+    config.accountScope !== getAccountScope()
+  ) {
+    throw new axios.CanceledError('Account changed')
+  }
+  config.accountScope = getAccountScope()
+  config.headers.set('Accept-Language', toIntlLocale(i18next.language) ?? 'en')
   const uid = getUserId()
   if (uid) {
     // Custom header for user identification
@@ -202,54 +270,6 @@ export async function getUserGroups(): Promise<{
 
 // Get system status
 export async function getStatus() {
-  const res = await api.get('/api/status', {
-    skipErrorHandler: true,
-  })
+  const res = await api.get('/api/status')
   return res.data?.data as Record<string, unknown>
-}
-
-// Get system notice
-export async function getNotice(): Promise<{
-  success: boolean
-  message?: string
-  data?: string
-}> {
-  const res = await api.get('/api/notice', {
-    skipErrorHandler: true,
-  })
-  return res.data
-}
-
-// ----------------------------------------------------------------------------
-// 2FA Management APIs
-// ----------------------------------------------------------------------------
-
-// Get 2FA status
-export async function get2FAStatus() {
-  const res = await api.get('/api/user/2fa/status')
-  return res.data
-}
-
-// Setup 2FA
-export async function setup2FA() {
-  const res = await api.post('/api/user/2fa/setup')
-  return res.data
-}
-
-// Enable 2FA with verification code
-export async function enable2FA(code: string) {
-  const res = await api.post('/api/user/2fa/enable', { code })
-  return res.data
-}
-
-// Disable 2FA with verification code
-export async function disable2FA(code: string) {
-  const res = await api.post('/api/user/2fa/disable', { code })
-  return res.data
-}
-
-// Regenerate 2FA backup codes
-export async function regenerate2FABackupCodes(code: string) {
-  const res = await api.post('/api/user/2fa/backup_codes', { code })
-  return res.data
 }

@@ -16,32 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import * as React from 'react'
+import { useSyncExternalStore } from 'react'
 
-// Keep the Sidebar mobile/Sheet boundary aligned with the Aurora desktop shell.
-// Below lg the app uses AppHeader + overlay navigation; at lg and above Aurora
-// switches to the dedicated Topbar + floating Dock desktop experience.
-const MOBILE_BREAKPOINT = 1024
-const MOBILE_MEDIA_QUERY = `(max-width: ${MOBILE_BREAKPOINT - 1}px)`
-
-function subscribeToMobileQuery(onStoreChange: () => void) {
-  const mediaQuery = window.matchMedia(MOBILE_MEDIA_QUERY)
-  mediaQuery.addEventListener('change', onStoreChange)
-  return () => mediaQuery.removeEventListener('change', onStoreChange)
+const query = '(max-width: 767px)'
+function subscribe(onChange: () => void) {
+  const media = window.matchMedia(query)
+  media.addEventListener('change', onChange)
+  return () => media.removeEventListener('change', onChange)
 }
-
-function getMobileSnapshot() {
-  return window.matchMedia(MOBILE_MEDIA_QUERY).matches
-}
-
-function getServerMobileSnapshot() {
-  return false
-}
-
+const getSnapshot = () => window.matchMedia(query).matches
+const getServerSnapshot = () => false
 export function useIsMobile() {
-  return React.useSyncExternalStore(
-    subscribeToMobileQuery,
-    getMobileSnapshot,
-    getServerMobileSnapshot
-  )
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 }

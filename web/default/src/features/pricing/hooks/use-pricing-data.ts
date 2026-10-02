@@ -25,9 +25,10 @@ export function usePricingData() {
   const { status } = useStatus()
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['pricing'],
+    queryKey: ['model-catalog'],
     queryFn: getPricing,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   })
 
   // Ensure rates never reach zero to prevent division errors
@@ -54,6 +55,7 @@ export function usePricingData() {
         key: model.model_name,
         vendor_name: vendor?.name,
         vendor_icon: vendor?.icon,
+        vendor_description: vendor?.description,
         group_ratio: data.group_ratio,
       }
     })
@@ -62,6 +64,7 @@ export function usePricingData() {
   return {
     models,
     vendors: data?.vendors ?? [],
+    currentGroup: data?.current_group ?? '',
     groupRatio: data?.group_ratio ?? {},
     usableGroup: data?.usable_group ?? {},
     endpointMap: data?.supported_endpoint ?? {},

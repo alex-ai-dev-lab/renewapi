@@ -17,24 +17,45 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 export const INTERFACE_LANGUAGE_OPTIONS = [
-  { code: 'zh', label: '简体中文' },
+  { code: 'zhCN', label: '简体中文' },
   { code: 'en', label: 'English' },
-  { code: 'fr', label: 'Français' },
-  { code: 'ru', label: 'Русский' },
   { code: 'ja', label: '日本語' },
-  { code: 'vi', label: 'Tiếng Việt' },
 ] as const
 
 export type InterfaceLanguageCode =
   (typeof INTERFACE_LANGUAGE_OPTIONS)[number]['code']
 
-export function normalizeInterfaceLanguage(value?: string | null): string {
+export function normalizeInterfaceLanguage(
+  value?: string | null
+): InterfaceLanguageCode {
   if (!value) return 'en'
 
-  const normalized = value.trim().replace(/_/g, '-').toLowerCase()
-  if (normalized.startsWith('zh')) return 'zh'
+  const normalized = value.trim().replaceAll('_', '-').toLowerCase()
+  if (normalized.startsWith('zh')) return 'zhCN'
+  if (normalized === 'ja' || normalized.startsWith('ja-')) return 'ja'
+  if (normalized === 'en' || normalized.startsWith('en-')) return 'en'
+  return 'en'
+}
 
-  return INTERFACE_LANGUAGE_OPTIONS.some((lang) => lang.code === normalized)
-    ? normalized
-    : 'en'
+/** Map detected or persisted locales onto the three visible UI languages. */
+export function convertDetectedLanguage(value: string): InterfaceLanguageCode {
+  return normalizeInterfaceLanguage(value)
+}
+
+/** Convert internal i18next language codes into valid BCP-47 locale tags. */
+export function toIntlLocale(value?: string | null): string | undefined {
+  if (!value) return undefined
+  switch (value) {
+    case 'zhCN':
+      return 'zh-CN'
+    case 'zhTW':
+      return 'zh-TW'
+    default:
+      break
+  }
+  try {
+    return Intl.getCanonicalLocales(value)[0]
+  } catch {
+    return undefined
+  }
 }

@@ -38,6 +38,7 @@ import type {
   WaffoPaymentResponse,
   WaffoPancakePaymentRequest,
   WaffoPancakePaymentResponse,
+  TopupStatus,
 } from './types'
 
 const DEFAULT_PAGE = 1
@@ -253,4 +254,21 @@ export async function completeOrder(
 ): Promise<ApiResponse> {
   const res = await api.post('/api/user/topup/complete', request)
   return res.data
+}
+
+/**
+ * Read one current user's topup status without exposing another user's order.
+ */
+export async function getPaymentStatus(
+  tradeNo: string
+): Promise<TopupStatus | null> {
+  const response = await getUserBillingHistory(1, 1, tradeNo)
+  if (!isApiSuccess(response)) {
+    return null
+  }
+
+  return (
+    response.data?.items.find((item) => item.trade_no === tradeNo)?.status ??
+    null
+  )
 }

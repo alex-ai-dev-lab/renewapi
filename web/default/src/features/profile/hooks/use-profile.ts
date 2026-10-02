@@ -120,7 +120,17 @@ export function useProfile() {
 
   // Initial fetch
   useEffect(() => {
-    fetchProfile()
+    let cleanup: (() => void) | undefined
+    const timer = setTimeout(() => {
+      const effectCleanup = (() => {
+        fetchProfile()
+      })()
+      if (typeof effectCleanup === 'function') cleanup = effectCleanup
+    }, 0)
+    return () => {
+      clearTimeout(timer)
+      cleanup?.()
+    }
   }, [fetchProfile])
 
   return {

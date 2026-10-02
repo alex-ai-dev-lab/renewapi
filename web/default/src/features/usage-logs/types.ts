@@ -22,13 +22,10 @@ For commercial licensing, please contact support@quantumnous.com
 import type { UsageLog } from './data/schema'
 
 // ============================================================================
-// Log Category Types
+// Log View Types
 // ============================================================================
 
-/**
- * Log category for different log types
- */
-export type LogCategory = 'common' | 'drawing' | 'task'
+export type UsageLogView = 'consume' | 'billing' | 'other'
 
 // ============================================================================
 // Filter Types
@@ -55,25 +52,6 @@ export interface CommonLogFilters extends CommonFilters {
   upstreamRequestId?: string
 }
 
-/**
- * Drawing logs specific filters
- */
-export interface DrawingLogFilters extends CommonFilters {
-  mjId?: string
-}
-
-/**
- * Task logs specific filters
- */
-export interface TaskLogFilters extends CommonFilters {
-  taskId?: string
-}
-
-/**
- * Union type for all log filters
- */
-export type LogFilters = CommonLogFilters | DrawingLogFilters | TaskLogFilters
-
 // ============================================================================
 // Common Logs Additional Types
 // ============================================================================
@@ -92,8 +70,50 @@ export interface ChannelAffinityInfo {
   using_group?: string
 }
 
+export const USAGE_BILLING_PATH = {
+  LOCAL: 'local',
+  UPSTREAM: 'upstream',
+  OPENAI: 'billing-usage-openai',
+  OPENAI_ESTIMATED: 'billing-usage-openai-estimated',
+  ANTHROPIC: 'billing-usage-anthropic',
+  ANTHROPIC_ESTIMATED: 'billing-usage-anthropic-estimated',
+  GEMINI: 'billing-usage-gemini',
+  GEMINI_ESTIMATED: 'billing-usage-gemini-estimated',
+} as const
+
+export type UsageBillingPath =
+  (typeof USAGE_BILLING_PATH)[keyof typeof USAGE_BILLING_PATH]
+
 export interface LogOtherData {
   admin_info?: {
+    is_multi_key?: boolean
+    multi_key_index?: number
+    use_channel?: number[]
+    local_count_tokens?: boolean
+    usage_billing_path?: UsageBillingPath | string
+    channel_affinity?: ChannelAffinityInfo
+    // Top-up audit fields (type=1, admin only)
+    payment_method?: string
+    callback_payment_method?: string
+    caller_ip?: string
+    server_ip?: string
+    version?: string
+    node_name?: string
+    // Operator identity for audit logs (type=3, admin only)
+    admin_username?: string
+    admin_id?: number | string
+    admin_role?: number
+    auth_method?: 'session' | 'access_token' | string
+    // Quota saturation marker: set when a quota conversion clamped at the
+    // int32 bound (overflow/underflow) or hit a NaN fallback while computing
+    // this request's charge. Admin-only (nested under admin_info).
+    quota_saturation?: {
+      op: string
+      kind: 'overflow' | 'underflow' | 'nan'
+      original: number
+      clamped: number
+    }
+  } & {
     real_error?: string
     attempts?: ChannelAttempt[]
     response_model?: ResponseModelInfo
@@ -113,6 +133,24 @@ export interface LogOtherData {
     admin_username?: string
     admin_id?: number | string
   }
+  // Language-independent operation descriptor (audit/login logs).
+  // Frontend renders localized content from action + params via i18n templates.
+  op?: {
+    action?: string
+    params?: Record<string, string | number | boolean | string[]>
+  }
+  // Operation audit details written by the admin-audit fallback in authHelper (type=3, admin only)
+  audit_info?: {
+    method?: string
+    route?: string
+    path?: string
+    status?: number
+    success?: boolean
+    params?: Record<string, string>
+  }
+  // Login audit fields (type=7); visible to the log owner
+  login_method?: string
+  user_agent?: string
   request_path?: string
   request_conversion?: string[]
   ws?: boolean
@@ -194,6 +232,124 @@ export interface LogOtherData {
   subscription_total?: number
 }
 
+/**
+ * Log statistics data
+ */
+export interface LogStatistics {
+  quota: number
+  rpm: number
+  tpm: number
+}
+
+// ============================================================================
+// Common Log Types
+// ============================================================================
+
+export interface GetLogsParams {
+  p?: number
+  page_size?: number
+  type?: number
+  types?: string
+  username?: string
+  token_name?: string
+  model_name?: string
+  start_timestamp?: number
+  end_timestamp?: number
+  channel?: number
+  group?: string
+  request_id?: string
+  upstream_request_id?: string
+}
+
+export interface GetLogsResponse {
+  success: boolean
+  message?: string
+  data?: {
+    items: UsageLog[]
+    total: number
+    page: number
+    page_size: number
+  }
+}
+
+export interface GetLogStatsParams {
+  type?: number
+  username?: string
+  token_name?: string
+  model_name?: string
+  start_timestamp?: number
+  end_timestamp?: number
+  channel?: number
+  group?: string
+  request_id?: string
+  upstream_request_id?: string
+}
+
+export interface GetLogStatsResponse {
+  success: boolean
+  message?: string
+  data?: LogStatistics
+}
+
+// ============================================================================
+// Fetch Logs Configuration
+// ============================================================================
+
+/**
+ * Configuration for fetching usage logs
+ */
+export interface FetchLogsConfig {
+  logView: UsageLogView
+  isAdmin: boolean
+  page: number
+  pageSize: number
+  searchParams: Record<string, unknown>
+  columnFilters: Array<{ id: string; value: unknown }>
+}
+
+// ============================================================================
+// User Info Types
+// ============================================================================
+
+export interface UserInfo {
+  id: number
+  username: string
+  display_name?: string
+  quota: number
+  used_quota: number
+  request_count: number
+  group?: string
+  remark?: string
+}
+
+// ============================================================================
+// Log Category Types
+// ============================================================================
+
+/**
+ * Log category for different log types
+ */
+export type LogCategory = 'common' | 'drawing' | 'task'
+
+/**
+ * Drawing logs specific filters
+ */
+export interface DrawingLogFilters extends CommonFilters {
+  mjId?: string
+}
+
+/**
+ * Task logs specific filters
+ */
+export interface TaskLogFilters extends CommonFilters {
+  taskId?: string
+}
+
+/**
+ * Union type for all log filters
+ */
+export type LogFilters = CommonLogFilters | DrawingLogFilters | TaskLogFilters
+
 export interface ResponseModelInfo {
   requested_model: string
   upstream_model: string
@@ -214,15 +370,6 @@ export interface ChannelAttempt {
   upstream_model?: string
   mapping_rule_id?: string
   response_model?: ResponseModelInfo
-}
-
-/**
- * Log statistics data
- */
-export interface LogStatistics {
-  quota: number
-  rpm: number
-  tpm: number
 }
 
 // ============================================================================
@@ -278,55 +425,6 @@ export interface TaskLog {
 }
 
 // ============================================================================
-// Common Log Types
-// ============================================================================
-
-export interface GetLogsParams {
-  p?: number
-  page_size?: number
-  type?: number
-  username?: string
-  token_name?: string
-  model_name?: string
-  start_timestamp?: number
-  end_timestamp?: number
-  channel?: number
-  group?: string
-  request_id?: string
-  upstream_request_id?: string
-}
-
-export interface GetLogsResponse {
-  success: boolean
-  message?: string
-  data?: {
-    items: UsageLog[] | MidjourneyLog[] | TaskLog[]
-    total: number
-    page: number
-    page_size: number
-  }
-}
-
-export interface GetLogStatsParams {
-  type?: number
-  username?: string
-  token_name?: string
-  model_name?: string
-  start_timestamp?: number
-  end_timestamp?: number
-  channel?: number
-  group?: string
-  request_id?: string
-  upstream_request_id?: string
-}
-
-export interface GetLogStatsResponse {
-  success: boolean
-  message?: string
-  data?: LogStatistics
-}
-
-// ============================================================================
 // Drawing Log Types
 // ============================================================================
 
@@ -352,14 +450,7 @@ export interface GetTaskLogsParams {
   end_timestamp?: number
 }
 
-// ============================================================================
-// Fetch Logs Configuration
-// ============================================================================
-
-/**
- * Configuration for fetching logs by category
- */
-export interface FetchLogsConfig {
+export interface TaskFetchLogsConfig {
   logCategory: LogCategory
   isAdmin: boolean
   page: number
@@ -367,22 +458,4 @@ export interface FetchLogsConfig {
   searchParams: Record<string, unknown>
   columnFilters: Array<{ id: string; value: unknown }>
   signal?: AbortSignal
-}
-
-// ============================================================================
-// User Info Types
-// ============================================================================
-
-export interface UserInfo {
-  id: number
-  username: string
-  display_name?: string
-  quota: number
-  used_quota: number
-  request_count: number
-  group?: string
-  aff_code?: string
-  aff_count?: number
-  aff_quota?: number
-  remark?: string
 }

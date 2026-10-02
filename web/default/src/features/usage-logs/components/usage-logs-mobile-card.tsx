@@ -35,12 +35,21 @@ import {
   type StatusVariant,
 } from '@/components/status-badge'
 import { LOG_TYPE_ENUM } from '../constants'
-import { getLogTypeConfig } from '../lib/utils'
-import type { LogCategory } from '../types'
+import type { UsageLog } from '../data/schema'
+import { parseLogOther } from '../lib/format'
+import {
+  getLogTypeConfig,
+  isDisplayableLogType,
+  isTimingLogType,
+} from '../lib/utils'
+import { StreamTpsCell, TimingMetricsCell } from './timing-metrics-cell'
+import { useUsageLogsContext } from './usage-logs-provider'
 
 const logTypeRowTint: Record<number, string> = {
-  [LOG_TYPE_ENUM.ERROR]: 'bg-destructive/5 border-destructive/25',
-  [LOG_TYPE_ENUM.REFUND]: 'bg-chart-1/10 border-chart-1/25',
+  [LOG_TYPE_ENUM.ERROR]:
+    'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200/50 dark:border-rose-900/30',
+  [LOG_TYPE_ENUM.REFUND]:
+    'bg-blue-50/30 dark:bg-blue-950/15 border-blue-200/50 dark:border-blue-900/30',
 }
 
 interface UsageLogsMobileListProps<TData> {
@@ -48,7 +57,6 @@ interface UsageLogsMobileListProps<TData> {
   isLoading?: boolean
   emptyTitle?: string
   emptyDescription?: string
-  logCategory: LogCategory
 }
 
 function UsageLogsMobileSkeleton() {
@@ -106,35 +114,6 @@ function CompactCell<TData>({
   )
 }
 
-function SummaryField<TData>({
-  label,
-  cell,
-  className,
-  valueClassName,
-  primaryOnly = false,
-}: {
-  label: string
-  cell?: Cell<TData, unknown>
-  className?: string
-  valueClassName?: string
-  primaryOnly?: boolean
-}) {
-  if (!cell) return null
-
-  return (
-    <div className={cn('border-border min-w-0 border-t px-0 py-2', className)}>
-      <div className='text-muted-foreground mb-1 text-[11px] leading-none font-medium select-none'>
-        {label}
-      </div>
-      <CompactCell
-        cell={cell}
-        primaryOnly={primaryOnly}
-        className={valueClassName}
-      />
-    </div>
-  )
-}
-
 function MobileLogTimeStatus({
   createdAt,
   type,
@@ -149,13 +128,13 @@ function MobileLogTimeStatus({
   const variant = config.color as StatusVariant
 
   return (
-    <div className='space-y-1'>
-      <div className='font-mono text-xs leading-tight tabular-nums'>
+    <div className='flex min-w-0 items-center gap-2'>
+      <div className='shrink-0 font-mono text-[11px] leading-none tabular-nums'>
         {formatTimestampToDate(timestamp)}
       </div>
       <div
         className={cn(
-          'inline-flex items-center gap-1 text-xs leading-none font-medium',
+          'inline-flex min-w-0 items-center gap-1 text-[11px] leading-none font-medium',
           textColorMap[variant]
         )}
       >
@@ -163,8 +142,114 @@ function MobileLogTimeStatus({
           className={cn('size-1.5 shrink-0 rounded-full', dotColorMap[variant])}
           aria-hidden='true'
         />
-        <span>{t(config.label)}</span>
+        <span className='truncate'>{t(config.label)}</span>
       </div>
+    </div>
+  )
+}
+
+/** Mobile-only token block with optional cache token details. */
+function MobileTokensField({ log }: { log: UsageLog }) {
+  const { t } = useTranslation()
+
+  if (!isDisplayableLogType(log.type)) return null
+
+  const promptTokens = log.prompt_tokens || 0
+  const completionTokens = log.completion_tokens || 0
+  if (promptTokens === 0 && completionTokens === 0) {
+    return (
+      <div className='min-w-0'>
+        <span className='text-muted-foreground text-xs'>-</span>
+      </div>
+    )
+  }
+
+  const other = parseLogOther(log.other)
+  const cacheReadTokens = other?.cache_tokens || 0
+  const cacheWrite5m = other?.cache_creation_tokens_5m || 0
+  const cacheWrite1h = other?.cache_creation_tokens_1h || 0
+  const hasSplitCache = cacheWrite5m > 0 || cacheWrite1h > 0
+  const cacheWriteTokens = hasSplitCache
+    ? cacheWrite5m + cacheWrite1h
+    : other?.cache_creation_tokens || 0
+  const showCache = cacheReadTokens > 0 || cacheWriteTokens > 0
+
+  return (
+    <div className='min-w-0'>
+      <div className='flex flex-col gap-0.5'>
+        <span className='font-mono text-xs font-medium tabular-nums'>
+          {promptTokens.toLocaleString()} / {completionTokens.toLocaleString()}
+        </span>
+        {showCache && (
+          <div className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] leading-none'>
+            {cacheReadTokens > 0 && (
+              <span>
+                {t('Cache Read')} {cacheReadTokens.toLocaleString()}
+              </span>
+            )}
+            {cacheWriteTokens > 0 && (
+              <span>
+                {t('Cache Write')} {cacheWriteTokens.toLocaleString()}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Mobile-only user block with a compact, text-first layout. */
+function MobileUserField({ log }: { log: UsageLog }) {
+  const { sensitiveVisible, setSelectedUserId, setUserInfoDialogOpen } =
+    useUsageLogsContext()
+
+  if (!log.username) return null
+
+  return (
+    <button
+      type='button'
+      className='text-muted-foreground hover:text-foreground flex max-w-[7rem] min-w-0 items-center text-left'
+      onClick={(e) => {
+        e.stopPropagation()
+        setSelectedUserId(log.user_id)
+        setUserInfoDialogOpen(true)
+      }}
+    >
+      <span className='min-w-0 truncate text-[11px]'>
+        {sensitiveVisible ? log.username : '••••'}
+      </span>
+    </button>
+  )
+}
+
+/** Merge stream badge + TPS with first-token / duration on one row. */
+function MobileStreamTimingField({ log }: { log: UsageLog }) {
+  if (!isTimingLogType(log.type)) return null
+
+  const other = parseLogOther(log.other)
+  const useTime = log.use_time || 0
+  const tokensPerSecond =
+    useTime > 0 && log.completion_tokens > 0
+      ? log.completion_tokens / useTime
+      : null
+
+  return (
+    <div className='flex min-w-0 items-center gap-2'>
+      <TimingMetricsCell
+        useTimeSec={useTime}
+        completionTokens={log.completion_tokens}
+        frtMs={other?.frt}
+        isStream={log.is_stream}
+        indicator='dot'
+        className='min-w-0 flex-1'
+      />
+      <StreamTpsCell
+        isStream={log.is_stream}
+        tokensPerSecond={tokensPerSecond}
+        streamStatus={other?.stream_status}
+        className='shrink-0'
+      />
     </div>
   )
 }
@@ -174,139 +259,44 @@ function CommonLogsCard<TData>({
 }: {
   cells: Map<string, Cell<TData, unknown>>
 }) {
-  const { t } = useTranslation()
-
   const modelCell = cells.get('model_name')
   const quotaCell = cells.get('quota')
-  const createdAtRow = cells.get('created_at')?.row.original as
-    | { created_at?: number; type?: number }
-    | undefined
+  const rowData = cells.get('created_at')?.row.original as UsageLog | undefined
+  const showUsageFields = rowData != null && isDisplayableLogType(rowData.type)
 
   return (
-    <div className='space-y-2.5'>
-      <div className='flex min-w-0 items-start justify-between gap-3'>
-        <CompactCell cell={modelCell} className='flex-1' />
-        <CompactCell
-          cell={quotaCell}
-          className='shrink-0 text-right [&_span]:!h-6 [&_span]:!px-2 [&_span]:!text-sm [&_span]:!leading-none'
-        />
-      </div>
-
-      <div className='grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] gap-1.5'>
-        <div className='border-border min-w-0 border-t px-0 py-2'>
-          <div className='text-muted-foreground mb-1 text-[11px] leading-none font-medium select-none'>
-            {t('Time')}
-          </div>
-          <MobileLogTimeStatus
-            createdAt={createdAtRow?.created_at}
-            type={createdAtRow?.type}
+    <div className='flex min-w-0 flex-col gap-1.5'>
+      {showUsageFields ? (
+        <div className='flex min-w-0 items-center justify-between gap-3'>
+          <CompactCell cell={modelCell} className='flex-1' />
+          <CompactCell
+            cell={quotaCell}
+            className='shrink-0 text-right [&_.flex-col]:items-end'
           />
         </div>
-        <SummaryField
-          label={t('Channel')}
-          cell={cells.get('channel')}
-          primaryOnly
-        />
-        <SummaryField label={t('User')} cell={cells.get('user')} primaryOnly />
-        <SummaryField
-          label={t('Token')}
-          cell={cells.get('token_name')}
-          valueClassName='[&_.flex-col]:max-w-none [&_.flex-col>*:not(:first-child)]:text-[11px] [&_.flex-col>*:not(:first-child)]:leading-none'
-        />
-        <SummaryField
-          label={t('Timing')}
-          cell={cells.get('use_time')}
-          primaryOnly
-        />
-        <SummaryField
-          label={t('Tokens')}
-          cell={cells.get('prompt_tokens')}
-          primaryOnly
-        />
-        <SummaryField
-          label={t('Details')}
-          cell={cells.get('content')}
-          className='col-span-2 bg-transparent px-0 py-0'
-        />
-      </div>
-    </div>
-  )
-}
+      ) : null}
 
-function TaskLogsCard<TData>({
-  cells,
-}: {
-  cells: Map<string, Cell<TData, unknown>>
-}) {
-  const { t } = useTranslation()
-
-  const taskIdCell = cells.get('task_id')
-  const statusCell = cells.get('status')
-  const submitTimeCell = cells.get('submit_time')
-
-  return (
-    <div className='space-y-2.5'>
-      <div className='flex min-w-0 items-start justify-between gap-3'>
-        <CompactCell cell={taskIdCell} className='flex-1' />
-        <CompactCell cell={statusCell} className='shrink-0 text-right' />
+      <div className='flex min-w-0 items-center justify-between gap-2'>
+        <MobileLogTimeStatus
+          createdAt={rowData?.created_at}
+          type={rowData?.type}
+        />
+        {rowData && cells.has('user') ? (
+          <MobileUserField log={rowData} />
+        ) : null}
       </div>
 
-      <div className='grid grid-cols-2 gap-1.5'>
-        <SummaryField label={t('Submit Time')} cell={submitTimeCell} />
-        <SummaryField label={t('User')} cell={cells.get('user')} primaryOnly />
-        <SummaryField
-          label={t('Result')}
-          cell={cells.get('fail_reason')}
-          className='col-span-2 bg-transparent px-0 py-0'
-        />
-      </div>
-    </div>
-  )
-}
+      {showUsageFields ? (
+        <div className='grid min-w-0 grid-cols-2 items-center gap-3'>
+          <MobileTokensField log={rowData} />
+          <MobileStreamTimingField log={rowData} />
+        </div>
+      ) : null}
 
-function DrawingLogsCard<TData>({
-  cells,
-}: {
-  cells: Map<string, Cell<TData, unknown>>
-}) {
-  const { t } = useTranslation()
-
-  const actionCell = cells.get('action')
-  const codeCell = cells.get('code')
-  const submitTimeCell = cells.get('submit_time')
-
-  return (
-    <div className='space-y-2.5'>
-      <div className='flex min-w-0 items-start justify-between gap-3'>
-        <CompactCell cell={actionCell} className='flex-1' />
-        <CompactCell cell={codeCell} className='shrink-0 text-right' />
-      </div>
-
-      <div className='grid grid-cols-2 gap-1.5'>
-        <SummaryField label={t('Submit Time')} cell={submitTimeCell} />
-        <SummaryField
-          label={t('Channel')}
-          cell={cells.get('channel')}
-          primaryOnly
-        />
-        <SummaryField label={t('Task ID')} cell={cells.get('mj_id')} />
-        <SummaryField
-          label={t('Duration')}
-          cell={cells.get('duration')}
-          primaryOnly
-        />
-        <SummaryField label={t('Image')} cell={cells.get('image_url')} />
-        <SummaryField
-          label={t('Prompt')}
-          cell={cells.get('prompt')}
-          primaryOnly
-        />
-        <SummaryField
-          label={t('Fail Reason')}
-          cell={cells.get('fail_reason')}
-          className='col-span-2 bg-transparent px-0 py-0'
-        />
-      </div>
+      <CompactCell
+        cell={cells.get('content')}
+        className='text-xs [&_button]:w-full [&_button]:truncate'
+      />
     </div>
   )
 }
@@ -316,7 +306,6 @@ export function UsageLogsMobileList<TData>({
   isLoading = false,
   emptyTitle,
   emptyDescription,
-  logCategory,
 }: UsageLogsMobileListProps<TData>) {
   const { t } = useTranslation()
 
@@ -363,13 +352,11 @@ export function UsageLogsMobileList<TData>({
           <div
             key={row.id}
             className={cn(
-              'border-border/40 border-b border-l-2 border-l-transparent p-3 transition-colors last:border-b-0',
+              'snowapi-usage-log-mobile-row border-border/40 border-b border-l-2 border-l-transparent px-3 py-2.5 transition-colors last:border-b-0',
               tintClass
             )}
           >
-            {logCategory === 'common' && <CommonLogsCard cells={cells} />}
-            {logCategory === 'task' && <TaskLogsCard cells={cells} />}
-            {logCategory === 'drawing' && <DrawingLogsCard cells={cells} />}
+            <CommonLogsCard cells={cells} />
           </div>
         )
       })}

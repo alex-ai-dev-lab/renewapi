@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { useClock } from '@/hooks/use-clock'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -74,7 +75,7 @@ function SubscriptionStatusBadge(props: {
   t: (key: string) => string
 }) {
   // eslint-disable-next-line react-hooks/purity
-  const now = Date.now() / 1000
+  const now = useClock() / 1000
   const isExpired = (props.sub.end_time || 0) > 0 && props.sub.end_time < now
   const isActive = props.sub.status === 'active' && !isExpired
   if (isActive)
@@ -103,6 +104,8 @@ function SubscriptionStatusBadge(props: {
 }
 
 export function UserSubscriptionsDialog(props: Props) {
+  const clock = useClock()
+
   const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -127,13 +130,14 @@ export function UserSubscriptionsDialog(props: Props) {
     return map
   }, [plans])
 
+  const userId = props.user?.id
   const loadData = useCallback(async () => {
-    if (!props.user?.id) return
+    if (!userId) return
     setLoading(true)
     try {
       const [plansRes, subsRes] = await Promise.all([
         getAdminPlans(),
-        getUserSubscriptions(props.user.id),
+        getUserSubscriptions(userId),
       ])
       if (plansRes.success) {
         setPlans(plansRes.data || [])
@@ -151,12 +155,22 @@ export function UserSubscriptionsDialog(props: Props) {
     } finally {
       setLoading(false)
     }
-  }, [props.user?.id, t])
+  }, [userId, t])
 
   useEffect(() => {
-    if (props.open && props.user?.id) {
-      setSelectedPlanId('')
-      loadData()
+    let cleanup: (() => void) | undefined
+    const timer = setTimeout(() => {
+      const result = (() => {
+        if (props.open && props.user?.id) {
+          setSelectedPlanId('')
+          loadData()
+        }
+      })()
+      if (typeof result === 'function') cleanup = result
+    }, 0)
+    return () => {
+      clearTimeout(timer)
+      cleanup?.()
     }
   }, [props.open, props.user?.id, loadData])
 
@@ -311,7 +325,7 @@ export function UserSubscriptionsDialog(props: Props) {
                   ) : (
                     subs.map((record) => {
                       const sub = record.subscription
-                      const now = Date.now() / 1000
+                      const now = clock / 1000
                       const isExpired =
                         (sub.end_time || 0) > 0 && sub.end_time < now
                       const isActive = sub.status === 'active' && !isExpired

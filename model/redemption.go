@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -48,15 +49,46 @@ func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total 
 	return redemptions, total, nil
 }
 
-func SearchRedemptions(keyword string, startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
+func SearchRedemptions(keyword string, startIdx int, num int, statusFilter ...string) (redemptions []*Redemption, total int64, err error) {
+	var clauses []string
+	var arguments []any
+	now := common.GetTimestamp()
+	if len(statusFilter) > 0 && statusFilter[0] != "" {
+		statuses := strings.Split(statusFilter[0], ",")
+		if len(statuses) > 4 {
+			return nil, 0, errors.New("invalid redemption status filter")
+		}
+		for _, status := range statuses {
+			switch status {
+			case "1":
+				clauses = append(clauses, "(status = ? AND (expired_time = 0 OR expired_time >= ?))")
+				arguments = append(arguments, common.RedemptionCodeStatusEnabled, now)
+			case "expired":
+				clauses = append(clauses, "(status = ? AND expired_time > 0 AND expired_time < ?)")
+				arguments = append(arguments, common.RedemptionCodeStatusEnabled, now)
+			case "2", "3":
+				value, _ := strconv.Atoi(status)
+				clauses = append(clauses, "status = ?")
+				arguments = append(arguments, value)
+			default:
+				return nil, 0, errors.New("invalid redemption status filter")
+			}
+		}
+	}
+	applyStatus := func(query *gorm.DB) *gorm.DB {
+		if len(clauses) > 0 {
+			return query.Where("("+strings.Join(clauses, " OR ")+")", arguments...)
+		}
+		return query
+	}
 	// Keep wildcard characters in the search syntax under control. The shared
 	// helper uses ! as the escape character for cross-dialect consistency.
 	escapedKeyword := escapeLikeKeyword(keyword)
 	buildQuery := func() *gorm.DB {
 		if id, convErr := strconv.Atoi(keyword); convErr == nil {
-			return DB.Model(&Redemption{}).Where("id = ? OR name LIKE ? ESCAPE '!'", id, escapedKeyword+"%")
+			return applyStatus(DB.Model(&Redemption{}).Where("id = ? OR name LIKE ? ESCAPE '!'", id, escapedKeyword+"%"))
 		}
-		return DB.Model(&Redemption{}).Where("name LIKE ? ESCAPE '!'", escapedKeyword+"%")
+		return applyStatus(DB.Model(&Redemption{}).Where("name LIKE ? ESCAPE '!'", escapedKeyword+"%"))
 	}
 
 	if err = buildQuery().Count(&total).Error; err != nil {

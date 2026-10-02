@@ -31,16 +31,15 @@ import {
 
 export function ThemeSwitch() {
   const { t } = useTranslation()
-  const { theme, resolvedTheme, setTheme } = useTheme()
+  const { theme, setTheme } = useTheme()
 
   /* Update theme-color meta tag
    * when theme is updated */
   useEffect(() => {
-    const styles = getComputedStyle(document.documentElement)
-    const themeColor = styles.getPropertyValue('--background').trim()
+    const themeColor = theme === 'dark' ? '#020817' : '#fff'
     const metaThemeColor = document.querySelector("meta[name='theme-color']")
     if (metaThemeColor) metaThemeColor.setAttribute('content', themeColor)
-  }, [theme, resolvedTheme])
+  }, [theme])
 
   return (
     <DropdownMenu modal={false}>

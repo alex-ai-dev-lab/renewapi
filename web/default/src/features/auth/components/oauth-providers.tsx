@@ -35,6 +35,9 @@ type OAuthProvidersProps = {
   className?: string
   onWeChatLogin?: () => void
   isWeChatLoading?: boolean
+  showDivider?: boolean
+  primaryProvider?: string
+  linuxDOInvitationCode?: string
 }
 
 type ProviderButton = {
@@ -51,6 +54,9 @@ export function OAuthProviders({
   className,
   onWeChatLogin,
   isWeChatLoading = false,
+  showDivider = true,
+  primaryProvider,
+  linuxDOInvitationCode = '',
 }: OAuthProvidersProps) {
   const { t } = useTranslation()
   const {
@@ -63,7 +69,7 @@ export function OAuthProviders({
     handleLinuxDOLogin,
     handleTelegramLogin,
     handleCustomOAuthLogin,
-  } = useOAuthLogin(status)
+  } = useOAuthLogin(status, linuxDOInvitationCode)
 
   const providerButtons: ProviderButton[] = []
 
@@ -134,26 +140,35 @@ export function OAuthProviders({
   }
 
   if (providerButtons.length === 0) return null
+  const orderedProviderButtons = primaryProvider
+    ? [...providerButtons].sort((left, right) => {
+        if (left.key === primaryProvider) return -1
+        if (right.key === primaryProvider) return 1
+        return 0
+      })
+    : providerButtons
 
   return (
     <div className={cn('space-y-3', className)}>
-      <div className='relative'>
-        <div className='absolute inset-0 flex items-center'>
-          <span className='w-full border-t' />
+      {showDivider && (
+        <div className='relative'>
+          <div className='absolute inset-0 flex items-center'>
+            <span className='w-full border-t' />
+          </div>
+          <div className='relative flex justify-center text-xs uppercase'>
+            <span className='bg-background text-muted-foreground px-2'>
+              {t('Or continue with')}
+            </span>
+          </div>
         </div>
-        <div className='relative flex justify-center text-xs uppercase'>
-          <span className='bg-background text-muted-foreground px-2'>
-            {t('Or continue with')}
-          </span>
-        </div>
-      </div>
+      )}
 
       <div className='flex flex-col gap-2'>
-        {providerButtons.map(
+        {orderedProviderButtons.map(
           ({ key, label, onClick, icon, disabled: extraDisabled }) => (
             <Button
               key={key}
-              variant='outline'
+              variant={key === primaryProvider ? 'default' : 'outline'}
               type='button'
               disabled={disabled || isLoading || extraDisabled}
               onClick={onClick}

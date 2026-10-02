@@ -16,8 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import '@/styles/obsidian-admin.css'
-import { Info } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { SectionPageLayout } from '@/components/layout'
@@ -31,43 +29,31 @@ import { SubscriptionsTable } from './components/subscriptions-table'
 
 function SubscriptionsContent() {
   const { t } = useTranslation()
-  const { complianceConfirmed, complianceLoading } = useSubscriptions()
+  const { complianceConfirmed } = useSubscriptions()
 
   return (
     <>
-      <SectionPageLayout>
+      <SectionPageLayout fixedContent>
         <SectionPageLayout.Title>
           {t('Subscription Management')}
         </SectionPageLayout.Title>
         <SectionPageLayout.Actions>
-          <div className='flex min-w-0 flex-wrap items-center justify-end gap-2'>
-            <Alert variant='default' className='hidden px-3 py-2 sm:flex'>
-              <Info className='h-4 w-4' />
-              <AlertDescription className='text-xs'>
-                {t(
-                  'Stripe/Creem requires creating products on the third-party platform and entering the ID'
-                )}
-              </AlertDescription>
-            </Alert>
-            <SubscriptionsPrimaryButtons />
-          </div>
+          <SubscriptionsPrimaryButtons />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          {/*
-            系统配置还在加载时 complianceConfirmed 必然为 false，
-            原实现会在首屏闪现一条红色「合规未确认」告警。
-          */}
-          {!complianceLoading && !complianceConfirmed ? (
-            <Alert variant='destructive' className='mb-4'>
-              <AlertDescription>
-                {t(
-                  'Subscription plan creation and changes are locked until the administrator confirms compliance terms in Payment Gateway settings.'
-                )}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          <div className='obsidian-admin'>
-            <SubscriptionsTable />
+          <div className='flex h-full min-h-0 flex-col gap-4'>
+            {!complianceConfirmed ? (
+              <Alert variant='destructive' className='shrink-0'>
+                <AlertDescription>
+                  {t(
+                    'Subscription plan creation and changes are locked until the administrator confirms compliance terms in Payment Gateway settings.'
+                  )}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            <div className='h-full min-h-0 flex-1'>
+              <SubscriptionsTable />
+            </div>
           </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>

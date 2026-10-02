@@ -21,4 +21,7 @@ import { Otp } from '@/features/auth/otp'
 
 export const Route = createFileRoute('/(auth)/otp')({
   component: Otp,
+  validateSearch: (search: Record<string, unknown>) => ({
+    redirect: typeof search.redirect === 'string' ? search.redirect : undefined,
+  }),
 })

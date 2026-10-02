@@ -24,6 +24,7 @@ import {
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -47,6 +48,7 @@ type LegacyComboboxProps = {
   allowCustomValue?: boolean
   className?: string
   id?: string
+  openOnFocus?: boolean
 }
 
 function Combobox(props: LegacyComboboxProps): React.ReactElement
@@ -69,6 +71,7 @@ function Combobox(
         emptyText={props.emptyText}
         className={props.className}
         allowCustomValue={props.allowCustomValue}
+        openOnFocus={props.openOnFocus}
       />
     )
   }
@@ -313,6 +316,7 @@ function ComboboxChip({
 }: ComboboxPrimitive.Chip.Props & {
   showRemove?: boolean
 }) {
+  const { t } = useTranslation()
   return (
     <ComboboxPrimitive.Chip
       data-slot='combobox-chip'
@@ -327,8 +331,8 @@ function ComboboxChip({
         <ComboboxPrimitive.ChipRemove
           render={<Button variant='ghost' size='icon-xs' />}
           className='-ml-1 opacity-50 hover:opacity-100'
+          aria-label={t('Remove selection')}
           data-slot='combobox-chip-remove'
-          aria-label='Remove item'
         >
           <HugeiconsIcon
             icon={Cancel01Icon}

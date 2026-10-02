@@ -16,9 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+@layer reset, theme, base, astryx-base, astryx-theme, components, utilities;
+
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
+@import '@astryxdesign/core/astryx.css';
 @import '@fontsource-variable/public-sans';
 /* Editorial serif (Lora) backing the `serif` font axis and the Anthropic
  * preset's default typography. See `--font-serif` in theme.css for the
@@ -29,10 +32,260 @@ For commercial licensing, please contact support@quantumnous.com
 
 @import './theme.css';
 @import './theme-presets.css';
-@import './obsidian.css';
+@import './astryx-app-shell.css';
+@import './site-design.css';
+
+.snowapi-confirm-content {
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  color: var(--snowapi-floating-ink);
+  background: var(--snowapi-floating-surface);
+  border: 1px solid var(--snowapi-floating-border);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 16%);
+  font-family: var(--font-sans);
+}
+.snowapi-confirm-content [data-slot='alert-dialog-title'] {
+  font-family: var(--font-sans);
+}
+.snowapi-confirm-content [data-slot='alert-dialog-description'] {
+  color: var(--snowapi-floating-muted);
+}
+.snowapi-confirm-content [data-slot='alert-dialog-footer'] > button {
+  min-width: 88px;
+  min-height: 44px;
+  padding-inline: 22px;
+  border-radius: 999px;
+  box-shadow: none;
+}
+.snowapi-confirm-content
+  [data-slot='alert-dialog-footer']
+  > button[data-variant='outline'] {
+  border-color: transparent;
+  background: var(--snowapi-floating-hover);
+  color: var(--snowapi-floating-ink);
+}
+.snowapi-confirm-content
+  [data-slot='alert-dialog-footer']
+  > button:is([data-variant='default'], [data-variant='destructive']) {
+  border-color: transparent;
+  background: var(--snowapi-floating-ink);
+  color: var(--snowapi-floating-surface);
+}
+
+/* Shared SnowAPI surfaces also apply to portals outside the console shell. */
+:root {
+  --snowapi-floating-surface: #ffffff;
+  --snowapi-floating-ink: #111111;
+  --snowapi-floating-muted: #696969;
+  --snowapi-floating-hover: #f1f1ef;
+  --snowapi-floating-border: #e2e2df;
+  --snowapi-floating-shadow: 0 12px 36px rgb(0 0 0 / 0.1);
+  --snowapi-notice-surface: #ffffff;
+  --snowapi-notice-ink: #111111;
+  --snowapi-notice-error: #c23b2b;
+  --snowapi-notice-border: #e2e2df;
+  --snowapi-notice-hover: #f1f1ef;
+  --snowapi-notice-shadow: 0 8px 28px rgb(0 0 0 / 0.12);
+}
+
+.dark {
+  --snowapi-floating-surface: #181818;
+  --snowapi-floating-ink: #f4f4f2;
+  --snowapi-floating-muted: #a6a6a3;
+  --snowapi-floating-hover: #292929;
+  --snowapi-floating-border: #343434;
+  --snowapi-floating-shadow: 0 18px 52px rgb(0 0 0 / 0.42);
+}
+
+.snowapi-toaster[data-sonner-toaster] {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  font-family: var(--font-sans);
+}
+
+.snowapi-toaster [data-sonner-toast] {
+  --background: var(--snowapi-notice-surface);
+  --foreground: var(--snowapi-notice-ink);
+  --primary: var(--snowapi-notice-ink);
+  --primary-foreground: var(--snowapi-notice-surface);
+  --muted: var(--snowapi-notice-hover);
+  --muted-foreground: var(--snowapi-notice-ink);
+  --destructive: var(--snowapi-notice-error);
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  min-height: 3rem;
+  align-items: center;
+  gap: 0.625rem;
+  border: 1px solid var(--snowapi-notice-border);
+  border-radius: 2rem;
+  padding: 0.75rem 1.125rem;
+  background: var(--snowapi-notice-surface);
+  color: var(--snowapi-notice-ink);
+  box-shadow: var(--snowapi-notice-shadow);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.snowapi-toaster [data-sonner-toast][data-type='error'] {
+  color: var(--snowapi-notice-error);
+}
+
+.snowapi-toaster [data-content] {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.snowapi-toaster :is([data-title], [data-description]) {
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+.snowapi-toaster [data-title] {
+  font-weight: 500;
+}
+
+.snowapi-toaster [data-description] {
+  font-weight: 400;
+}
+
+.snowapi-toaster [data-icon] {
+  position: relative;
+  display: flex;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 1rem;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+}
+
+.snowapi-toaster :is([data-button], [data-close-button]) {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: var(--snowapi-notice-hover);
+  color: var(--snowapi-notice-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.snowapi-toaster [data-button] {
+  min-height: 1.875rem;
+  margin-inline-start: auto;
+  padding: 0.25rem 0.75rem;
+}
+
+.snowapi-toaster [data-close-button] {
+  order: 1;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-inline-end: -0.5rem;
+  padding: 0;
+  background: transparent;
+}
+
+.snowapi-toaster :is([data-button], [data-close-button]):hover {
+  background: var(--snowapi-notice-border);
+}
+
+.snowapi-toaster :is([data-button], [data-close-button]):focus-visible {
+  outline: 2px solid var(--snowapi-notice-ink);
+  outline-offset: 2px;
+}
+
+.snowapi-toaster
+  [data-sonner-toast][data-expanded='false'][data-front='false']
+  > * {
+  opacity: 0;
+}
+
+.snowapi-tooltip[data-slot='tooltip-content'] {
+  --background: var(--snowapi-notice-surface);
+  --foreground: var(--snowapi-notice-ink);
+  --muted-foreground: var(--snowapi-notice-ink);
+  --destructive: var(--snowapi-notice-error);
+  max-width: min(24rem, calc(100vw - 2rem));
+  border: 1px solid var(--snowapi-notice-border);
+  border-radius: 1.25rem;
+  background: var(--snowapi-notice-surface);
+  color: var(--snowapi-notice-ink);
+  box-shadow: var(--snowapi-notice-shadow);
+  font-family: var(--font-sans);
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .snowapi-toaster,
+  .snowapi-toaster *,
+  .snowapi-tooltip {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.snowapi-home-gradient {
+  background:
+    radial-gradient(
+      circle at 18% 24%,
+      rgb(255 255 255 / 0.96) 0%,
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 82% 74%,
+      rgb(218 218 218 / 0.72) 0%,
+      transparent 38%
+    ),
+    linear-gradient(125deg, #ffffff 0%, #e8e8e8 36%, #f8f8f8 68%, #dedede 100%);
+  background-size:
+    180% 180%,
+    190% 190%,
+    240% 240%;
+  animation: snowapi-home-gradient-cycle 18s ease-in-out infinite;
+}
+
+@keyframes snowapi-home-gradient-cycle {
+  0%,
+  100% {
+    background-position:
+      0% 20%,
+      100% 80%,
+      0% 50%;
+  }
+  50% {
+    background-position:
+      100% 80%,
+      0% 20%,
+      100% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .snowapi-home-gradient {
+    animation: none;
+    background-position:
+      50% 50%,
+      50% 50%,
+      50% 50%;
+  }
+}
 
 /* Shiki dual themes: token colors follow dark theme (pre background stays `bg-background` on the block) */
 @layer components {
+  .shiki span {
+    color: var(--shiki-light) !important;
+    font-style: var(--shiki-light-font-style) !important;
+    font-weight: var(--shiki-light-font-weight) !important;
+    text-decoration: var(--shiki-light-text-decoration) !important;
+  }
+
   .dark .shiki span {
     color: var(--shiki-dark) !important;
     font-style: var(--shiki-dark-font-style) !important;
@@ -49,10 +302,6 @@ For commercial licensing, please contact support@quantumnous.com
   }
   html {
     @apply overflow-x-hidden font-sans;
-    /* 优化文本渲染 */
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    text-rendering: optimizeLegibility;
   }
   body {
     @apply bg-background text-foreground has-[div[data-variant='inset']]:bg-sidebar min-h-svh w-full;
@@ -60,28 +309,18 @@ For commercial licensing, please contact support@quantumnous.com
      * (defined in theme.css, swapped by `[data-theme-font='...']` blocks
      * in theme-presets.css). Defaults to the project's humanist sans. */
     font-family: var(--font-body);
-    /* 设置基础字体大小，可通过主题配置调整 */
-    font-size: var(--font-size-base, 14px);
-    line-height: 1.6;
   }
 
   /* Keep sticky headers stable while primitives lock body scrolling. */
   body[data-scroll-locked] {
-    overflow: unset !important;
+    overflow-x: clip !important;
+    overflow-y: unset !important;
   }
 
   /* Cursor pointer for buttons */
   button:not(:disabled),
   [role='button']:not(:disabled) {
     cursor: pointer;
-  }
-
-  /* 优化代码字体显示 */
-  code,
-  pre,
-  kbd,
-  samp {
-    font-family: var(--font-mono);
   }
 
   /* Prevent focus zoom on mobile devices */
@@ -493,30 +732,31 @@ For commercial licensing, please contact support@quantumnous.com
 
 /* Micro-interactions — Vercel-style subtle hover/active feedback */
 @media (prefers-reduced-motion: no-preference) {
-  [data-slot='card'] {
+  [data-slot='card']:not([data-card-hover='false']) {
     transition:
-      transform 150ms ease,
-      box-shadow 150ms ease;
+      transform 180ms ease,
+      box-shadow 180ms ease;
   }
 
   @media (min-width: 641px) {
-    [data-slot='card']:hover {
+    [data-slot='card']:not([data-card-hover='false']):hover {
       transform: translateY(-1px);
       box-shadow: 0 4px 12px rgb(0 0 0 / 0.06);
     }
 
-    .dark [data-slot='card']:hover {
+    .dark [data-slot='card']:not([data-card-hover='false']):hover {
       box-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
     }
   }
 
-  button:not(:disabled):active,
-  [role='button']:not(:disabled):active {
+  button:not(:disabled):not([data-press-animation='none']):active,
+  [role='button']:not(:disabled):not([data-press-animation='none']):active {
     transform: scale(0.98);
   }
 
-  [data-slot='table'] tr {
-    transition: background-color 120ms ease;
+  [data-slot='table'] tr,
+  [data-slot='table'] td {
+    transition: none;
   }
 
   /* Table row stagger-in animation */
@@ -619,5 +859,850 @@ For commercial licensing, please contact support@quantumnous.com
   .terminal-demo-spin,
   .terminal-demo-pulse {
     animation: none !important;
+  }
+}
+
+/* SnowAPI console: a soft monochrome canvas. Hierarchy comes from tone,
+ * spacing and rounded surfaces rather than stacked outlines. Public and auth
+ * pages intentionally remain outside this authenticated-route marker. */
+body[data-snowapi-console='true'] {
+  --background: #fdfdfc;
+  --foreground: #111111;
+  --card: #f5f5f3;
+  --card-foreground: #111111;
+  --popover: #ffffff;
+  --popover-foreground: #111111;
+  --primary: #111111;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f1ef;
+  --secondary-foreground: #111111;
+  --muted: #f0f0ee;
+  --muted-foreground: #696969;
+  --accent: #ebebe8;
+  --accent-foreground: #111111;
+  --border: #e2e2df;
+  --input: #d9d9d6;
+  --ring: #111111;
+  --success: #2b2b2b;
+  --warning: #626262;
+  --info: #4a4a4a;
+  --destructive: #111111;
+  --chart-1: #111111;
+  --chart-2: #444444;
+  --chart-3: #717171;
+  --chart-4: #9d9d9d;
+  --chart-5: #c8c8c8;
+  --sidebar: #fafaf9;
+  --sidebar-foreground: #111111;
+  --sidebar-primary: #111111;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ececea;
+  --sidebar-accent-foreground: #111111;
+  --sidebar-border: #e5e5e2;
+  --sidebar-ring: #111111;
+  --color-background-surface: #f5f5f3;
+  --color-background-body: #fdfdfc;
+  --color-background-card: #f5f5f3;
+  --color-background-popover: #ffffff;
+  --color-background-muted: #f0f0ee;
+  --color-accent: #111111;
+  --color-accent-muted: #ebebe8;
+  --color-neutral: #e7e7e4;
+  --color-text-primary: #111111;
+  --color-text-secondary: #696969;
+  --color-text-accent: #111111;
+  --color-on-accent: #ffffff;
+  --color-icon-accent: #111111;
+  --color-icon-primary: #111111;
+  --color-icon-secondary: #696969;
+  --color-border: #e2e2df;
+  --color-border-emphasized: #d4d4d0;
+  --snowapi-rainflow-surface: #f5f5f3;
+  --snowapi-rainflow-surface-strong: #eeeeeb;
+  --snowapi-rainflow-surface-inset: #fdfdfc;
+  --snowapi-rainflow-divider: color-mix(
+    in oklab,
+    var(--foreground) 7%,
+    transparent
+  );
+  overflow-x: clip;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.dark body[data-snowapi-console='true'] {
+  --background: #0d0d0d;
+  --foreground: #f4f4f2;
+  --card: #181818;
+  --card-foreground: #f4f4f2;
+  --popover: #181818;
+  --popover-foreground: #f4f4f2;
+  --primary: #f4f4f2;
+  --primary-foreground: #111111;
+  --secondary: #202020;
+  --secondary-foreground: #f4f4f2;
+  --muted: #222222;
+  --muted-foreground: #a6a6a3;
+  --accent: #292929;
+  --accent-foreground: #f4f4f2;
+  --border: #343434;
+  --input: #3a3a3a;
+  --ring: #f4f4f2;
+  --success: #dadad7;
+  --warning: #a9a9a5;
+  --info: #c4c4c0;
+  --destructive: #f4f4f2;
+  --chart-1: #f4f4f2;
+  --chart-2: #c8c8c4;
+  --chart-3: #969693;
+  --chart-4: #696967;
+  --chart-5: #414140;
+  --sidebar: #111111;
+  --sidebar-foreground: #f4f4f2;
+  --sidebar-primary: #f4f4f2;
+  --sidebar-primary-foreground: #111111;
+  --sidebar-accent: #242424;
+  --sidebar-accent-foreground: #f4f4f2;
+  --sidebar-border: #2b2b2b;
+  --sidebar-ring: #f4f4f2;
+  --color-background-surface: #181818;
+  --color-background-body: #0d0d0d;
+  --color-background-card: #181818;
+  --color-background-popover: #181818;
+  --color-background-muted: #222222;
+  --color-accent: #f4f4f2;
+  --color-accent-muted: #292929;
+  --color-neutral: #2a2a2a;
+  --color-text-primary: #f4f4f2;
+  --color-text-secondary: #a6a6a3;
+  --color-text-accent: #f4f4f2;
+  --color-on-accent: #111111;
+  --color-icon-accent: #f4f4f2;
+  --color-icon-primary: #f4f4f2;
+  --color-icon-secondary: #a6a6a3;
+  --color-border: #343434;
+  --color-border-emphasized: #424242;
+  --snowapi-rainflow-surface: #181818;
+  --snowapi-rainflow-surface-strong: #222222;
+  --snowapi-rainflow-surface-inset: #101010;
+  --snowapi-rainflow-divider: color-mix(
+    in oklab,
+    var(--foreground) 9%,
+    transparent
+  );
+}
+
+body[data-snowapi-console='true'] .snowapi-astryx-shell,
+body[data-snowapi-console='true'] .snowapi-astryx-content,
+body[data-snowapi-console='true'] [data-slot='dialog-content'],
+body[data-snowapi-console='true'] [data-slot='sheet-content'],
+body[data-snowapi-console='true'] [data-slot='drawer-content'],
+body[data-snowapi-console='true'] [data-slot='popover-content'],
+body[data-snowapi-console='true'] [data-slot='select-content'],
+body[data-snowapi-console='true'] [data-slot='dropdown-menu-content'] {
+  font-family: var(--font-sans) !important;
+}
+
+body[data-snowapi-console='true']
+  :is(h1, h2, h3, h4, h5, h6, [data-slot='card-title']):not(
+    .snowapi-login-welcome-heading
+  ) {
+  font-family: var(--font-sans) !important;
+  letter-spacing: -0.015em;
+}
+
+body[data-snowapi-console='true'] .snowapi-console-content-state {
+  position: relative;
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body[data-snowapi-console='true'] .snowapi-console-loaded-content {
+  opacity: 1;
+  transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body[data-snowapi-console='true']
+  .snowapi-console-content-state[data-loading='true']
+  .snowapi-console-loaded-content {
+  pointer-events: none;
+  opacity: 0;
+}
+
+body[data-snowapi-console='true'] .snowapi-console-loading-indicator {
+  background: var(--background);
+}
+
+.snowapi-content-reveal {
+  animation: snowapi-content-reveal-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes snowapi-content-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-shell
+  :is(.astryx-layout-content, #astryx-app-shell-main) {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
+}
+
+body[data-snowapi-console='true'] .snowapi-astryx-content {
+  max-width: 100%;
+  overflow: hidden;
+  background: var(--background);
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-visual-region='page-heading'] {
+  width: 100%;
+  max-width: 86rem;
+  margin-inline: auto;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-visual-region='page-content'] {
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  scrollbar-gutter: stable;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-visual-region='page-content']
+  > * {
+  width: 100%;
+  min-width: 0;
+  max-width: 86rem;
+  margin-inline: auto;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-visual-region='page-heading'] {
+  border: 0;
+  padding-bottom: 0.75rem;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-visual-region='page-heading']
+  h1 {
+  font-size: 1.25rem;
+  line-height: 1.65rem;
+  font-weight: 500;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-visual-region='page-heading']
+  p {
+  max-width: 48rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+body[data-snowapi-console='true'] .snowapi-rainflow-panel,
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-visual-region='page-content']
+  [data-slot='card'],
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  :is(
+    [data-visual-region='data-table'],
+    [data-visual-region='static-data-table']
+  ),
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='model-list-card'] {
+  border: 0 !important;
+  border-radius: 0.75rem !important;
+  background: var(--snowapi-rainflow-surface) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  :is([data-slot='card-header'], [data-slot='card-footer']),
+body[data-snowapi-console='true'] .snowapi-rainflow-panel > .border-b,
+body[data-snowapi-console='true'] .snowapi-rainflow-panel > .border-t {
+  border-color: transparent !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='card-header'] {
+  padding-inline: 1.125rem;
+  padding-top: 0.75rem;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  .snowapi-rainflow-panel
+  > [data-slot='card-header'] {
+  padding-top: 1.125rem !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='card-content'] {
+  padding-inline: 1.125rem;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='card-footer'] {
+  border: 0;
+  background: var(--snowapi-rainflow-surface-strong);
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='card-title'] {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='card-description'] {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='icon-badge'],
+body[data-snowapi-console='true']
+  [data-visual-region='titled-panel']
+  [data-slot='icon-badge'] {
+  background: var(--snowapi-rainflow-surface-strong) !important;
+  color: var(--muted-foreground) !important;
+  box-shadow: none !important;
+}
+
+body[data-snowapi-console='true'] .snowapi-astryx-content [data-slot='button'] {
+  box-shadow: none !important;
+  font-weight: 500;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='button'][data-variant='default']:not([data-size^='icon']) {
+  border-radius: 999px;
+  padding-inline: 0.875rem;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='button'][data-variant='default'] {
+  border-color: var(--foreground);
+  background: var(--foreground);
+  color: var(--background);
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='button'][data-variant='secondary'],
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='button'][data-variant='outline'] {
+  border-color: transparent;
+  background: var(--snowapi-rainflow-surface-strong);
+  color: var(--foreground);
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='button'][data-variant='ghost'] {
+  background: transparent;
+  color: var(--muted-foreground);
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='button'][data-variant='default']:hover {
+  opacity: 0.82;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  :is(
+    [data-slot='button'][data-variant='secondary'],
+    [data-slot='button'][data-variant='outline'],
+    [data-slot='button'][data-variant='ghost']
+  ):hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  button:not(:disabled):active,
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [role='button']:not(:disabled):active,
+body[data-snowapi-console='true'] [data-slot='dialog-content'] button:active,
+body[data-snowapi-console='true'] [data-slot='sheet-content'] button:active,
+body[data-snowapi-console='true'] [data-slot='drawer-content'] button:active {
+  transform: none !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  :is(
+    [data-slot='input'],
+    [data-slot='select-trigger'],
+    [data-slot='native-select'],
+    textarea
+  ) {
+  border: 1px solid var(--input);
+  border-radius: 0.5rem;
+  background: var(--snowapi-rainflow-surface-inset);
+  color: var(--foreground);
+  box-shadow: none !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  :is(
+    [data-slot='input'],
+    [data-slot='select-trigger'],
+    [data-slot='native-select'],
+    textarea
+  ):focus-visible {
+  border-color: var(--foreground);
+  box-shadow: 0 0 0 1px var(--foreground) !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  :is(
+    [data-visual-region='data-table'],
+    [data-visual-region='static-data-table']
+  ) {
+  --table-header: var(--snowapi-rainflow-surface-strong);
+  --table-header-hover: var(--snowapi-rainflow-surface-strong);
+  --data-table-row-hover: var(--snowapi-rainflow-surface-strong);
+  max-width: 100%;
+  overflow: hidden;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='table-header'] {
+  background: var(--snowapi-rainflow-surface-strong);
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='table-head'] {
+  height: 2.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='table-row'] {
+  border-color: var(--snowapi-rainflow-divider);
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='table']
+  tbody
+  tr {
+  animation: none !important;
+  opacity: 1;
+  transform: none !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='table-row']:hover {
+  background: var(--snowapi-rainflow-surface-strong);
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='table-cell'] {
+  color: var(--foreground);
+  font-size: 0.75rem;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  :is([data-slot='table-container'], [data-visual-region='data-table-scroll']) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Empty messages are not selectable data rows; keep the entire surface calm. */
+[data-slot='table-row'][data-empty='true']:hover {
+  background: transparent !important;
+}
+
+@media (min-width: 768px) {
+  :is([data-slot='table-container'], [data-visual-region='data-table-scroll']) {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(
+        in srgb,
+        var(--muted-foreground) 45%,
+        transparent
+      )
+      transparent;
+    scrollbar-gutter: stable;
+  }
+
+  :is(
+    [data-slot='table-container'],
+    [data-visual-region='data-table-scroll']
+  )::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  :is(
+    [data-slot='table-container'],
+    [data-visual-region='data-table-scroll']
+  )::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+    background-clip: padding-box;
+  }
+
+  :is(
+      [data-slot='table-container'],
+      [data-visual-region='data-table-scroll']
+    )::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+  }
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='tabs-list'] {
+  border: 0;
+  border-radius: 0.625rem;
+  background: var(--snowapi-rainflow-surface-strong);
+  padding: 0.1875rem;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='tabs-trigger'] {
+  border: 0;
+  border-radius: 0.4375rem;
+  background: transparent !important;
+  color: var(--muted-foreground);
+  box-shadow: none !important;
+  font-size: 0.75rem;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='tabs-trigger']::after {
+  display: none;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='tabs-trigger'][data-active] {
+  background: var(--snowapi-rainflow-surface-inset) !important;
+  color: var(--foreground);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04) !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='model-list-toolbar'] {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-visual-region='model-list-table-header'] {
+  border: 0;
+  background: var(--snowapi-rainflow-surface-strong);
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='model-list-card']
+  li {
+  border-color: var(--snowapi-rainflow-divider);
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='model-health']
+  [data-health-hours]
+  > span[data-health-level] {
+  background: var(--health-color, var(--muted)) !important;
+}
+
+[data-slot='model-health'] [data-health-level='excellent'] {
+  --health-color: #10b981;
+}
+[data-slot='model-health'] [data-health-level='good'] {
+  --health-color: #34d399;
+}
+[data-slot='model-health'] [data-health-level='warning'] {
+  --health-color: #f59e0b;
+}
+[data-slot='model-health'] [data-health-level='critical'] {
+  --health-color: #ef4444;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  :is(
+    [class*='bg-emerald-'],
+    [class*='bg-green-'],
+    [class*='bg-blue-'],
+    [class*='bg-sky-'],
+    [class*='bg-cyan-'],
+    [class*='bg-violet-'],
+    [class*='bg-purple-'],
+    [class*='bg-amber-'],
+    [class*='bg-yellow-'],
+    [class*='bg-orange-'],
+    [class*='bg-red-'],
+    [class*='bg-rose-']
+  ) {
+  background-color: var(--snowapi-rainflow-surface-strong) !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  :is(
+    [class*='border-emerald-'],
+    [class*='border-green-'],
+    [class*='border-blue-'],
+    [class*='border-sky-'],
+    [class*='border-cyan-'],
+    [class*='border-violet-'],
+    [class*='border-purple-'],
+    [class*='border-amber-'],
+    [class*='border-yellow-'],
+    [class*='border-orange-'],
+    [class*='border-red-'],
+    [class*='border-rose-']
+  ) {
+  border-color: var(--snowapi-rainflow-divider) !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  :is([data-slot='badge'], [data-slot='status-badge']) {
+  transform: none !important;
+  box-shadow: none !important;
+  color: var(--foreground) !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='badge'][data-variant='default'] {
+  background-color: var(--primary);
+  color: var(--primary-foreground) !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='status-badge']
+  > span[aria-hidden='true'] {
+  background: var(--foreground) !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-slot='progress-indicator'] {
+  background: var(--snowapi-progress-fill, var(--foreground)) !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  :is(
+    [class*='text-emerald-'],
+    [class*='text-green-'],
+    [class*='text-blue-'],
+    [class*='text-sky-'],
+    [class*='text-cyan-'],
+    [class*='text-violet-'],
+    [class*='text-purple-'],
+    [class*='text-amber-'],
+    [class*='text-yellow-'],
+    [class*='text-orange-'],
+    [class*='text-red-'],
+    [class*='text-rose-']
+  ) {
+  color: var(--foreground) !important;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-astryx-content
+  [data-visual-region='page-content']
+  + div {
+  border: 0;
+  background: transparent;
+}
+
+body[data-snowapi-console='true']
+  .snowapi-rainflow-panel
+  [data-slot='avatar-fallback'] {
+  background: var(--foreground) !important;
+  color: var(--background) !important;
+}
+
+body[data-snowapi-console='true']
+  :is(
+    [data-slot='dialog-content'],
+    [data-slot='sheet-content'],
+    [data-slot='drawer-content']
+  ) {
+  border-color: var(--snowapi-rainflow-divider) !important;
+  background: var(--popover) !important;
+  color: var(--popover-foreground) !important;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.14) !important;
+}
+
+body[data-snowapi-console='true'] [data-slot='dialog-footer'] {
+  border-color: transparent;
+  background: transparent;
+}
+
+/* Menus keep the same palette and typography on home, auth, docs and console.
+ * Set tokens on the portal itself instead of relying on a route ancestor. */
+:is(
+  [data-slot='popover-content'],
+  [data-slot='select-content'],
+  [data-slot='dropdown-menu-content'],
+  [data-slot='dropdown-menu-sub-content'],
+  [data-slot='context-menu-content'],
+  [data-slot='context-menu-sub-content'],
+  [data-slot='hover-card-content'],
+  [data-slot='combobox-content']
+) {
+  --background: var(--snowapi-floating-surface);
+  --popover: var(--snowapi-floating-surface);
+  --popover-foreground: var(--snowapi-floating-ink);
+  --foreground: var(--snowapi-floating-ink);
+  --primary: var(--snowapi-floating-ink);
+  --primary-foreground: var(--snowapi-floating-surface);
+  --secondary: var(--snowapi-floating-hover);
+  --secondary-foreground: var(--snowapi-floating-ink);
+  --accent: var(--snowapi-floating-hover);
+  --accent-foreground: var(--snowapi-floating-ink);
+  --muted: var(--snowapi-floating-hover);
+  --muted-foreground: var(--snowapi-floating-muted);
+  --border: var(--snowapi-floating-border);
+  --ring: var(--snowapi-floating-ink);
+  border-color: var(--snowapi-floating-border);
+  border-radius: 1rem;
+  background: var(--snowapi-floating-surface);
+  color: var(--snowapi-floating-ink);
+  box-shadow: var(--snowapi-floating-shadow);
+  font-family: var(--font-sans);
+}
+
+:is(
+  [data-slot='dropdown-menu-content'],
+  [data-slot='dropdown-menu-sub-content']
+) {
+  min-width: 10rem;
+  padding: 0.375rem;
+}
+
+:is(
+  [data-slot='dropdown-menu-item'],
+  [data-slot='dropdown-menu-checkbox-item'],
+  [data-slot='dropdown-menu-radio-item'],
+  [data-slot='dropdown-menu-sub-trigger']
+) {
+  min-height: 2rem;
+  border-radius: 999px;
+  padding-block: 0.375rem;
+  padding-inline: 0.75rem;
+}
+
+:is(
+  [data-slot='dropdown-menu-item'],
+  [data-slot='dropdown-menu-checkbox-item'],
+  [data-slot='dropdown-menu-radio-item'],
+  [data-slot='dropdown-menu-sub-trigger']
+)[data-inset='true'] {
+  padding-inline-start: 1.75rem;
+}
+
+:is(
+  [data-slot='dropdown-menu-checkbox-item'],
+  [data-slot='dropdown-menu-radio-item']
+) {
+  padding-inline-end: 2rem;
+}
+
+:is(
+  [data-slot='dropdown-menu-item'],
+  [data-slot='dropdown-menu-checkbox-item'],
+  [data-slot='dropdown-menu-radio-item'],
+  [data-slot='dropdown-menu-sub-trigger']
+):focus-visible {
+  outline: 2px solid var(--snowapi-floating-ink);
+  outline-offset: -2px;
+}
+
+.dark
+  body[data-snowapi-console='true']
+  :is(
+    [data-slot='dialog-content'],
+    [data-slot='sheet-content'],
+    [data-slot='drawer-content']
+  ) {
+  box-shadow: 0 18px 52px rgb(0 0 0 / 0.42) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-snowapi-console='true'] .snowapi-astryx-content *,
+  body[data-snowapi-console='true'] [data-slot='dialog-content'],
+  body[data-snowapi-console='true'] [data-slot='sheet-content'],
+  body[data-snowapi-console='true'] [data-slot='drawer-content'] {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .snowapi-content-reveal {
+    animation-duration: 0.01ms !important;
   }
 }

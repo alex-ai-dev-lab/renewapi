@@ -16,62 +16,37 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import i18n, { type BackendModule, type ResourceKey } from 'i18next'
+import i18n from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
+import { convertDetectedLanguage } from './languages'
 import en from './locales/en.json'
+import fr from './locales/fr.json'
+import ja from './locales/ja.json'
+import ru from './locales/ru.json'
+import vi from './locales/vi.json'
+import zhTW from './locales/zh-TW.json'
+import zhCN from './locales/zh.json'
 
 export const resources = {
   en,
+  zhCN,
+  fr,
+  ru,
+  ja,
+  vi,
+  zhTW,
 } as const
 
-type LocaleModule = {
-  default: Record<string, ResourceKey>
-}
-
-const localeLoaders: Record<string, () => Promise<LocaleModule>> = {
-  zh: () => import('./locales/zh.json') as Promise<LocaleModule>,
-  fr: () => import('./locales/fr.json') as Promise<LocaleModule>,
-  ru: () => import('./locales/ru.json') as Promise<LocaleModule>,
-  ja: () => import('./locales/ja.json') as Promise<LocaleModule>,
-  vi: () => import('./locales/vi.json') as Promise<LocaleModule>,
-}
-
-const localeBackend: BackendModule = {
-  type: 'backend',
-  init() {},
-  read(language, namespace, callback) {
-    const loadLocale = localeLoaders[language]
-    if (!loadLocale) {
-      callback(new Error(`Unsupported locale: ${language}`), false)
-      return
-    }
-
-    void loadLocale()
-      .then((locale) => callback(null, locale.default[namespace] ?? {}))
-      .catch((error: unknown) => {
-        callback(
-          error instanceof Error
-            ? error
-            : new Error(`Failed to load locale: ${language}`),
-          false
-        )
-      })
-  },
-}
-
-export const i18nReady = i18n
-  .use(localeBackend)
+i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources,
-    partialBundledLanguages: true,
     fallbackLng: 'en',
-    supportedLngs: ['en', 'zh', 'fr', 'ru', 'ja', 'vi'],
-    load: 'languageOnly', // Convert zh-CN -> zh
+    supportedLngs: ['en', 'zhCN', 'fr', 'ru', 'ja', 'vi', 'zhTW'],
+    load: 'currentOnly',
     nsSeparator: false, // Allow literal colons in keys (e.g., URLs, labels)
-    keySeparator: false, // Allow literal dots in sentence keys
     debug: import.meta.env.DEV,
     interpolation: {
       escapeValue: false, // not needed for react as it escapes by default
@@ -79,6 +54,9 @@ export const i18nReady = i18n
     detection: {
       order: ['localStorage', 'navigator'],
       caches: ['localStorage'],
+      // Browsers report `zh-CN`/`zh-TW`/`zh`; map them onto our `zhCN`/`zhTW`
+      // codes (non-Chinese codes pass through for normal supportedLngs matching).
+      convertDetectedLanguage,
     },
   })
 

@@ -16,4 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-export { OverviewDashboard } from '../../overview-dashboard'
+import { AnnouncementsPanel } from './announcements-panel'
+import { SummaryCards } from './summary-cards'
+
+export function OverviewDashboard() {
+  return (
+    <div className='flex flex-col gap-4'>
+      <AnnouncementsPanel />
+      <SummaryCards />
+    </div>
+  )
+}

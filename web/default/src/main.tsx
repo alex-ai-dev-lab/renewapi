@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
-import { AxiosError } from 'axios'
+import { AxiosError, isCancel } from 'axios'
 import {
   QueryCache,
   QueryClient,
@@ -28,18 +28,20 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { bindAccountQueryCache } from '@/lib/account-query-cache'
 import { getStatus } from '@/lib/api'
-import { ApiBusinessError } from '@/lib/api-errors'
 import { installBuildMetadata } from '@/lib/build-metadata'
 import '@/lib/dayjs'
+import { APP_BASE_PATH } from '@/lib/deployment-mode'
 import { applyFaviconToDom } from '@/lib/dom-utils'
 import { initializeFrontendCache } from '@/lib/frontend-cache'
 import { handleServerError } from '@/lib/handle-server-error'
-import { isRequestCanceled } from '@/lib/request-errors'
+import { applySiteDesign } from '@/lib/site-design'
+import { applySnowApiAppearanceDefaultsOnce } from '@/lib/snowapi-appearance-defaults'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
 import { ThemeProvider } from './context/theme-provider'
-import { i18nReady } from './i18n/config'
+import './i18n/config'
 // Generated Routes
 import { routeTree } from './routeTree.gen'
 // Styles
@@ -49,14 +51,14 @@ import './styles/index.css'
 // VChart theme is driven by our ThemeProvider (html.light/html.dark) via per-chart `theme` prop.
 initializeFrontendCache()
 installBuildMetadata()
+applySnowApiAppearanceDefaultsOnce()
+applySiteDesign(undefined)
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: (failureCount, error) => {
-        if (isRequestCanceled(error) || error instanceof ApiBusinessError)
-          return false
-
+        if (isCancel(error)) return false
         // eslint-disable-next-line no-console
         if (import.meta.env.DEV) console.log({ failureCount, error })
 
@@ -68,13 +70,12 @@ const queryClient = new QueryClient({
           [401, 403].includes(error.response?.status ?? 0)
         )
       },
-      refetchOnWindowFocus: import.meta.env.PROD,
+      // Keep focused tabs from silently re-running heavy pages like logs.
+      refetchOnWindowFocus: false,
       staleTime: 10 * 1000, // 10s
     },
     mutations: {
       onError: (error) => {
-        if (isRequestCanceled(error)) return
-
         handleServerError(error)
 
         if (error instanceof AxiosError) {
@@ -87,8 +88,6 @@ const queryClient = new QueryClient({
   },
   queryCache: new QueryCache({
     onError: (error) => {
-      if (isRequestCanceled(error)) return
-
       if (error instanceof AxiosError) {
         if (error.response?.status === 401) {
           toast.error(i18next.t('Session expired!'))
@@ -96,14 +95,34 @@ const queryClient = new QueryClient({
           const redirect = `${router.history.location.href}`
           router.navigate({ to: '/sign-in', search: { redirect } })
         }
-        // 数据查询失败由当前页面和请求提示处理，不打断正在编辑的内容。
+        // Failed page queries keep the current route and editing context.
       }
     },
   }),
 })
 
 // Create a new router instance
+bindAccountQueryCache(queryClient)
+
+// Another tab can replace the shared login cookie. Reload rather than mixing
+// its identity with this tab's mounted components and private local state.
+window.addEventListener('storage', (event) => {
+  if (event.key !== 'user' && event.key !== null) return
+  let nextId: number | undefined
+  try {
+    const saved = window.localStorage.getItem('user')
+    nextId = saved ? (JSON.parse(saved) as { id?: number }).id : undefined
+  } catch {
+    nextId = undefined
+  }
+  if (nextId !== useAuthStore.getState().auth.user?.id) {
+    queryClient.clear()
+    window.location.reload()
+  }
+})
+
 const router = createRouter({
+  basepath: APP_BASE_PATH,
   routeTree,
   context: { queryClient },
   defaultPreload: 'intent',
@@ -118,7 +137,10 @@ declare module '@tanstack/react-router' {
 }
 
 // Render the app
-const rootElement = document.getElementById('root')!
+const rootElement = document.querySelector<HTMLElement>('#root')
+if (!rootElement) {
+  throw new Error('Root element not found')
+}
 // Set document.title and favicon from cached status, then refresh from network
 ;(function initSystemBranding() {
   try {
@@ -135,6 +157,7 @@ const rootElement = document.getElementById('root')!
       const saved = localStorage.getItem('status')
       if (saved) {
         const s = JSON.parse(saved)
+        applySiteDesign(s?.home_design)
         if (s?.system_name) apply(s.system_name)
         if (s?.logo) applyFaviconToDom(s.logo)
       }
@@ -144,6 +167,7 @@ const rootElement = document.getElementById('root')!
     // Background refresh
     getStatus()
       .then((s) => {
+        if (s) applySiteDesign(s.home_design)
         if (s?.system_name) {
           apply(s.system_name as string)
           try {
@@ -161,23 +185,21 @@ const rootElement = document.getElementById('root')!
     /* empty */
   }
 })()
-function renderApp() {
-  if (rootElement.innerHTML) return
-
+if (!rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement)
   root.render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <FontProvider>
-            <DirectionProvider>
-              <RouterProvider router={router} />
-            </DirectionProvider>
-          </FontProvider>
-        </ThemeProvider>
+        <>
+          <ThemeProvider>
+            <FontProvider>
+              <DirectionProvider>
+                <RouterProvider router={router} />
+              </DirectionProvider>
+            </FontProvider>
+          </ThemeProvider>
+        </>
       </QueryClientProvider>
     </StrictMode>
   )
 }
-
-void i18nReady.catch(() => undefined).then(renderApp)

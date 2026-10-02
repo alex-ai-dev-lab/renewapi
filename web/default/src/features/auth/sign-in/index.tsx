@@ -16,10 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Link, useSearch } from '@tanstack/react-router'
+import { useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
+import { IS_DEMO, appPath } from '@/lib/deployment-mode'
 import { useStatus } from '@/hooks/use-status'
 import { AuthLayout } from '../auth-layout'
+import { MetallicPaint } from '../components/metallic-paint'
 import { TermsFooter } from '../components/terms-footer'
 import { UserAuthForm } from './components/user-auth-form'
 
@@ -29,23 +31,20 @@ export function SignIn() {
   const { status } = useStatus()
 
   return (
-    <AuthLayout>
-      <div className='obsidian-auth-page'>
-        <div className='obsidian-auth-page-header'>
-          <h1 className='obsidian-auth-title'>{t('Sign in')}</h1>
-          {!status?.self_use_mode_enabled &&
-            status?.register_enabled !== false && (
-              <p className='obsidian-auth-description'>
-                {t("Don't have an account?")}{' '}
-                <Link
-                  to='/sign-up'
-                  className='hover:text-primary font-medium underline underline-offset-4'
-                >
-                  {t('Sign up')}
-                </Link>
-                .
-              </p>
-            )}
+    <AuthLayout dark>
+      <div className='w-full space-y-8'>
+        <div className='space-y-5'>
+          <MetallicPaint
+            imageSrc={
+              status?.logo ||
+              (IS_DEMO
+                ? appPath('/snowapi-logo.png')
+                : '/snowapi-theme/unsnow-favicon.png?v=20260717-1')
+            }
+          />
+          <h2 className='text-center text-2xl font-semibold tracking-tight sm:text-left'>
+            {t('Sign in')}
+          </h2>
         </div>
 
         <UserAuthForm redirectTo={redirect} />

@@ -26,16 +26,24 @@ import {
   Loading03Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { useTranslation } from 'react-i18next'
 import { Toaster as Sonner, type ToasterProps } from 'sonner'
-import { useTheme } from '@/context/theme-provider'
+import { cn } from '@/lib/utils'
 
 const Toaster = (props: ToasterProps) => {
-  const { resolvedTheme } = useTheme()
+  const { t } = useTranslation()
 
   return (
     <Sonner
-      theme={resolvedTheme}
-      className='toaster group'
+      {...props}
+      theme='light'
+      richColors={false}
+      className={cn('snowapi-toaster', props.className)}
+      toastOptions={{
+        ...props.toastOptions,
+        unstyled: true,
+        closeButtonAriaLabel: t('Close'),
+      }}
       icons={{
         success: (
           <HugeiconsIcon
@@ -73,37 +81,6 @@ const Toaster = (props: ToasterProps) => {
           />
         ),
       }}
-      style={
-        {
-          '--normal-bg': 'var(--popover)',
-          '--normal-text': 'var(--popover-foreground)',
-          '--normal-border': 'var(--border)',
-          '--success-bg':
-            'color-mix(in oklch, var(--success) 16%, var(--popover))',
-          '--success-border':
-            'color-mix(in oklch, var(--success) 35%, var(--border))',
-          '--success-text': 'var(--success)',
-          '--info-bg': 'color-mix(in oklch, var(--info) 16%, var(--popover))',
-          '--info-border':
-            'color-mix(in oklch, var(--info) 35%, var(--border))',
-          '--info-text': 'var(--info)',
-          '--warning-bg':
-            'color-mix(in oklch, var(--warning) 18%, var(--popover))',
-          '--warning-border':
-            'color-mix(in oklch, var(--warning) 38%, var(--border))',
-          '--warning-text': 'var(--warning)',
-          '--error-bg':
-            'color-mix(in oklch, var(--destructive) 16%, var(--popover))',
-          '--error-border':
-            'color-mix(in oklch, var(--destructive) 35%, var(--border))',
-          '--error-text':
-            resolvedTheme === 'dark'
-              ? 'color-mix(in oklch, var(--destructive) 80%, var(--popover-foreground))'
-              : 'var(--destructive)',
-          '--border-radius': 'var(--radius)',
-        } as React.CSSProperties
-      }
-      {...props}
     />
   )
 }

@@ -16,20 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getRouteApi, Link } from '@tanstack/react-router'
-import {
-  getCoreRowModel,
-  useReactTable,
-  type SortingState,
-  type VisibilityState,
-} from '@tanstack/react-table'
+import { getRouteApi } from '@tanstack/react-router'
+import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
-import { shouldRetryQuery, unwrapApiResponse } from '@/lib/api-errors'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
-import { DataTablePage } from '@/components/data-table'
-import { FilterPills } from '@/components/page-primitives'
+import { DataTablePage, useDataTable } from '@/components/data-table'
 import { getModels, searchModels, getVendors } from '../api'
 import {
   DEFAULT_PAGE_SIZE,
@@ -39,31 +32,14 @@ import {
 import { modelsQueryKeys, vendorsQueryKeys } from '../lib'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { useModelsColumns } from './models-columns'
-import { ModelsPrimaryButtons } from './models-primary-buttons'
 import { useModels } from './models-provider'
-import { ModelsStats } from './models-stats'
 
 const route = getRouteApi('/_authenticated/models/$section')
 
 export function ModelsTable() {
   const { t } = useTranslation()
   const { selectedVendor } = useModels()
-
-  // Table state
-  const [sorting, setSorting] = useState<SortingState>([])
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-    id: false,
-    name_rule: false,
-    description: false,
-    tags: false,
-    endpoints: false,
-    bound_channels: false,
-    quota_types: false,
-    created_time: false,
-    updated_time: false,
-  })
-  const [rowSelection, setRowSelection] = useState({})
-  const [managementOpen, setManagementOpen] = useState(false)
+  const isMobile = useMediaQuery('(max-width: 640px)')
 
   // URL state management
   const {
@@ -79,7 +55,7 @@ export function ModelsTable() {
     navigate: route.useNavigate(),
     pagination: {
       defaultPage: 1,
-      defaultPageSize: DEFAULT_PAGE_SIZE,
+      defaultPageSize: isMobile ? 10 : DEFAULT_PAGE_SIZE,
     },
     globalFilter: { enabled: true, key: 'filter' },
     columnFilters: [
@@ -116,9 +92,6 @@ export function ModelsTable() {
     }))
   }, [vendors])
 
-  // Determine whether to use search or regular list API
-  const shouldSearch = Boolean(globalFilter?.trim())
-
   // Apply selected vendor from context or filter
   const activeVendorFilter =
     selectedVendor ||
@@ -126,101 +99,81 @@ export function ModelsTable() {
       ? vendorFilter[0]
       : undefined)
 
+  const statusFilterValue =
+    statusFilter.length > 0 && !statusFilter.includes('all')
+      ? statusFilter[0]
+      : undefined
+  const syncFilterValue =
+    syncFilter.length > 0 && !syncFilter.includes('all')
+      ? syncFilter[0]
+      : undefined
+
+  // Use search API whenever any filter is active so status/sync are applied server-side
+  const shouldSearch = Boolean(
+    globalFilter?.trim() ||
+    activeVendorFilter ||
+    statusFilterValue ||
+    syncFilterValue
+  )
+
   // Fetch models data
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const { data, isLoading, isFetching, isError, error } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: modelsQueryKeys.list({
       keyword: globalFilter,
       vendor: activeVendorFilter,
-      status:
-        statusFilter.length > 0 && !statusFilter.includes('all')
-          ? statusFilter[0]
-          : undefined,
-      sync_official:
-        syncFilter.length > 0 && !syncFilter.includes('all')
-          ? syncFilter[0]
-          : undefined,
+      status: statusFilterValue,
+      sync_official: syncFilterValue,
       p: pagination.pageIndex + 1,
       page_size: pagination.pageSize,
     }),
     queryFn: async () => {
-      if (shouldSearch || activeVendorFilter) {
-        return unwrapApiResponse(
-          await searchModels({
-            keyword: globalFilter,
-            vendor: activeVendorFilter,
-            status:
-              statusFilter.length > 0 && !statusFilter.includes('all')
-                ? statusFilter[0]
-                : undefined,
-            sync_official:
-              syncFilter.length > 0 && !syncFilter.includes('all')
-                ? syncFilter[0]
-                : undefined,
-            p: pagination.pageIndex + 1,
-            page_size: pagination.pageSize,
-          })
-        )
-      }
-
-      return unwrapApiResponse(
-        await getModels({
-          status:
-            statusFilter.length > 0 && !statusFilter.includes('all')
-              ? statusFilter[0]
-              : undefined,
-          sync_official:
-            syncFilter.length > 0 && !syncFilter.includes('all')
-              ? syncFilter[0]
-              : undefined,
+      if (shouldSearch) {
+        return searchModels({
+          keyword: globalFilter,
+          vendor: activeVendorFilter,
+          status: statusFilterValue,
+          sync_official: syncFilterValue,
           p: pagination.pageIndex + 1,
           page_size: pagination.pageSize,
         })
-      )
+      }
+      return getModels({
+        p: pagination.pageIndex + 1,
+        page_size: pagination.pageSize,
+      })
     },
-    retry: shouldRetryQuery,
-    placeholderData: (previousData) => previousData,
   })
 
   const models = data?.data?.items || []
   const totalCount = data?.data?.total || 0
   const vendorCounts = data?.data?.vendor_counts
-  const errorDescription = error instanceof Error ? error.message : undefined
 
   // Columns configuration
   const columns = useModelsColumns(vendors)
 
   // React Table instance
-  const table = useReactTable({
+  const { table } = useDataTable({
     data: models,
     columns,
-    pageCount: Math.ceil(totalCount / pagination.pageSize),
-    state: {
-      sorting,
-      columnFilters,
-      columnVisibility,
-      rowSelection,
-      pagination,
-      globalFilter,
+    totalCount,
+    initialColumnVisibility: {
+      description: false,
+      bound_channels: false,
+      quota_types: false,
     },
+    columnFilters,
+    pagination,
+    globalFilter,
     enableRowSelection: true,
-    onRowSelectionChange: setRowSelection,
-    onSortingChange: setSorting,
     onColumnFiltersChange,
-    onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange,
     onGlobalFilterChange,
-    getCoreRowModel: getCoreRowModel(),
     manualPagination: true,
     manualSorting: true,
     manualFiltering: true,
+    ensurePageInRange,
   })
-
-  // Ensure page is in range when total count changes
-  const pageCount = table.getPageCount()
-  useEffect(() => {
-    ensurePageInRange(pageCount)
-  }, [pageCount, ensurePageInRange])
 
   // Prepare filter options
   const vendorFilterOptions = [
@@ -234,93 +187,42 @@ export function ModelsTable() {
     })),
   ]
 
-  const activeSync = syncFilter[0] ?? 'all'
-  const syncPillOptions = [
-    { value: 'all', label: t('全部同步状态') },
-    ...getSyncStatusOptions(t).map((option) => ({
-      value: option.value,
-      label: option.label,
-    })),
-  ]
-
   return (
-    <div className='space-y-3 sm:space-y-4'>
-      <ModelsStats
-        models={models}
-        vendors={vendors}
-        totalModels={totalCount}
-        isLoading={isLoading}
-        isError={isError}
-        errorDescription={errorDescription}
-        managementOpen={managementOpen}
-        onManagementToggle={() => setManagementOpen((open) => !open)}
-      />
-
-      {managementOpen ? (
-        <div className='space-y-3'>
-          <div className='flex flex-wrap items-center justify-end gap-2 px-1'>
-            <Link
-              to='/models/$section'
-              params={{ section: 'deployments' }}
-              className='border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground inline-flex h-8 items-center rounded border px-3 text-xs font-medium transition-colors'
-            >
-              {t('Deployments')}
-            </Link>
-            <ModelsPrimaryButtons />
-          </div>
-
-          <DataTablePage
-            verticalScroll={{ mode: 'page' }}
-            table={table}
-            columns={columns}
-            isLoading={isLoading}
-            isFetching={isFetching}
-            isError={isError}
-            errorDescription={errorDescription}
-            tableHeaderClassName='sticky top-0 z-10 bg-card'
-            emptyTitle={t('No Models Found')}
-            emptyDescription={t(
-              'No models available. Create your first model to get started.'
-            )}
-            skeletonKeyPrefix='model-skeleton'
-            toolbarProps={{
-              searchPlaceholder: t('Filter by model name...'),
-              additionalSearch: (
-                <FilterPills
-                  value={activeSync}
-                  options={syncPillOptions}
-                  onValueChange={(value) => {
-                    onColumnFiltersChange((prev) => {
-                      const filtered = prev.filter(
-                        (filter) => filter.id !== 'sync_official'
-                      )
-                      return value === 'all'
-                        ? filtered
-                        : [...filtered, { id: 'sync_official', value: [value] }]
-                    })
-                  }}
-                  className='min-w-0'
-                />
-              ),
-              filters: [
-                {
-                  columnId: 'status',
-                  title: t('Status'),
-                  options: [...getModelStatusOptions(t)],
-                  singleSelect: true,
-                },
-                {
-                  columnId: 'vendor_id',
-                  title: t('Vendor'),
-                  options: vendorFilterOptions,
-                  singleSelect: true,
-                },
-              ],
-            }}
-            bulkActions={<DataTableBulkActions table={table} />}
-          />
-        </div>
-      ) : null}
-    </div>
+    <DataTablePage
+      table={table}
+      columns={columns}
+      isLoading={isLoading}
+      isFetching={isFetching}
+      emptyTitle={t('No Models Found')}
+      emptyDescription={t(
+        'No models available. Create your first model to get started.'
+      )}
+      skeletonKeyPrefix='model-skeleton'
+      applyHeaderSize
+      toolbarProps={{
+        searchPlaceholder: t('Filter by model name...'),
+        filters: [
+          {
+            columnId: 'status',
+            title: t('Status'),
+            options: [...getModelStatusOptions(t)],
+            singleSelect: true,
+          },
+          {
+            columnId: 'vendor_id',
+            title: t('Vendor'),
+            options: vendorFilterOptions,
+            singleSelect: true,
+          },
+          {
+            columnId: 'sync_official',
+            title: t('Official Sync'),
+            options: [...getSyncStatusOptions(t)],
+            singleSelect: true,
+          },
+        ],
+      }}
+      bulkActions={<DataTableBulkActions table={table} />}
+    />
   )
 }

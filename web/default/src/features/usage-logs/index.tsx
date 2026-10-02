@@ -16,52 +16,57 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useMemo } from 'react'
-import { getRouteApi, useNavigate } from '@tanstack/react-router'
-import '@/styles/obsidian-user.css'
-import { useTranslation } from 'react-i18next'
-import { useSidebarConfig } from '@/hooks/use-sidebar-config'
-import { SectionPageLayout } from '@/components/layout'
-import type { NavGroup } from '@/components/layout/types'
-import { SegmentedTabs } from '@/components/page-primitives'
-import { CacheStatsDialog } from '@/features/system-settings/general/channel-affinity/cache-stats-dialog'
-import { CommonLogsStats } from './components/common-logs-stats'
-import { UserInfoDialog } from './components/dialogs/user-info-dialog'
+import { useCallback } from 'react'
+import { getRouteApi } from '@tanstack/react-router'
 import {
+  ChartNoAxesColumnIncreasing,
+  Ellipsis,
+  ReceiptText,
+} from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { SectionPageLayout } from '@/components/layout'
+import { CacheStatsDialog } from '@/features/system-settings/general/channel-affinity/cache-stats-dialog'
+import { UserInfoDialog } from './components/dialogs/user-info-dialog'
+import { TaskLogsTable } from './components/task-logs-table'
+import {
+  type LogsViewScope,
   UsageLogsProvider,
+  useLogsViewScope,
   useUsageLogsContext,
 } from './components/usage-logs-provider'
 import { UsageLogsTable } from './components/usage-logs-table'
-import {
-  isUsageLogsSectionId,
-  USAGE_LOGS_DEFAULT_SECTION,
-  type UsageLogsSectionId,
-} from './section-registry'
+import type { UsageLogView } from './types'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
-const TASK_LOG_SECTIONS = ['drawing', 'task'] as const
+const LOG_VIEWS = [
+  {
+    id: 'consume',
+    labelKey: 'Consume',
+    icon: ChartNoAxesColumnIncreasing,
+  },
+  {
+    id: 'billing',
+    labelKey: 'Bills',
+    icon: ReceiptText,
+  },
+  {
+    id: 'other',
+    labelKey: 'Other',
+    icon: Ellipsis,
+  },
+] as const
 
-const SECTION_META: Record<UsageLogsSectionId, { titleKey: string }> = {
-  common: {
-    titleKey: 'Common Logs',
-  },
-  drawing: {
-    titleKey: 'Drawing Logs',
-  },
-  task: {
-    titleKey: 'Task Logs',
-  },
+function isUsageLogView(value: string): value is UsageLogView {
+  return LOG_VIEWS.some((view) => view.id === value)
 }
 
 function UsageLogsContent() {
-  const { t, i18n } = useTranslation()
-  const isChinese = i18n.resolvedLanguage?.startsWith('zh') ?? false
-  const navigate = useNavigate()
-  const params = route.useParams()
-  const activeCategory: UsageLogsSectionId =
-    params.section && isUsageLogsSectionId(params.section)
-      ? params.section
-      : USAGE_LOGS_DEFAULT_SECTION
+  const { t } = useTranslation()
+  const { section } = route.useParams()
+  const navigate = route.useNavigate()
+  const searchParams = route.useSearch()
+  const activeView: UsageLogView = searchParams.category ?? 'consume'
   const {
     selectedUserId,
     userInfoDialogOpen,
@@ -70,75 +75,85 @@ function UsageLogsContent() {
     affinityDialogOpen,
     setAffinityDialogOpen,
   } = useUsageLogsContext()
-  const tabNavGroups = useMemo<NavGroup[]>(
-    () => [
-      {
-        title: 'Task Logs',
-        items: TASK_LOG_SECTIONS.map((section) => ({
-          title: SECTION_META[section].titleKey,
-          url: `/usage-logs/${section}`,
-        })),
-      },
-    ],
-    []
+  const { canManageScope, viewScope, setViewScope } = useLogsViewScope()
+  const handleViewScopeChange = useCallback(
+    (scope: string) => {
+      if (scope === 'all' || scope === 'self') {
+        setViewScope(scope as LogsViewScope)
+      }
+    },
+    [setViewScope]
   )
-  const filteredTabGroups = useSidebarConfig(tabNavGroups)
-  const visibleSections = useMemo(
-    () =>
-      (filteredTabGroups[0]?.items ?? [])
-        .map((item) => {
-          if (!('url' in item) || typeof item.url !== 'string') return null
-          return item.url.split('/').pop() ?? null
-        })
-        .filter((section): section is UsageLogsSectionId =>
-          Boolean(section && isUsageLogsSectionId(section))
-        ),
-    [filteredTabGroups]
-  )
-
-  const handleSectionChange = useCallback(
-    (section: string) => {
-      void navigate({
+  const handleLogViewChange = useCallback(
+    (value: string) => {
+      if (!isUsageLogView(value) || value === activeView) return
+      navigate({
         to: '/usage-logs/$section',
-        params: { section: section as UsageLogsSectionId },
+        params: { section: 'common' },
+        search: {
+          ...searchParams,
+          category: value,
+          page: 1,
+        },
       })
     },
-    [navigate]
+    [activeView, navigate, searchParams]
   )
-
-  const pageMeta = SECTION_META[activeCategory]
-  const showTaskSwitcher =
-    activeCategory !== 'common' && visibleSections.length > 1
 
   return (
     <>
-      <SectionPageLayout>
-        <SectionPageLayout.Title>
-          {t(pageMeta.titleKey)}
-        </SectionPageLayout.Title>
-        {activeCategory !== 'common' ? (
-          <SectionPageLayout.Description>
-            {t('aurora.logs.tasks.description', {
-              defaultValue: isChinese
-                ? '查看异步任务与绘图请求的执行记录、状态和资源消耗。'
-                : 'Inspect execution history, status and resource usage for asynchronous tasks and drawing requests.',
-            })}
-          </SectionPageLayout.Description>
-        ) : null}
+      <SectionPageLayout fixedContent>
+        <SectionPageLayout.Title>{t('Usage Logs')}</SectionPageLayout.Title>
+        <SectionPageLayout.Description>
+          {t('API usage records')}
+        </SectionPageLayout.Description>
+        {canManageScope && (
+          <SectionPageLayout.Actions>
+            <Tabs value={viewScope} onValueChange={handleViewScopeChange}>
+              <TabsList>
+                <TabsTrigger value='all'>{t('All')}</TabsTrigger>
+                <TabsTrigger value='self'>{t('Only Mine')}</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </SectionPageLayout.Actions>
+        )}
         <SectionPageLayout.Content>
-          <div className='max-w-full min-w-0 space-y-4'>
-            {activeCategory === 'common' && <CommonLogsStats variant='bento' />}
-            {showTaskSwitcher && (
-              <SegmentedTabs
-                value={activeCategory}
-                onValueChange={handleSectionChange}
-                options={visibleSections.map((section) => ({
-                  value: section,
-                  label: t(SECTION_META[section].titleKey),
-                }))}
-              />
+          <div className='flex h-full min-h-0 flex-col gap-4'>
+            {section === 'common' && (
+              <Tabs
+                value={activeView}
+                onValueChange={handleLogViewChange}
+                className='shrink-0'
+              >
+                <TabsList
+                  aria-label={t('Usage Logs')}
+                  className='bg-muted/45 h-10 rounded-xl p-1 group-data-horizontal/tabs:h-10'
+                >
+                  {LOG_VIEWS.map((view) => {
+                    const Icon = view.icon
+                    return (
+                      <TabsTrigger
+                        key={view.id}
+                        value={view.id}
+                        className='data-active:border-foreground h-8 rounded-lg px-3 data-active:shadow-none'
+                      >
+                        <Icon aria-hidden='true' />
+                        {t(view.labelKey)}
+                      </TabsTrigger>
+                    )
+                  })}
+                </TabsList>
+              </Tabs>
             )}
-            <UsageLogsTable logCategory={activeCategory} />
+            <div className='min-h-0 flex-1'>
+              {section === 'common' ? (
+                <UsageLogsTable logView={activeView} />
+              ) : (
+                <TaskLogsTable
+                  category={section === 'drawing' ? 'drawing' : 'task'}
+                />
+              )}
+            </div>
           </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>

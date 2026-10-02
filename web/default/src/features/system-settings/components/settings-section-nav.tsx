@@ -61,7 +61,7 @@ export function SettingsSectionNav({
         data-ui='settings-section-nav'
         className='hidden w-48 shrink-0 lg:block'
       >
-        <div className='obsidian-settings-nav-panel border-border bg-card sticky top-20 rounded border p-2'>
+        <div className='border-border bg-card sticky top-20 rounded border p-2'>
           <a
             href='/system-settings'
             className='text-muted-foreground hover:text-foreground mb-1 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors'

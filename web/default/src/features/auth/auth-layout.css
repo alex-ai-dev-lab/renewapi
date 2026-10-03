@@ -80,10 +80,6 @@ body:has(.snowapi-auth-shell) {
   color: #fff;
 }
 
-.snowapi-auth-shell .snowapi-auth-brand-logo {
-  filter: invert(1);
-}
-
 @keyframes snowapi-auth-content-in {
   from {
     opacity: 0;

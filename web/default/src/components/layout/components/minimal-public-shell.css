@@ -125,10 +125,6 @@ body:has(.snowapi-minimal-public-shell-dark) {
   outline-offset: 0.3rem;
 }
 
-.snowapi-minimal-public-shell-dark .snowapi-minimal-public-brand img {
-  filter: invert(1);
-}
-
 .snowapi-minimal-public-content {
   position: relative;
   min-height: 100svh;

@@ -47,7 +47,7 @@ export function MinimalPublicShell(props: MinimalPublicShellProps) {
           className='snowapi-minimal-public-brand'
           aria-label={systemName}
         >
-          <SnowApiLogoMark className='size-6 dark:invert' />
+          <SnowApiLogoMark className='size-6' />
           {!props.logoOnly && <span>{systemName}</span>}
         </Link>
       </header>

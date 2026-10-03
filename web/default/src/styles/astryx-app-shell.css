@@ -145,11 +145,6 @@ For commercial licensing, please contact support@quantumnous.com
   width: 1.5rem;
   height: 1.5rem;
   object-fit: contain;
-  filter: brightness(0);
-}
-
-.dark .snowapi-astryx-logo-link img {
-  filter: brightness(0) invert(1);
 }
 
 .snowapi-astryx-collapse-button {
@@ -703,7 +698,6 @@ For commercial licensing, please contact support@quantumnous.com
   height: 2.5rem;
   flex-shrink: 0;
   object-fit: contain;
-  filter: brightness(0) invert(1);
 }
 
 .snowapi-upgrade-plan-card {

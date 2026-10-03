@@ -76,11 +76,6 @@ For commercial licensing, please contact support@quantumnous.com
 .snowapi-deeix-wordmark img {
   width: 2.05rem;
   height: 2.05rem;
-  filter: brightness(0);
-}
-
-.dark .snowapi-deeix-wordmark img {
-  filter: brightness(0) invert(1);
 }
 
 .snowapi-deeix-header-actions {

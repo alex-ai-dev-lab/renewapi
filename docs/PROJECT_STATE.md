@@ -2,6 +2,13 @@
 
 更新日期：2026-10-03。源码和验证状态以当前 Git 提交为准，本文不代表生产部署状态。
 
+## v1.1.1 Logo 原色修复
+
+已修复 SnowAPI 的单色滤镜把配置的 JPG Logo 压黑/压白及反色的问题，按原图显示。
+正式版 [v1.1.1](https://github.com/alex-ai-dev-lab/renewapi/releases/tag/renewapi-v1.1.1)，源码 `db8a6949d0111785344bd3311eea61fa5932ecdd`；
+完整 Actions 检查、本地 16 项 Logo 回归和线上 12 项 Logo 检查通过。
+细节见 [Logo 修复部署归档](../tasks/archive/2026-10-logo-color-v1.1.1.md)。
+
 ## SnowAPI 界面替换与 v1.1.0
 
 已按用户要求用 SnowAPI 的 Snowflake 首页、Astryx 导航及模块界面替换旧 UI，
@@ -29,14 +36,14 @@
 
 ## 当前线上部署
 
-2026-10-03 已通过服务器代理下载并热切换至 `renewapi:1.1.0` / `0d83a1f8fbf607eb00f7a3270fc325003d1e88f7`。
-站点 `router.108848.xyz:1443`，容器 `new-api-v1-1-0` healthy，Caddy 上游 3014。
-原 v1.0.0 容器连接归零后停止；会话密钥、环境、数据挂载及 off 计费模式保留。
-隔离迁移核心表/结构指纹不变，最终一轮公网 30 次探测零失败，10 项线上桌面/手机检查通过。
-旧静态资源、镜像及数据库备份保留；证据和回退方式见 [部署归档](../tasks/archive/2026-10-deploy-v1.1.0.md)。
+2026-10-03 通过服务器代理下载并热切换至 `renewapi:1.1.1` / `db8a6949d0111785344bd3311eea61fa5932ecdd`。
+站点 `router.108848.xyz:1443`，容器 `new-api-v1-1-1` healthy，Caddy 上游 3015。
+原 v1.1.0 容器连接归零后停止；会话密钥、环境、数据挂载及 off 计费模式保留。
+隔离迁移核心表/结构指纹不变，本轮公网 28 次探测零失败，线上 12 项 Logo 场景通过。
+旧静态资源、镜像及数据库备份保留；证据和回退见 [部署归档](../tasks/archive/2026-10-logo-color-v1.1.1.md)。
 
 代理为 Caddy 2.11.6，保留 5 分钟流连接重载保护；系统 Ubuntu 24.04.4 LTS。
-历史升级记录见 [Caddy 归档](../tasks/archive/2026-10-caddy-upgrade.md)及 [v1.0.0 部署](../tasks/archive/2026-10-deploy-v1.0.0.md)。
+历史记录见 [Caddy](../tasks/archive/2026-10-caddy-upgrade.md)及 [v1.1.0 部署](../tasks/archive/2026-10-deploy-v1.1.0.md)。
 
 ## 线上产品复核
 
@@ -74,7 +81,7 @@
 
 ## 产品与开发基线
 
-- `VERSION` 及线上正式版本为 `v1.1.0` / `renewapi-v1.1.0`，源码构建继续使用独立预发行身份。生产部署结果按运行镜像修订和服务端验收记录核实。
+- `VERSION` 及线上正式版本为 `v1.1.1` / `renewapi-v1.1.1`，源码构建继续使用独立预发行身份。生产部署结果按运行镜像修订和服务端验收记录核实。
 - 可靠性升级原开发分支：`upgrade/2026-09-reliability`，已合入 `main`；后续直接在主分支维护。
 - 分支基线：`4def3a8848e336532c55e9c3070cc78ead67e378`。
 - 可靠性升级功能及复核修复提交截至 `a2321c2b1dae57a98c4ed18ec3197f97cd76c62d`；本次发布维护的路由修复和构建验证另见上方归档。

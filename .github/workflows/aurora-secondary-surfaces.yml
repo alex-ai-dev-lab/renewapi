@@ -80,6 +80,11 @@ jobs:
         working-directory: web/default
         run: cp ../../.github/aurora-secondary-surfaces.mjs .aurora-secondary-surfaces.mjs
 
+      - name: Verify status text and chart contrast across themes and portals
+        env:
+          CONTRAST_QA_OUT: qa-artifacts/aurora-secondary-surfaces/color-contrast
+        run: node scripts/qa/color-contrast-check.cjs
+
       - name: Run Secondary Surfaces real-browser gate
         working-directory: web/default
         env:

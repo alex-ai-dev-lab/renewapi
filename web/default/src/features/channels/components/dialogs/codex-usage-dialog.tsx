@@ -57,7 +57,11 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Dialog } from '@/components/dialog'
-import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
+import {
+  StatusBadge,
+  textColorMap,
+  type StatusBadgeProps,
+} from '@/components/status-badge'
 import {
   getCodexResetCredits,
   resetCodexUsage,
@@ -398,33 +402,6 @@ function formatLabelValue(label: string, value: string) {
   return label.endsWith('：') ? `${label}${value}` : `${label} ${value}`
 }
 
-const percentTextClassName: Record<
-  NonNullable<StatusBadgeProps['variant']>,
-  string
-> = {
-  success: 'text-success',
-  warning: 'text-warning',
-  danger: 'text-destructive',
-  info: 'text-info',
-  neutral: 'text-muted-foreground',
-  purple: 'text-chart-4',
-  amber: 'text-warning',
-  blue: 'text-chart-1',
-  cyan: 'text-chart-2',
-  green: 'text-success',
-  grey: 'text-muted-foreground',
-  indigo: 'text-chart-1',
-  'light-blue': 'text-info',
-  'light-green': 'text-emerald-500 dark:text-emerald-300',
-  lime: 'text-chart-3',
-  orange: 'text-warning',
-  pink: 'text-chart-5',
-  red: 'text-destructive',
-  teal: 'text-chart-2',
-  violet: 'text-chart-4',
-  yellow: 'text-warning',
-}
-
 type RateLimitWindowProps = {
   title: string
   window?: CodexRateLimitWindow | null
@@ -457,7 +434,7 @@ function RateLimitWindow(props: RateLimitWindowProps) {
             <div
               className={cn(
                 'text-xl leading-none font-semibold tabular-nums',
-                percentTextClassName[variant ?? 'neutral']
+                textColorMap[variant ?? 'neutral']
               )}
             >
               {hasData ? `${percent}%` : '-'}

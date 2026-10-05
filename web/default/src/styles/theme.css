@@ -64,6 +64,16 @@ For commercial licensing, please contact support@quantumnous.com
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  --color-success-text: var(--success-text);
+  --color-warning-text: var(--warning-text);
+  --color-info-text: var(--info-text);
+  --color-destructive-text: var(--destructive-text);
+  --color-tag-blue-text: var(--tag-blue-text);
+  --color-tag-cyan-text: var(--tag-cyan-text);
+  --color-tag-lime-text: var(--tag-lime-text);
+  --color-tag-purple-text: var(--tag-purple-text);
+  --color-tag-pink-text: var(--tag-pink-text);
+  --color-tag-neutral-text: var(--tag-neutral-text);
   --color-neutral: var(--neutral);
   --color-neutral-foreground: var(--neutral-foreground);
   --color-border: var(--border);
@@ -96,6 +106,18 @@ For commercial licensing, please contact support@quantumnous.com
 }
 
 :root {
+  /* Text inks are independent of chart/fill palettes and preset accents.
+   * Keep small labels readable on canvas, cards, popovers and selected rows. */
+  --success-text: #14532d;
+  --warning-text: #713f12;
+  --info-text: #1e3a8a;
+  --destructive-text: #991b1b;
+  --tag-blue-text: #1e3a8a;
+  --tag-cyan-text: #164e63;
+  --tag-lime-text: #365314;
+  --tag-purple-text: #581c87;
+  --tag-pink-text: #831843;
+  --tag-neutral-text: #525252;
   --radius: 1rem;
   --app-header-height: 3rem;
   /* Static build-channel fallback consumed when JS hasn't booted yet. */
@@ -134,9 +156,9 @@ For commercial licensing, please contact support@quantumnous.com
   --ring: oklch(0.55 0 0);
   --chart-1: oklch(0.72 0.18 250);
   --chart-2: oklch(0.65 0.15 200);
-  --chart-3: oklch(0.7 0.12 280);
-  --chart-4: oklch(0.68 0.19 325);
-  --chart-5: oklch(0.68 0.16 155);
+  --chart-3: oklch(0.56 0.12 280);
+  --chart-4: oklch(0.6 0.19 325);
+  --chart-5: oklch(0.61 0.16 155);
   --overview-accent-1: oklch(0.72 0.18 250);
   --overview-accent-2: oklch(0.65 0.15 200);
   --overview-accent-3: oklch(0.7 0.12 280);
@@ -185,6 +207,16 @@ For commercial licensing, please contact support@quantumnous.com
 }
 
 .dark {
+  --success-text: #86efac;
+  --warning-text: #fcd34d;
+  --info-text: #bfdbfe;
+  --destructive-text: #fecaca;
+  --tag-blue-text: #bfdbfe;
+  --tag-cyan-text: #67e8f9;
+  --tag-lime-text: #bef264;
+  --tag-purple-text: #e9d5ff;
+  --tag-pink-text: #fbcfe8;
+  --tag-neutral-text: #d4d4d4;
   /* OpenAI-like dark mode with a crisp charcoal canvas. */
   --background: oklch(0.235 0 0);
   --foreground: oklch(0.965 0 0);

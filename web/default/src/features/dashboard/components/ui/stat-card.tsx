@@ -77,9 +77,9 @@ const ICON_TONE_BY_STAT_TONE: Record<StatCardTone, IconBadgeTone> = {
 const DETAIL_TONE_CLASSES: Record<StatCardDetailTone, string> = {
   default: 'text-foreground',
   muted: 'text-muted-foreground',
-  success: 'text-success',
-  warning: 'text-warning',
-  destructive: 'text-destructive',
+  success: 'text-success-text',
+  warning: 'text-warning-text',
+  destructive: 'text-destructive-text',
 }
 
 interface SparklineBucket {

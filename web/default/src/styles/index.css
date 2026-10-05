@@ -889,9 +889,9 @@ body[data-snowapi-console='true'] {
   --destructive: #111111;
   --chart-1: #111111;
   --chart-2: #444444;
-  --chart-3: #717171;
-  --chart-4: #9d9d9d;
-  --chart-5: #c8c8c8;
+  --chart-3: #606060;
+  --chart-4: #717171;
+  --chart-5: #808080;
   --sidebar: #fafaf9;
   --sidebar-foreground: #111111;
   --sidebar-primary: #111111;
@@ -955,8 +955,8 @@ body[data-snowapi-console='true'] {
   --chart-1: #f4f4f2;
   --chart-2: #c8c8c4;
   --chart-3: #969693;
-  --chart-4: #696967;
-  --chart-5: #414140;
+  --chart-4: #858583;
+  --chart-5: #7b7b78;
   --sidebar: #111111;
   --sidebar-foreground: #f4f4f2;
   --sidebar-primary: #f4f4f2;
@@ -1529,6 +1529,10 @@ body[data-snowapi-console='true']
   :is([data-slot='badge'], [data-slot='status-badge']) {
   transform: none !important;
   box-shadow: none !important;
+}
+
+/* StatusBadge owns its text ink, identically inside content and portals. */
+body[data-snowapi-console='true'] .snowapi-astryx-content [data-slot='badge'] {
   color: var(--foreground) !important;
 }
 
@@ -1537,13 +1541,6 @@ body[data-snowapi-console='true']
   [data-slot='badge'][data-variant='default'] {
   background-color: var(--primary);
   color: var(--primary-foreground) !important;
-}
-
-body[data-snowapi-console='true']
-  .snowapi-astryx-content
-  [data-slot='status-badge']
-  > span[aria-hidden='true'] {
-  background: var(--foreground) !important;
 }
 
 body[data-snowapi-console='true']
@@ -1577,13 +1574,6 @@ body[data-snowapi-console='true']
   + div {
   border: 0;
   background: transparent;
-}
-
-body[data-snowapi-console='true']
-  .snowapi-rainflow-panel
-  [data-slot='avatar-fallback'] {
-  background: var(--foreground) !important;
-  color: var(--background) !important;
 }
 
 body[data-snowapi-console='true']

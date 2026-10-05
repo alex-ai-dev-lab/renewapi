@@ -174,7 +174,7 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
       <span
         className={cn(
           'inline-flex items-center gap-1 font-medium',
-          props.isStream ? 'text-info' : 'text-muted-foreground'
+          props.isStream ? 'text-info-text' : 'text-muted-foreground'
         )}
       >
         {streamLabel}
@@ -182,7 +182,9 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger
-                render={<CircleAlert className='text-destructive size-3' />}
+                render={
+                  <CircleAlert className='text-destructive-text size-3' />
+                }
               />
               <TooltipContent>
                 <div className='space-y-0.5 text-xs'>

@@ -49,7 +49,7 @@ export function PromptSelector(props: {
         </SelectContent>
       </Select>
       {prompts.isError && (
-        <p className='text-destructive text-sm'>
+        <p className='text-destructive-text text-sm'>
           {t('Failed to load test prompts')}
         </p>
       )}

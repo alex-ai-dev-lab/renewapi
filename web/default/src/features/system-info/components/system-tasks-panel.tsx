@@ -138,7 +138,7 @@ function SystemTasksTable(props: SystemTasksTableProps) {
                     <div className='font-medium'>
                       {t(TYPE_LABEL[task.type] ?? task.type)}
                     </div>
-                    <div className='text-muted-foreground font-mono text-[11px]'>
+                    <div className='text-muted-foreground font-mono text-xs'>
                       {TYPE_DISPLAY_ID[task.type] ?? task.type}
                     </div>
                   </div>
@@ -186,7 +186,7 @@ function SystemTasksTable(props: SystemTasksTableProps) {
                   )}
                 </TableCell>
                 <TableCell
-                  className='text-destructive max-w-[220px] truncate py-3 pr-4 align-middle text-xs'
+                  className='text-destructive-text max-w-[220px] truncate py-3 pr-4 align-middle text-xs'
                   title={task.error || undefined}
                 >
                   {task.error || '-'}

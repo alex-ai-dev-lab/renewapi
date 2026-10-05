@@ -20,12 +20,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Clock, Cloud, RefreshCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { StatusBadge } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
-import {
-  getOfficialPriceSyncStatus,
-  triggerOfficialPriceSync,
-} from '../api'
+import { StatusBadge } from '@/components/status-badge'
+import { getOfficialPriceSyncStatus, triggerOfficialPriceSync } from '../api'
 
 function formatLastRun(timestamp?: number): string {
   if (!timestamp) return 'Never'
@@ -78,7 +75,7 @@ export function OfficialPriceSyncPanel() {
   const sourceUrl = status?.source_url || 'https://models.dev/api.json'
 
   return (
-    <div className='rounded-lg border bg-background p-4'>
+    <div className='bg-background rounded-lg border p-4'>
       <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
         <div className='space-y-3'>
           <div className='flex flex-wrap items-center gap-2'>
@@ -117,7 +114,9 @@ export function OfficialPriceSyncPanel() {
             <span className='font-mono text-xs'>{sourceUrl}</span>
           </div>
           {status?.last_error && (
-            <div className='text-destructive text-sm'>{status.last_error}</div>
+            <div className='text-destructive-text text-sm'>
+              {status.last_error}
+            </div>
           )}
         </div>
         <Button

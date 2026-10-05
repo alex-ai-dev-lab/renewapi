@@ -121,7 +121,7 @@ export function DataTableRowActions<TData>({
             setCurrentRow(redemption)
             setOpen('delete')
           }}
-          className='text-destructive focus:text-destructive'
+          className='text-destructive-text focus:text-destructive-text'
         >
           {t('Delete')}
           <DropdownMenuShortcut>

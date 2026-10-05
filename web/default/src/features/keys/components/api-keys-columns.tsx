@@ -286,7 +286,7 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
             now={now}
             locale={locale}
             justNowLabel={justNowLabel}
-            className={isStale ? 'text-warning' : 'text-muted-foreground'}
+            className={isStale ? 'text-warning-text' : 'text-muted-foreground'}
           />
         )
       },
@@ -316,7 +316,7 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
             locale={locale}
             justNowLabel={justNowLabel}
             className={cn(
-              isExpired ? 'text-destructive' : 'text-muted-foreground'
+              isExpired ? 'text-destructive-text' : 'text-muted-foreground'
             )}
           />
         )

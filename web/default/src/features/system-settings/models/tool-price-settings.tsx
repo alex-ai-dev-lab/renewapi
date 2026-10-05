@@ -318,7 +318,7 @@ export const ToolPriceSettings = memo(function ToolPriceSettings({
                         onClick={() => removeRow(row.id)}
                         aria-label={t('Delete')}
                       >
-                        <Trash2 className='text-destructive h-4 w-4' />
+                        <Trash2 className='text-destructive-text h-4 w-4' />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -336,7 +336,9 @@ export const ToolPriceSettings = memo(function ToolPriceSettings({
             rows={12}
             spellCheck={false}
           />
-          {jsonError && <p className='text-destructive text-sm'>{jsonError}</p>}
+          {jsonError && (
+            <p className='text-destructive-text text-sm'>{jsonError}</p>
+          )}
         </div>
       )}
 

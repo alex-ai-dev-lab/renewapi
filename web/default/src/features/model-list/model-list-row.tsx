@@ -34,14 +34,14 @@ function PriceCell(props: {
 
   return (
     <div className='min-w-0'>
-      <span className='text-muted-foreground mb-1 block text-[10px] lg:sr-only'>
+      <span className='text-muted-foreground mb-1 block text-xs lg:sr-only'>
         {props.label}
       </span>
       <div className='font-mono text-sm font-semibold tabular-nums'>
         {props.price ?? t('No data')}
       </div>
       {props.price ? (
-        <div className='text-muted-foreground mt-0.5 text-[10px]'>
+        <div className='text-muted-foreground mt-0.5 text-xs'>
           {props.priceUnit}
         </div>
       ) : null}
@@ -101,7 +101,7 @@ export function ModelListRow(props: {
             </code>
             <span
               className={cn(
-                'inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[10px] leading-none font-medium whitespace-nowrap',
+                'inline-flex h-5 shrink-0 items-center rounded-full px-2 text-xs leading-none font-medium whitespace-nowrap',
                 accessClassName
               )}
             >
@@ -118,7 +118,7 @@ export function ModelListRow(props: {
 
         <div className='relative col-span-2 grid grid-cols-2 gap-3 lg:contents'>
           <div className='col-span-2 min-w-0 lg:col-span-1'>
-            <span className='text-muted-foreground mb-1 block text-[10px] lg:sr-only'>
+            <span className='text-muted-foreground mb-1 block text-xs lg:sr-only'>
               {t('Provider')}
             </span>
             <ModelProvider model={props.model} />
@@ -136,7 +136,7 @@ export function ModelListRow(props: {
           />
 
           <div className='col-span-2 min-w-0 lg:col-span-1'>
-            <span className='text-muted-foreground mb-0.5 block w-full text-[10px] lg:sr-only'>
+            <span className='text-muted-foreground mb-0.5 block w-full text-xs lg:sr-only'>
               {t('Health')}
             </span>
             <ModelHealthBar

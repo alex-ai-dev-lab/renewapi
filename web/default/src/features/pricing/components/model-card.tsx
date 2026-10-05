@@ -118,7 +118,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
                     <span className='text-chart-1'>
                       {t('Special billing expression')}
                     </span>
-                    <code className='text-muted-foreground mt-0.5 line-clamp-1 block font-mono text-[11px] break-all'>
+                    <code className='text-muted-foreground mt-0.5 line-clamp-1 block font-mono text-xs break-all'>
                       {dynamicSummary.rawExpression}
                     </code>
                   </span>

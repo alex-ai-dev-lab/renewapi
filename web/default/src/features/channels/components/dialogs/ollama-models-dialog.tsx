@@ -556,7 +556,7 @@ export function OllamaModelsDialog({
                           <Button
                             variant='ghost'
                             size='sm'
-                            className='text-destructive hover:text-destructive'
+                            className='text-destructive-text hover:text-destructive-text'
                             onClick={() => {
                               setDeleteTarget(m.id)
                               setDeleteOpen(true)

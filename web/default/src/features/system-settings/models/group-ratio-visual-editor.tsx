@@ -771,6 +771,8 @@ function GroupPricingTable({
       groupRatio,
       userUsableGroups
     )
+    // Incoming controlled pricing props must reconcile with the guarded local draft.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRows((currentRows) => {
       if (groupPricingSignature(currentRows) === incomingSignature) {
         return currentRows
@@ -959,7 +961,7 @@ function GroupPricingTable({
           </div>
 
           {duplicateNames.length > 0 && (
-            <p className='text-destructive text-sm'>
+            <p className='text-destructive-text text-sm'>
               {t('Duplicate group names: {{names}}', {
                 names: duplicateNames.join(', '),
               })}
@@ -995,6 +997,8 @@ function SimpleGroupDialog({
 
   useEffect(() => {
     if (!open) {
+      // Reset the dialog draft when its externally controlled open prop closes.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setName('')
       setValue('')
       return
@@ -1083,6 +1087,8 @@ function GroupOverrideDialog({
 
   useEffect(() => {
     if (!open) {
+      // Reset the dialog draft when its externally controlled open prop closes.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTargetGroup('')
       setRatio('')
       return

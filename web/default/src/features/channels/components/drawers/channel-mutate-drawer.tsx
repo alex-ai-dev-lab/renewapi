@@ -524,7 +524,7 @@ function ChannelEditorNav(props: {
                     'hover:bg-muted/60 flex w-full items-start gap-2 rounded-md px-2 py-2 text-left transition-colors',
                     isActive && 'bg-muted/70',
                     isConfigured && !isError && 'text-primary',
-                    isError && 'text-destructive hover:bg-destructive/10'
+                    isError && 'text-destructive-text hover:bg-destructive/10'
                   )}
                   onClick={() => props.onNavigate(item.id)}
                   aria-current={isActive ? 'true' : undefined}
@@ -533,7 +533,7 @@ function ChannelEditorNav(props: {
                     className={cn(
                       'bg-muted text-muted-foreground mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md',
                       isConfigured && !isError && 'bg-primary/10 text-primary',
-                      isError && 'bg-destructive/10 text-destructive',
+                      isError && 'bg-destructive/10 text-destructive-text',
                       isDone && !isError && 'text-primary'
                     )}
                   >
@@ -552,7 +552,7 @@ function ChannelEditorNav(props: {
                   <span
                     className={cn(
                       'text-muted-foreground mt-1 shrink-0',
-                      isError && 'text-destructive',
+                      isError && 'text-destructive-text',
                       isDone && !isError && 'text-primary',
                       isConfigured && !isError && 'pt-1.5'
                     )}
@@ -2938,7 +2938,7 @@ export function ChannelMutateDrawer({
                                           'Enter new key to update, or leave empty to keep current key'
                                         )}
                                         {isMultiKeyChannel && (
-                                          <span className='text-warning mt-1 block'>
+                                          <span className='text-warning-text mt-1 block'>
                                             {keyModeDescription}
                                           </span>
                                         )}
@@ -3186,7 +3186,7 @@ export function ChannelMutateDrawer({
                                         </Select>
                                         <FormDescription>
                                           {multiKeyType === 'polling' ? (
-                                            <span className='text-warning'>
+                                            <span className='text-warning-text'>
                                               {t(
                                                 'Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded'
                                               )}
@@ -3457,7 +3457,7 @@ export function ChannelMutateDrawer({
                                                 )
                                               )}
                                               {remainingMappingCount > 0 && (
-                                                <div className='text-[11px] opacity-70'>
+                                                <div className='text-xs opacity-70'>
                                                   +{remainingMappingCount}{' '}
                                                   {t('more mapping')}
                                                   {remainingMappingCount > 1
@@ -3466,7 +3466,7 @@ export function ChannelMutateDrawer({
                                                 </div>
                                               )}
                                             </div>
-                                            <p className='text-[11px] leading-relaxed opacity-80'>
+                                            <p className='text-xs leading-relaxed opacity-80'>
                                               {t(
                                                 'Users call the model on the left. The platform forwards the request to the upstream model on the right.'
                                               )}

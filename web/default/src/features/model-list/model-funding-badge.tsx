@@ -32,7 +32,7 @@ export function ModelFundingBadge(props: {
     <Badge
       variant={subscription ? 'secondary' : 'outline'}
       data-model-funding={props.source}
-      className='text-[10px]'
+      className='text-xs'
     >
       {subscription ? t('Subscription only') : t('Balance only')}
     </Badge>

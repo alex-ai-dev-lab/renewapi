@@ -129,12 +129,12 @@ function MobileLogTimeStatus({
 
   return (
     <div className='flex min-w-0 items-center gap-2'>
-      <div className='shrink-0 font-mono text-[11px] leading-none tabular-nums'>
+      <div className='shrink-0 font-mono text-xs leading-none tabular-nums'>
         {formatTimestampToDate(timestamp)}
       </div>
       <div
         className={cn(
-          'inline-flex min-w-0 items-center gap-1 text-[11px] leading-none font-medium',
+          'inline-flex min-w-0 items-center gap-1 text-xs leading-none font-medium',
           textColorMap[variant]
         )}
       >
@@ -181,7 +181,7 @@ function MobileTokensField({ log }: { log: UsageLog }) {
           {promptTokens.toLocaleString()} / {completionTokens.toLocaleString()}
         </span>
         {showCache && (
-          <div className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] leading-none'>
+          <div className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs leading-none'>
             {cacheReadTokens > 0 && (
               <span>
                 {t('Cache Read')} {cacheReadTokens.toLocaleString()}
@@ -216,7 +216,7 @@ function MobileUserField({ log }: { log: UsageLog }) {
         setUserInfoDialogOpen(true)
       }}
     >
-      <span className='min-w-0 truncate text-[11px]'>
+      <span className='min-w-0 truncate text-xs'>
         {sensitiveVisible ? log.username : '••••'}
       </span>
     </button>

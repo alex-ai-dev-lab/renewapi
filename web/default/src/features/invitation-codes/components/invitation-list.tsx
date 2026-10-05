@@ -212,7 +212,7 @@ export function InvitationList() {
             </div>
           ) : null}
           {!invitationQuery.isLoading && invitationQuery.isError ? (
-            <div className='border-destructive/30 text-destructive rounded-xl border p-6 text-sm'>
+            <div className='border-destructive/30 text-destructive-text rounded-xl border p-6 text-sm'>
               {invitationQuery.error.message}
             </div>
           ) : null}

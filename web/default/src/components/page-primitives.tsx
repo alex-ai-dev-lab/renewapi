@@ -242,7 +242,7 @@ export function StatCard({
               variant={isDown ? 'destructive' : 'outline'}
               className={cn(
                 'rounded-lg text-xs',
-                !isDown && 'border-success/25 text-success'
+                !isDown && 'border-success/25 text-success-text'
               )}
             >
               <TrendIcon className='size-3' />

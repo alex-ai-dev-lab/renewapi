@@ -31,7 +31,7 @@ provider adapter pipeline under `relay/`. Shared concerns live in
 - `service/requestguard/`: request admission and audit persistence.
 - `scripts/`: upstream audit, build, release, deploy, rollback, and secret
   loading helpers.
-- `web/default/` and `web/classic/`: the primary and compatibility frontend
+- `web/default/`: the application frontend
   bundles embedded by the Docker build.
 
 ## Version and build metadata

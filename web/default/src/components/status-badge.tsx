@@ -18,7 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 /* eslint-disable react-refresh/only-export-components */
 import * as React from 'react'
-import type { LucideIcon } from 'lucide-react'
+import {
+  CircleCheck,
+  TriangleAlert,
+  CircleAlert,
+  Info,
+  type LucideIcon,
+} from 'lucide-react'
 import { stringToColor } from '@/lib/colors'
 import { cn } from '@/lib/utils'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
@@ -72,6 +78,13 @@ export const textColorMap = {
 } as const
 
 export type StatusVariant = keyof typeof dotColorMap
+
+const semanticIcons: Partial<Record<StatusVariant, LucideIcon>> = {
+  success: CircleCheck,
+  warning: TriangleAlert,
+  danger: CircleAlert,
+  info: Info,
+}
 
 /** Controls the visual style of the badge.
  * - `badge`    — default pill with background and padding (default)
@@ -139,6 +152,8 @@ export function StatusBadge({
   const computedVariant: StatusVariant = autoColor
     ? (stringToColor(autoColor) as StatusVariant)
     : (variant ?? 'neutral')
+  const StatusIcon =
+    Icon ?? (showDot ? undefined : semanticIcons[computedVariant])
 
   const handleClick = (e: React.MouseEvent<HTMLSpanElement>) => {
     if (copyable) {
@@ -189,7 +204,9 @@ export function StatusBadge({
           aria-hidden='true'
         />
       )}
-      {Icon && <Icon className='size-3.5 shrink-0' />}
+      {StatusIcon && (
+        <StatusIcon aria-hidden='true' className='size-3.5 shrink-0' />
+      )}
       {content}
     </span>
   )

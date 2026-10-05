@@ -78,8 +78,8 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
               aria-label={toggleLabel}
               className={
                 isEnabled
-                  ? 'text-destructive hover:text-destructive'
-                  : 'text-success hover:text-success'
+                  ? 'text-destructive-text hover:text-destructive-text'
+                  : 'text-success-text hover:text-success-text'
               }
             />
           }

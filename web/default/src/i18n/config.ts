@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import i18n from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
+import { bindDocumentLanguage } from './document-language'
 import { convertDetectedLanguage } from './languages'
 import en from './locales/en.json'
 import fr from './locales/fr.json'
@@ -37,6 +38,10 @@ export const resources = {
   vi,
   zhTW,
 } as const
+
+if (typeof document !== 'undefined') {
+  bindDocumentLanguage(i18n, document.documentElement)
+}
 
 i18n
   .use(LanguageDetector)

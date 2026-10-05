@@ -233,7 +233,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
 
         <DropdownMenuItem
           onClick={handleDelete}
-          className='text-destructive focus:text-destructive'
+          className='text-destructive-text focus:text-destructive-text'
           disabled={isRoot}
         >
           {t('Delete')}

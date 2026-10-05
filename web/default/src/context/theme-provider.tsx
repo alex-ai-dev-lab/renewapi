@@ -25,6 +25,7 @@ import {
   useState,
 } from 'react'
 import { getCookie, setCookie, removeCookie } from '@/lib/cookies'
+import { useBrowserThemeColor } from '@/hooks/use-browser-theme-color'
 
 type Theme = 'dark' | 'light' | 'system'
 type ResolvedTheme = Exclude<Theme, 'system'>
@@ -80,6 +81,7 @@ export function ThemeProvider({
   storageKey = THEME_COOKIE_NAME,
   ...props
 }: ThemeProviderProps) {
+  useBrowserThemeColor()
   const [theme, _setTheme] = useState<Theme>(() =>
     getStoredTheme(storageKey, defaultTheme)
   )

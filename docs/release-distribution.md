@@ -32,7 +32,7 @@ sha256sum --ignore-missing -c CHECKSUMS.txt && docker load -i "$IMAGE_ARCHIVE"
 ## 检查与发布入口
 
 [build-release.yml](../.github/workflows/build-release.yml) 是唯一发布入口。
-它运行 Go 测试、竞态检查、vet/build、默认前端测试与类型检查、双前端构建、
+它运行 Go 测试、竞态检查、vet/build、默认前端测试与类型检查、默认前端构建、
 MySQL 5.7/8.4、PostgreSQL 9.6/16 和两组实际浏览器检查。
 全部通过后，在两个原生架构 runner 构建镜像并验证镜像身份及数据库迁移。
 附件先上传草稿，重新下载并通过 SHA256 校验后才公开。

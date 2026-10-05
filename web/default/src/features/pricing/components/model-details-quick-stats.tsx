@@ -127,7 +127,7 @@ export function ModelDetailsQuickStats(props: QuickStatsProps) {
               'bg-background flex min-w-0 flex-col gap-0.5 px-3 py-2.5'
             )}
           >
-            <span className='text-muted-foreground inline-flex min-w-0 items-center gap-1 text-[10px] font-medium tracking-wider uppercase'>
+            <span className='text-muted-foreground inline-flex min-w-0 items-center gap-1 text-xs font-medium tracking-wider uppercase'>
               <Icon className='size-3 shrink-0' />
               <span className='truncate'>{stat.label}</span>
             </span>
@@ -135,7 +135,7 @@ export function ModelDetailsQuickStats(props: QuickStatsProps) {
               {stat.value}
             </span>
             {stat.hint && (
-              <span className='text-muted-foreground/60 truncate text-[10px]'>
+              <span className='text-muted-foreground/60 truncate text-xs'>
                 {stat.hint}
               </span>
             )}

@@ -26,7 +26,7 @@ Actions 工作流在各自架构的 runner 构建并发布到 Releases；本地�
 
 ## 构建内容
 
-- `frontend-default-builder` 和 `frontend-classic-builder` 分别构建两套前端。
+- `frontend-default-builder` 构建唯一的默认前端；classic 已退役，不再安装或打包。
 - `backend-builder` 将前端产物嵌入 Go 程序，运行镜像中的程序路径为 `/app/new-api`。
 - `runtime` 使用 Alpine，包含 CA 证书、健康检查工具和许可证；入口脚本按
   `PUID` / `PGID` 处理数据目录后，以对应用户运行程序。

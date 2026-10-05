@@ -5,8 +5,8 @@ node_modules/
 web/node_modules/
 web/default/node_modules/
 web/default/dist/
-web/classic/node_modules/
-web/classic/dist/
+# Exclude leftover generated files in older checkouts after classic retirement.
+web/classic/
 data/
 logs/
 upload/

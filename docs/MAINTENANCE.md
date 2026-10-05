@@ -41,7 +41,7 @@ bash scripts/check-upstream.sh
 基线取自 `UPSTREAM_PORTS.md` 的 `Audited-Upstream-Ref`。
 现有 `sync-upstream.sh --port` / `sync-upstream.ps1 -Mode port` 仍保留为手动
 审计入口；它们不会自动移植代码。当前规则禁止直接合并或变基上游历史。
-选取行为后小步移植、补充验证并登记台账；发布前构建两套前端。
+选取行为后小步移植、补充验证并登记台账；发布前构建默认前端。
 
 ## Version and release policy
 

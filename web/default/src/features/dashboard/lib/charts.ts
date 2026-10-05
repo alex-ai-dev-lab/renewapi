@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { CHART_COLORS, getChartColor } from '@/lib/colors'
+import { CHART_COLORS, getChartColor, getSeriesAppearance } from '@/lib/colors'
 import { getCurrencyDisplay } from '@/lib/currency'
 import { formatChartTime, type TimeGranularity } from '@/lib/time'
 import { MAX_CHART_TREND_POINTS } from '@/features/dashboard/constants'
@@ -351,6 +351,7 @@ export function processChartData(
     rankedQuotaModels.slice(0, MAX_AREA_MODELS).map((m) => m.Model)
   )
 
+  const modelStyleOrder = [...sortedModels, otherLabel]
   const areaValues: typeof lineValues = []
   chartTimes.forEach((time) => {
     const buckets = new Map<string, { rawQuota: number; usage: number }>()
@@ -561,11 +562,22 @@ export function processChartData(
       },
       line: {
         style: {
+          lineDash: (datum: Record<string, unknown>) =>
+            getSeriesAppearance(modelStyleOrder.indexOf(String(datum.Model)))
+              .lineDash,
           lineWidth: 2,
           curveType: 'monotone',
         },
       },
-      point: { visible: false },
+      point: {
+        visible: true,
+        style: {
+          size: 5,
+          symbolType: (datum: Record<string, unknown>) =>
+            getSeriesAppearance(modelStyleOrder.indexOf(String(datum.Model)))
+              .symbolType,
+        },
+      },
       background: { fill: 'transparent' },
       animation: true,
     },
@@ -639,11 +651,22 @@ export function processChartData(
       },
       line: {
         style: {
+          lineDash: (datum: Record<string, unknown>) =>
+            getSeriesAppearance(modelStyleOrder.indexOf(String(datum.Model)))
+              .lineDash,
           lineWidth: 2,
           curveType: 'monotone',
         },
       },
-      point: { visible: false },
+      point: {
+        visible: true,
+        style: {
+          size: 5,
+          symbolType: (datum: Record<string, unknown>) =>
+            getSeriesAppearance(modelStyleOrder.indexOf(String(datum.Model)))
+              .symbolType,
+        },
+      },
       background: { fill: 'transparent' },
       animation: true,
     },
@@ -923,11 +946,21 @@ export function processUserChartData(
       },
       line: {
         style: {
+          lineDash: (datum: Record<string, unknown>) =>
+            getSeriesAppearance(topUsers.indexOf(String(datum.User))).lineDash,
           lineWidth: 2,
           curveType: 'monotone',
         },
       },
-      point: { visible: false },
+      point: {
+        visible: true,
+        style: {
+          size: 5,
+          symbolType: (datum: Record<string, unknown>) =>
+            getSeriesAppearance(topUsers.indexOf(String(datum.User)))
+              .symbolType,
+        },
+      },
       color: { specified: userColorMap },
       background: { fill: 'transparent' },
       animation: true,

@@ -26,7 +26,7 @@ html[data-site-design='poolside'] {
   --site-inset: #efeee7;
   --site-muted: #6f6d69;
   --site-rule: #e4e1d7;
-  --site-emphasis: #d4d0c4;
+  --site-emphasis: #737168;
   background: var(--site-paper);
 }
 html.dark[data-site-design='poolside'] {
@@ -36,7 +36,7 @@ html.dark[data-site-design='poolside'] {
   --site-inset: #292822;
   --site-muted: #aaa79e;
   --site-rule: #37362f;
-  --site-emphasis: #4a483e;
+  --site-emphasis: #aaa79e;
 }
 html[data-site-design='poolside'] body,
 html[data-site-design='poolside'] body[data-snowapi-console='true'],

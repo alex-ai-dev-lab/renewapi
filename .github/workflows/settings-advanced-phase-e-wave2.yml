@@ -40,15 +40,6 @@ jobs:
           bun run typecheck
           bun run build
 
-      - name: Build classic frontend
-        working-directory: web/classic
-        run: |
-          if ! bun install --frozen-lockfile; then
-            bun pm cache rm
-            bun install --frozen-lockfile
-          fi
-          bun run build
-
       - name: Build real RenewAPI binary
         run: go build -o "$RUNNER_TEMP/renewapi-settings-phase-e-wave2" .
 

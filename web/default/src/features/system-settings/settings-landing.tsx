@@ -283,7 +283,7 @@ export function SettingsLanding() {
 
           <div>
             <div className='mb-3 flex items-center gap-3'>
-              <h2 className='text-muted-foreground text-[11px] font-bold tracking-[0.14em] uppercase'>
+              <h2 className='text-muted-foreground text-xs font-bold tracking-[0.14em] uppercase'>
                 {t('aurora.settings.quickControls', {
                   defaultValue: isChinese ? '常用控制' : 'Quick controls',
                 })}
@@ -328,7 +328,7 @@ export function SettingsLanding() {
                   </h2>
                   <a
                     href='#all-settings'
-                    className='text-muted-foreground hover:text-foreground text-[11px] font-semibold transition-colors'
+                    className='text-muted-foreground hover:text-foreground text-xs font-semibold transition-colors'
                   >
                     {t('aurora.settings.allSettings', {
                       defaultValue: isChinese ? '完整设置 →' : 'All settings →',
@@ -442,13 +442,13 @@ export function SettingsLanding() {
 
           <div id='all-settings' className='scroll-mt-24'>
             <div className='mb-3 flex items-center gap-3'>
-              <h2 className='text-muted-foreground text-[11px] font-bold tracking-[0.14em] uppercase'>
+              <h2 className='text-muted-foreground text-xs font-bold tracking-[0.14em] uppercase'>
                 {t('aurora.settings.allSettingsTitle', {
                   defaultValue: isChinese ? '全部设置' : 'All settings',
                 })}
               </h2>
               <div className='bg-border/60 h-px flex-1' />
-              <span className='text-muted-foreground text-[11px] font-semibold tabular-nums'>
+              <span className='text-muted-foreground text-xs font-semibold tabular-nums'>
                 {t('aurora.settings.sectionCount', {
                   defaultValue: isChinese
                     ? '{{count}} 项'
@@ -494,7 +494,7 @@ function SettingsTogglePanel(props: {
         <h2 className='text-[13px] font-semibold'>{props.title}</h2>
         <a
           href={props.detailHref}
-          className='text-muted-foreground hover:text-foreground text-[10px] font-semibold transition-colors'
+          className='text-muted-foreground hover:text-foreground text-xs font-semibold transition-colors'
         >
           {props.detailLabel}
         </a>

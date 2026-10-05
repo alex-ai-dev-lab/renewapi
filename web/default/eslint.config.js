@@ -5,6 +5,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig } from 'eslint/config'
 import tseslint from 'typescript-eslint'
+import semanticTextRule from './scripts/eslint/semantic-text-colors.mjs'
 
 export default defineConfig(
   { ignores: ['dist', 'src/components/ui'] },
@@ -21,10 +22,12 @@ export default defineConfig(
     },
     plugins: {
       'react-hooks': reactHooks,
+      renewapi: { rules: { 'semantic-text-colors': semanticTextRule } },
       'react-refresh': reactRefresh,
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      'renewapi/semantic-text-colors': 'error',
       'react-hooks/incompatible-library': 'off',
       'react-refresh/only-export-components': [
         'warn',

@@ -19,9 +19,9 @@ For commercial licensing, please contact support@quantumnous.com
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
+import type { TFunction } from 'i18next'
 import { ArrowLeft, Code2, HeartPulse, Info, Timer } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -194,14 +194,14 @@ function OverviewMetric(props: {
     <div className='flex min-w-0 items-center gap-2 px-3 py-2'>
       <Icon className='text-muted-foreground/70 size-3.5 shrink-0' />
       <div className='min-w-0 flex-1'>
-        <div className='text-muted-foreground truncate text-[10px] font-medium tracking-wider uppercase'>
+        <div className='text-muted-foreground truncate text-xs font-medium tracking-wider uppercase'>
           {props.label}
         </div>
         <div
           className={cn(
             'text-foreground truncate font-mono text-sm font-semibold tabular-nums',
-            intent === 'warning' && 'text-warning',
-            intent === 'success' && 'text-success'
+            intent === 'warning' && 'text-warning-text',
+            intent === 'success' && 'text-success-text'
           )}
         >
           {props.value}
@@ -319,7 +319,7 @@ function ModelHeader(props: { model: PricingModel }) {
         {model.billing_mode === 'tiered_expr' && model.billing_expr && (
           <>
             <span className='text-muted-foreground/30'>·</span>
-            <span className='bg-chart-1/10 text-chart-1 rounded px-1.5 py-0.5 text-[10px] font-medium'>
+            <span className='bg-chart-1/10 text-chart-1 rounded px-1.5 py-0.5 text-xs font-medium'>
               {isSpecialExpression
                 ? t('Special billing expression')
                 : t('Dynamic Pricing')}
@@ -337,7 +337,7 @@ function ModelHeader(props: { model: PricingModel }) {
           {tags.map((tag) => (
             <span
               key={tag}
-              className='bg-muted text-muted-foreground rounded px-2 py-0.5 text-[11px] font-medium'
+              className='bg-muted text-muted-foreground rounded px-2 py-0.5 text-xs font-medium'
             >
               {tag}
             </span>
@@ -415,7 +415,7 @@ function PriceSection(props: {
       return (
         <section>
           <SectionTitle>{t('Base Price')}</SectionTitle>
-          <div className='bg-chart-1/10 rounded-lg border border-border p-3'>
+          <div className='bg-chart-1/10 border-border rounded-lg border p-3'>
             <div className='text-chart-1 text-sm font-medium'>
               {t('Special billing expression')}
             </div>
@@ -423,7 +423,7 @@ function PriceSection(props: {
               {t('Unable to parse structured pricing')}
             </p>
             <div className='mt-3'>
-              <div className='text-muted-foreground mb-1 text-[10px] font-medium tracking-wider uppercase'>
+              <div className='text-muted-foreground mb-1 text-xs font-medium tracking-wider uppercase'>
                 {t('Raw expression')}
               </div>
               <code className='text-muted-foreground bg-background/80 block max-h-28 overflow-auto rounded-md border px-2 py-1.5 font-mono text-xs break-all'>
@@ -655,7 +655,7 @@ function GroupPricingSection(props: {
   }
 
   const thClass =
-    'text-muted-foreground py-2 text-[10px] font-medium tracking-wider uppercase'
+    'text-muted-foreground py-2 text-xs font-medium tracking-wider uppercase'
 
   if (isDynamicPricingModel(props.model)) {
     const dynamicTiers = getDynamicPricingTiers(props.model)
@@ -665,7 +665,7 @@ function GroupPricingSection(props: {
         <section>
           <SectionTitle>{t('Pricing by Group')}</SectionTitle>
           <AutoGroupChain model={props.model} autoGroups={props.autoGroups} />
-          <div className='bg-chart-1/10 rounded-lg border border-border p-3'>
+          <div className='bg-chart-1/10 border-border rounded-lg border p-3'>
             <div className='text-chart-1 text-sm font-medium'>
               {t('Special billing expression')}
             </div>
@@ -675,7 +675,7 @@ function GroupPricingSection(props: {
               )}
             </p>
             <div className='mt-3'>
-              <div className='text-muted-foreground mb-1 text-[10px] font-medium tracking-wider uppercase'>
+              <div className='text-muted-foreground mb-1 text-xs font-medium tracking-wider uppercase'>
                 {t('Raw expression')}
               </div>
               <code className='text-muted-foreground bg-background/80 block max-h-28 overflow-auto rounded-md border px-2 py-1.5 font-mono text-xs break-all'>
@@ -771,7 +771,7 @@ function GroupPricingSection(props: {
               </div>
             )
           })}
-          <p className='text-muted-foreground/40 mt-1.5 text-[10px]'>
+          <p className='text-muted-foreground/40 mt-1.5 text-xs'>
             {t('Prices shown per')} {tokenUnitLabel} tokens
           </p>
         </div>
@@ -886,7 +886,7 @@ function GroupPricingSection(props: {
           </TableBody>
         </Table>
         {isTokenBased && (
-          <p className='text-muted-foreground/40 mt-1.5 px-4 text-[10px] sm:px-0'>
+          <p className='text-muted-foreground/40 mt-1.5 px-4 text-xs sm:px-0'>
             {t('Prices shown per')} {tokenUnitLabel} tokens
           </p>
         )}

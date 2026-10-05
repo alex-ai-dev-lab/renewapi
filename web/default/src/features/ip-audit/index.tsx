@@ -186,7 +186,7 @@ export function IPAudit() {
             readinessQuery.isError) && (
             <div
               role='alert'
-              className='border-destructive/30 bg-destructive/5 text-destructive rounded-lg border px-4 py-3 text-sm'
+              className='border-destructive/30 bg-destructive/5 text-destructive-text rounded-lg border px-4 py-3 text-sm'
             >
               {t('Request failed')}
             </div>

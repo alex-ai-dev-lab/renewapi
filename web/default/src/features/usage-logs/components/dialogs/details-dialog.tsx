@@ -1127,7 +1127,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
               )}
               {Array.isArray(other.stream_status.errors) &&
                 other.stream_status.errors.length > 0 && (
-                  <pre className='bg-background/60 mt-1 max-h-32 overflow-y-auto rounded border p-2 font-mono text-[11px] leading-relaxed wrap-break-word whitespace-pre-wrap'>
+                  <pre className='bg-background/60 mt-1 max-h-32 overflow-y-auto rounded border p-2 font-mono text-xs leading-relaxed wrap-break-word whitespace-pre-wrap'>
                     {other.stream_status.errors.join('\n')}
                   </pre>
                 )}
@@ -1203,7 +1203,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                     className='shrink-0 font-medium'
                     copyable={false}
                   />
-                  <span className='min-w-0 font-mono text-[11px] leading-relaxed break-all sm:wrap-break-word'>
+                  <span className='min-w-0 font-mono text-xs leading-relaxed break-all sm:wrap-break-word'>
                     {parsed.content}
                   </span>
                 </div>

@@ -159,7 +159,7 @@ export function TransferDialog({
               className='font-mono text-lg'
             />
             {errorMessage ? (
-              <p className='text-destructive text-xs'>{errorMessage}</p>
+              <p className='text-destructive-text text-xs'>{errorMessage}</p>
             ) : (
               <p className='text-muted-foreground text-xs'>
                 {t('Minimum:')} {formatQuota(minimumQuota)}

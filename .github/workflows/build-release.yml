@@ -170,6 +170,7 @@ jobs:
       - name: Verify default frontend
         working-directory: web/default
         run: |
+          bun run lint:semantic
           bun test
           bun run typecheck
           bun run build
@@ -196,14 +197,6 @@ jobs:
           if ((${#format_files[@]})); then
             bunx prettier --check "${format_files[@]}"
           fi
-
-      - name: Install classic frontend dependencies
-        working-directory: web/classic
-        run: bun install --frozen-lockfile
-
-      - name: Build classic frontend
-        working-directory: web/classic
-        run: bun run build
 
       - name: Verify backend
         shell: bash
@@ -347,7 +340,7 @@ jobs:
           jq -n --arg sha "$GITHUB_SHA" --arg image "$IMAGE" --arg version "$PRODUCT_VERSION" --arg run "$GITHUB_RUN_ID" \
             '{source_commit: $sha, image: $image, product_version: $version, actions_run: $run, distribution: "github-releases", architectures: ["amd64", "arm64"]}' > release-assets/build-info.json
           cat > release-assets/RELEASE_NOTES.md <<EOF
-          本次构建已通过后端、双前端、四版本数据库和实际浏览器检查。
+          本次构建已通过后端、前端、四版本数据库和实际浏览器检查。
 
           产品版本：$PRODUCT_VERSION
           源码提交：$GITHUB_SHA

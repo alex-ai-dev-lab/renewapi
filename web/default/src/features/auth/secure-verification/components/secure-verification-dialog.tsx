@@ -190,7 +190,7 @@ export function SecureVerificationDialog({
               </div>
             </div>
             {!methods.passkeySupported && (
-              <p className='text-destructive text-sm'>
+              <p className='text-destructive-text text-sm'>
                 {t('This device does not support Passkey verification.')}
               </p>
             )}

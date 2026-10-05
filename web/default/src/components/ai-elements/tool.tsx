@@ -75,11 +75,13 @@ const getStatusBadge = (status: ExtendedToolState) => {
   const icons: Record<ExtendedToolState, ReactNode> = {
     'input-streaming': <CircleIcon className='size-4' />,
     'input-available': <ClockIcon className='size-4 animate-pulse' />,
-    'approval-requested': <ClockIcon className='text-warning size-4' />,
-    'approval-responded': <CheckCircleIcon className='text-info size-4' />,
-    'output-available': <CheckCircleIcon className='text-success size-4' />,
-    'output-error': <XCircleIcon className='text-destructive size-4' />,
-    'output-denied': <XCircleIcon className='text-warning size-4' />,
+    'approval-requested': <ClockIcon className='text-warning-text size-4' />,
+    'approval-responded': <CheckCircleIcon className='text-info-text size-4' />,
+    'output-available': (
+      <CheckCircleIcon className='text-success-text size-4' />
+    ),
+    'output-error': <XCircleIcon className='text-destructive-text size-4' />,
+    'output-denied': <XCircleIcon className='text-warning-text size-4' />,
   }
 
   return (
@@ -179,7 +181,7 @@ export const ToolOutput = ({
         className={cn(
           'overflow-x-auto rounded-md text-xs [&_table]:w-full',
           errorText
-            ? 'bg-destructive/10 text-destructive'
+            ? 'bg-destructive/10 text-destructive-text'
             : 'bg-muted/50 text-foreground'
         )}
       >

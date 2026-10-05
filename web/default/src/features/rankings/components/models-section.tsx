@@ -182,7 +182,7 @@ export function ModelsSection(props: ModelsSectionProps) {
           <div className='text-foreground font-mono text-2xl font-semibold tabular-nums'>
             {formatTokens(totalTokens)}
           </div>
-          <div className='text-muted-foreground text-[10px] font-medium tracking-widest uppercase'>
+          <div className='text-muted-foreground text-xs font-medium tracking-widest uppercase'>
             {t('tokens')}
           </div>
         </div>

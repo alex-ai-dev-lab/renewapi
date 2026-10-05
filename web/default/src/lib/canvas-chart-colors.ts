@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { CHART_COLORS } from './colors'
+
 export type CanvasChartColors = {
   background: string
   foreground: string
@@ -43,21 +45,7 @@ const LIGHT_CANVAS_CHART_COLORS: CanvasChartColors = {
   destructive: 'rgb(220, 38, 38)',
   text: 'rgba(23, 23, 23, 0.58)',
   grid: 'rgba(23, 23, 23, 0.12)',
-  // Vercel/Geist-style high-contrast categorical palette (no black/near-black).
-  series: [
-    'rgb(0, 112, 243)', // #0070F3 blue
-    'rgb(121, 40, 202)', // #7928CA purple
-    'rgb(245, 166, 35)', // #F5A623 amber
-    'rgb(229, 72, 77)', // #E5484D red
-    'rgb(18, 165, 148)', // #12A594 teal
-    'rgb(235, 54, 127)', // #EB367F pink
-    'rgb(80, 227, 194)', // #50E3C2 light teal
-    'rgb(249, 115, 22)', // #F97316 orange
-    'rgb(139, 92, 246)', // #8B5CF6 violet
-    'rgb(12, 206, 107)', // #0CCE6B green
-    'rgb(217, 119, 87)', // terracotta
-    'rgb(38, 38, 38)', // graphite
-  ],
+  series: [...CHART_COLORS],
 }
 
 const DARK_CANVAS_CHART_COLORS: CanvasChartColors = {
@@ -72,21 +60,7 @@ const DARK_CANVAS_CHART_COLORS: CanvasChartColors = {
   destructive: 'rgb(248, 113, 113)',
   text: 'rgba(245, 245, 245, 0.68)',
   grid: 'rgba(245, 245, 245, 0.12)',
-  // Brightened variants of the same hues for readability on dark backgrounds.
-  series: [
-    'rgb(56, 153, 255)', // blue (lighter #0070F3)
-    'rgb(165, 110, 240)', // purple (lighter #7928CA)
-    'rgb(247, 184, 75)', // amber (lighter #F5A623)
-    'rgb(240, 110, 115)', // red (lighter #E5484D)
-    'rgb(45, 196, 178)', // teal (lighter #12A594)
-    'rgb(242, 105, 158)', // pink (lighter #EB367F)
-    'rgb(110, 235, 208)', // light teal (lighter #50E3C2)
-    'rgb(251, 146, 60)', // orange (lighter #F97316)
-    'rgb(167, 139, 250)', // violet (lighter #8B5CF6)
-    'rgb(74, 222, 128)', // green (lighter #0CCE6B)
-    'rgb(240, 151, 120)', // terracotta
-    'rgb(245, 245, 245)', // graphite on dark
-  ],
+  series: [...CHART_COLORS],
 }
 
 export function getCanvasChartColors(theme?: string): CanvasChartColors {

@@ -209,7 +209,7 @@ export function BanActionDialog({
           </div>
 
           {mutation.isError && (
-            <p role='alert' className='text-destructive text-sm'>
+            <p role='alert' className='text-destructive-text text-sm'>
               {t('Request failed')}
             </p>
           )}

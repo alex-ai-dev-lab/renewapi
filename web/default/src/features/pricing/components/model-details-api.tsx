@@ -545,7 +545,7 @@ function CodeSamplesSection(props: {
 
       <p className='text-muted-foreground mt-2 text-xs'>
         {t('Replace')}{' '}
-        <code className='bg-muted rounded px-1 py-0.5 font-mono text-[11px]'>
+        <code className='bg-muted rounded px-1 py-0.5 font-mono text-xs'>
           {'<YOUR_API_KEY>'}
         </code>{' '}
         {t('with the API key from your token settings.')}
@@ -591,7 +591,7 @@ function SupportedParametersSection(props: { model: PricingModel }) {
                     {p.required && (
                       <Badge
                         variant='outline'
-                        className='h-6 border-destructive/40 px-2 text-sm text-destructive'
+                        className='border-destructive/40 text-destructive-text h-6 px-2 text-sm'
                       >
                         {t('required')}
                       </Badge>
@@ -699,7 +699,7 @@ function RateLimitsSection(props: { model: PricingModel }) {
           </TableBody>
         </Table>
       </div>
-      <p className='text-muted-foreground mt-2 text-[11px] leading-relaxed'>
+      <p className='text-muted-foreground mt-2 text-xs leading-relaxed'>
         {t(
           'RPM = requests per minute, TPM = tokens per minute, RPD = requests per day. Limits apply per token group.'
         )}
@@ -734,7 +734,7 @@ export function ModelDetailsProviderInfo(props: { model: PricingModel }) {
                 href={info.homepage}
                 target='_blank'
                 rel='noopener noreferrer'
-                className='text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5 text-[11px]'
+                className='text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5 text-xs'
               >
                 {t('Docs')}
                 <ExternalLink className='size-3' />
@@ -747,7 +747,7 @@ export function ModelDetailsProviderInfo(props: { model: PricingModel }) {
           <div className='flex flex-col gap-0.5'>
             <code className='font-mono text-xs'>{info.tokenizer}</code>
             {info.tokenizer_note && (
-              <span className='text-muted-foreground text-[10px]'>
+              <span className='text-muted-foreground text-xs'>
                 {info.tokenizer_note}
               </span>
             )}
@@ -760,13 +760,13 @@ export function ModelDetailsProviderInfo(props: { model: PricingModel }) {
             <Badge
               variant='outline'
               className={cn(
-                'h-4 w-fit px-1.5 text-[9px] font-medium',
+                'h-4 w-fit px-1.5 text-xs font-medium',
                 info.license_kind === 'open' &&
-                  'border-success/40 text-success',
+                  'border-success/40 text-success-text',
                 info.license_kind === 'open-weight' &&
                   'border-primary/40 text-primary',
                 info.license_kind === 'proprietary' &&
-                  'border-warning/40 text-warning'
+                  'border-warning/40 text-warning-text'
               )}
             >
               {info.license_kind === 'open'
@@ -786,7 +786,7 @@ export function ModelDetailsProviderInfo(props: { model: PricingModel }) {
               ? t('Zero retention')
               : `${info.data_retention_days} ${t('days')}`}
           </span>
-          <span className='text-muted-foreground text-[10px]'>
+          <span className='text-muted-foreground text-xs'>
             {info.training_opt_out
               ? t('Not used for upstream training by default')
               : t('May be used for training by upstream provider')}
@@ -800,7 +800,7 @@ export function ModelDetailsProviderInfo(props: { model: PricingModel }) {
 function InfoCell(props: { label: string; children: React.ReactNode }) {
   return (
     <div className='bg-card flex flex-col gap-1 px-3 py-2.5'>
-      <span className='text-muted-foreground text-[10px] font-medium tracking-wider uppercase'>
+      <span className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
         {props.label}
       </span>
       {props.children}
@@ -822,11 +822,11 @@ function AuthSection() {
         <div className='space-y-1.5 text-xs leading-relaxed'>
           <p>
             {t('All requests must include')}{' '}
-            <code className='bg-muted rounded px-1 py-0.5 font-mono text-[11px]'>
+            <code className='bg-muted rounded px-1 py-0.5 font-mono text-xs'>
               Authorization: Bearer &lt;TOKEN&gt;
             </code>{' '}
             {t('header. Anthropic-formatted endpoints accept the')}{' '}
-            <code className='bg-muted rounded px-1 py-0.5 font-mono text-[11px]'>
+            <code className='bg-muted rounded px-1 py-0.5 font-mono text-xs'>
               x-api-key
             </code>{' '}
             {t('header instead.')}

@@ -125,7 +125,7 @@ export function RedemptionsMobileList(props: RedemptionsMobileListProps) {
                 <div className='truncate text-sm font-semibold'>
                   {redemption.name}
                 </div>
-                <div className='text-muted-foreground text-[11px]'>
+                <div className='text-muted-foreground text-xs'>
                   {t('Redemption Code')}
                 </div>
               </div>

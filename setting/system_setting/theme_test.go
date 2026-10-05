@@ -29,12 +29,16 @@ func TestThemeDefaultsToRedesignedFrontend(t *testing.T) {
 	}
 }
 
-func TestThemeSyncPreservesClassicOverride(t *testing.T) {
+func TestRetiredClassicSettingUsesDefaultFrontend(t *testing.T) {
 	preserveThemeState(t)
 
+	common.SetTheme("classic")
+	if common.GetTheme() != "default" {
+		t.Fatal("retired theme bypassed the default frontend")
+	}
 	GetThemeSettings().Frontend = "classic"
 	UpdateAndSyncTheme()
-	if got := common.GetTheme(); got != "classic" {
-		t.Fatalf("expected persisted classic override to remain supported, got %q", got)
+	if got := common.GetTheme(); got != "default" {
+		t.Fatalf("expected retired classic setting to resolve to the available frontend, got %q", got)
 	}
 }

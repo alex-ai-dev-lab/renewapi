@@ -149,10 +149,7 @@ export function ThemeCustomizationProvider(props: {
   }, [font, preset])
 
   useEffect(() => {
-    applyAttribute(
-      'data-theme-radius',
-      radius === DEFAULT_THEME_CUSTOMIZATION.radius ? null : radius
-    )
+    applyAttribute('data-theme-radius', radius === 'default' ? null : radius)
   }, [radius])
 
   useEffect(() => {

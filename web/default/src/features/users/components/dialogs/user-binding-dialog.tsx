@@ -423,7 +423,7 @@ export function UserBindingDialog(props: Props) {
                         <Button
                           variant='ghost'
                           size='sm'
-                          className='text-destructive hover:text-destructive h-7 w-7 shrink-0 p-0'
+                          className='text-destructive-text hover:text-destructive-text h-7 w-7 shrink-0 p-0'
                           onClick={() => setUnbindTarget(binding)}
                         >
                           <Unlink className='h-3.5 w-3.5' />

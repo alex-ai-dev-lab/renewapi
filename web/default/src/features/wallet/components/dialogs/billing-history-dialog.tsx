@@ -163,7 +163,7 @@ export function BillingHistoryDialog({
                 role='alert'
                 className='flex min-h-40 flex-col items-center justify-center gap-3'
               >
-                <p className='text-destructive text-sm'>
+                <p className='text-destructive-text text-sm'>
                   {t('Failed to load topup orders')}
                 </p>
                 <Button variant='outline' onClick={() => void refresh()}>

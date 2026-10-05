@@ -67,7 +67,7 @@ function EndpointList(props: { endpoints: string[]; emptyLabel: string }) {
 
         return (
           <div key={endpoint} className='flex min-w-0 items-baseline gap-3'>
-            <span className='text-muted-foreground w-8 shrink-0 font-mono text-[10px] font-semibold tracking-wide'>
+            <span className='text-muted-foreground w-8 shrink-0 font-mono text-xs font-semibold tracking-wide'>
               {method}
             </span>
             <code className='text-foreground min-w-0 text-xs break-all'>

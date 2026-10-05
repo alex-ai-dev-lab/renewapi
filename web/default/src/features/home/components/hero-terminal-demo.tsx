@@ -230,7 +230,7 @@ export function HeroTerminalDemo(props: HeroTerminalDemoProps) {
                 key={item.id}
                 onClick={() => handleSelect(index)}
                 className={cn(
-                  'relative -mb-px flex items-center gap-1.5 border-b-2 px-2.5 py-2.5 text-[11px] font-medium tracking-wide transition-colors sm:px-3 sm:text-xs',
+                  'relative -mb-px flex items-center gap-1.5 border-b-2 px-2.5 py-2.5 text-xs font-medium tracking-wide transition-colors sm:px-3 sm:text-xs',
                   isActive
                     ? `${tone.activeBorder} ${tone.activeText}`
                     : 'text-foreground/40 hover:text-foreground/70 border-transparent'
@@ -242,7 +242,7 @@ export function HeroTerminalDemo(props: HeroTerminalDemoProps) {
           })}
           <div className='ml-auto flex items-center gap-2 pr-2 sm:pr-3'>
             <span className='inline-block size-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.45)]' />
-            <span className='text-foreground/40 font-mono text-[10px] tracking-wider uppercase'>
+            <span className='text-foreground/40 font-mono text-xs tracking-wider uppercase'>
               200 ok
             </span>
           </div>
@@ -257,7 +257,7 @@ export function HeroTerminalDemo(props: HeroTerminalDemoProps) {
         >
           <span
             className={cn(
-              'rounded-md px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wider',
+              'rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold tracking-wider',
               accent.badge
             )}
           >
@@ -289,7 +289,7 @@ export function HeroTerminalDemo(props: HeroTerminalDemoProps) {
             'border-border/40 bg-muted/30 dark:border-white/[0.05] dark:bg-white/[0.02]'
           )}
         >
-          <div className='text-foreground/40 flex items-center gap-3 text-[10px] tabular-nums'>
+          <div className='text-foreground/40 flex items-center gap-3 text-xs tabular-nums'>
             <span className='flex items-center gap-1'>
               <span className='font-mono'>{demo.latency}</span>
               <span className='tracking-wider uppercase'>ms</span>
@@ -307,7 +307,7 @@ export function HeroTerminalDemo(props: HeroTerminalDemoProps) {
               </span>
             </span>
           </div>
-          <span className='text-foreground/30 font-mono text-[10px] tracking-wider uppercase'>
+          <span className='text-foreground/30 font-mono text-xs tracking-wider uppercase'>
             stream · sse
           </span>
         </div>
@@ -382,7 +382,7 @@ function ResponseBlock(props: { demo: ApiDemoConfig; transitioning: boolean }) {
 
 function SectionLabel(props: { children: ReactNode }) {
   return (
-    <span className='text-foreground/30 font-sans text-[10px] font-semibold tracking-[0.18em] uppercase'>
+    <span className='text-foreground/30 font-sans text-xs font-semibold tracking-[0.18em] uppercase'>
       {props.children}
     </span>
   )

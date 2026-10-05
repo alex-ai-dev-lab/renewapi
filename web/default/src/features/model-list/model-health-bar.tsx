@@ -131,7 +131,7 @@ export function ModelHealthBar(props: {
         {props.showLabel ? null : (
           <span
             className={cn(
-              'w-12 text-right font-mono text-[11px] font-medium whitespace-nowrap tabular-nums',
+              'w-12 text-right font-mono text-xs font-medium whitespace-nowrap tabular-nums',
               successRate === null
                 ? 'text-muted-foreground'
                 : getSuccessRateTextClass(successRate)
@@ -142,7 +142,7 @@ export function ModelHealthBar(props: {
         )}
       </div>
       {props.showLabel ? (
-        <div className='text-muted-foreground mt-1.5 flex justify-between text-[10px]'>
+        <div className='text-muted-foreground mt-1.5 flex justify-between text-xs'>
           <span>{t('23 hours ago')}</span>
           <span>{t('Now')}</span>
         </div>

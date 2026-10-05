@@ -22,7 +22,7 @@ var TopUpLink = ""
 var themeValue atomic.Value // stores string; safe for concurrent read/write
 
 func init() {
-	themeValue.Store("classic")
+	themeValue.Store("default")
 	dataExportEnabled.Store(true)
 }
 
@@ -31,31 +31,40 @@ func GetTheme() string {
 }
 
 // SetTheme updates the frontend theme atomically.
-// Only "default" and "classic" are accepted; other values are silently ignored.
+// The retired "classic" setting is accepted as a compatibility alias for "default".
 func SetTheme(t string) {
 	if t == "default" || t == "classic" {
-		themeValue.Store(t)
+		themeValue.Store("default")
 	}
 }
 
-// ThemeAwarePath rewrites legacy /console/* paths to the default-theme
-// equivalents when the active theme is "default".  For "classic" (or any
-// other theme) the path is returned unchanged.  The function only touches
-// known prefixes so it is safe to call with arbitrary suffixes and query
-// strings.
+// ThemeAwarePath resolves legacy frontend URLs after classic retirement.
+// Unknown paths and query strings are preserved; API routes are never rewritten.
 func ThemeAwarePath(suffix string) string {
-	if GetTheme() != "default" {
+	path, query, hasQuery := strings.Cut(suffix, "?")
+	routes := map[string]string{
+		"/login": "/sign-in", "/register": "/sign-up",
+		"/console": "/dashboard/overview", "/console/chat": "/chat/0", "/console/topup": "/wallet", "/console/personal": "/profile",
+		"/console/token": "/keys", "/console/channel": "/channels", "/console/models": "/models/metadata",
+		"/console/deployment": "/models/metadata", "/console/user": "/users", "/console/redemption": "/redemption-codes",
+		"/console/subscription": "/subscriptions", "/console/setting": "/system-settings/site", "/console/playground": "/playground",
+		"/console/log": "/usage-logs/common", "/console/midjourney": "/usage-logs/drawing", "/console/task": "/usage-logs/task",
+	}
+	if strings.HasPrefix(path, "/console/chat/") {
+		target := strings.TrimPrefix(path, "/console")
+		if hasQuery {
+			target += "?" + query
+		}
+		return target
+	}
+	target, ok := routes[strings.TrimSuffix(path, "/")]
+	if !ok {
 		return suffix
 	}
-	switch {
-	case strings.HasPrefix(suffix, "/console/topup"):
-		return strings.Replace(suffix, "/console/topup", "/wallet", 1)
-	case strings.HasPrefix(suffix, "/console/log"):
-		return strings.Replace(suffix, "/console/log", "/usage-logs", 1)
-	case strings.HasPrefix(suffix, "/console/personal"):
-		return strings.Replace(suffix, "/console/personal", "/profile", 1)
+	if hasQuery {
+		target += "?" + query
 	}
-	return suffix
+	return target
 }
 
 // var ChatLink = ""

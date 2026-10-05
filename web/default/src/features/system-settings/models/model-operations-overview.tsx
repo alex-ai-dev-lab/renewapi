@@ -293,7 +293,7 @@ function ModelHealthSnapshot(props: {
             loading={props.loading}
             valueClassName={
               props.overview && props.overview.success_rate < 95
-                ? 'text-warning'
+                ? 'text-warning-text'
                 : undefined
             }
           />
@@ -319,7 +319,7 @@ function ModelHealthSnapshot(props: {
         </CardHeader>
         <CardContent className='space-y-3 pt-4'>
           {props.error ? (
-            <div className='border-destructive/30 bg-destructive/5 text-destructive flex items-start gap-2 rounded-md border p-3 text-sm'>
+            <div className='border-destructive/30 bg-destructive/5 text-destructive-text flex items-start gap-2 rounded-md border p-3 text-sm'>
               <AlertTriangle className='mt-0.5 size-4 shrink-0' />
               <span>Unable to load the operations snapshot.</span>
             </div>

@@ -174,7 +174,7 @@ function UsageTrendChart({
             </div>
           ) : null}
         </div>
-        <div className='text-muted-foreground flex justify-between text-[10px]'>
+        <div className='text-muted-foreground flex justify-between text-xs'>
           <span>{t('23 hours ago')}</span>
           <span>{t('Now')}</span>
         </div>

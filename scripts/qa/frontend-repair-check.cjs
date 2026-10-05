@@ -803,6 +803,133 @@ function totp(s) {
       }
     },
   );
+  await check(
+    "document language follows the public language switcher",
+    async () => {
+      const c = await context();
+      try {
+        const p = await page(c, "/docs");
+        let current = "en";
+        for (const [locale, label, expected] of [
+          ["zh", "简体中文", "zh-CN"],
+          ["ja", "日本語", "ja"],
+          ["en", "English", "en"],
+        ]) {
+          const messages = JSON.parse(
+            fs.readFileSync(
+              path.join(root, `web/default/src/i18n/locales/${current}.json`),
+              "utf8",
+            ),
+          );
+          const name =
+            (messages.translation || messages)["Change language"] ||
+            "Change language";
+          await p.getByRole("button", { name, exact: true }).first().click();
+          await p.getByRole("menuitem", { name: label, exact: true }).click();
+          await p.waitForFunction(
+            (expected) => document.documentElement.lang === expected,
+            expected,
+          );
+          current = locale;
+        }
+      } finally {
+        await c.close();
+      }
+    },
+  );
+  await check(
+    "stored palette and density survive reload with visible preset colors",
+    async () => {
+      const c = await context();
+      try {
+        await login(c, accounts[2]);
+        await c.addCookies([
+          { name: "theme_preset", value: "rose-garden", url: origin },
+          { name: "theme_scale", value: "default", url: origin },
+        ]);
+        const p = await page(c, "/profile");
+        for (let i = 0; i < 2; i++) {
+          await p.waitForFunction(
+            () => document.body.dataset.themePreset === "rose-garden",
+          );
+          const style = await p.evaluate(() => {
+            const css = getComputedStyle(document.body);
+            return {
+              primary: css.getPropertyValue("--primary").trim(),
+              danger: css.getPropertyValue("--destructive").trim(),
+              scale: document.body.dataset.themeScale,
+            };
+          });
+          assert(
+            style.primary !== "#111" && style.primary !== style.danger,
+            "Preset or danger color was overridden",
+          );
+          assert(style.scale !== "sm", "Default density became compact");
+          if (i === 0) await p.reload({ waitUntil: "networkidle" });
+        }
+        await p
+          .getByRole("button", { name: "Toggle theme", exact: true })
+          .first()
+          .click();
+        await p.getByRole("menuitem", { name: "Dark", exact: true }).click();
+        await p.waitForFunction(
+          () =>
+            document.querySelector('meta[name="theme-color"]')?.content ===
+            getComputedStyle(document.body).backgroundColor,
+        );
+        await p.emulateMedia({ forcedColors: "active" });
+        await p
+          .getByRole("button", { name: "Change Password", exact: true })
+          .focus();
+        const focus = await p.evaluate(() => {
+          const s = getComputedStyle(document.activeElement);
+          return { style: s.outlineStyle, width: parseFloat(s.outlineWidth) };
+        });
+        assert(
+          focus.style === "solid" && focus.width >= 2,
+          "Forced-colors focus disappeared",
+        );
+      } finally {
+        await c.close();
+      }
+    },
+  );
+  await check(
+    "retired classic setting and old URLs use the default frontend",
+    async () => {
+      await json(
+        await rc.request.put("/api/option/", {
+          headers,
+          data: { key: "theme.frontend", value: "classic" },
+        }),
+      );
+      const c = await context();
+      try {
+        await login(c, accounts[2]);
+        const p = await page(c, "/console/token");
+        assert(
+          new URL(p.url()).pathname === "/keys",
+          "Legacy key URL did not redirect",
+        );
+        await p.locator("#astryx-app-shell-main").waitFor();
+        await p.goto("/console/log?category=consume", {
+          waitUntil: "networkidle",
+        });
+        assert(
+          new URL(p.url()).pathname === "/usage-logs/common",
+          "Legacy log URL did not redirect",
+        );
+      } finally {
+        await c.close();
+        await json(
+          await rc.request.put("/api/option/", {
+            headers,
+            data: { key: "theme.frontend", value: "default" },
+          }),
+        );
+      }
+    },
+  );
   await rc.close();
 })()
   .catch((e) => {

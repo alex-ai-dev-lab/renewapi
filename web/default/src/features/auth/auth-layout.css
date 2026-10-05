@@ -34,6 +34,10 @@ For commercial licensing, please contact support@quantumnous.com
   --border: oklch(1 0 0 / 22%);
   --input: oklch(1 0 0 / 26%);
   --ring: oklch(1 0 0);
+  --destructive-text: #fecaca;
+  --success-text: #86efac;
+  --warning-text: #fcd34d;
+  --info-text: #bfdbfe;
   --skeleton-base: oklch(0.12 0 0);
   --skeleton-highlight: oklch(0.24 0 0);
 
@@ -62,7 +66,7 @@ body:has(.snowapi-auth-shell) {
 }
 
 .snowapi-auth-shell [data-slot='input'] {
-  border-color: rgb(255 255 255 / 0.28);
+  border-color: #8a8a8a;
   background: rgb(255 255 255 / 0.035);
   color: #fff;
   caret-color: #fff;

@@ -69,7 +69,7 @@ export function SettingsSectionNav({
             <ArrowLeft className='size-3.5' />
             {backLabel}
           </a>
-          <div className='text-muted-foreground px-2 pt-1 pb-2 text-[11px] font-bold tracking-[0.08em] uppercase'>
+          <div className='text-muted-foreground px-2 pt-1 pb-2 text-xs font-bold tracking-[0.08em] uppercase'>
             {categoryTitle}
           </div>
           <ul className='space-y-0.5'>

@@ -43,6 +43,8 @@ func init() {
 }
 
 func syncThemeToCommon() {
+	// Retain the old option key, but never serve removed classic assets.
+	themeSettings.Frontend = "default"
 	common.SetTheme(themeSettings.Frontend)
 }
 

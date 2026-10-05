@@ -53,23 +53,21 @@ function StatCard(props: {
   const intent = props.intent ?? 'default'
   return (
     <div className='bg-background flex flex-col gap-1 rounded-lg border p-3'>
-      <span className='text-muted-foreground inline-flex items-center gap-1.5 text-[10px] font-medium tracking-wider uppercase'>
+      <span className='text-muted-foreground inline-flex items-center gap-1.5 text-xs font-medium tracking-wider uppercase'>
         <Icon className='size-3' />
         {props.label}
       </span>
       <span
         className={cn(
           'text-foreground font-mono text-lg font-semibold tabular-nums',
-          intent === 'warning' && 'text-warning',
-          intent === 'success' && 'text-success'
+          intent === 'warning' && 'text-warning-text',
+          intent === 'success' && 'text-success-text'
         )}
       >
         {props.value}
       </span>
       {props.hint && (
-        <span className='text-muted-foreground/70 text-[11px]'>
-          {props.hint}
-        </span>
+        <span className='text-muted-foreground/70 text-xs'>{props.hint}</span>
       )}
     </div>
   )
@@ -219,7 +217,7 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
   }
 
   const headerCellClass =
-    'text-muted-foreground py-2 text-[10px] font-medium tracking-wider uppercase'
+    'text-muted-foreground py-2 text-xs font-medium tracking-wider uppercase'
 
   return (
     <div className='flex flex-col gap-4'>
@@ -330,7 +328,7 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
           }
           accent={
             incidentCount > 0 ? (
-              <span className='inline-flex items-center gap-1 text-warning'>
+              <span className='text-warning-text inline-flex items-center gap-1'>
                 <AlertTriangle className='size-3.5' />
                 {t('{{count}} incidents', {
                   count: incidentCount,

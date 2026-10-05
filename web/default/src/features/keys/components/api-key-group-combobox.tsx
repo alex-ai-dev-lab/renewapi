@@ -86,7 +86,7 @@ function GroupRatioBadge({ ratio }: { ratio: ApiKeyGroupOption['ratio'] }) {
     <Badge
       variant='outline'
       className={cn(
-        'max-w-24 shrink-0 truncate text-[10px] sm:max-w-none sm:text-xs',
+        'max-w-24 shrink-0 truncate text-xs sm:max-w-none sm:text-xs',
         getRatioBadgeClassName(ratio)
       )}
     >
@@ -148,7 +148,7 @@ export function ApiKeyGroupCombobox({
               {selectedOption?.label || placeholder || t('Select a group')}
             </span>
             {selectedOption?.desc && (
-              <span className='text-muted-foreground block truncate text-[11px] sm:text-xs'>
+              <span className='text-muted-foreground block truncate text-xs sm:text-xs'>
                 {selectedOption.desc}
               </span>
             )}

@@ -35,9 +35,9 @@ For commercial licensing, please contact support@quantumnous.com
 /* ── Underground ──────────────────────────────────────────────────────── */
 [data-theme-preset='underground'] {
   --primary: oklch(0.5315 0.0694 156.19);
-  --primary-foreground: oklch(1 0 0);
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.5748 0.0862 336.52);
-  --secondary-foreground: oklch(1 0 0);
+  --secondary-foreground: #ffffff;
   --ring: oklch(0.5315 0.0694 156.19);
   --chart-1: oklch(0.5315 0.0694 156.19);
   --chart-2: oklch(0.5748 0.0862 336.52);
@@ -53,9 +53,9 @@ For commercial licensing, please contact support@quantumnous.com
 }
 .dark [data-theme-preset='underground'] {
   --primary: oklch(0.6147 0.0867 154.73);
-  --primary-foreground: oklch(0.129 0.0306 264.71);
+  --primary-foreground: #171717;
   --secondary: oklch(0.6624 0.0855 334.26);
-  --secondary-foreground: oklch(0.129 0.0306 264.71);
+  --secondary-foreground: #171717;
   --ring: oklch(0.6147 0.0867 154.73);
   --chart-1: oklch(0.6147 0.0867 154.73);
   --chart-2: oklch(0.6624 0.0855 334.26);
@@ -72,9 +72,9 @@ For commercial licensing, please contact support@quantumnous.com
 /* ── Rose Garden ──────────────────────────────────────────────────────── */
 [data-theme-preset='rose-garden'] {
   --primary: oklch(0.5827 0.2418 12.23);
-  --primary-foreground: oklch(1 0 0);
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.8131 0.1129 5.67);
-  --secondary-foreground: oklch(0.2686 0.0032 34.85);
+  --secondary-foreground: #171717;
   --ring: oklch(0.5827 0.2418 12.23);
   --chart-1: oklch(0.5827 0.2418 12.23);
   --chart-2: oklch(0.8938 0.0563 3.77);
@@ -90,9 +90,9 @@ For commercial licensing, please contact support@quantumnous.com
 }
 .dark [data-theme-preset='rose-garden'] {
   --primary: oklch(0.6476 0.2348 10.36);
-  --primary-foreground: oklch(1 0 0);
+  --primary-foreground: #171717;
   --secondary: oklch(0.8131 0.1129 5.67);
-  --secondary-foreground: oklch(0.9227 0.0029 34.49);
+  --secondary-foreground: #171717;
   --ring: oklch(0.6476 0.2348 10.36);
   --chart-1: oklch(0.6476 0.2348 10.36);
   --chart-2: oklch(0.8938 0.0563 3.77);
@@ -109,9 +109,9 @@ For commercial licensing, please contact support@quantumnous.com
 /* ── Lake View ────────────────────────────────────────────────────────── */
 [data-theme-preset='lake-view'] {
   --primary: oklch(0.765 0.177 163.22);
-  --primary-foreground: oklch(0 0 0);
+  --primary-foreground: #171717;
   --secondary: oklch(0.551 0.0899 200.52);
-  --secondary-foreground: oklch(1 0 0);
+  --secondary-foreground: #ffffff;
   --ring: oklch(0.765 0.177 163.22);
   --chart-1: oklch(0.765 0.177 163.22);
   --chart-2: oklch(0.551 0.0899 200.52);
@@ -127,9 +127,9 @@ For commercial licensing, please contact support@quantumnous.com
 }
 .dark [data-theme-preset='lake-view'] {
   --primary: oklch(0.765 0.177 163.22);
-  --primary-foreground: oklch(0 0 0);
+  --primary-foreground: #171717;
   --secondary: oklch(0.551 0.0899 200.52);
-  --secondary-foreground: oklch(1 0 0);
+  --secondary-foreground: #ffffff;
   --ring: oklch(0.765 0.177 163.22);
   --chart-1: oklch(0.765 0.177 163.22);
   --chart-2: oklch(0.551 0.0899 200.52);
@@ -146,9 +146,9 @@ For commercial licensing, please contact support@quantumnous.com
 /* ── Sunset Glow ──────────────────────────────────────────────────────── */
 [data-theme-preset='sunset-glow'] {
   --primary: oklch(0.5591 0.1882 25.33);
-  --primary-foreground: oklch(1 0 0);
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.7938 0.1248 42.42);
-  --secondary-foreground: oklch(0 0 0);
+  --secondary-foreground: #171717;
   --ring: oklch(0.5591 0.1882 25.33);
   --chart-1: oklch(0.5591 0.1882 25.33);
   --chart-2: oklch(0.7938 0.1248 42.42);
@@ -164,9 +164,9 @@ For commercial licensing, please contact support@quantumnous.com
 }
 .dark [data-theme-preset='sunset-glow'] {
   --primary: oklch(0.6387 0.1822 23.51);
-  --primary-foreground: oklch(1 0 0);
+  --primary-foreground: #171717;
   --secondary: oklch(0.7938 0.1248 42.42);
-  --secondary-foreground: oklch(0 0 0);
+  --secondary-foreground: #171717;
   --ring: oklch(0.6387 0.1822 23.51);
   --chart-1: oklch(0.6387 0.1822 23.51);
   --chart-2: oklch(0.7938 0.1248 42.42);
@@ -183,9 +183,9 @@ For commercial licensing, please contact support@quantumnous.com
 /* ── Forest Whisper ───────────────────────────────────────────────────── */
 [data-theme-preset='forest-whisper'] {
   --primary: oklch(0.5276 0.1072 182.22);
-  --primary-foreground: oklch(1 0 0);
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.5236 0.0505 250.18);
-  --secondary-foreground: oklch(1 0 0);
+  --secondary-foreground: #ffffff;
   --ring: oklch(0.5276 0.1072 182.22);
   --chart-1: oklch(0.5276 0.1072 182.22);
   --chart-2: oklch(0.5236 0.0505 250.18);
@@ -201,9 +201,9 @@ For commercial licensing, please contact support@quantumnous.com
 }
 .dark [data-theme-preset='forest-whisper'] {
   --primary: oklch(0.5991 0.1318 180.39);
-  --primary-foreground: oklch(1 0 0);
+  --primary-foreground: #111111;
   --secondary: oklch(0.6578 0.0485 247.35);
-  --secondary-foreground: oklch(1 0 0);
+  --secondary-foreground: #171717;
   --ring: oklch(0.5991 0.1318 180.39);
   --chart-1: oklch(0.5991 0.1318 180.39);
   --chart-2: oklch(0.6578 0.0485 247.35);
@@ -211,7 +211,7 @@ For commercial licensing, please contact support@quantumnous.com
   --chart-4: oklch(0.7294 0.0416 244.67);
   --chart-5: oklch(0.9511 0.0547 177.24);
   --sidebar-primary: oklch(0.5991 0.1318 180.39);
-  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-primary-foreground: #111111;
   --sidebar-accent: oklch(0.5991 0.1318 180.39);
   --sidebar-accent-foreground: oklch(1 0 0);
   --sidebar-ring: oklch(0.5991 0.1318 180.39);
@@ -220,9 +220,9 @@ For commercial licensing, please contact support@quantumnous.com
 /* ── Ocean Breeze ─────────────────────────────────────────────────────── */
 [data-theme-preset='ocean-breeze'] {
   --primary: oklch(0.5461 0.2152 262.88);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.5854 0.2041 277.12);
-  --secondary-foreground: oklch(1 0 0);
+  --primary-foreground: #ffffff;
+  --secondary: oklch(0.55 0.2041 277.12);
+  --secondary-foreground: #ffffff;
   --ring: oklch(0.5461 0.2152 262.88);
   --chart-1: oklch(0.5461 0.2152 262.88);
   --chart-2: oklch(0.5854 0.2041 277.12);
@@ -238,9 +238,9 @@ For commercial licensing, please contact support@quantumnous.com
 }
 .dark [data-theme-preset='ocean-breeze'] {
   --primary: oklch(0.623 0.188 259.81);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.5854 0.2041 277.12);
-  --secondary-foreground: oklch(0 0 0);
+  --primary-foreground: #171717;
+  --secondary: oklch(0.55 0.2041 277.12);
+  --secondary-foreground: #ffffff;
   --ring: oklch(0.623 0.188 259.81);
   --chart-1: oklch(0.623 0.188 259.81);
   --chart-2: oklch(0.5854 0.2041 277.12);
@@ -257,9 +257,9 @@ For commercial licensing, please contact support@quantumnous.com
 /* ── Lavender Dream ───────────────────────────────────────────────────── */
 [data-theme-preset='lavender-dream'] {
   --primary: oklch(0.5709 0.1808 306.89);
-  --primary-foreground: oklch(1 0 0);
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.811 0.0589 201.14);
-  --secondary-foreground: oklch(0 0 0);
+  --secondary-foreground: #171717;
   --ring: oklch(0.5709 0.1808 306.89);
   --chart-1: oklch(0.5709 0.1808 306.89);
   --chart-2: oklch(0.811 0.0589 201.14);
@@ -275,9 +275,9 @@ For commercial licensing, please contact support@quantumnous.com
 }
 .dark [data-theme-preset='lavender-dream'] {
   --primary: oklch(0.6359 0.1699 307.95);
-  --primary-foreground: oklch(1 0 0);
+  --primary-foreground: #171717;
   --secondary: oklch(0.811 0.0589 201.14);
-  --secondary-foreground: oklch(0 0 0);
+  --secondary-foreground: #171717;
   --ring: oklch(0.6359 0.1699 307.95);
   --chart-1: oklch(0.6359 0.1699 307.95);
   --chart-2: oklch(0.811 0.0589 201.14);
@@ -301,27 +301,15 @@ For commercial licensing, please contact support@quantumnous.com
   --popover-foreground: oklch(0.15 0 0);
 
   --primary: oklch(0.22 0 0);
-  --primary-foreground: oklch(1 0 0);
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.93 0 0);
-  --secondary-foreground: oklch(0.15 0 0);
+  --secondary-foreground: #171717;
   --muted: oklch(0.95 0 0);
   --muted-foreground: oklch(0.36 0 0);
   --accent: oklch(0.91 0 0);
   --accent-foreground: oklch(0.15 0 0);
 
-  --destructive: oklch(0.55 0.2 28);
-  --destructive-foreground: oklch(1 0 0);
-  --success: oklch(0.45 0.12 145);
-  --success-foreground: oklch(1 0 0);
-  --warning: oklch(0.72 0.14 75);
-  --warning-foreground: oklch(0.15 0 0);
-  --info: oklch(0.48 0.13 250);
-  --info-foreground: oklch(1 0 0);
-  --neutral: oklch(0.36 0 0);
-  --neutral-foreground: oklch(1 0 0);
-
   --border: oklch(0.82 0 0);
-  --input: oklch(0.82 0 0);
   --ring: oklch(0.22 0 0);
 
   --chart-1: oklch(0.22 0 0);
@@ -361,27 +349,15 @@ For commercial licensing, please contact support@quantumnous.com
   --popover-foreground: oklch(0.97 0 0);
 
   --primary: oklch(0.94 0 0);
-  --primary-foreground: oklch(0.145 0 0);
+  --primary-foreground: #171717;
   --secondary: oklch(0.315 0 0);
-  --secondary-foreground: oklch(0.97 0 0);
+  --secondary-foreground: #ffffff;
   --muted: oklch(0.315 0 0);
   --muted-foreground: oklch(0.82 0 0);
   --accent: oklch(0.36 0 0);
   --accent-foreground: oklch(0.98 0 0);
 
-  --destructive: oklch(0.68 0.19 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --success: oklch(0.72 0.13 145);
-  --success-foreground: oklch(0.145 0 0);
-  --warning: oklch(0.82 0.13 75);
-  --warning-foreground: oklch(0.145 0 0);
-  --info: oklch(0.72 0.12 250);
-  --info-foreground: oklch(0.145 0 0);
-  --neutral: oklch(0.82 0 0);
-  --neutral-foreground: oklch(0.145 0 0);
-
   --border: oklch(1 0 0 / 18%);
-  --input: oklch(1 0 0 / 24%);
   --ring: oklch(0.94 0 0);
 
   --chart-1: oklch(0.94 0 0);
@@ -441,15 +417,10 @@ For commercial licensing, please contact support@quantumnous.com
   --accent: color-mix(in oklch, var(--primary) 14%, var(--background));
   --accent-foreground: var(--foreground);
   --border: color-mix(in oklch, var(--primary) 20%, var(--background));
-  --input: color-mix(in oklch, var(--primary) 22%, var(--background));
   --sidebar: color-mix(in oklch, var(--primary) 4%, var(--background));
   --sidebar-accent: color-mix(in oklch, var(--primary) 14%, var(--background));
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: color-mix(in oklch, var(--primary) 18%, var(--background));
-  --success: var(--chart-2);
-  --warning: var(--chart-4);
-  --info: var(--chart-1);
-  --neutral: var(--muted-foreground);
 }
 .dark
   [data-theme-preset]:not([data-theme-preset='default']):not(
@@ -465,7 +436,6 @@ For commercial licensing, please contact support@quantumnous.com
   );
   --accent: color-mix(in oklch, var(--primary) 18%, var(--background));
   --border: color-mix(in oklch, var(--primary) 24%, var(--background));
-  --input: color-mix(in oklch, var(--primary) 28%, var(--background));
   --sidebar: color-mix(in oklch, var(--primary) 5%, var(--background));
   --sidebar-accent: color-mix(in oklch, var(--primary) 18%, var(--background));
   --sidebar-border: color-mix(in oklch, var(--primary) 22%, var(--background));
@@ -506,30 +476,18 @@ For commercial licensing, please contact support@quantumnous.com
 
   /* Clay/coral — Anthropic's signature accent, used scarcely on CTAs. */
   --primary: oklch(0.685 0.142 38); /* ≈ #d97757 */
-  --primary-foreground: oklch(0.99 0.005 95);
+  --primary-foreground: #171717;
 
   --secondary: oklch(0.925 0.008 92);
-  --secondary-foreground: oklch(0.255 0.005 60);
+  --secondary-foreground: #171717;
 
   --muted: oklch(0.94 0.007 92);
   --muted-foreground: oklch(0.51 0.006 75); /* ≈ #5e5d59 warm gray */
   --accent: oklch(0.92 0.009 92);
   --accent-foreground: oklch(0.205 0.005 60);
 
-  --destructive: oklch(0.55 0.18 27);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.59 0.082 130); /* olive #788c5d */
-  --success-foreground: oklch(0.985 0 0);
-  --warning: oklch(0.78 0.13 70); /* kraft amber */
-  --warning-foreground: oklch(0.205 0.005 60);
-  --info: oklch(0.67 0.075 248); /* sky #6a9bcc */
-  --info-foreground: oklch(0.985 0 0);
-  --neutral: oklch(0.51 0.006 75);
-  --neutral-foreground: oklch(0.205 0.005 60);
-
   /* Hairline borders — warm gray, not coral. */
   --border: oklch(0.895 0.008 92); /* ≈ #e8e6dc */
-  --input: oklch(0.895 0.008 92);
   --ring: oklch(0.685 0.142 38);
 
   /* Chart palette uses Anthropic's dormant accent swatches. */
@@ -569,28 +527,16 @@ For commercial licensing, please contact support@quantumnous.com
   --popover-foreground: oklch(0.965 0.005 92);
 
   --primary: oklch(0.72 0.135 40);
-  --primary-foreground: oklch(0.18 0.005 60);
+  --primary-foreground: #171717;
   --secondary: oklch(0.305 0.004 60);
-  --secondary-foreground: oklch(0.945 0.005 92);
+  --secondary-foreground: #ffffff;
 
   --muted: oklch(0.285 0.004 60);
   --muted-foreground: oklch(0.76 0.006 75);
   --accent: oklch(0.33 0.006 60);
   --accent-foreground: oklch(0.985 0.005 92);
 
-  --destructive: oklch(0.7 0.19 22);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.7 0.105 135);
-  --success-foreground: oklch(0.18 0.005 60);
-  --warning: oklch(0.78 0.13 70);
-  --warning-foreground: oklch(0.18 0.005 60);
-  --info: oklch(0.72 0.085 248);
-  --info-foreground: oklch(0.18 0.005 60);
-  --neutral: oklch(0.76 0.006 75);
-  --neutral-foreground: oklch(0.18 0.005 60);
-
   --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 16%);
   --ring: oklch(0.72 0.135 40);
 
   --chart-1: oklch(0.72 0.135 40);
@@ -698,8 +644,8 @@ For commercial licensing, please contact support@quantumnous.com
 /* ── Density scale ────────────────────────────────────────────────────── */
 /* `sm` = compact UI; `lg` = comfortable; `xl` = extra readable. Default keeps Tailwind defaults. */
 [data-theme-scale='sm'] {
-  --text-xs: 0.7rem;
-  --text-sm: 0.78rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
   --text-base: 0.88rem;
   --text-lg: 1rem;
   --text-xl: 1.13rem;

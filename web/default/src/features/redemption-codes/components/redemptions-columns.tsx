@@ -211,7 +211,7 @@ export function useRedemptionsColumns(): ColumnDef<Redemption>[] {
         const isExpired = isTimestampExpired(expiredTime)
         return (
           <div
-            className={`min-w-[160px] font-mono text-sm ${isExpired ? 'text-destructive' : ''}`}
+            className={`min-w-[160px] font-mono text-sm ${isExpired ? 'text-destructive-text' : ''}`}
           >
             {formatTimestampToDate(expiredTime)}
           </div>

@@ -363,7 +363,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
                     onChange={(e) => change(row.key, { from: e.target.value })}
                   />
                   {!row.from.trim() && (
-                    <p className='text-destructive text-xs'>
+                    <p className='text-destructive-text text-xs'>
                       {t('Source is required')}
                     </p>
                   )}
@@ -379,7 +379,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
                     onChange={(e) => change(row.key, { to: e.target.value })}
                   />
                   {!row.to.trim() && (
-                    <p className='text-destructive text-xs'>
+                    <p className='text-destructive-text text-xs'>
                       {t('Target is required')}
                     </p>
                   )}

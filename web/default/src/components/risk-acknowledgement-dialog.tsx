@@ -305,7 +305,7 @@ export function RiskAcknowledgementDialog({
                 />
               )}
               {hasTypedRequiredText && !typedMatched ? (
-                <p className='text-destructive text-xs'>
+                <p className='text-destructive-text text-xs'>
                   {mismatchHint ??
                     t('The entered text does not match the required text.')}
                 </p>

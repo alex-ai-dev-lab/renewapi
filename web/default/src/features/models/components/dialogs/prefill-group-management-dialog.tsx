@@ -229,7 +229,7 @@ export function PrefillGroupManagementDialog({
                 <Button
                   size='icon'
                   variant='ghost'
-                  className='text-destructive hover:text-destructive'
+                  className='text-destructive-text hover:text-destructive-text'
                   onClick={() => handleDeleteClick(group)}
                 >
                   <Trash2 className='h-4 w-4' />

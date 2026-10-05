@@ -20,22 +20,6 @@ COPY VERSION ./VERSION
 WORKDIR /src/web/default
 RUN DISABLE_ESLINT_PLUGIN=true VITE_REACT_APP_VERSION="$(cat /src/VERSION)" bun run build
 
-FROM --platform=$BUILDPLATFORM ${BUN_IMAGE} AS frontend-classic-builder
-WORKDIR /src
-
-COPY web/classic/package.json web/classic/bun.lock ./web/classic/
-
-WORKDIR /src/web/classic
-RUN --mount=type=cache,id=renewapi-bun-classic,target=/root/.bun/install/cache,sharing=locked \
-    bun install --frozen-lockfile
-
-WORKDIR /src
-COPY web/classic ./web/classic
-COPY VERSION ./VERSION
-
-WORKDIR /src/web/classic
-RUN VITE_REACT_APP_VERSION="$(cat /src/VERSION)" bun run build
-
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS backend-builder
 ARG TARGETOS
 ARG TARGETARCH
@@ -59,7 +43,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 COPY . .
 COPY --from=frontend-default-builder /src/web/default/dist ./web/default/dist
-COPY --from=frontend-classic-builder /src/web/classic/dist ./web/classic/dist
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \

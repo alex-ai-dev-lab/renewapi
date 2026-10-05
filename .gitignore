@@ -9,7 +9,8 @@ build
 *.db-journal
 logs
 web/default/dist
-web/classic/dist
+# Retired frontend: do not accidentally re-add stale local dependencies/builds.
+/web/classic/
 web/node_modules
 web/dist
 .env

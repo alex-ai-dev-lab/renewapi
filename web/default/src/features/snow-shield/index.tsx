@@ -139,14 +139,7 @@ function BrowserShield(props: { children: ReactNode }) {
 
   const blocked =
     check.data?.enabled !== false && (!verified || clock >= expiresAt)
-  useEffect(() => {
-    if (!blocked) return
-    const originalLanguage = document.documentElement.lang
-    document.documentElement.lang = toIntlLocale(language) ?? 'en'
-    return () => {
-      document.documentElement.lang = originalLanguage
-    }
-  }, [blocked, language])
+  // The challenge has its own lang attribute; the document follows global i18n.
 
   // An unknown clearance is not a failed clearance. Keep the normal page
   // background until the server answers, without mounting protected content

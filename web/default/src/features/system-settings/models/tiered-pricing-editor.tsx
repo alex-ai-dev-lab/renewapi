@@ -368,6 +368,8 @@ function DraftNumberInput({
 
   useEffect(() => {
     if (!focused) {
+      // External values synchronize only while the input is not being edited.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDraft(formatNumberDraft(value))
     }
   }, [focused, value])
@@ -499,7 +501,7 @@ function ConditionRow({ condition, onChange, onRemove }: ConditionRowProps) {
         aria-label='remove'
         className='ml-auto'
       >
-        <Trash2 className='text-destructive h-4 w-4' />
+        <Trash2 className='text-destructive-text h-4 w-4' />
       </Button>
     </div>
   )
@@ -594,6 +596,8 @@ function VisualTierCard({
   const [mediaOpen, setMediaOpen] = useState(hasMediaPricing)
 
   useEffect(() => {
+    // Incoming media fields must expose the section containing their existing values.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (hasMediaPricing) setMediaOpen(true)
   }, [hasMediaPricing])
 
@@ -639,7 +643,7 @@ function VisualTierCard({
           disabled={total <= 1}
           aria-label={t('Remove tier')}
         >
-          <Trash2 className='text-destructive h-4 w-4' />
+          <Trash2 className='text-destructive-text h-4 w-4' />
         </Button>
       </div>
 
@@ -1176,7 +1180,7 @@ function RuleConditionRow({
         aria-label={t('Remove condition')}
         className='ml-auto'
       >
-        <Trash2 className='text-destructive h-4 w-4' />
+        <Trash2 className='text-destructive-text h-4 w-4' />
       </Button>
     </div>
   )
@@ -1232,7 +1236,7 @@ function RuleGroupCard({
           onClick={onRemove}
           aria-label={t('Remove rule group')}
         >
-          <Trash2 className='text-destructive h-4 w-4' />
+          <Trash2 className='text-destructive-text h-4 w-4' />
         </Button>
       </div>
 
@@ -1444,7 +1448,7 @@ function CostEstimator({ effectiveExpr }: EstimatorProps) {
         className={cn(
           'rounded-md border p-3 text-sm',
           result.error
-            ? 'border-destructive/50 bg-destructive/10 text-destructive'
+            ? 'border-destructive/50 bg-destructive/10 text-destructive-text'
             : 'border-primary/50 bg-primary/10'
         )}
       >

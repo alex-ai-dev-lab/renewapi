@@ -256,7 +256,7 @@ export function AstryxAppShell(props: AstryxAppShellProps) {
                 ) : null}
                 <div className='snowapi-console-loaded-content flex min-h-0 flex-1 flex-col'>
                   {props.children ?? <AnimatedOutlet />}
-                  <footer className='text-muted-foreground shrink-0 px-4 py-2 text-center text-[10px]'>
+                  <footer className='text-muted-foreground shrink-0 px-4 py-2 text-center text-xs'>
                     Frontend design and development by{' '}
                     <a
                       className='underline underline-offset-2'

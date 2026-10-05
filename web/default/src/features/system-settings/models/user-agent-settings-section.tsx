@@ -209,6 +209,8 @@ export function UserAgentSettingsSection() {
   }
 
   useEffect(() => {
+    // External dialog closure also discards its local draft.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!formOpen) setFormValues(EMPTY_FORM)
   }, [formOpen])
 
@@ -237,7 +239,12 @@ export function UserAgentSettingsSection() {
             <Upload className='mr-2 h-4 w-4' />
             {t('Import')}
           </Button>
-          <Button type='button' variant='outline' size='sm' onClick={handleExport}>
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            onClick={handleExport}
+          >
             <Download className='mr-2 h-4 w-4' />
             {t('Export')}
           </Button>
@@ -263,13 +270,19 @@ export function UserAgentSettingsSection() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className='text-muted-foreground py-8 text-center'>
+                <TableCell
+                  colSpan={6}
+                  className='text-muted-foreground py-8 text-center'
+                >
                   {t('Loading')}
                 </TableCell>
               </TableRow>
             ) : userAgents.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className='text-muted-foreground py-8 text-center'>
+                <TableCell
+                  colSpan={6}
+                  className='text-muted-foreground py-8 text-center'
+                >
                   {t('No User-Agent entries configured.')}
                 </TableCell>
               </TableRow>
@@ -296,7 +309,11 @@ export function UserAgentSettingsSection() {
                       </Badge>
                     </TableCell>
                     <TableCell className='text-right'>
-                      <Button variant='ghost' size='icon-sm' onClick={() => openEdit(ua)}>
+                      <Button
+                        variant='ghost'
+                        size='icon-sm'
+                        onClick={() => openEdit(ua)}
+                      >
                         <Pencil className='h-4 w-4' />
                       </Button>
                       <Button
@@ -304,7 +321,7 @@ export function UserAgentSettingsSection() {
                         size='icon-sm'
                         onClick={() => setDeleteTarget(ua)}
                       >
-                        <Trash2 className='text-destructive h-4 w-4' />
+                        <Trash2 className='text-destructive-text h-4 w-4' />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -328,7 +345,10 @@ export function UserAgentSettingsSection() {
                 placeholder={t('Name')}
                 value={formValues.name}
                 onChange={(event) =>
-                  setFormValues((prev) => ({ ...prev, name: event.target.value }))
+                  setFormValues((prev) => ({
+                    ...prev,
+                    name: event.target.value,
+                  }))
                 }
               />
               <Select
@@ -357,7 +377,10 @@ export function UserAgentSettingsSection() {
               placeholder='codex_exec/0.136.0 (Windows 10.0.26200; x86_64)'
               value={formValues.value}
               onChange={(event) =>
-                setFormValues((prev) => ({ ...prev, value: event.target.value }))
+                setFormValues((prev) => ({
+                  ...prev,
+                  value: event.target.value,
+                }))
               }
             />
             <div className='grid gap-4 sm:grid-cols-2'>
@@ -376,7 +399,10 @@ export function UserAgentSettingsSection() {
                 placeholder={t('Remark')}
                 value={formValues.remark || ''}
                 onChange={(event) =>
-                  setFormValues((prev) => ({ ...prev, remark: event.target.value }))
+                  setFormValues((prev) => ({
+                    ...prev,
+                    remark: event.target.value,
+                  }))
                 }
               />
             </div>
@@ -420,7 +446,9 @@ export function UserAgentSettingsSection() {
         confirmText={t('Delete')}
         destructive
         isLoading={deleteMutation.isPending}
-        handleConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        handleConfirm={() =>
+          deleteTarget && deleteMutation.mutate(deleteTarget.id)
+        }
       />
     </SettingsSection>
   )

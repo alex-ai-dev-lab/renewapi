@@ -67,10 +67,10 @@ function heightFor(uptime: number): string {
 }
 
 function overallTextColour(pct: number): string {
-  if (pct >= 99.9) return 'text-success'
-  if (pct >= 99.0) return 'text-success'
-  if (pct >= 95.0) return 'text-warning'
-  return 'text-destructive'
+  if (pct >= 99.9) return 'text-success-text'
+  if (pct >= 99.0) return 'text-success-text'
+  if (pct >= 95.0) return 'text-warning-text'
+  return 'text-destructive-text'
 }
 
 export function UptimeSparkline(props: UptimeSparklineProps) {
@@ -174,12 +174,12 @@ export function UptimeStatusRow(props: {
 
   const statusColour =
     status === 'operational'
-      ? 'text-success'
+      ? 'text-success-text'
       : status === 'minor'
-        ? 'text-success'
+        ? 'text-success-text'
         : status === 'degraded'
-          ? 'text-warning'
-          : 'text-destructive'
+          ? 'text-warning-text'
+          : 'text-destructive-text'
 
   const statusLabel =
     status === 'operational'

@@ -69,7 +69,7 @@ function AlertDialogContent({
         data-slot='alert-dialog-content'
         data-size={size}
         className={cn(
-          'snowapi-dialog-content snowapi-confirm-content group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 gap-6 rounded-3xl p-6 outline-none data-[size=sm]:max-w-xs',
+          'snowapi-dialog-content snowapi-confirm-content group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 gap-6 rounded-3xl p-6 outline-hidden data-[size=sm]:max-w-xs',
           className
         )}
         {...props}

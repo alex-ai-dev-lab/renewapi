@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { getCookie, setCookie } from '@/lib/cookies'
+import { DEFAULT_THEME_CUSTOMIZATION } from '@/lib/theme-customization'
 
 const APPEARANCE_DEFAULTS_VERSION = 'renewapi-snow-20261002'
 const APPEARANCE_DEFAULTS_COOKIE = 'snowapi_appearance_defaults'
@@ -38,31 +39,31 @@ const APPEARANCE_PREFERENCES: AppearancePreference[] = [
   },
   {
     name: 'theme_preset',
-    fallback: 'default',
+    fallback: DEFAULT_THEME_CUSTOMIZATION.preset,
     legacyCookies: ['themePreset', 'theme-preset'],
     siteAttributes: ['data-theme-preset'],
   },
   {
     name: 'theme_font',
-    fallback: 'sans',
+    fallback: DEFAULT_THEME_CUSTOMIZATION.font,
     legacyCookies: ['themeFont', 'font'],
     siteAttributes: ['data-theme-font'],
   },
   {
     name: 'theme_radius',
-    fallback: 'md',
+    fallback: DEFAULT_THEME_CUSTOMIZATION.radius,
     legacyCookies: ['themeRadius', 'radius'],
     siteAttributes: ['data-theme-radius'],
   },
   {
     name: 'theme_scale',
-    fallback: 'sm',
+    fallback: DEFAULT_THEME_CUSTOMIZATION.scale,
     legacyCookies: ['themeScale', 'scale'],
     siteAttributes: ['data-theme-scale'],
   },
   {
     name: 'theme_content_layout',
-    fallback: 'centered',
+    fallback: DEFAULT_THEME_CUSTOMIZATION.contentLayout,
     legacyCookies: ['content_layout', 'contentLayout'],
     siteAttributes: ['data-theme-content-layout'],
   },
@@ -120,13 +121,6 @@ export function applySnowApiAppearanceDefaultsOnce(): void {
   }
 
   for (const preference of APPEARANCE_PREFERENCES) {
-    if (
-      preference.name.startsWith('theme_') ||
-      preference.name.startsWith('layout_')
-    ) {
-      setCookie(preference.name, preference.fallback, COOKIE_MAX_AGE)
-      continue
-    }
     if (getCookie(preference.name) !== undefined) continue
 
     const legacyValue = preference.legacyCookies

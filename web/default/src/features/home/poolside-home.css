@@ -31,7 +31,9 @@ For commercial licensing, please contact support@quantumnous.com
   min-height: 100dvh;
   color: var(--home-ink);
   background: var(--home-bg);
-  font-family: 'Inter', 'Public Sans Variable', Arial, sans-serif;
+  font-family:
+    'Public Sans Variable', 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', Arial, sans-serif;
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
 }

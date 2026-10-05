@@ -122,7 +122,7 @@ export function ProviderTable(props: ProviderTableProps) {
                       size='sm'
                       onClick={() => setDeleteTarget(provider)}
                     >
-                      <Trash2 className='text-destructive h-4 w-4' />
+                      <Trash2 className='text-destructive-text h-4 w-4' />
                     </Button>
                   </div>
                 </TableCell>

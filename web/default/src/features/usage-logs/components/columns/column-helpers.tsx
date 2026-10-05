@@ -220,7 +220,7 @@ export function createFailReasonColumn<T>(config: {
             onClick={() => setDialogOpen(true)}
             title={cellTitle}
           >
-            <span className='text-destructive min-w-0 truncate leading-snug group-hover:underline'>
+            <span className='text-destructive-text min-w-0 truncate leading-snug group-hover:underline'>
               {failReason}
             </span>
           </button>

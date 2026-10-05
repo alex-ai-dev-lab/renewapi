@@ -49,7 +49,7 @@ export function ErrorState(props: ErrorStateProps) {
       <Empty className={cn('min-h-[300px]', props.className)}>
         <EmptyHeader>
           <EmptyMedia variant='icon'>
-            <Icon className='text-destructive size-6' />
+            <Icon className='text-destructive-text size-6' />
           </EmptyMedia>
           <EmptyTitle>
             {props.title ?? t('Oops! Something went wrong')}

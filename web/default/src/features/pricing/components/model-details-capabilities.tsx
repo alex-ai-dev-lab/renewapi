@@ -162,14 +162,14 @@ export function ModelDetailsCapabilities(props: {
               'hover:bg-muted/30'
             )}
           >
-            <span className='bg-muted text-foreground inline-flex size-7 shrink-0 items-center justify-center rounded-md transition-colors group-hover:bg-success/10 group-hover:text-success'>
+            <span className='bg-muted text-foreground group-hover:bg-success/10 group-hover:text-success-text inline-flex size-7 shrink-0 items-center justify-center rounded-md transition-colors'>
               <Icon className='size-3.5' />
             </span>
             <div className='min-w-0 flex-1'>
               <div className='text-foreground truncate text-xs font-semibold'>
                 {t(meta.labelKey)}
               </div>
-              <p className='text-muted-foreground mt-0.5 line-clamp-2 text-[11px] leading-snug'>
+              <p className='text-muted-foreground mt-0.5 line-clamp-2 text-xs leading-snug'>
                 {t(meta.descriptionKey)}
               </p>
             </div>

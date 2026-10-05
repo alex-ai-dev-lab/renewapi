@@ -73,16 +73,16 @@ function GrowthChip(props: { value: number }) {
   const isUp = value > 0
   const isDown = value < 0
   const palette = isUp
-    ? 'bg-success/10 text-success'
+    ? 'bg-success/10 text-success-text'
     : isDown
-      ? 'bg-destructive/10 text-destructive'
+      ? 'bg-destructive/10 text-destructive-text'
       : 'bg-muted text-muted-foreground'
   const Icon = isUp ? ArrowUpRight : isDown ? ArrowDownRight : null
   const formatted = `${value > 0 ? '+' : ''}${value.toFixed(1)}%`
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums',
+        'inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums',
         palette
       )}
     >
@@ -124,41 +124,41 @@ export function ModelDetailsApps(props: { model: PricingModel }) {
   const totalMonthlyTokens = apps.reduce((s, a) => s + a.monthly_tokens, 0)
   const top = apps[0]
   const headerCellClass =
-    'text-muted-foreground py-2 text-[10px] font-medium tracking-wider uppercase'
+    'text-muted-foreground py-2 text-xs font-medium tracking-wider uppercase'
 
   return (
     <div className='flex flex-col gap-4'>
       <div className='grid grid-cols-1 gap-2 sm:grid-cols-3'>
         <div className='bg-muted/20 rounded-lg border p-3'>
-          <div className='text-muted-foreground text-[10px] font-medium tracking-wider uppercase'>
+          <div className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
             {t('Tracked apps')}
           </div>
           <div className='text-foreground mt-1 font-mono text-lg font-semibold tabular-nums'>
             {apps.length}
           </div>
-          <p className='text-muted-foreground/70 text-[11px]'>
+          <p className='text-muted-foreground/70 text-xs'>
             {t('Top integrations using this model')}
           </p>
         </div>
         <div className='bg-muted/20 rounded-lg border p-3'>
-          <div className='text-muted-foreground text-[10px] font-medium tracking-wider uppercase'>
+          <div className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
             {t('Monthly tokens')}
           </div>
           <div className='text-foreground mt-1 font-mono text-lg font-semibold tabular-nums'>
             {COMPACT_NUMBER.format(totalMonthlyTokens)}
           </div>
-          <p className='text-muted-foreground/70 text-[11px]'>
+          <p className='text-muted-foreground/70 text-xs'>
             {t('Aggregated across the apps below')}
           </p>
         </div>
         <div className='bg-muted/20 rounded-lg border p-3'>
-          <div className='text-muted-foreground text-[10px] font-medium tracking-wider uppercase'>
+          <div className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
             {t('#1 by usage')}
           </div>
           <div className='text-foreground mt-1 truncate text-base font-semibold'>
             {top.name}
           </div>
-          <p className='text-muted-foreground/70 truncate text-[11px]'>
+          <p className='text-muted-foreground/70 truncate text-xs'>
             {top.category} · {formatTokenVolume(top.monthly_tokens)}{' '}
             {t('tokens / mo')}
           </p>
@@ -220,7 +220,7 @@ export function ModelDetailsApps(props: { model: PricingModel }) {
         </Table>
       </div>
 
-      <p className='text-muted-foreground/60 text-[11px] leading-relaxed'>
+      <p className='text-muted-foreground/60 text-xs leading-relaxed'>
         {t(
           'App rankings shown here are simulated for preview purposes and will be replaced with live usage data once the backend integration is complete.'
         )}

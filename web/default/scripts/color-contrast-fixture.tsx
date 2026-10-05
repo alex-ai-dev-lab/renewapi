@@ -23,12 +23,33 @@ import {
   textColorMap,
   type StatusVariant,
 } from '../src/components/status-badge'
+import { Button } from '../src/components/ui/button'
+import { Input } from '../src/components/ui/input'
 import { avatarColorMap } from '../src/lib/colors'
+import { CHART_COLORS } from '../src/lib/colors'
 import { THEME_PRESETS } from '../src/lib/theme-customization'
 
 // Render actual component markup; the browser runner supplies the production CSS.
 const samples = (
   <>
+    {(['default', 'secondary', 'destructive'] as const).map((variant) => (
+      <Button
+        key={variant}
+        variant={variant}
+        data-control={variant}
+        data-contrast={`button:${variant}`}
+      >
+        Action
+      </Button>
+    ))}
+    <Input aria-label='Sample input' data-control='input' />
+    <Button
+      size='icon-xs'
+      data-control='small-target'
+      aria-label='Small action'
+    >
+      +
+    </Button>
     {Object.keys(textColorMap).map((variant) =>
       (['badge', 'text', 'underline'] as const).map((type) => (
         <StatusBadge
@@ -54,5 +75,6 @@ writeFileSync(
   JSON.stringify({
     markup: renderToStaticMarkup(samples),
     presets: THEME_PRESETS.map((p) => p.value),
+    chartColors: CHART_COLORS,
   })
 )

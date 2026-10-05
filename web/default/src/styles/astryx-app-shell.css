@@ -651,7 +651,11 @@ For commercial licensing, please contact support@quantumnous.com
   --accent: oklch(0.22 0 0);
   --accent-foreground: oklch(0.97 0 0);
   --border: oklch(0.28 0 0);
-  --input: oklch(0.28 0 0);
+  --input: #a3a3a3;
+  --success-text: #86efac;
+  --warning-text: #fcd34d;
+  --info-text: #bfdbfe;
+  --destructive-text: #fecaca;
   --ring: oklch(0.72 0 0);
 }
 

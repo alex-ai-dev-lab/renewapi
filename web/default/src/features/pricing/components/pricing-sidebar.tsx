@@ -113,7 +113,7 @@ function FilterChip(props: {
       {(props.option.suffix || props.option.count != null) && (
         <span
           className={cn(
-            'rounded-md px-1.5 py-0.5 text-[10px]',
+            'rounded-md px-1.5 py-0.5 text-xs',
             props.active
               ? 'bg-background text-foreground'
               : 'bg-muted text-muted-foreground'
@@ -133,7 +133,7 @@ function FilterSection(props: FilterSectionProps) {
       className='border-border/50 border-b pb-3 last:border-b-0'
     >
       <CollapsibleTrigger className='group flex w-full items-center justify-between py-2.5 text-left'>
-        <span className='text-muted-foreground text-xs font-medium uppercase tracking-widest'>
+        <span className='text-muted-foreground text-xs font-medium tracking-widest uppercase'>
           {props.title}
         </span>
         <ChevronDown className='text-muted-foreground size-3.5 transition-transform group-data-[panel-open]:rotate-180' />

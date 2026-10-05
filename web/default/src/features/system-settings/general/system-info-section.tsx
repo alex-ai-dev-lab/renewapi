@@ -41,14 +41,6 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { FormDirtyIndicator } from '../components/form-dirty-indicator'
 import { FormNavigationGuard } from '../components/form-navigation-guard'
@@ -374,52 +366,6 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
               </Button>
             </div>
             <SettingsFormGrid>
-              <FormField
-                control={form.control}
-                name='theme.frontend'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Frontend Theme')}</FormLabel>
-                    <Select
-                      items={[
-                        {
-                          value: 'default',
-                          label: t('Default (New Frontend)'),
-                        },
-                        {
-                          value: 'classic',
-                          label: t('Classic (Legacy Frontend)'),
-                        },
-                      ]}
-                      onValueChange={field.onChange}
-                      value={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger className='w-full'>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent alignItemWithTrigger={false}>
-                        <SelectGroup>
-                          <SelectItem value='default'>
-                            {t('Default (New Frontend)')}
-                          </SelectItem>
-                          <SelectItem value='classic'>
-                            {t('Classic (Legacy Frontend)')}
-                          </SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      {t(
-                        'Switch between the new frontend and the classic frontend. Changes take effect after page reload.'
-                      )}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               <FormField
                 control={form.control}
                 name='SystemName'

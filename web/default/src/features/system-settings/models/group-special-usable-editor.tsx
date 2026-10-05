@@ -183,7 +183,7 @@ function GroupSection(props: GroupSectionProps) {
             <Button
               variant='ghost'
               size='sm'
-              className='text-destructive h-7 w-7 p-0'
+              className='text-destructive-text h-7 w-7 p-0'
               onClick={() => props.onRemoveGroup(props.groupName)}
             >
               <Trash2 className='h-4 w-4' />
@@ -292,7 +292,7 @@ function GroupSection(props: GroupSectionProps) {
                 <Button
                   variant='ghost'
                   size='sm'
-                  className='text-destructive h-8 w-8 p-0'
+                  className='text-destructive-text h-8 w-8 p-0'
                   onClick={() => props.onRemove(rule._id)}
                 >
                   <Trash2 className='h-4 w-4' />

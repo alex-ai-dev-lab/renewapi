@@ -91,18 +91,18 @@ export function getBgColorClass(color?: string): string {
  * Keep hex values so canvas charts and translucent flow links share the palette.
  */
 export const CHART_COLORS = [
-  '#3b82f6', // blue
-  '#d97706', // amber
-  '#059669', // emerald
-  '#a855f7', // purple
-  '#db477c', // rose
-  '#0891b2', // cyan
-  '#ea580c', // orange
-  '#6366f1', // indigo
-  '#65a30d', // lime
-  '#c052c7', // orchid
-  '#0d9488', // teal
-  '#b77945', // bronze
+  '#0084ce',
+  '#d55e00',
+  '#00986e',
+  '#c15c94',
+  '#8473dc',
+  '#c063b1',
+  '#83832c',
+  '#398f81',
+  '#cc6576',
+  '#d24d90',
+  '#828282',
+  '#af7a46',
 ] as const
 
 /**
@@ -153,4 +153,25 @@ export function stringToColor(str: string): SemanticColor {
   }
   const index = sum % TAG_COLORS.length
   return TAG_COLORS[index]
+}
+
+/** Stable non-color encodings; adjacent series do not rely on hue alone. */
+const SERIES_DASHES = [[], [6, 3], [2, 3], [8, 3, 2, 3], [3, 2], [10, 4]]
+const SERIES_SYMBOLS = [
+  'circle',
+  'square',
+  'diamond',
+  'triangle',
+  'cross',
+  'star',
+]
+export function getSeriesAppearance(index: number) {
+  const value = Math.max(0, index)
+  return {
+    lineDash: SERIES_DASHES[value % SERIES_DASHES.length],
+    symbolType:
+      SERIES_SYMBOLS[
+        Math.floor(value / SERIES_DASHES.length) % SERIES_SYMBOLS.length
+      ],
+  }
 }

@@ -50,7 +50,7 @@ export function StaticRowActions(props: StaticRowActionsProps) {
         <DropdownMenuItem
           onClick={props.onDelete}
           disabled={props.deleteDisabled}
-          className='text-destructive focus:text-destructive'
+          className='text-destructive-text focus:text-destructive-text'
         >
           {props.deleteLabel}
           <DropdownMenuShortcut>

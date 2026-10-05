@@ -636,7 +636,7 @@ export function useChannelsColumns(
                       <Tooltip>
                         <TooltipTrigger
                           render={
-                            <SlidersHorizontal className='text-info h-3.5 w-3.5 flex-shrink-0' />
+                            <SlidersHorizontal className='text-info-text h-3.5 w-3.5 flex-shrink-0' />
                           }
                         />
                         <TooltipContent side='top'>

@@ -356,23 +356,8 @@ For commercial licensing, please contact support@quantumnous.com
   }
 }
 
-/* Override auto-skeleton-react inline styles with Vercel shimmer */
-.auto-skeleton-fade [class^='skeleton-'] {
-  background: linear-gradient(
-    90deg,
-    var(--skeleton-base) 0%,
-    var(--skeleton-base) 33%,
-    var(--skeleton-highlight) 50%,
-    var(--skeleton-base) 67%,
-    var(--skeleton-base) 100%
-  ) !important;
-  background-size: 300% 100% !important;
-  animation: skeleton-shimmer 1.8s ease-in-out infinite !important;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .skeleton-shimmer,
-  .auto-skeleton-fade [class^='skeleton-'] {
+  .skeleton-shimmer {
     animation: none !important;
     background: var(--skeleton-base) !important;
   }
@@ -865,7 +850,10 @@ For commercial licensing, please contact support@quantumnous.com
 /* SnowAPI console: a soft monochrome canvas. Hierarchy comes from tone,
  * spacing and rounded surfaces rather than stacked outlines. Public and auth
  * pages intentionally remain outside this authenticated-route marker. */
-body[data-snowapi-console='true'] {
+body[data-snowapi-console='true']:where(
+    :not([data-theme-preset]),
+    [data-theme-preset='default']
+  ) {
   --background: #fdfdfc;
   --foreground: #111111;
   --card: #f5f5f3;
@@ -881,12 +869,7 @@ body[data-snowapi-console='true'] {
   --accent: #ebebe8;
   --accent-foreground: #111111;
   --border: #e2e2df;
-  --input: #d9d9d6;
   --ring: #111111;
-  --success: #2b2b2b;
-  --warning: #626262;
-  --info: #4a4a4a;
-  --destructive: #111111;
   --chart-1: #111111;
   --chart-2: #444444;
   --chart-3: #606060;
@@ -930,7 +913,11 @@ body[data-snowapi-console='true'] {
   color: var(--foreground);
 }
 
-.dark body[data-snowapi-console='true'] {
+.dark
+  body[data-snowapi-console='true']:where(
+    :not([data-theme-preset]),
+    [data-theme-preset='default']
+  ) {
   --background: #0d0d0d;
   --foreground: #f4f4f2;
   --card: #181818;
@@ -946,12 +933,7 @@ body[data-snowapi-console='true'] {
   --accent: #292929;
   --accent-foreground: #f4f4f2;
   --border: #343434;
-  --input: #3a3a3a;
   --ring: #f4f4f2;
-  --success: #dadad7;
-  --warning: #a9a9a5;
-  --info: #c4c4c0;
-  --destructive: #f4f4f2;
   --chart-1: #f4f4f2;
   --chart-2: #c8c8c4;
   --chart-3: #969693;
@@ -1000,14 +982,14 @@ body[data-snowapi-console='true'] [data-slot='drawer-content'],
 body[data-snowapi-console='true'] [data-slot='popover-content'],
 body[data-snowapi-console='true'] [data-slot='select-content'],
 body[data-snowapi-console='true'] [data-slot='dropdown-menu-content'] {
-  font-family: var(--font-sans) !important;
+  font-family: var(--font-body) !important;
 }
 
 body[data-snowapi-console='true']
   :is(h1, h2, h3, h4, h5, h6, [data-slot='card-title']):not(
     .snowapi-login-welcome-heading
   ) {
-  font-family: var(--font-sans) !important;
+  font-family: var(--font-body) !important;
   letter-spacing: -0.015em;
 }
 
@@ -1221,14 +1203,18 @@ body[data-snowapi-console='true']
 body[data-snowapi-console='true']
   .snowapi-astryx-content
   [data-slot='button'][data-variant='default'] {
-  border-color: var(--foreground);
-  background: var(--foreground);
-  color: var(--background);
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
 
 body[data-snowapi-console='true']
   .snowapi-astryx-content
-  [data-slot='button'][data-variant='secondary'],
+  [data-slot='button'][data-variant='secondary'] {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
 body[data-snowapi-console='true']
   .snowapi-astryx-content
   [data-slot='button'][data-variant='outline'] {
@@ -1247,7 +1233,8 @@ body[data-snowapi-console='true']
 body[data-snowapi-console='true']
   .snowapi-astryx-content
   [data-slot='button'][data-variant='default']:hover {
-  opacity: 0.82;
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 body[data-snowapi-console='true']
@@ -1488,52 +1475,9 @@ body[data-snowapi-console='true']
 
 body[data-snowapi-console='true']
   .snowapi-astryx-content
-  :is(
-    [class*='bg-emerald-'],
-    [class*='bg-green-'],
-    [class*='bg-blue-'],
-    [class*='bg-sky-'],
-    [class*='bg-cyan-'],
-    [class*='bg-violet-'],
-    [class*='bg-purple-'],
-    [class*='bg-amber-'],
-    [class*='bg-yellow-'],
-    [class*='bg-orange-'],
-    [class*='bg-red-'],
-    [class*='bg-rose-']
-  ) {
-  background-color: var(--snowapi-rainflow-surface-strong) !important;
-}
-
-body[data-snowapi-console='true']
-  .snowapi-astryx-content
-  :is(
-    [class*='border-emerald-'],
-    [class*='border-green-'],
-    [class*='border-blue-'],
-    [class*='border-sky-'],
-    [class*='border-cyan-'],
-    [class*='border-violet-'],
-    [class*='border-purple-'],
-    [class*='border-amber-'],
-    [class*='border-yellow-'],
-    [class*='border-orange-'],
-    [class*='border-red-'],
-    [class*='border-rose-']
-  ) {
-  border-color: var(--snowapi-rainflow-divider) !important;
-}
-
-body[data-snowapi-console='true']
-  .snowapi-astryx-content
   :is([data-slot='badge'], [data-slot='status-badge']) {
   transform: none !important;
   box-shadow: none !important;
-}
-
-/* StatusBadge owns its text ink, identically inside content and portals. */
-body[data-snowapi-console='true'] .snowapi-astryx-content [data-slot='badge'] {
-  color: var(--foreground) !important;
 }
 
 body[data-snowapi-console='true']
@@ -1547,25 +1491,6 @@ body[data-snowapi-console='true']
   .snowapi-astryx-content
   [data-slot='progress-indicator'] {
   background: var(--snowapi-progress-fill, var(--foreground)) !important;
-}
-
-body[data-snowapi-console='true']
-  .snowapi-astryx-content
-  :is(
-    [class*='text-emerald-'],
-    [class*='text-green-'],
-    [class*='text-blue-'],
-    [class*='text-sky-'],
-    [class*='text-cyan-'],
-    [class*='text-violet-'],
-    [class*='text-purple-'],
-    [class*='text-amber-'],
-    [class*='text-yellow-'],
-    [class*='text-orange-'],
-    [class*='text-red-'],
-    [class*='text-rose-']
-  ) {
-  color: var(--foreground) !important;
 }
 
 body[data-snowapi-console='true']
@@ -1694,5 +1619,76 @@ body[data-snowapi-console='true'] [data-slot='dialog-footer'] {
 
   .snowapi-content-reveal {
     animation-duration: 0.01ms !important;
+  }
+}
+
+/* Surface aliases resolve on the same element as the chosen preset. */
+body[data-snowapi-console='true'] {
+  --color-background-surface: var(--card);
+  --color-background-body: var(--background);
+  --color-background-card: var(--card);
+  --color-background-popover: var(--popover);
+  --color-background-muted: var(--muted);
+  --color-accent: var(--primary);
+  --color-accent-muted: var(--accent);
+  --color-text-primary: var(--foreground);
+  --color-text-secondary: var(--muted-foreground);
+  --color-text-accent: var(--primary);
+  --color-on-accent: var(--primary-foreground);
+  --color-icon-accent: var(--primary);
+  --color-icon-primary: var(--foreground);
+  --color-icon-secondary: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-emphasized: var(--input);
+  --snowapi-rainflow-surface: var(--card);
+  --snowapi-rainflow-surface-strong: var(--muted);
+  --snowapi-rainflow-surface-inset: var(--background);
+  --snowapi-rainflow-divider: var(--border);
+}
+body {
+  --snowapi-floating-surface: var(--popover);
+  --snowapi-floating-border: var(--border);
+  --snowapi-floating-ink: var(--popover-foreground);
+  --snowapi-floating-muted: var(--muted-foreground);
+  --snowapi-floating-hover: var(--accent);
+  --snowapi-notice-surface: var(--popover);
+  --snowapi-notice-ink: var(--popover-foreground);
+  --snowapi-notice-error: var(--destructive-text);
+  --snowapi-notice-border: var(--border);
+  --snowapi-notice-hover: var(--accent);
+}
+
+/* Density preferences must not shrink interactive targets below 24 CSS px. */
+[data-slot='button'],
+[data-slot='tabs-trigger'],
+[data-slot='select-trigger'] {
+  min-width: 24px;
+  min-height: 24px;
+}
+@media (pointer: coarse) {
+  [data-slot='button'],
+  [data-slot='input'],
+  [data-slot='select-trigger'],
+  [data-slot='tabs-trigger'] {
+    min-height: 44px;
+  }
+  [data-slot='button'][data-size^='icon'] {
+    min-width: 44px;
+  }
+}
+
+/* Box shadows are suppressed by Windows forced-colors; system outlines survive. */
+@media (forced-colors: active) {
+  :is(button, a, input, textarea, select, [tabindex]):focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px !important;
+  }
+  :is(
+    [data-slot='input'],
+    [data-slot='select-trigger'],
+    [data-slot='checkbox'],
+    [data-slot='switch']
+  ) {
+    border: 1px solid ButtonText;
   }
 }

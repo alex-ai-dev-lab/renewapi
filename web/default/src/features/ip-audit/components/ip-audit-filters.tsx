@@ -194,9 +194,7 @@ function ThresholdInput({
 }) {
   return (
     <label className='space-y-1'>
-      <span className='text-muted-foreground text-[11px] font-medium'>
-        {label}
-      </span>
+      <span className='text-muted-foreground text-xs font-medium'>{label}</span>
       <Input
         type='number'
         min={1}

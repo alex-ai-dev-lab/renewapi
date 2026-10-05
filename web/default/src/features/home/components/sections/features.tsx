@@ -111,7 +111,7 @@ export function Features(_props: FeaturesProps) {
             (step, i) => (
               <div key={step} className='flex items-center gap-2'>
                 <div
-                  className={`flex size-6 items-center justify-center rounded-full text-[10px] font-bold ${
+                  className={`flex size-6 items-center justify-center rounded-full text-xs font-bold ${
                     i === 1
                       ? 'border border-blue-500/30 bg-blue-500/20 text-blue-500'
                       : 'border-border/40 bg-muted text-muted-foreground border'
@@ -140,7 +140,7 @@ export function Features(_props: FeaturesProps) {
             {['API', 'SDK', 'CLI', 'Docs'].map((n) => (
               <div
                 key={n}
-                className='border-background from-muted to-muted/60 text-muted-foreground flex size-8 items-center justify-center rounded-full border-2 bg-gradient-to-br text-[9px] font-bold'
+                className='border-background from-muted to-muted/60 text-muted-foreground flex size-8 items-center justify-center rounded-full border-2 bg-gradient-to-br text-xs font-bold'
               >
                 {n}
               </div>
@@ -202,7 +202,7 @@ export function Features(_props: FeaturesProps) {
               className={`bg-background group hover:bg-muted/20 p-7 transition-colors duration-300 md:p-8 ${f.span}`}
             >
               <div className='mb-3 flex items-center gap-3'>
-                <span className='border-border/40 bg-muted text-muted-foreground flex size-7 items-center justify-center rounded-md border text-[10px] font-semibold tabular-nums'>
+                <span className='border-border/40 bg-muted text-muted-foreground flex size-7 items-center justify-center rounded-md border text-xs font-semibold tabular-nums'>
                   {f.num}
                 </span>
                 <h3 className='text-sm font-semibold'>{f.title}</h3>

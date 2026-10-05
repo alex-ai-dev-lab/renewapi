@@ -93,8 +93,8 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
               aria-label={toggleLabel}
               className={
                 isEnabled
-                  ? 'text-destructive hover:text-destructive'
-                  : 'text-success hover:text-success'
+                  ? 'text-destructive-text hover:text-destructive-text'
+                  : 'text-success-text hover:text-success-text'
               }
             />
           }
@@ -110,7 +110,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             e.preventDefault()
             setDeleteConfirmOpen(true)
           }}
-          className='text-destructive focus:text-destructive'
+          className='text-destructive-text focus:text-destructive-text'
         >
           {t('Delete')}
           <DropdownMenuShortcut>

@@ -26,7 +26,7 @@ export function ModelProvider(props: { model: CatalogModel }) {
         {props.model.providerIcon ? (
           getLobeIcon(props.model.providerIcon, 16)
         ) : (
-          <span className='text-muted-foreground text-[10px] font-semibold'>
+          <span className='text-muted-foreground text-xs font-semibold'>
             {props.model.provider.slice(0, 1).toUpperCase()}
           </span>
         )}

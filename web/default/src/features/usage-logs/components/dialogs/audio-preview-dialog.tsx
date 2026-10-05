@@ -107,7 +107,7 @@ function AudioClipCard({ clip }: { clip: AudioClip }) {
 
         {hasError ? (
           <div className='flex flex-wrap items-center gap-2'>
-            <span className='text-destructive text-xs'>
+            <span className='text-destructive-text text-xs'>
               {t('Audio playback failed')}
             </span>
             <Button

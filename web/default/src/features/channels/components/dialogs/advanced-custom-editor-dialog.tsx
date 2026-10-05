@@ -678,7 +678,7 @@ export function AdvancedCustomEditorDialog({
             {t('Edit JSON text directly. Format will be validated on save.')}
           </p>
           {jsonError ? (
-            <p className='text-destructive mt-1 text-xs'>{jsonError}</p>
+            <p className='text-destructive-text mt-1 text-xs'>{jsonError}</p>
           ) : null}
         </div>
       )}
@@ -789,7 +789,7 @@ function RouteGroupEditor({
           )}
         </p>
         {groupHasError && validationError ? (
-          <p className='text-destructive mt-1 text-xs'>
+          <p className='text-destructive-text mt-1 text-xs'>
             {validationError.routeIndex !== undefined
               ? `${t('Route')} ${validationError.routeIndex + 1}: `
               : ''}
@@ -1058,7 +1058,7 @@ function RouteEditor({
                     variant={ruleKind === 'regex' ? 'outline' : 'secondary'}
                     className='max-w-full gap-1.5 font-mono'
                   >
-                    <span className='font-sans text-[10px] font-semibold tracking-normal uppercase'>
+                    <span className='font-sans text-xs font-semibold tracking-normal uppercase'>
                       {t(ruleKind === 'regex' ? 'Regex' : 'Exact')}
                     </span>
                     <span className='truncate'>{displayModel}</span>
@@ -1185,7 +1185,7 @@ function RouteEditor({
       </div>
 
       {errorMessage ? (
-        <p className='text-destructive text-xs'>{t(errorMessage)}</p>
+        <p className='text-destructive-text text-xs'>{t(errorMessage)}</p>
       ) : null}
 
       {authMode === 'header' || authMode === 'query' ? (

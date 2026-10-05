@@ -158,7 +158,7 @@ export function AmountOptionsVisualEditor({
             aria-invalid={errorMessage ? true : undefined}
           />
           {errorMessage && (
-            <p className='text-destructive mt-1 text-sm'>{errorMessage}</p>
+            <p className='text-destructive-text mt-1 text-sm'>{errorMessage}</p>
           )}
         </div>
         <Button

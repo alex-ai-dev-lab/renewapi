@@ -107,7 +107,7 @@ export function DeleteAccountDialog({
         'This action cannot be undone. This will permanently delete your account and remove all your data from our servers.'
       )}
       contentClassName='sm:max-w-md'
-      titleClassName='text-destructive flex items-center gap-2'
+      titleClassName='text-destructive-text flex items-center gap-2'
       contentHeight='auto'
       bodyClassName='space-y-4'
       footer={

@@ -99,7 +99,7 @@ export function ModalitiesMatrix(props: {
     <tr>
       <th
         scope='row'
-        className='text-muted-foreground bg-muted/30 px-3 py-2 text-left text-[11px] font-medium tracking-wider uppercase'
+        className='text-muted-foreground bg-muted/30 px-3 py-2 text-left text-xs font-medium tracking-wider uppercase'
       >
         {label}
       </th>
@@ -111,17 +111,13 @@ export function ModalitiesMatrix(props: {
             key={modality}
             className={cn(
               'border-l px-3 py-2 text-center',
-              enabled
-                ? 'bg-success/10'
-                : 'bg-background'
+              enabled ? 'bg-success/10' : 'bg-background'
             )}
           >
             <span
               className={cn(
                 'inline-flex items-center justify-center',
-                enabled
-                  ? 'text-success'
-                  : 'text-muted-foreground/40'
+                enabled ? 'text-success-text' : 'text-muted-foreground/40'
               )}
               aria-label={
                 enabled
@@ -148,7 +144,7 @@ export function ModalitiesMatrix(props: {
           <tr className='bg-muted/40'>
             <th
               scope='col'
-              className='text-muted-foreground px-3 py-2 text-left text-[11px] font-medium tracking-wider uppercase'
+              className='text-muted-foreground px-3 py-2 text-left text-xs font-medium tracking-wider uppercase'
             >
               {t('Modality')}
             </th>
@@ -156,7 +152,7 @@ export function ModalitiesMatrix(props: {
               <th
                 key={modality}
                 scope='col'
-                className='text-muted-foreground border-l px-3 py-2 text-center text-[11px] font-medium tracking-wider uppercase'
+                className='text-muted-foreground border-l px-3 py-2 text-center text-xs font-medium tracking-wider uppercase'
               >
                 {t(MODALITY_META[modality].labelKey)}
               </th>

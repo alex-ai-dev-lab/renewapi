@@ -107,11 +107,11 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
               {formatTimestampToDate(submitTime, 'seconds')}
             </span>
             {log.finish_time ? (
-              <span className='text-muted-foreground/80 font-mono text-[11px] tabular-nums'>
+              <span className='text-muted-foreground/80 font-mono text-xs tabular-nums'>
                 {formatTimestampToDate(log.finish_time, 'seconds')}
               </span>
             ) : (
-              <span className='text-muted-foreground/80 text-[11px]'>-</span>
+              <span className='text-muted-foreground/80 text-xs'>-</span>
             )}
           </div>
         )
@@ -146,7 +146,7 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
             <Avatar className='ring-border/60 size-6 ring-1 max-sm:hidden'>
               <AvatarFallback
                 className={cn(
-                  'text-[11px] font-semibold',
+                  'text-xs font-semibold',
                   !sensitiveVisible && 'bg-muted text-muted-foreground'
                 )}
                 style={
@@ -186,7 +186,7 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
               size='sm'
               className='border-border/60 bg-muted/30 max-w-full truncate rounded-md border px-1.5 py-0.5 font-mono'
             />
-            <span className='text-muted-foreground/80 truncate text-[11px]'>
+            <span className='text-muted-foreground/80 truncate text-xs'>
               {t(log.platform)} · {t(taskActionMapper.getLabel(log.action))}
             </span>
           </div>
@@ -282,7 +282,7 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
               onClick={() => setDialogOpen(true)}
               title={t('Click to view full error message')}
             >
-              <span className='text-destructive min-w-0 truncate leading-snug group-hover:underline'>
+              <span className='text-destructive-text min-w-0 truncate leading-snug group-hover:underline'>
                 {failReason}
               </span>
             </button>

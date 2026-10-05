@@ -232,14 +232,14 @@ function DesktopRow({
       <TableCell
         className={cn(
           'text-right font-medium',
-          item.rpm_anomaly && 'text-destructive'
+          item.rpm_anomaly && 'text-destructive-text'
         )}
       >
         {numberFormat.format(item.peak_rpm)}
       </TableCell>
       <TableCell>
         <div className='text-xs'>{formatTime(item.last_seen_at)}</div>
-        <div className='text-muted-foreground mt-1 text-[11px]'>
+        <div className='text-muted-foreground mt-1 text-xs'>
           {t('First {{time}}', { time: formatTime(item.first_seen_at) })}
         </div>
       </TableCell>
@@ -292,7 +292,7 @@ function MobileRow({
       <div className='mt-3'>
         <UserList item={item} numberFormat={numberFormat} />
       </div>
-      <div className='text-muted-foreground mt-3 text-[11px]'>
+      <div className='text-muted-foreground mt-3 text-xs'>
         {t('Last seen {{time}}', { time: formatTime(item.last_seen_at) })}
       </div>
     </div>
@@ -324,7 +324,7 @@ function UserList({
         ))}
         {item.users_truncated && <Badge variant='outline'>{t('More')}</Badge>}
       </div>
-      <div className='text-muted-foreground mt-1 text-[11px]'>
+      <div className='text-muted-foreground mt-1 text-xs'>
         {t('{{count}} associated users', {
           count: numberFormat.format(item.user_count),
         })}
@@ -336,7 +336,7 @@ function UserList({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className='text-muted-foreground text-[10px] font-medium uppercase'>
+      <div className='text-muted-foreground text-xs font-medium uppercase'>
         {label}
       </div>
       <div className='mt-0.5 font-medium tabular-nums'>{value}</div>

@@ -250,7 +250,7 @@ export function GlobalTokenUsagePanel() {
               {t('Hourly Token Consumption')}
             </span>
           </div>
-          <span className='text-muted-foreground rounded-md border px-2 py-1 font-mono text-[11px]'>
+          <span className='text-muted-foreground rounded-md border px-2 py-1 font-mono text-xs'>
             24 × 1h
           </span>
         </div>

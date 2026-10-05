@@ -88,7 +88,7 @@ export function StatusCodeRiskDialog({
       }
       description={t('High-risk status code retry risk disclaimer')}
       contentClassName='max-w-lg'
-      titleClassName='text-destructive flex items-center gap-2'
+      titleClassName='text-destructive-text flex items-center gap-2'
       contentHeight='auto'
       bodyClassName='space-y-4'
       footer={
@@ -153,7 +153,7 @@ export function StatusCodeRiskDialog({
             placeholder={t('High-risk status code retry input placeholder')}
           />
           {confirmText && !textMatches && (
-            <p className='text-destructive text-xs'>
+            <p className='text-destructive-text text-xs'>
               {t('High-risk status code retry input mismatch')}
             </p>
           )}

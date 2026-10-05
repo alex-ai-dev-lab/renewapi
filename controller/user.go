@@ -432,6 +432,13 @@ func GetSelf(c *gin.Context) {
 	// Hide admin remarks: set to empty to trigger omitempty tag, ensuring the remark field is not included in JSON returned to regular users
 	user.Remark = ""
 
+	// Report whether a local password exists without exposing the stored hash.
+	hasPassword, err := model.UserHasPassword(user.Id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
 	// 计算用户权限信息
 	permissions := calculateUserPermissions(userRole)
 
@@ -446,6 +453,7 @@ func GetSelf(c *gin.Context) {
 		"role":              user.Role,
 		"status":            user.Status,
 		"email":             user.Email,
+		"has_password":      hasPassword,
 		"github_id":         user.GitHubId,
 		"discord_id":        user.DiscordId,
 		"oidc_id":           user.OidcId,
@@ -758,17 +766,11 @@ func UpdateSelf(c *gin.Context) {
 		return
 	}
 
-	cleanUser := model.User{
-		Id:          c.GetInt("id"),
-		Username:    user.Username,
-		Password:    user.Password,
-		DisplayName: user.DisplayName,
-	}
+	userID := c.GetInt("id")
 	if user.Password == "$I_LOVE_U" {
-		user.Password = "" // rollback to what it should be
-		cleanUser.Password = ""
+		user.Password = ""
 	}
-	updatePassword, err := checkUpdatePassword(user.OriginalPassword, user.Password, cleanUser.Id)
+	updatePassword, err := checkUpdatePassword(user.OriginalPassword, user.Password, userID)
 	if err != nil {
 		if errors.Is(err, errUserPasswordUnset) {
 			common.ApiErrorI18n(c, i18n.MsgUserPasswordUnset)
@@ -781,7 +783,18 @@ func UpdateSelf(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if err := cleanUser.Update(updatePassword); err != nil {
+	var username, displayName *string
+	if _, present := requestData["username"]; present {
+		username = &user.Username
+	}
+	if _, present := requestData["display_name"]; present {
+		displayName = &user.DisplayName
+	}
+	password := ""
+	if updatePassword {
+		password = user.Password
+	}
+	if err := model.UpdateSelfProfile(userID, username, displayName, password); err != nil {
 		common.ApiError(c, err)
 		return
 	}

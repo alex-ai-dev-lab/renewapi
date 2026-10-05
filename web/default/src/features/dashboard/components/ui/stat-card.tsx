@@ -261,7 +261,7 @@ export function StatCard(props: StatCardProps) {
         </div>
         <p
           className={cn(
-            'text-muted-foreground/60 line-clamp-1 text-[11px] sm:text-xs',
+            'text-muted-foreground line-clamp-1 text-[11px] sm:text-xs',
             props.compactMobile && 'hidden sm:block'
           )}
         >
@@ -277,7 +277,7 @@ export function StatCard(props: StatCardProps) {
         </div>
         <p
           className={cn(
-            'text-muted-foreground/60 line-clamp-1 text-[11px] leading-relaxed sm:text-xs',
+            'text-muted-foreground line-clamp-1 text-[11px] leading-relaxed sm:text-xs',
             props.compactMobile && 'hidden sm:block'
           )}
         >

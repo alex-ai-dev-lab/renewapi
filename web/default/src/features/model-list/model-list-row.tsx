@@ -63,6 +63,17 @@ export function ModelListRow(props: {
     fundingLabel = t('Balance only')
   }
 
+  let accessLabel = t('Access unknown')
+  let accessClassName =
+    'border border-border bg-transparent text-muted-foreground'
+  if (props.model.hasAccess === true) {
+    accessLabel = t('Available')
+    accessClassName = 'bg-foreground text-background'
+  } else if (props.model.hasAccess === false) {
+    accessLabel = t('No access')
+    accessClassName = 'bg-muted text-muted-foreground'
+  }
+
   return (
     <li className='content-auto border-b last:border-b-0'>
       <button
@@ -90,13 +101,11 @@ export function ModelListRow(props: {
             </code>
             <span
               className={cn(
-                'inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[10px] leading-none font-medium',
-                props.model.hasAccess
-                  ? 'bg-foreground text-background'
-                  : 'bg-muted text-muted-foreground'
+                'inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[10px] leading-none font-medium whitespace-nowrap',
+                accessClassName
               )}
             >
-              {props.model.hasAccess ? t('Available') : t('No access')}
+              {accessLabel}
             </span>
             <ModelFundingBadge source={props.model.fundingSource} />
           </div>

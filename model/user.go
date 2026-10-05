@@ -401,6 +401,20 @@ func GetUserById(id int, selectAll bool) (*User, error) {
 	return &user, err
 }
 
+// UserHasPassword reports whether the account has a local password set.
+// It loads only the password column and never returns the stored hash to
+// callers, so it is safe to expose the boolean through user-facing APIs.
+func UserHasPassword(id int) (bool, error) {
+	if id == 0 {
+		return false, errors.New("id 为空！")
+	}
+	var user User
+	if err := DB.Select("id", "password").First(&user, "id = ?", id).Error; err != nil {
+		return false, err
+	}
+	return user.Password != "", nil
+}
+
 func GetUserIdByAffCode(affCode string) (int, error) {
 	if affCode == "" {
 		return 0, errors.New("affCode 为空！")
@@ -588,6 +602,42 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 			_ = inviteUser(inviterId)
 		}
 	}
+}
+
+// UpdateSelfProfile changes only explicitly requested self-service fields.
+// It must never write zero values from a partial request into privileged columns.
+func UpdateSelfProfile(id int, username, displayName *string, password string) error {
+	if id <= 0 {
+		return errors.New("invalid user id")
+	}
+	updates := map[string]interface{}{}
+	if username != nil {
+		if strings.TrimSpace(*username) == "" {
+			return errors.New("username is empty")
+		}
+		updates["username"] = *username
+	}
+	if displayName != nil {
+		updates["display_name"] = *displayName
+	}
+	if password != "" {
+		hash, err := common.Password2Hash(password)
+		if err != nil {
+			return err
+		}
+		updates["password"] = hash
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	if err := DB.Model(&User{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+		return err
+	}
+	user, err := GetUserById(id, false)
+	if err != nil {
+		return err
+	}
+	return updateUserCache(*user)
 }
 
 func (user *User) Update(updatePassword bool) error {

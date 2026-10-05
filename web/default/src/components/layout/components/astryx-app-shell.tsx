@@ -28,7 +28,6 @@ import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { DEFAULT_LOGO } from '@/lib/constants'
 import { useDirection } from '@/context/direction-provider'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { Button } from '@/components/ui/button'
@@ -38,6 +37,7 @@ import {
   SheetContent,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { BrandImage } from '@/components/brand-image'
 import { ContentLoading } from '@/components/content-loading'
 import { AnimatedOutlet } from '@/components/page-transition'
 import { SubscriptionReveal } from '@/features/subscriptions/components/subscription-reveal'
@@ -67,6 +67,7 @@ function SnowMobileNavigation({
   minimalModeEnabled,
 }: SnowMobileNavigationProps) {
   const { t } = useTranslation()
+  const { systemName } = useSystemConfig()
   const { isMobileNavOpen, closeMobileNav, mobileNavId } = useAppShellMobile()
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const upgradeOpenTimerRef = useRef<number | null>(null)
@@ -104,9 +105,9 @@ function SnowMobileNavigation({
             <Link
               to='/dashboard'
               className='snowapi-astryx-logo-link'
-              aria-label='SnowAPI'
+              aria-label={systemName}
             >
-              <img src={logo || DEFAULT_LOGO} alt='' width={24} height={24} />
+              <BrandImage src={logo} alt='' width={24} height={24} />
             </Link>
             <SheetClose
               render={

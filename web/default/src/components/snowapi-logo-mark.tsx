@@ -17,26 +17,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { ComponentProps } from 'react'
-import { IS_DEMO, appPath } from '@/lib/deployment-mode'
 import { cn } from '@/lib/utils'
-
-const fallbackLogo = IS_DEMO
-  ? appPath('/snowapi-logo.png')
-  : '/snowapi-theme/unsnow-favicon.png?v=20260717-1'
+import { useSystemConfig } from '@/hooks/use-system-config'
+import { BrandImage } from '@/components/brand-image'
 
 type SnowApiLogoMarkProps = Omit<ComponentProps<'img'>, 'alt' | 'src'>
 
 export function SnowApiLogoMark({ className, ...props }: SnowApiLogoMarkProps) {
-  const source =
-    typeof document === 'undefined'
-      ? fallbackLogo
-      : (document.querySelector<HTMLLinkElement>('link[rel~="icon"]')?.href ??
-        fallbackLogo)
+  const { logo } = useSystemConfig()
 
   return (
-    <img
+    <BrandImage
       {...props}
-      src={source}
+      src={logo}
       alt=''
       aria-hidden='true'
       className={cn('object-contain', className)}

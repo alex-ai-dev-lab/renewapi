@@ -90,6 +90,9 @@ export function GeneralError({
                 {t('Retry')}
               </Button>
             )}
+            <Button variant='outline' onClick={() => window.location.reload()}>
+              {t('Reload page')}
+            </Button>
             <Button variant='outline' onClick={() => history.go(-1)}>
               {t('Go Back')}
             </Button>

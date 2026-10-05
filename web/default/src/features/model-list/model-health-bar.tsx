@@ -67,10 +67,14 @@ export function ModelHealthBar(props: {
             {t('Success rate')}
           </span>
           <span
-            className={cn('font-mono text-sm font-semibold tabular-nums', {
-              [getSuccessRateTextClass(successRate ?? 0)]: successRate !== null,
-              'text-muted-foreground': successRate === null,
-            })}
+            className={cn(
+              'font-mono text-sm font-semibold whitespace-nowrap tabular-nums',
+              {
+                [getSuccessRateTextClass(successRate ?? 0)]:
+                  successRate !== null,
+                'text-muted-foreground': successRate === null,
+              }
+            )}
           >
             {successRate === null ? t('No data') : formatUptimePct(successRate)}
           </span>
@@ -127,7 +131,7 @@ export function ModelHealthBar(props: {
         {props.showLabel ? null : (
           <span
             className={cn(
-              'w-12 text-right font-mono text-[11px] font-medium tabular-nums',
+              'w-12 text-right font-mono text-[11px] font-medium whitespace-nowrap tabular-nums',
               successRate === null
                 ? 'text-muted-foreground'
                 : getSuccessRateTextClass(successRate)

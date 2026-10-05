@@ -20,12 +20,14 @@ import { Link } from '@tanstack/react-router'
 import { ArrowUpRight, LogIn } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { IconGithub } from '@/assets/brand-icons'
+import { useSystemConfig } from '@/hooks/use-system-config'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { SnowApiLogoMark } from '@/components/snowapi-logo-mark'
 import { ThemeSwitch } from '@/components/theme-switch'
 
 export function HomeHeader() {
   const { t } = useTranslation()
+  const { systemName } = useSystemConfig()
 
   return (
     <header className='snowapi-deeix-header'>
@@ -33,7 +35,7 @@ export function HomeHeader() {
         <a
           href='#home'
           className='snowapi-deeix-wordmark'
-          aria-label='RenewAPI'
+          aria-label={systemName}
         >
           <SnowApiLogoMark />
         </a>

@@ -368,11 +368,16 @@ For commercial licensing, please contact support@quantumnous.com
   bottom: 1.35rem;
   left: 0;
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
+  gap: 0.4rem 0.75rem;
+  padding-inline: 1rem;
+  text-align: center;
   color: var(--deeix-muted);
   font-size: 0.76rem;
   letter-spacing: 0.015em;
-  line-height: 1;
+  line-height: 1.5;
   opacity: 1;
 }
 
@@ -602,7 +607,9 @@ For commercial licensing, please contact support@quantumnous.com
   }
 
   .snowapi-deeix-copyright {
-    bottom: 1rem;
+    bottom: max(1rem, env(safe-area-inset-bottom));
+    flex-direction: column;
+    gap: 0.25rem;
     font-size: 0.72rem;
   }
 }

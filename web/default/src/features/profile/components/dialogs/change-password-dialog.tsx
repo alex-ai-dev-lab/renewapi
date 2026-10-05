@@ -49,6 +49,17 @@ export function ChangePasswordDialog({
     confirmPassword: '',
   })
 
+  const handleOpenChange = (next: boolean) => {
+    if (loading) return
+    if (!next)
+      setFormData({
+        originalPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      })
+    onOpenChange(next)
+  }
+
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
@@ -67,8 +78,8 @@ export function ChangePasswordDialog({
       return
     }
 
-    if (formData.newPassword.length < 8) {
-      toast.error(t('Password must be at least 8 characters'))
+    if (formData.newPassword.length < 8 || formData.newPassword.length > 20) {
+      toast.error(t('Password must be between 8 and 20 characters'))
       return
     }
 
@@ -112,7 +123,7 @@ export function ChangePasswordDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title={t('Change Password')}
       description={
         <>
@@ -127,7 +138,7 @@ export function ChangePasswordDialog({
           <Button
             type='button'
             variant='outline'
-            onClick={() => onOpenChange(false)}
+            onClick={() => handleOpenChange(false)}
             disabled={loading}
           >
             {t('Cancel')}
@@ -161,6 +172,7 @@ export function ChangePasswordDialog({
             disabled={loading}
             required
             minLength={8}
+            maxLength={20}
             autoComplete='new-password'
           />
           <p className='text-muted-foreground text-xs'>

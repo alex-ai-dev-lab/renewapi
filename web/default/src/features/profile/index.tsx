@@ -21,9 +21,11 @@ import { useStatus } from '@/hooks/use-status'
 import { ContentLoading, ContentReveal } from '@/components/content-loading'
 import { SectionPageLayout } from '@/components/layout'
 import { CheckinCalendarCard } from './components/checkin-calendar-card'
+import { PasskeyCard } from './components/passkey-card'
 import { ProfileHeader } from './components/profile-header'
 import { ProfilePreferencesCard } from './components/profile-preferences-card'
 import { ProfileSecurityCard } from './components/profile-security-card'
+import { TwoFactorCard } from './components/two-factor-card'
 import { useProfile } from './hooks'
 
 export function Profile() {
@@ -32,6 +34,7 @@ export function Profile() {
   const { status } = useStatus()
 
   const checkinEnabled = status?.checkin_enabled === true
+  const passkeyEnabled = status?.passkey_login === true
   const turnstileEnabled = !!(
     status?.turnstile_check && status?.turnstile_site_key
   )
@@ -54,7 +57,11 @@ export function Profile() {
                   : 'grid gap-4'
               }
             >
-              <ProfileSecurityCard profile={profile} />
+              <div className='flex flex-col gap-4'>
+                <ProfileSecurityCard profile={profile} />
+                {passkeyEnabled ? <PasskeyCard loading={loading} /> : null}
+                <TwoFactorCard />
+              </div>
               {checkinEnabled ? (
                 <CheckinCalendarCard
                   checkinEnabled={checkinEnabled}

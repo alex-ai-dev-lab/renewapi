@@ -64,7 +64,7 @@ export default function SnowflakeHome() {
         <span>
           © {new Date().getFullYear()} {systemName}
         </span>
-        <span className='ml-3'>
+        <span>
           UI:{' '}
           <a
             href='https://github.com/Ooxygen7/SnowAPI'
@@ -74,7 +74,7 @@ export default function SnowflakeHome() {
             SnowAPI
           </a>
         </span>
-        <span className='mt-2 block'>
+        <span>
           Frontend design and development by{' '}
           <a
             href='https://github.com/QuantumNous/new-api'

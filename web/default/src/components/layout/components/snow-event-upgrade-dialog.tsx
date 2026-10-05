@@ -37,6 +37,7 @@ import { getSelf } from '@/lib/api'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/use-media-query'
+import { useSystemConfig } from '@/hooks/use-system-config'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -67,7 +68,8 @@ import {
   subscriptionOverviewQueryKey,
   useSubscriptionOverview,
 } from '@/features/subscriptions/use-subscription-overview'
-import { getTopupInfo } from '@/features/wallet/api'
+import { useTopupInfoQuery } from '@/features/wallet/hooks/use-payment-compliance'
+import { isPaymentComplianceConfirmed } from '@/features/wallet/lib/payment-compliance'
 import { SnowEventAurora } from './snow-event-aurora'
 
 type SnowEventUpgradeDialogProps = {
@@ -130,6 +132,7 @@ function getSnowEventFeatures(
 
 export function SnowEventUpgradeDialog(props: SnowEventUpgradeDialogProps) {
   const { t } = useTranslation()
+  const { systemName } = useSystemConfig()
   const isMobile = useMediaQuery('(max-width: 1023px)')
   const queryClient = useQueryClient()
   const overviewQuery = useSubscriptionOverview(props.open)
@@ -137,13 +140,9 @@ export function SnowEventUpgradeDialog(props: SnowEventUpgradeDialogProps) {
   const [purchaseOpen, setPurchaseOpen] = useState(false)
   const [mobilePlanIndex, setMobilePlanIndex] = useState(0)
 
-  const paymentInfo = useQuery({
-    queryKey: ['topup-info'],
-    queryFn: getTopupInfo,
-    enabled: props.open,
-  })
+  const paymentInfo = useTopupInfoQuery(props.open)
   const info = paymentInfo.data?.data
-  const complianceConfirmed = info?.payment_compliance_confirmed === true
+  const complianceConfirmed = isPaymentComplianceConfirmed(info)
 
   const selfQuery = useQuery({
     queryKey: ['snow-event-user'],
@@ -235,7 +234,7 @@ export function SnowEventUpgradeDialog(props: SnowEventUpgradeDialogProps) {
           className='snowapi-upgrade-dialog inset-0 block max-w-none translate-x-0 translate-y-0 overflow-x-hidden overflow-y-auto rounded-none p-0 ring-0 sm:max-w-none'
         >
           <DialogHeader className='sr-only'>
-            <DialogTitle>SnowEvent</DialogTitle>
+            <DialogTitle>{t('Subscription Plans')}</DialogTitle>
             <DialogDescription>
               {t('Unlock higher privileges')}
             </DialogDescription>
@@ -260,7 +259,7 @@ export function SnowEventUpgradeDialog(props: SnowEventUpgradeDialogProps) {
                 <div className='flex items-center gap-3'>
                   <SnowApiLogoMark className='snowapi-upgrade-logo' />
                   <h1 className='text-3xl font-semibold tracking-[-0.045em] sm:text-4xl'>
-                    SnowEvent
+                    {systemName}
                   </h1>
                 </div>
                 <p className='text-muted-foreground mt-2 text-sm font-medium'>
@@ -305,7 +304,7 @@ export function SnowEventUpgradeDialog(props: SnowEventUpgradeDialogProps) {
                       </EmptyMedia>
                       <EmptyTitle>{t('No subscription plans yet')}</EmptyTitle>
                       <EmptyDescription>
-                        {t('Subscribe to a plan for model access')}
+                        {t('Please check back later.')}
                       </EmptyDescription>
                     </EmptyHeader>
                   </Empty>
@@ -316,7 +315,7 @@ export function SnowEventUpgradeDialog(props: SnowEventUpgradeDialogProps) {
                     {isMobile ? (
                       <ToggleGroup
                         className='snowapi-upgrade-tier-selector'
-                        aria-label='SnowEvent'
+                        aria-label={t('Subscription Plans')}
                         value={[String(mobilePlanIndex)]}
                         onValueChange={(value) => {
                           if (value[0] !== undefined) {

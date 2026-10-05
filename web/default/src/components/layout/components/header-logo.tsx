@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { cn } from '@/lib/utils'
+import { BrandImage } from '@/components/brand-image'
 
 interface HeaderLogoProps {
   src: string
@@ -38,7 +39,7 @@ export function HeaderLogo({
   className,
 }: HeaderLogoProps) {
   return (
-    <img
+    <BrandImage
       src={src}
       alt={alt}
       className={cn(

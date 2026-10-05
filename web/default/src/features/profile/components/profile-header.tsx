@@ -24,7 +24,7 @@ import { formatQuota } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { StatusBadge } from '@/components/status-badge'
-import { getDisplayName } from '../lib'
+import { formatLimit, getDisplayName } from '../lib'
 import type { UserProfile } from '../types'
 import { ChangePasswordDialog } from './dialogs/change-password-dialog'
 
@@ -32,19 +32,18 @@ interface ProfileHeaderProps {
   profile: UserProfile
 }
 
-function formatLimit(value: number | undefined) {
-  if (!value || value <= 0) return '∞'
-  return value.toLocaleString()
-}
-
 export function ProfileHeader({ profile }: ProfileHeaderProps) {
   const { t } = useTranslation()
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
   const policy = profile.group_policy
-  const periodMinutes = Math.max(1, policy?.period_minutes ?? 1)
-  const rpm = policy?.max_requests
-    ? Math.max(1, Math.floor(policy.max_requests / periodMinutes))
-    : 0
+  let rpm: number | undefined
+  if (policy?.max_requests !== undefined) {
+    const periodMinutes = Math.max(1, policy.period_minutes ?? 1)
+    rpm =
+      policy.max_requests > 0
+        ? Math.max(1, Math.floor(policy.max_requests / periodMinutes))
+        : 0
+  }
   const limits = [
     { label: 'RPM', value: formatLimit(rpm) },
     { label: 'TPM', value: formatLimit(policy?.tpm_limit) },
@@ -109,7 +108,9 @@ export function ProfileHeader({ profile }: ProfileHeaderProps) {
                   {t('Cumulative recharge')}
                 </p>
                 <p className='mt-2 text-xl font-medium tabular-nums'>
-                  {formatLocalCurrencyAmount(profile.total_topup ?? 0)}
+                  {profile.total_topup === undefined
+                    ? t('No data')
+                    : formatLocalCurrencyAmount(profile.total_topup)}
                 </p>
               </div>
             </div>
@@ -133,7 +134,9 @@ export function ProfileHeader({ profile }: ProfileHeaderProps) {
                   className='bg-background/55 flex min-h-20 flex-col justify-center rounded-lg px-3 py-3 text-center'
                 >
                   <p className='text-muted-foreground text-xs'>{limit.label}</p>
-                  <p className='mt-1 font-mono text-sm'>{limit.value}</p>
+                  <p className='mt-1 font-mono text-sm'>
+                    {limit.value ?? t('No data')}
+                  </p>
                 </div>
               ))}
             </div>

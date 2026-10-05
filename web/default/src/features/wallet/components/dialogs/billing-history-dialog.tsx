@@ -103,12 +103,14 @@ export function BillingHistoryDialog({
         title={
           targetUser
             ? `${t('Wallet')} · ${targetUser.username}`
-            : t('Billing History')
+            : t('Topup Orders')
         }
         description={
           targetUser
-            ? `${t('User ID')}: ${targetUser.id} · ${t('Billing History')}`
-            : t('View your topup transaction records and payment history')
+            ? `${t('User ID')}: ${targetUser.id} · ${t('Topup Orders')}`
+            : t(
+                'Topup and refund orders. For token usage, see consumption logs.'
+              )
         }
         contentClassName='flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] min-w-0 flex-col rounded-2xl p-4 sm:max-w-4xl'
         headerClassName='pr-8'
@@ -162,7 +164,7 @@ export function BillingHistoryDialog({
                 className='flex min-h-40 flex-col items-center justify-center gap-3'
               >
                 <p className='text-destructive text-sm'>
-                  {t('Failed to load billing history')}
+                  {t('Failed to load topup orders')}
                 </p>
                 <Button variant='outline' onClick={() => void refresh()}>
                   {t('Retry')}
@@ -172,7 +174,7 @@ export function BillingHistoryDialog({
             {!loading && !error && records.length === 0 ? (
               <div className='text-muted-foreground flex min-h-40 flex-col items-center justify-center py-10 text-center'>
                 <p className='text-sm font-medium'>
-                  {t('No billing records found')}
+                  {t('No topup orders found')}
                 </p>
                 {!targetUser && (
                   <p className='mt-1 text-xs'>

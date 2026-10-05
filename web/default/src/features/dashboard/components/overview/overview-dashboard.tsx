@@ -16,14 +16,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useOverviewFreshness } from '../../hooks/use-overview-freshness'
 import { AnnouncementsPanel } from './announcements-panel'
+import { OnboardingPanel } from './onboarding-panel'
 import { SummaryCards } from './summary-cards'
 
 export function OverviewDashboard() {
+  const { isFresh } = useOverviewFreshness()
+
   return (
     <div className='flex flex-col gap-4'>
-      <AnnouncementsPanel />
-      <SummaryCards />
+      {isFresh ? <OnboardingPanel /> : null}
+      <AnnouncementsPanel hideWhenEmpty={isFresh} />
+      <SummaryCards compact={isFresh} />
     </div>
   )
 }

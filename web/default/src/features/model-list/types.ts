@@ -56,7 +56,7 @@ export type ModelHealthResponse = {
 export type CatalogModel = {
   id: string
   name: string
-  hasAccess: boolean
+  hasAccess: boolean | null
   fundingSource?: 'subscription_only' | 'wallet_only'
   provider: string
   providerIcon?: string

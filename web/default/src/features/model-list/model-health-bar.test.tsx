@@ -48,3 +48,16 @@ test('health timeline preserves semantic levels and unknown gaps in list and det
     assert.ok(markup.includes('aria-valuenow="80"'))
   }
 })
+
+test('health no-data text stays on one line', () => {
+  const markup = renderToStaticMarkup(
+    createElement(ModelHealthBar, {
+      modelName: 'health-empty',
+      successRate: null,
+      showLabel: false,
+      hourlyHealth: [],
+    })
+  )
+  assert.ok(markup.includes('whitespace-nowrap'))
+  assert.ok(markup.includes('No data'))
+})

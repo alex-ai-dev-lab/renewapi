@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { BrandImage } from '@/components/brand-image'
 import './metallic-paint.css'
 
 const vertexShader = `#version 300 es
@@ -652,9 +653,9 @@ export function MetallicPaint({
       className={`metallic-paint ${className}`.trim()}
       data-ready={paintVisible}
       role='img'
-      aria-label='SnowAPI'
+      aria-label='Logo'
     >
-      <img
+      <BrandImage
         src={imageSrc}
         alt=''
         className='metallic-paint__fallback'

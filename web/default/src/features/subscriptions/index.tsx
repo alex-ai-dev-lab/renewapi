@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { SectionPageLayout } from '@/components/layout'
 import { SubscriptionsDialogs } from './components/subscriptions-dialogs'
 import { SubscriptionsPrimaryButtons } from './components/subscriptions-primary-buttons'
@@ -29,20 +30,49 @@ import { SubscriptionsTable } from './components/subscriptions-table'
 
 function SubscriptionsContent() {
   const { t } = useTranslation()
-  const { complianceConfirmed } = useSubscriptions()
+  const { complianceStatus, refetchCompliance } = useSubscriptions()
 
   return (
     <>
       <SectionPageLayout fixedContent>
         <SectionPageLayout.Title>
-          {t('Subscription Management')}
+          {t('Subscription Plan Management')}
         </SectionPageLayout.Title>
+        <SectionPageLayout.Description>
+          {t(
+            'Admin: create and manage the subscription plans users can purchase.'
+          )}
+        </SectionPageLayout.Description>
         <SectionPageLayout.Actions>
           <SubscriptionsPrimaryButtons />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
           <div className='flex h-full min-h-0 flex-col gap-4'>
-            {!complianceConfirmed ? (
+            {complianceStatus === 'loading' ? (
+              <p
+                role='status'
+                className='text-muted-foreground shrink-0 text-sm'
+              >
+                {t('Verifying payment compliance status...')}
+              </p>
+            ) : null}
+            {complianceStatus === 'error' ? (
+              <Alert variant='destructive' className='shrink-0'>
+                <AlertDescription className='flex flex-wrap items-center justify-between gap-3'>
+                  <span>
+                    {t('Unable to verify payment compliance status.')}
+                  </span>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    onClick={() => void refetchCompliance()}
+                  >
+                    {t('Retry')}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            {complianceStatus === 'unconfirmed' ? (
               <Alert variant='destructive' className='shrink-0'>
                 <AlertDescription>
                   {t(

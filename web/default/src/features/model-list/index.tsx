@@ -23,7 +23,6 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { backendCapabilities } from '@/lib/backend-capabilities'
-import { getLobeIconName } from '@/lib/lobe-icon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SectionPageLayout } from '@/components/layout'
@@ -45,6 +44,7 @@ import {
   canUsePricingModel,
   mergePricingModels,
   normalizeModelName,
+  resolveProviderLabel,
 } from './model-list-data'
 import { ModelListRow } from './model-list-row'
 import type { CatalogModel } from './types'
@@ -77,6 +77,7 @@ function toCatalogModel(
   model: PricingModel,
   endpointMap: Record<string, PricingEndpointInfo>,
   currentGroup: string,
+  usableGroups: Record<string, unknown> | undefined,
   fallbackProvider: string
 ): CatalogModel {
   const endpoints = buildCatalogEndpoints(model, endpointMap)
@@ -89,10 +90,9 @@ function toCatalogModel(
   return {
     id: normalizeModelName(model.model_name),
     name: model.model_name,
-    hasAccess: canUsePricingModel(model, currentGroup),
+    hasAccess: canUsePricingModel(model, currentGroup, usableGroups),
     fundingSource: model.funding_source,
-    provider:
-      getLobeIconName(model.icon || model.vendor_icon) || fallbackProvider,
+    provider: resolveProviderLabel(model, fallbackProvider),
     providerIcon: model.icon || model.vendor_icon,
     description: model.description,
     inputPrice: isRequestPriced
@@ -145,6 +145,7 @@ export function ModelList() {
     models,
     endpointMap,
     currentGroup,
+    usableGroup,
     error,
     isLoading,
     refetch: refetchCatalog,
@@ -156,6 +157,7 @@ export function ModelList() {
         model,
         endpointMap,
         currentGroup,
+        usableGroup,
         t('Unknown')
       )
       const health = snapshots.get(catalog.id)
@@ -167,7 +169,7 @@ export function ModelList() {
           }
         : catalog
     })
-  }, [currentGroup, endpointMap, models, t, healthQuery.data])
+  }, [currentGroup, usableGroup, endpointMap, models, t, healthQuery.data])
 
   const filteredModels = useMemo(() => {
     const query = deferredSearch.trim().toLocaleLowerCase('en-US')

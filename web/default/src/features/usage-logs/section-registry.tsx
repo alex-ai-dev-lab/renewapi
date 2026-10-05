@@ -21,25 +21,36 @@ import { createSectionRegistry } from '@/features/system-settings/utils/section-
 /**
  * Usage logs page section definitions
  */
-const USAGE_LOGS_SECTIONS = [
+export const USAGE_LOGS_SECTIONS = [
   {
     id: 'common',
     titleKey: 'Common Logs',
+    descriptionKey: 'API usage records',
     build: () => null, // Content is rendered directly in the page component
   },
   {
     id: 'drawing',
     titleKey: 'Drawing Logs',
+    descriptionKey: 'Drawing task records',
     build: () => null, // Content is rendered directly in the page component
   },
   {
     id: 'task',
     titleKey: 'Task Logs',
+    descriptionKey: 'Async task records',
     build: () => null, // Content is rendered directly in the page component
   },
 ] as const
 
 export type UsageLogsSectionId = (typeof USAGE_LOGS_SECTIONS)[number]['id']
+
+/** Resolve a usage-logs section's heading/description keys for a given id. */
+export function getUsageLogsSectionMeta(id: UsageLogsSectionId) {
+  return (
+    USAGE_LOGS_SECTIONS.find((section) => section.id === id) ??
+    USAGE_LOGS_SECTIONS[0]
+  )
+}
 
 const usageLogsRegistry = createSectionRegistry<
   UsageLogsSectionId,

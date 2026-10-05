@@ -95,6 +95,21 @@ export async function getTopupInfo(): Promise<TopupInfoResponse> {
 }
 
 /**
+ * Get topup configuration info without the global toast handlers.
+ *
+ * This endpoint is the authenticated, role-safe source for the effective
+ * payment compliance state. It is intentionally error-silent so callers can
+ * render their own loading/error/retry state instead of relying on a toast.
+ */
+export async function getTopupInfoSafe(): Promise<TopupInfoResponse> {
+  const res = await api.get('/api/user/topup/info', {
+    skipBusinessError: true,
+    skipErrorHandler: true,
+  })
+  return res.data
+}
+
+/**
  * Redeem a topup code
  */
 export async function redeemTopupCode(

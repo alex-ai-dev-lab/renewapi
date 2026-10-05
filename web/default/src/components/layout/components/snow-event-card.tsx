@@ -16,17 +16,88 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { lazy, Suspense, useState } from 'react'
+/*
+ * SnowAPI-derived UI. The user-facing name uses the configured site brand and
+ * the generic "Subscription Plans" label instead of the "SnowEvent" codename.
+ * Source attribution is preserved in NOTICE and the shell footer.
+ */
+import { Component, lazy, Suspense, useState, type ReactNode } from 'react'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
+import { useSystemConfig } from '@/hooks/use-system-config'
 import { Button } from '@/components/ui/button'
+import { ContentLoading } from '@/components/content-loading'
+import { Dialog } from '@/components/dialog'
+import { ErrorState } from '@/components/error-state'
 import { useSubscriptionOverview } from '@/features/subscriptions/use-subscription-overview'
 
-const SnowEventUpgradeDialog = lazy(async () => {
-  const module = await import('./snow-event-upgrade-dialog')
-  return { default: module.SnowEventUpgradeDialog }
-})
+function createLazyUpgradeDialog() {
+  return lazy(async () => {
+    const module = await import('./snow-event-upgrade-dialog')
+    return { default: module.SnowEventUpgradeDialog }
+  })
+}
+
+type SnowEventDialogErrorBoundaryProps = {
+  onRetry: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  children: ReactNode
+}
+
+class SnowEventDialogErrorBoundary extends Component<
+  SnowEventDialogErrorBoundaryProps,
+  { hasError: boolean }
+> {
+  state: { hasError: boolean } = { hasError: false }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error: unknown) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to load subscription plans dialog:', error)
+  }
+
+  handleRetry = () => {
+    this.setState({ hasError: false })
+    this.props.onRetry()
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <SnowEventDialogFallback
+          open={this.props.open}
+          onOpenChange={this.props.onOpenChange}
+        >
+          <ErrorState onRetry={this.handleRetry} />
+        </SnowEventDialogFallback>
+      )
+    }
+    return this.props.children
+  }
+}
+
+function SnowEventDialogFallback(props: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  children?: ReactNode
+}) {
+  const { t } = useTranslation()
+  return (
+    <Dialog
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      title={t('Subscription Plans')}
+      contentClassName='sm:max-w-md'
+    >
+      {props.children ?? <ContentLoading className='min-h-0' />}
+    </Dialog>
+  )
+}
 
 const snowParticles = Array.from({ length: 9 }, (_, index) => index)
 
@@ -45,23 +116,42 @@ export function SnowEventDialog(props: {
   onOpenChange: (open: boolean) => void
 }) {
   const [hasOpened, setHasOpened] = useState(props.open)
+  // A rejected dynamic import is cached by the lazy component, so retry must
+  // create a fresh lazy instance instead of re-rendering the failed one.
+  const [LazyUpgradeDialog, setLazyUpgradeDialog] = useState(() =>
+    createLazyUpgradeDialog()
+  )
 
   if (props.open && !hasOpened) setHasOpened(true)
 
   if (!hasOpened) return null
 
   return (
-    <Suspense fallback={null}>
-      <SnowEventUpgradeDialog
-        open={props.open}
-        onOpenChange={props.onOpenChange}
-      />
-    </Suspense>
+    <SnowEventDialogErrorBoundary
+      onRetry={() => setLazyUpgradeDialog(() => createLazyUpgradeDialog())}
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+    >
+      <Suspense
+        fallback={
+          <SnowEventDialogFallback
+            open={props.open}
+            onOpenChange={props.onOpenChange}
+          />
+        }
+      >
+        <LazyUpgradeDialog
+          open={props.open}
+          onOpenChange={props.onOpenChange}
+        />
+      </Suspense>
+    </SnowEventDialogErrorBoundary>
   )
 }
 
 export function SnowEventCard() {
   const { t } = useTranslation()
+  const { systemName } = useSystemConfig()
   const overviewQuery = useSubscriptionOverview()
   const [isVisible, setIsVisible] = useState(true)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
@@ -73,7 +163,10 @@ export function SnowEventCard() {
   return (
     <>
       {shouldShow ? (
-        <aside className='snowapi-event-card' aria-label='SnowEvent'>
+        <aside
+          className='snowapi-event-card'
+          aria-label={t('Subscription Plans')}
+        >
           <SnowEventSnow />
 
           <Button
@@ -81,14 +174,14 @@ export function SnowEventCard() {
             variant='ghost'
             size='icon-xs'
             className='snowapi-event-dismiss'
-            aria-label={t('Close SnowEvent')}
+            aria-label={t('Close')}
             onClick={() => setIsVisible(false)}
           >
             <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
           </Button>
 
           <div className='snowapi-event-copy'>
-            <p className='snowapi-event-name'>SnowEvent</p>
+            <p className='snowapi-event-name'>{systemName}</p>
             <p className='snowapi-event-description'>
               {t('Unlock higher privileges')}
             </p>
@@ -111,17 +204,18 @@ export function SnowEventCard() {
 
 export function SnowEventMobileCard(props: { onActivate: () => void }) {
   const { t } = useTranslation()
+  const { systemName } = useSystemConfig()
 
   return (
     <button
       type='button'
       className='snowapi-mobile-event-card'
-      aria-label={`${t('Upgrade')} SnowEvent`}
+      aria-label={`${t('Upgrade')} ${t('Subscription Plans')}`}
       onClick={props.onActivate}
     >
       <SnowEventSnow />
       <span className='snowapi-event-copy'>
-        <span className='snowapi-event-name'>SnowEvent</span>
+        <span className='snowapi-event-name'>{systemName}</span>
         <span className='snowapi-event-description'>
           {t('Unlock higher privileges')}
         </span>

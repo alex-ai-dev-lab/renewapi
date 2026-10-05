@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSystemConfig } from '@/hooks/use-system-config'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { MinimalPublicShell } from '@/components/layout'
 import { RichContent } from '@/components/rich-content'
@@ -31,6 +32,7 @@ import './user-guide.css'
 
 export function UserGuide() {
   const { t } = useTranslation()
+  const { systemName } = useSystemConfig()
   const guide = useUserGuideSections()
   const automation = useAutoAccessSections()
   const faq = useFAQ()
@@ -142,8 +144,8 @@ export function UserGuide() {
           <LanguageSwitcher />
         </div>
         <header className='snowapi-guide-heading'>
-          <p>SnowAPI</p>
-          <h1>{t('SnowAPI user guide')}</h1>
+          <p>{systemName}</p>
+          <h1>{t('{{name}} user guide', { name: systemName })}</h1>
         </header>
         <details className='snowapi-guide-mobile-index'>
           <summary>{t('On this page')}</summary>

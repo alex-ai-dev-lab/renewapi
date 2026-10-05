@@ -38,6 +38,7 @@ import { initializeFrontendCache } from '@/lib/frontend-cache'
 import { handleServerError } from '@/lib/handle-server-error'
 import { applySiteDesign } from '@/lib/site-design'
 import { applySnowApiAppearanceDefaultsOnce } from '@/lib/snowapi-appearance-defaults'
+import { RouteLoading } from '@/components/route-loading'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
 import { ThemeProvider } from './context/theme-provider'
@@ -125,6 +126,9 @@ const router = createRouter({
   basepath: APP_BASE_PATH,
   routeTree,
   context: { queryClient },
+  defaultPendingComponent: RouteLoading,
+  defaultPendingMs: 150,
+  defaultPendingMinMs: 200,
   defaultPreload: 'intent',
   defaultPreloadStaleTime: 0,
 })
@@ -185,21 +189,19 @@ if (!rootElement) {
     /* empty */
   }
 })()
-if (!rootElement.innerHTML) {
-  const root = ReactDOM.createRoot(rootElement)
-  root.render(
-    <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <>
-          <ThemeProvider>
-            <FontProvider>
-              <DirectionProvider>
-                <RouterProvider router={router} />
-              </DirectionProvider>
-            </FontProvider>
-          </ThemeProvider>
-        </>
-      </QueryClientProvider>
-    </StrictMode>
-  )
-}
+const root = ReactDOM.createRoot(rootElement)
+root.render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <>
+        <ThemeProvider>
+          <FontProvider>
+            <DirectionProvider>
+              <RouterProvider router={router} />
+            </DirectionProvider>
+          </FontProvider>
+        </ThemeProvider>
+      </>
+    </QueryClientProvider>
+  </StrictMode>
+)

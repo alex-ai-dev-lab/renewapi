@@ -36,6 +36,10 @@ import {
   useUsageLogsContext,
 } from './components/usage-logs-provider'
 import { UsageLogsTable } from './components/usage-logs-table'
+import {
+  getUsageLogsSectionMeta,
+  isUsageLogsSectionId,
+} from './section-registry'
 import type { UsageLogView } from './types'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
@@ -67,6 +71,12 @@ function UsageLogsContent() {
   const navigate = route.useNavigate()
   const searchParams = route.useSearch()
   const activeView: UsageLogView = searchParams.category ?? 'consume'
+  // Each log tab has its own heading/description from the section registry,
+  // so common/drawing/task pages are distinguishable in the sidebar and the
+  // page header.
+  const sectionMeta = getUsageLogsSectionMeta(
+    isUsageLogsSectionId(section) ? section : 'common'
+  )
   const {
     selectedUserId,
     userInfoDialogOpen,
@@ -103,9 +113,11 @@ function UsageLogsContent() {
   return (
     <>
       <SectionPageLayout fixedContent>
-        <SectionPageLayout.Title>{t('Usage Logs')}</SectionPageLayout.Title>
+        <SectionPageLayout.Title>
+          {t(sectionMeta.titleKey)}
+        </SectionPageLayout.Title>
         <SectionPageLayout.Description>
-          {t('API usage records')}
+          {t(sectionMeta.descriptionKey)}
         </SectionPageLayout.Description>
         {canManageScope && (
           <SectionPageLayout.Actions>
@@ -145,6 +157,13 @@ function UsageLogsContent() {
                 </TabsList>
               </Tabs>
             )}
+            {section === 'common' && activeView === 'billing' ? (
+              <p className='text-muted-foreground text-xs'>
+                {t(
+                  'Bills list top-ups and refunds only; consumption stays under Consume.'
+                )}
+              </p>
+            ) : null}
             <div className='min-h-0 flex-1'>
               {section === 'common' ? (
                 <UsageLogsTable logView={activeView} />

@@ -24,6 +24,7 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { getSelf } from '@/lib/api'
 import { useSystemConfig } from '@/hooks/use-system-config'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ContentLoading, ContentReveal } from '@/components/content-loading'
 import { Dialog } from '@/components/dialog'
@@ -298,7 +299,7 @@ export function Wallet(props: WalletProps) {
             onClick={() => setBillingDialogOpen(true)}
           >
             <Receipt className='size-4' />
-            {t('Order History')}
+            {t('Topup Orders')}
           </Button>
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
@@ -343,15 +344,24 @@ export function Wallet(props: WalletProps) {
                   </div>
                 </div>
               ) : (
-                <div className='grid gap-4 md:grid-cols-[minmax(0,1fr)_20rem]'>
-                  <WalletBalanceCard balance={user?.quota ?? 0} />
-                  <RedemptionCodeCard
-                    topupInfo={topupInfo}
-                    code={redemptionCode}
-                    onCodeChange={setRedemptionCode}
-                    onRedeem={handleRedeem}
-                    redeeming={redeeming}
-                  />
+                <div className='space-y-4'>
+                  <Alert>
+                    <AlertDescription>
+                      {t(
+                        'Online topup is currently unavailable. Redemption codes can still be used if enabled.'
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                  <div className='grid gap-4 md:grid-cols-[minmax(0,1fr)_20rem]'>
+                    <WalletBalanceCard balance={user?.quota ?? 0} />
+                    <RedemptionCodeCard
+                      topupInfo={topupInfo}
+                      code={redemptionCode}
+                      onCodeChange={setRedemptionCode}
+                      onRedeem={handleRedeem}
+                      redeeming={redeeming}
+                    />
+                  </div>
                 </div>
               )}
 

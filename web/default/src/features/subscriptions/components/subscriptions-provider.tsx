@@ -18,13 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import React, { useState } from 'react'
 import useDialogState from '@/hooks/use-dialog'
-import {
-  getOptionValue,
-  useSystemOptions,
-} from '@/features/system-settings/hooks/use-system-options'
+import { usePaymentCompliance } from '@/features/wallet/hooks/use-payment-compliance'
+import type { PaymentComplianceStatus } from '@/features/wallet/lib/payment-compliance'
 import type { PlanRecord, SubscriptionsDialogType } from '../types'
-
-const CURRENT_COMPLIANCE_TERMS_VERSION = 'v1'
 
 type SubscriptionsContextType = {
   open: SubscriptionsDialogType | null
@@ -33,7 +29,11 @@ type SubscriptionsContextType = {
   setCurrentRow: React.Dispatch<React.SetStateAction<PlanRecord | null>>
   refreshTrigger: number
   triggerRefresh: () => void
+  /** True only when the backend confirmed the current compliance terms. */
   complianceConfirmed: boolean
+  /** loading | error | unconfirmed | confirmed — a 403/error is never "unconfirmed". */
+  complianceStatus: PaymentComplianceStatus
+  refetchCompliance: () => void
 }
 
 const SubscriptionsContext =
@@ -47,15 +47,10 @@ export function SubscriptionsProvider({
   const [open, setOpen] = useDialogState<SubscriptionsDialogType>(null)
   const [currentRow, setCurrentRow] = useState<PlanRecord | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const { data } = useSystemOptions()
-  const complianceOptions = getOptionValue(data?.data, {
-    'payment_setting.compliance_confirmed': false,
-    'payment_setting.compliance_terms_version': '',
-  })
-  const complianceConfirmed =
-    complianceOptions['payment_setting.compliance_confirmed'] &&
-    complianceOptions['payment_setting.compliance_terms_version'] ===
-      CURRENT_COMPLIANCE_TERMS_VERSION
+  // Compliance comes from the authenticated topup endpoint, which every admin
+  // role may read. The root-only `/api/option/` is not used here: it 403s for
+  // ordinary admins and used to be misread as "not confirmed".
+  const { confirmed, status, refetch } = usePaymentCompliance()
 
   const triggerRefresh = () => setRefreshTrigger((prev) => prev + 1)
 
@@ -68,7 +63,9 @@ export function SubscriptionsProvider({
         setCurrentRow,
         refreshTrigger,
         triggerRefresh,
-        complianceConfirmed,
+        complianceConfirmed: confirmed,
+        complianceStatus: status,
+        refetchCompliance: refetch,
       }}
     >
       {children}

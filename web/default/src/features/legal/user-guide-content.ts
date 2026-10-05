@@ -17,15 +17,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
+import { useSystemConfig } from '@/hooks/use-system-config'
 
 export function useUserGuideSections() {
   const { t } = useTranslation()
+  const { systemName } = useSystemConfig()
   return [
     {
       id: 'welcome',
       title: t('User guide'),
       markdown: t(
-        'RenewAPI connects your applications to AI models through one gateway. Available models, prices, quotas and payment methods follow this site’s live configuration. Keep passwords, API keys and management access tokens private.'
+        '{{name}} connects your applications to AI models through one gateway. Available models, prices, quotas and payment methods follow this site’s live configuration. Keep passwords, API keys and management access tokens private.',
+        { name: systemName }
       ),
     },
     {

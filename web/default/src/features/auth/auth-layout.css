@@ -132,3 +132,16 @@ body:has(.snowapi-auth-shell) {
 .snowapi-auth-route input::placeholder {
   color: #aaa;
 }
+
+/* This canvas is dark even when the surrounding application is light. */
+.snowapi-auth-shell [data-slot='button'][data-variant='outline'] {
+  color: #fff;
+  background: rgb(255 255 255 / 0.06);
+  border-color: #626262;
+}
+.snowapi-auth-shell [data-slot='button'][data-variant='outline']:hover {
+  background: rgb(255 255 255 / 0.14);
+}
+.snowapi-auth-shell [data-slot='form-label'] {
+  color: #ddd;
+}

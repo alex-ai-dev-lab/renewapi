@@ -19,8 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { useMemo } from 'react'
 import { useLocation } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { useAuthStore } from '@/stores/auth-store'
-import { ROLE } from '@/lib/roles'
+import { useStatus } from '@/hooks/use-status'
+import {
+  projectTaskGroups,
+  resolveTaskSectionOrder,
+} from '@/components/layout/lib/sidebar-navigation'
 import { resolveSidebarView } from '@/components/layout/lib/sidebar-view-registry'
 import type { NavGroup, ResolvedSidebarView } from '@/components/layout/types'
 import { useSidebarConfig } from './use-sidebar-config'
@@ -34,33 +37,39 @@ const ROOT_VIEW_KEY = '__root'
  *
  * - Returns the matching nested {@link SidebarView} (with its nav
  *   groups) when the URL belongs to a registered drill-in workspace.
- * - Otherwise returns the root navigation, narrowed by:
- *     · admin-only group visibility (role-based);
- *     · `useSidebarConfig` (admin × user `sidebar_modules` overlay).
+ * - Otherwise returns the root navigation projected into task sections,
+ *   narrowed by:
+ *     · role (`minimumRole`/`rootOnly` via `filterSidebarGroups`);
+ *     · `useSidebarConfig` (admin × user `sidebar_modules` overlay);
+ *     · persisted task-section order (`SidebarTaskSectionOrder`).
  *
- * Nested views are intentionally NOT passed through `useSidebarConfig`
- * — those filters target known dashboard URLs only, and gating is
- * already enforced at the route level (`beforeLoad` redirects).
+ * This is the single filtered result consumed by the desktop sidebar, the
+ * mobile drawer and the command palette — no consumer may bypass it with
+ * raw, unfiltered navigation data.
+ *
+ * Nested views are intentionally NOT passed through `projectTaskGroups`
+ * — they already have a purpose-built structure, and gating is enforced at
+ * the route level (`beforeLoad` redirects) plus `useSidebarConfig`.
  */
 export function useSidebarView(): ResolvedSidebarView {
   const { t } = useTranslation()
   const pathname = useLocation({ select: (l) => l.pathname })
-  const userRole = useAuthStore((s) => s.auth.user?.role)
+  const { status } = useStatus()
   const rootSidebarData = useSidebarData()
   const configFilteredRoot = useSidebarConfig(rootSidebarData.navGroups)
 
   const rootNavGroups = useMemo<NavGroup[]>(() => {
-    const role = userRole ?? ROLE.GUEST
-    const isAdmin = role >= ROLE.ADMIN
-    return configFilteredRoot
-      .filter((group) => (group.id === 'admin' ? isAdmin : true))
-      .map((group) => {
-        const items = group.items.filter(
-          (item) => item.requiredRole === undefined || role >= item.requiredRole
-        )
-        return items.length === group.items.length ? group : { ...group, items }
-      })
-  }, [configFilteredRoot, userRole])
+    const order = resolveTaskSectionOrder(
+      status?.SidebarTaskSectionOrder as string | undefined,
+      status?.SidebarSectionOrder as string | undefined
+    )
+    return projectTaskGroups(
+      configFilteredRoot,
+      t,
+      order,
+      status?.SidebarModulesAdmin as string | undefined
+    )
+  }, [configFilteredRoot, status, t])
 
   const view = resolveSidebarView(pathname)
   const contextualGroups = useSidebarConfig(view?.getNavGroups(t) ?? [])

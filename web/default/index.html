@@ -18,11 +18,64 @@
     <style id="snow-shield-critical">
       <%= snowShieldCss %>
     </style>
+    <style>
+      #app-bootstrap {
+        min-height: 100svh;
+        display: grid;
+        place-content: center;
+        gap: 1rem;
+        padding: 1rem;
+        box-sizing: border-box;
+        text-align: center;
+        font:
+          16px/1.6 system-ui,
+          sans-serif;
+        color: #333;
+        background: #fff;
+      }
+      #app-bootstrap p {
+        margin: 0;
+      }
+      #app-bootstrap button {
+        padding: 0.6rem 1rem;
+        border: 1px solid currentColor;
+        border-radius: 0.5rem;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+      }
+      #app-bootstrap [hidden] {
+        display: none;
+      }
+      @media (prefers-color-scheme: dark) {
+        #app-bootstrap {
+          color: #eee;
+          background: #111;
+        }
+      }
+    </style>
     <!--umami-->
     <!--Google Analytics-->
   </head>
 
   <body>
-    <div id="root" translate="no" class="notranslate"></div>
+    <div id="root" translate="no" class="notranslate">
+      <div id="app-bootstrap" role="status" aria-live="polite">
+        <p>Loading… / 正在加载…</p>
+        <div id="app-bootstrap-retry" hidden>
+          <p>Check your connection and try again. / 请检查网络后重试。</p>
+          <button type="button" onclick="window.location.reload()">
+            Reload page / 重新加载
+          </button>
+        </div>
+        <noscript>JavaScript is required. / 请启用 JavaScript。</noscript>
+      </div>
+    </div>
+    <script>
+      window.setTimeout(function () {
+        var retry = document.getElementById('app-bootstrap-retry')
+        if (retry) retry.hidden = false
+      }, 10000)
+    </script>
   </body>
 </html>

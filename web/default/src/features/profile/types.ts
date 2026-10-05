@@ -216,3 +216,31 @@ export interface CheckinResponse {
   /** Quota awarded for this check-in */
   quota_awarded: number
 }
+
+// ============================================================================
+// Two-Factor Authentication Type Definitions
+// ============================================================================
+
+/**
+ * Two-factor authentication status for the current user
+ */
+export interface TwoFAStatus {
+  /** Whether 2FA is enabled */
+  enabled: boolean
+  /** Whether the account is locked due to failed attempts */
+  locked: boolean
+  /** Remaining unused backup codes (only present when enabled) */
+  backup_codes_remaining?: number
+}
+
+/**
+ * Payload returned when initializing 2FA setup
+ */
+export interface TwoFASetupData {
+  /** Base32 TOTP secret for manual entry */
+  secret: string
+  /** otpauth:// URI to render as a QR code */
+  qr_code_data: string
+  /** One-time backup codes */
+  backup_codes: string[]
+}

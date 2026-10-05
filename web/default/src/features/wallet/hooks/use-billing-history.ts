@@ -29,7 +29,7 @@ import {
 import type { TopupRecord } from '../types'
 
 // ============================================================================
-// Billing History Hook
+// Topup Orders Hook
 // ============================================================================
 
 interface UseBillingHistoryOptions {
@@ -88,11 +88,9 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
       // 后者的 response.message 很可能就是 'success'，用户会看到一个写着
       // “success” 的红色报错（参见 #30 对 isApiSuccess 的修正）。
       if (!isApiSuccess(response)) {
-        setError(
-          response.message || i18next.t('Failed to load billing history')
-        )
+        setError(response.message || i18next.t('Failed to load topup orders'))
         toast.error(
-          response.message || i18next.t('Failed to load billing history')
+          response.message || i18next.t('Failed to load topup orders')
         )
         setRecords([])
         setTotal(0)
@@ -103,10 +101,10 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
       setTotal(response.data?.total || 0)
     } catch (error) {
       if (isStale()) return
-      setError(i18next.t('Failed to load billing history'))
+      setError(i18next.t('Failed to load topup orders'))
       // eslint-disable-next-line no-console
       console.error('Failed to fetch billing history:', error)
-      toast.error(i18next.t('Failed to load billing history'))
+      toast.error(i18next.t('Failed to load topup orders'))
       setRecords([])
       setTotal(0)
     } finally {

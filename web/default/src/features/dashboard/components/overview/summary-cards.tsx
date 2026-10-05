@@ -206,7 +206,7 @@ function SummaryMetric({
   )
 }
 
-export function SummaryCards() {
+export function SummaryCards(props: { compact?: boolean }) {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
   const timeRange = useMemo(() => computeTimeRange(1), [])
@@ -282,16 +282,20 @@ export function SummaryCards() {
           <SummaryMetric key={metric.label} {...metric} />
         ))}
       </div>
-      <UsageTrendChart
-        values={hourlyTokens}
-        label={t('Hourly Token Consumption')}
-        formatValue={formatNumber}
-      />
-      <UsageTrendChart
-        values={hourlyRequests}
-        label={t('Hourly Request Count')}
-        formatValue={formatNumber}
-      />
+      {props.compact ? null : (
+        <>
+          <UsageTrendChart
+            values={hourlyTokens}
+            label={t('Hourly Token Consumption')}
+            formatValue={formatNumber}
+          />
+          <UsageTrendChart
+            values={hourlyRequests}
+            label={t('Hourly Request Count')}
+            formatValue={formatNumber}
+          />
+        </>
+      )}
 
       <ApiAccessPanel />
     </div>

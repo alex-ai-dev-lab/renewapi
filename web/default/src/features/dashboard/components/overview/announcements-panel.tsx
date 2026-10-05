@@ -104,7 +104,7 @@ function AllAnnouncementsDialog(props: {
   )
 }
 
-export function AnnouncementsPanel() {
+export function AnnouncementsPanel(props: { hideWhenEmpty?: boolean }) {
   const { t } = useTranslation()
   const { items, loading, enabled } = useAnnouncements()
   const [showAll, setShowAll] = useState(false)
@@ -122,6 +122,9 @@ export function AnnouncementsPanel() {
   const latest = announcements[0]
 
   if (!loading && !enabled) return null
+  // On a fresh account an empty announcements box is noise; hide it once the
+  // empty result is confirmed rather than showing a large placeholder.
+  if (props.hideWhenEmpty && !loading && announcements.length === 0) return null
 
   return (
     <>

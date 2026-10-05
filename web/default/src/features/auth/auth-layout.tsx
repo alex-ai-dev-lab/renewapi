@@ -20,6 +20,7 @@ import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { Skeleton } from '@/components/ui/skeleton'
+import { BrandImage } from '@/components/brand-image'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import './auth-layout.css'
 
@@ -44,7 +45,7 @@ export function AuthLayout({ children, dark = false }: AuthLayoutProps) {
           {loading ? (
             <Skeleton className='absolute inset-0 rounded-full' />
           ) : (
-            <img
+            <BrandImage
               src={logo}
               alt={t('Logo')}
               className='snowapi-auth-brand-logo h-8 w-8 rounded-full object-cover'

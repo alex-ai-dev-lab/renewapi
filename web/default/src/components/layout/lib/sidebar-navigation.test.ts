@@ -5,6 +5,7 @@ This file is licensed under the GNU Affero General Public License,
 version 3 or later. See the repository LICENSE for the full text.
 */
 import { describe, expect, test } from 'bun:test'
+import { buildRootSidebarGroups } from '@/hooks/use-sidebar-data'
 import {
   parseSidebarModulesAdmin,
   serializeSidebarModulesAdmin,
@@ -171,5 +172,133 @@ describe('task menu compatibility', () => {
     expect(hidden.chat.playground).toBe(false)
     expect(hidden.console.token).toBe(false)
     expect(hidden.console.log).toBe(true)
+  })
+})
+
+// The root sidebar is built from `buildRootSidebarGroups` and then narrowed by
+// the same `filterSidebarGroups` + `projectTaskGroups` path that
+// `useSidebarView` (and therefore the command palette) consumes.
+const identity = (key: string) => key
+const rootGroups = () => buildRootSidebarGroups(identity as never)
+const taskGroups = (role: number, admin = '', user = '') =>
+  projectTaskGroups(
+    filterSidebarGroups(rootGroups(), { admin, user, role, header: '' }),
+    identity,
+    resolveTaskSectionOrder()
+  )
+const flatItems = (groups: NavGroup[]) => groups.flatMap((group) => group.items)
+const flatUrls = (groups: NavGroup[]) =>
+  flatItems(groups).map((item) => String(item.url ?? item.type ?? ''))
+const titleFor = (groups: NavGroup[], url: string) =>
+  flatItems(groups).find((item) => item.url === url)?.title
+
+describe('root task navigation (actual filtered path)', () => {
+  test('access section configuration hides catalog without hiding overview', () => {
+    const config = JSON.stringify(setTaskSectionEnabled({}, 'access', false))
+    const result = flatUrls(taskGroups(1, config))
+    expect(result).not.toContain('/model-list')
+    expect(result).not.toContain('/keys')
+    expect(result).not.toContain('/playground')
+    expect(result).toContain('/dashboard/overview')
+  })
+
+  test('catalog URL visibility agrees with root navigation and legacy pricing toggle', () => {
+    for (const admin of [
+      '',
+      '{"console":{"pricing":false}}',
+      '{"console":{"detail":false}}',
+    ]) {
+      const visibleByUrl =
+        filterSidebarGroups(
+          [{ title: '', items: [{ title: '', url: '/model-list' }] }],
+          { role: 1, admin }
+        ).length > 0
+      expect(visibleByUrl).toBe(
+        flatUrls(taskGroups(1, admin)).includes('/model-list')
+      )
+    }
+    expect(
+      flatUrls(taskGroups(1, '{"console":{"pricing":false}}'))
+    ).not.toContain('/model-list')
+  })
+
+  test('preserves catalog, group settings and every legacy log URL', () => {
+    const groups = taskGroups(100)
+    const urls = flatUrls(groups)
+    for (const url of [
+      '/model-list',
+      '/keys',
+      '/playground',
+      '/dashboard/models',
+      '/usage-logs/common',
+      '/usage-logs/drawing',
+      '/usage-logs/task',
+      '/wallet',
+      '/profile',
+      '/channels',
+      '/models/metadata',
+      '/users',
+      '/subscriptions',
+      '/redemption-codes',
+      '/group-settings',
+      '/system-settings/site',
+    ]) {
+      expect(urls).toContain(url)
+    }
+    expect(groups.map((group) => group.id)).toEqual([
+      'overview',
+      ...TASK_SECTIONS.map((section) => section.id),
+    ])
+  })
+
+  test('role 10 never receives root-only settings commands', () => {
+    const urls = flatUrls(taskGroups(10))
+    expect(urls).not.toContain('/system-settings/site')
+    expect(urls).not.toContain('/group-settings')
+    expect(urls).toContain('/channels')
+    expect(urls).toContain('/models/metadata')
+    expect(urls).toContain('/users')
+    expect(urls).toContain('/subscriptions')
+  })
+
+  test('regular users only receive user task groups', () => {
+    const urls = flatUrls(taskGroups(1))
+    expect(urls).toContain('/model-list')
+    expect(urls).toContain('/usage-logs/common')
+    expect(urls).not.toContain('/channels')
+    expect(urls).not.toContain('/users')
+    expect(urls).not.toContain('/system-settings/site')
+  })
+
+  test('three log tabs keep unique section-registry headings', () => {
+    const groups = taskGroups(100)
+    const titles = flatItems(groups)
+      .filter((item) => String(item.url).startsWith('/usage-logs/'))
+      .map((item) => item.title)
+    expect(titles).toEqual(['Common Logs', 'Drawing Logs', 'Task Logs'])
+    expect(new Set(titles).size).toBe(3)
+  })
+
+  test('model catalog is distinct from model management; wallet from plans', () => {
+    const groups = taskGroups(100)
+    expect(titleFor(groups, '/model-list')).toBe('Model List')
+    expect(titleFor(groups, '/models/metadata')).toBe('Model management')
+    expect(titleFor(groups, '/model-list')).not.toBe(
+      titleFor(groups, '/models/metadata')
+    )
+    expect(titleFor(groups, '/wallet')).toBe('Wallet & subscriptions')
+    expect(titleFor(groups, '/subscriptions')).toBe('Subscription plans')
+    expect(titleFor(groups, '/wallet')).not.toBe(
+      titleFor(groups, '/subscriptions')
+    )
+  })
+
+  test('module config still narrows the task projection', () => {
+    expect(
+      flatUrls(taskGroups(100, '{"console":{"token":false}}'))
+    ).not.toContain('/keys')
+    const logs = flatUrls(taskGroups(100, '{"console":{"task":false}}'))
+    expect(logs).not.toContain('/usage-logs/task')
+    expect(logs).toContain('/usage-logs/common')
   })
 })

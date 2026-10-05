@@ -79,6 +79,15 @@ export const MENU_ITEMS: MenuDefinition[] = [
     permissions: permission('console', 'pricing'),
   },
   {
+    id: 'model-list',
+    title: '',
+    titleKey: 'Model List',
+    taskSection: 'access',
+    url: '/model-list',
+    icon: Box,
+    permissions: permission('console', 'pricing'),
+  },
+  {
     id: 'api-keys',
     title: '',
     titleKey: 'API Keys',

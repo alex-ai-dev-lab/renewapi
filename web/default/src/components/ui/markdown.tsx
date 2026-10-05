@@ -75,6 +75,7 @@ const allowedAttributes = [
   'stroke-width',
   'style',
   'target',
+  'tabindex',
   'text-anchor',
   'dominant-baseline',
   'dy',
@@ -618,7 +619,7 @@ markdownRenderer.code = (token: Tokens.Code): string => {
     return renderSequenceDiagram(token.text)
   }
 
-  return renderDefaultCode(token)
+  return renderDefaultCode(token).replace('<pre>', '<pre tabindex="0">')
 }
 
 const markdownExtensions: MarkedExtension[] = [
@@ -762,7 +763,7 @@ export function Markdown(props: MarkdownProps) {
         '[&_blockquote]:border-primary [&_blockquote]:bg-muted/50 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:py-1 [&_blockquote]:pl-4',
         '[&_code]:bg-muted [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono',
         '[&_pre]:bg-muted [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:border [&_pre]:p-3 [&_table]:my-4 [&_table]:block [&_table]:w-full [&_table]:overflow-x-auto',
-        '[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-sm',
+        '[&_pre]:focus-visible:outline-ring [&_pre]:focus-visible:outline-2 [&_pre]:focus-visible:outline-offset-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-sm',
         '[&_thead]:bg-muted [&_td]:border [&_td]:px-3 [&_td]:py-2 [&_th]:border [&_th]:px-3 [&_th]:py-2 [&_th]:text-left',
         '[&_hr]:my-6 [&_img]:my-4 [&_img]:max-w-full [&_img]:rounded-lg',
         '[&_.katex-display]:my-4 [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden',

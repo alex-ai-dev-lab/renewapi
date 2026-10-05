@@ -57,3 +57,20 @@ export function getUserInitials(user?: UserProfile): string {
   }
   return name.slice(0, 2).toUpperCase()
 }
+
+/**
+ * Format a quota/rate limit value.
+ *
+ * Returns `null` when the value is unknown so callers can render an
+ * unavailable state instead of inventing a finite or infinite value.
+ * `0` means unlimited and renders as the infinity symbol.
+ */
+export function formatLimit(value: number | undefined | null): string | null {
+  if (value === undefined || value === null || !Number.isFinite(value)) {
+    return null
+  }
+  if (value <= 0) {
+    return '∞'
+  }
+  return value.toLocaleString()
+}

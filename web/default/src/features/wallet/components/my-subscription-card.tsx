@@ -61,6 +61,7 @@ export function MySubscriptionCard() {
     (query.data?.plans ?? []).map((record) => [record.plan.id, record.plan])
   )
   const subscriptions = query.data?.activeSubscriptions ?? []
+  const hasPlans = (query.data?.plans.length ?? 0) > 0
   return (
     <>
       <section
@@ -69,20 +70,27 @@ export function MySubscriptionCard() {
       >
         <div className='snowapi-my-subscription-header'>
           <h2 id='my-subscriptions' className='snowapi-my-subscription-title'>
-            {t('My subscription')}
+            {t('My Subscriptions')}
           </h2>
-          <Button
-            className='snowapi-my-subscription-upgrade rounded-full'
-            onClick={() => setOpen(true)}
-          >
-            {t('View plans')}
-          </Button>
+          {hasPlans ? (
+            <Button
+              className='snowapi-my-subscription-upgrade rounded-full'
+              onClick={() => setOpen(true)}
+            >
+              {t('View Subscription Plans')}
+            </Button>
+          ) : null}
         </div>
         {query.isError && (
           <Button onClick={() => void query.refetch()}>{t('Retry')}</Button>
         )}
         {query.isLoading && <p role='status'>{t('Loading...')}</p>}
-        {query.isSuccess && subscriptions.length === 0 && (
+        {query.isSuccess && !hasPlans && (
+          <p className='text-white/75'>
+            {t('No subscription plans are available right now.')}
+          </p>
+        )}
+        {query.isSuccess && hasPlans && subscriptions.length === 0 && (
           <p className='text-white/75'>{t('No active subscription')}</p>
         )}
         {subscriptions.map((record) => {

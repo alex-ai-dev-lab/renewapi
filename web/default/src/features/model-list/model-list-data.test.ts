@@ -24,6 +24,7 @@ import {
   buildCatalogEndpoints,
   canUsePricingModel,
   mergePricingModels,
+  resolveProviderLabel,
 } from './model-list-data.ts'
 import type { ModelHealthModel } from './types'
 
@@ -141,7 +142,7 @@ test('formats configured endpoint metadata and omits unresolved internal endpoin
   )
 })
 
-test('reports access only for the current group or universally enabled models', () => {
+test('reports access from authoritative usable groups and keeps unknown distinct from denied', () => {
   const currentGroupModel = {
     ...pricingModel(1, 'model-a', ['chat']),
     enable_groups: ['Moderate'],
@@ -151,8 +152,87 @@ test('reports access only for the current group or universally enabled models', 
     enable_groups: ['all'],
   }
 
+  // The authoritative usable-group set wins over the current group.
+  assert.equal(
+    canUsePricingModel(currentGroupModel, 'Light', { Moderate: 'Moderate' }),
+    true
+  )
+  assert.equal(
+    canUsePricingModel(currentGroupModel, 'Moderate', { Light: 'Light' }),
+    false
+  )
+
+  // Without a usable-group set, the current group is the fallback.
   assert.equal(canUsePricingModel(currentGroupModel, 'Moderate'), true)
   assert.equal(canUsePricingModel(currentGroupModel, 'Light'), false)
-  assert.equal(canUsePricingModel(currentGroupModel, ''), false)
+
+  // Empty group with no usable-group data is unknown, not denied.
+  assert.equal(canUsePricingModel(currentGroupModel, ''), null)
+
+  // Universally enabled models are always usable.
   assert.equal(canUsePricingModel(universalModel, 'Free'), true)
+  assert.equal(canUsePricingModel(universalModel, '', null), true)
+})
+
+test('provider label prefers vendor_name over icon identifiers', () => {
+  const model = {
+    ...pricingModel(1, 'model-a', ['chat']),
+    icon: 'OpenAI.Color',
+    vendor_name: 'Acme AI',
+  }
+
+  assert.equal(resolveProviderLabel(model, 'Unknown'), 'Acme AI')
+  assert.equal(
+    resolveProviderLabel({ ...model, vendor_name: '' }, 'Unknown'),
+    'Unknown'
+  )
+  assert.equal(
+    resolveProviderLabel(pricingModel(2, 'model-b', []), 'Unknown'),
+    'Unknown'
+  )
+})
+
+test('missing model groups stay unknown while explicit empty groups deny access', () => {
+  const model = pricingModel(1, 'model-a', ['chat'])
+  assert.equal(
+    canUsePricingModel({ ...model, enable_groups: undefined }, 'default', {
+      default: 'Default',
+    }),
+    null
+  )
+  assert.equal(
+    canUsePricingModel({ ...model, enable_groups: null }, 'default'),
+    null
+  )
+  assert.equal(
+    canUsePricingModel({ ...model, enable_groups: [] }, 'default', {
+      default: 'Default',
+    }),
+    false
+  )
+})
+
+test('an explicit empty usable-group set denies even current-group and universal models', () => {
+  for (const enable_groups of [['default'], ['all']]) {
+    const model = { ...pricingModel(1, 'model-a', ['chat']), enable_groups }
+    assert.equal(canUsePricingModel(model, 'default', {}), false)
+    assert.equal(canUsePricingModel(model, 'default', undefined), true)
+  }
+})
+
+test('catalog merging preserves incomplete group data before computing access', () => {
+  const model = {
+    ...pricingModel(1, 'model-a', ['chat']),
+    enable_groups: undefined,
+  }
+  for (const rows of [
+    [model],
+    [model, { ...model, id: 2, enable_groups: [] }],
+  ]) {
+    const merged = mergePricingModels(rows)
+    assert.equal(
+      canUsePricingModel(merged[0], 'default', { default: 'Default' }),
+      null
+    )
+  }
 })

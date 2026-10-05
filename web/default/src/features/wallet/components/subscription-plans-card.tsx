@@ -200,7 +200,7 @@ export function SubscriptionPlansCard({
     <>
       <TitledCard
         title={t('Subscription Plans')}
-        description={t('Subscribe to a plan for model access')}
+        description={t('Subscription plans available for this account')}
         icon={<Crown className='h-4 w-4' />}
         iconTone='warning'
         disableHoverEffect
@@ -492,7 +492,7 @@ export function SubscriptionPlansCard({
 
           {!hasAny && (
             <p className='text-muted-foreground mt-2 text-xs'>
-              {t('Subscribe to a plan for model access')}
+              {t('No active subscription')}
             </p>
           )}
         </div>
@@ -608,7 +608,7 @@ export function SubscriptionPlansCard({
           </div>
         ) : (
           <p className='text-muted-foreground py-4 text-center text-sm'>
-            {t('No plans available')}
+            {t('No subscription plans are available right now.')}
           </p>
         )}
       </TitledCard>

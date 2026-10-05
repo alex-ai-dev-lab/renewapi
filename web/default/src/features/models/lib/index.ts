@@ -22,6 +22,9 @@ export * from './query-keys'
 // Utilities
 export * from './model-utils'
 
+// Root-only pricing access
+export * from './model-pricing-access'
+
 // Form schemas and transformers
 export * from './model-form'
 

@@ -25,6 +25,8 @@ import type {
   DeleteAccountRequest,
   CheckinStatusResponse,
   CheckinResponse,
+  TwoFAStatus,
+  TwoFASetupData,
 } from './types'
 
 // ============================================================================
@@ -182,5 +184,51 @@ export async function performCheckin(
     ? `/api/user/checkin?turnstile=${encodeURIComponent(turnstileToken)}`
     : '/api/user/checkin'
   const res = await api.post(url)
+  return res.data
+}
+
+// ============================================================================
+// Two-Factor Authentication APIs
+// ============================================================================
+
+/**
+ * Get the current user's two-factor authentication status
+ */
+export async function getTwoFAStatus(): Promise<ApiResponse<TwoFAStatus>> {
+  const res = await api.get('/api/user/2fa/status')
+  return res.data
+}
+
+/**
+ * Initialize two-factor authentication setup (secret, QR data, backup codes)
+ */
+export async function setupTwoFA(): Promise<ApiResponse<TwoFASetupData>> {
+  const res = await api.post('/api/user/2fa/setup')
+  return res.data
+}
+
+/**
+ * Enable two-factor authentication with an authenticator code
+ */
+export async function enableTwoFA(code: string): Promise<ApiResponse> {
+  const res = await api.post('/api/user/2fa/enable', { code })
+  return res.data
+}
+
+/**
+ * Disable two-factor authentication with a code or backup code
+ */
+export async function disableTwoFA(code: string): Promise<ApiResponse> {
+  const res = await api.post('/api/user/2fa/disable', { code })
+  return res.data
+}
+
+/**
+ * Regenerate two-factor authentication backup codes
+ */
+export async function regenerateBackupCodes(
+  code: string
+): Promise<ApiResponse<{ backup_codes: string[] }>> {
+  const res = await api.post('/api/user/2fa/backup_codes', { code })
   return res.data
 }

@@ -25,8 +25,9 @@ import {
   SideNavSection,
 } from '@astryxdesign/core/SideNav'
 import { useTranslation } from 'react-i18next'
-import { DEFAULT_LOGO } from '@/lib/constants'
 import { useSidebarView } from '@/hooks/use-sidebar-view'
+import { useSystemConfig } from '@/hooks/use-system-config'
+import { BrandImage } from '@/components/brand-image'
 import type {
   NavCollapsible,
   NavItem,
@@ -127,6 +128,7 @@ export function AstryxNavigation(props: {
   footer?: ReactNode
 }) {
   const { t } = useTranslation()
+  const { systemName } = useSystemConfig()
   const currentHref = useLocation({ select: (location) => location.href })
   const { key, view, navGroups } = useSidebarView()
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -150,18 +152,9 @@ export function AstryxNavigation(props: {
           <Link
             to='/dashboard'
             className='snowapi-astryx-logo-link'
-            aria-label='SnowAPI'
+            aria-label={systemName}
           >
-            <img
-              src={props.logo || DEFAULT_LOGO}
-              alt=''
-              width={24}
-              height={24}
-              onError={(event) => {
-                if (event.currentTarget.src.endsWith(DEFAULT_LOGO)) return
-                event.currentTarget.src = DEFAULT_LOGO
-              }}
-            />
+            <BrandImage src={props.logo} alt='' width={24} height={24} />
           </Link>
           <SideNavCollapseButton className='snowapi-astryx-collapse-button' />
         </div>
@@ -178,11 +171,7 @@ export function AstryxNavigation(props: {
     >
       <div key={key} className='snowapi-astryx-side-nav-content'>
         {navGroups.map((group) => (
-          <SideNavSection
-            key={group.id || group.title}
-            title={group.title}
-            isHeaderHidden
-          >
+          <SideNavSection key={group.id || group.title} title={group.title}>
             {group.items.map((item) => (
               <NavigationItem
                 key={`${item.title}-${item.type || 'item'}`}

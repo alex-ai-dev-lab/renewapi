@@ -150,7 +150,7 @@ export function Pricing() {
       <PublicLayout showMainContainer={false}>
         <PageContainer
           width='fluid'
-          className='mx-auto max-w-[1600px] min-w-0 pt-8 sm:pt-8'
+          className='mx-auto max-w-[1600px] min-w-0 pt-20 sm:pt-20'
         >
           <LoadingSkeleton viewMode={viewMode} />
         </PageContainer>
@@ -164,7 +164,7 @@ export function Pricing() {
         <PageTransition>
           <PageContainer
             width='fluid'
-            className='mx-auto max-w-[1600px] min-w-0 pt-8 sm:pt-8'
+            className='mx-auto max-w-[1600px] min-w-0 pt-20 sm:pt-20'
           >
             <PageHeader
               title={t('Model Plaza')}

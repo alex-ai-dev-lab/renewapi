@@ -25,8 +25,7 @@ import {
 } from '../src/components/status-badge'
 import { Button } from '../src/components/ui/button'
 import { Input } from '../src/components/ui/input'
-import { avatarColorMap } from '../src/lib/colors'
-import { CHART_COLORS } from '../src/lib/colors'
+import { avatarColorMap, CHART_COLORS } from '../src/lib/colors'
 import { THEME_PRESETS } from '../src/lib/theme-customization'
 
 // Render actual component markup; the browser runner supplies the production CSS.

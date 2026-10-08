@@ -930,6 +930,39 @@ function totp(s) {
       }
     },
   );
+  await check("protocol normalization: save, reload and route preview", async () => {
+    const key = "ModelEndpointDefaults";
+    const before = (await json(await rc.request.get("/api/option/", { headers }))).data.find((item) => item.key === key)?.value || "";
+    const config = { enabled: true, normalize_text_endpoints: false, entries: [{ match_type: "exact", pattern: "gpt-4o-mini", channel_type: 1, default_endpoint: "openai-response", supported_endpoints: ["openai", "openai-response", "anthropic"] }] };
+    let p;
+    try {
+      await json(await rc.request.put("/api/option/", { headers, data: { key, value: JSON.stringify(config) } }));
+      p = await page(rc, "/system-settings/operations/model-endpoint-defaults");
+      const toggle = p.getByRole("switch", { name: "Normalize text requests to model default endpoints", exact: true });
+      assert(await toggle.getAttribute("aria-checked") === "false", "Legacy mode must start disabled");
+      await toggle.click();
+      const saved = p.waitForResponse((r) => r.url().includes("/api/option/") && r.request().method() === "PUT");
+      await p.getByRole("button", { name: "Save Settings", exact: true }).click();
+      await json(await saved);
+      const options = (await json(await rc.request.get("/api/option/", { headers }))).data;
+      assert(JSON.parse(options.find((item) => item.key === key).value).normalize_text_endpoints === true, "Normalization flag was not persisted");
+      await p.reload({ waitUntil: "networkidle" });
+      assert(await toggle.getAttribute("aria-checked") === "true", "Reload lost normalization");
+      const preview = await json(await rc.request.get("/api/channel/1/model_route_preview?model=gpt-4o-mini&client_endpoint=anthropic", { headers }));
+      assert(preview.data.route.endpoint === "openai-response" && preview.data.capability.supported, "Preview did not use the saved model default");
+      await p.goto("/channels/1/edit", { waitUntil: "networkidle" });
+      const heading = p.getByRole("heading", { name: "Route preview", exact: true });
+      if (!(await heading.isVisible())) await p.getByRole("button", { name: "Advanced Settings", exact: true }).first().click();
+      const section = heading.locator("..");
+      await section.getByLabel("Model", { exact: true }).fill("gpt-4o-mini");
+      await section.getByRole("button", { name: "Preview", exact: true }).click();
+      await section.getByText("global", { exact: false }).waitFor();
+      await p.screenshot({ path: path.join(out, "protocol-route-preview.png"), fullPage: true });
+    } finally {
+      if (p) await p.close();
+      await json(await rc.request.put("/api/option/", { headers, data: { key, value: before } }));
+    }
+  });
   await rc.close();
 })()
   .catch((e) => {

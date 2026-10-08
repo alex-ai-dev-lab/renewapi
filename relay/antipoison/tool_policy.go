@@ -169,7 +169,7 @@ func ResponsesToolCallsFromResponse(resp *dto.OpenAIResponsesResponse) (names []
 			continue
 		}
 		names = append(names, name)
-		args = append(args, string(out.Arguments))
+		args = append(args, out.ArgumentsString())
 	}
 	return names, args
 }

@@ -15,6 +15,7 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/openaicompat"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/types"
 
@@ -63,7 +64,11 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 				types.ErrOptionWithSkipRetry(),
 			)
 		}
-		if capabilityErr := service.ValidateResponsesTextBridgeRequest(request); capabilityErr != nil {
+		validate := service.ValidateResponsesTextBridgeRequest
+		if info.ProtocolNormalized {
+			validate = func(r *dto.OpenAIResponsesRequest) error { return service.ValidateNormalizedBridgeRequest(r, endpoint) }
+		}
+		if capabilityErr := validate(request); capabilityErr != nil {
 			return types.NewErrorWithStatusCode(capabilityErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
 		if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
@@ -73,6 +78,23 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 				http.StatusBadRequest,
 				types.ErrOptionWithSkipRetry(),
 			)
+		}
+		if endpoint == appconstant.EndpointTypeAnthropic && info.ProtocolNormalized {
+			claudeReq, convErr := openaicompat.ResponsesRequestToClaudeRequest(request)
+			if convErr != nil {
+				return types.NewErrorWithStatusCode(convErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			}
+			originalRequest, originalMode, originalPath := info.Request, info.RelayMode, info.RequestURLPath
+			info.Request = claudeReq
+			info.RelayMode = relayconstant.RelayModeUnknown
+			info.RequestURLPath = "/v1/messages"
+			info.AppendRequestConversion(types.RelayFormatClaude)
+			defer func() {
+				info.Request = originalRequest
+				info.RelayMode = originalMode
+				info.RequestURLPath = originalPath
+			}()
+			return ClaudeHelper(c, info)
 		}
 		chatReq, convErr := service.ResponsesRequestToChatCompletionsRequestForContext(c, request)
 		if convErr != nil {

@@ -309,7 +309,7 @@ func rawText(raw json.RawMessage) string {
 }
 
 func rawBool(raw json.RawMessage) (bool, bool) {
-	if len(raw) == 0 || common.GetJsonType(raw) != "bool" {
+	if len(raw) == 0 || common.GetJsonType(raw) != "boolean" {
 		return false, false
 	}
 	var b bool

@@ -86,7 +86,13 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 			service.ShouldChatCompletionsUseResponsesForChannel(info.ChannelId, info.ChannelType, info.ChannelBaseUrl, info.OriginModelName) ||
 			service.ShouldUseModelDefaultResponsesForRelay(info)) {
 		if service.ShouldUseModelDefaultResponsesForRelay(info) {
-			if capabilityErr := service.ValidateChatTextBridgeRequest(request); capabilityErr != nil {
+			validate := service.ValidateChatTextBridgeRequest
+			if info.ProtocolNormalized {
+				validate = func(r *dto.GeneralOpenAIRequest) error {
+					return service.ValidateNormalizedBridgeRequest(r, constant.EndpointTypeOpenAIResponse)
+				}
+			}
+			if capabilityErr := validate(request); capabilityErr != nil {
 				return types.NewErrorWithStatusCode(capabilityErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 			}
 			logger.LogInfo(c, fmt.Sprintf(

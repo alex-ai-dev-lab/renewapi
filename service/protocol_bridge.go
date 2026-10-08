@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service/openaicompat"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/types"
 )
 
@@ -32,6 +33,18 @@ func EvaluateChannelProtocolCapability(channel *model.Channel, modelName string,
 	decision := model.ResolveModelRouteDecision(channel, modelName)
 	target := decision.Endpoint
 	overrideAllowed := model.ChannelAllowsModelProtocolOverrideTarget(channel, target)
+	if decision.Normalized {
+		overrideAllowed = model.UsesDefaultTextProtocol(channel, target)
+		if overrideAllowed && TextEndpointForClient(clientFormat) != "" {
+			if TextEndpointForClient(clientFormat) != target && (channel.GetSetting().PassThroughBodyEnabled || model_setting.GetGlobalSettings().PassThroughRequestEnabled) {
+				return unsupportedCapability(target, "", "body pass-through conflicts with protocol conversion")
+			}
+			if err := ValidateNormalizedBridgeRequest(request, target); err != nil {
+				return unsupportedCapability(target, string(TextEndpointForClient(clientFormat))+"->"+string(target), err.Error())
+			}
+			return supportedCapability(target, string(TextEndpointForClient(clientFormat))+"->"+string(target), "model default endpoint normalization")
+		}
+	}
 
 	switch clientFormat {
 	case types.RelayFormatOpenAIResponses:

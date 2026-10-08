@@ -1,5 +1,12 @@
 {
   "translation": {
+    "Normalize text requests to model default endpoints": "Normalize text requests to model default endpoints",
+    "Model defaults select the upstream endpoint. Text endpoint normalization converts Chat Completions, Responses and Messages while preserving the client response format. Dedicated image, audio and embedding endpoints keep their own routing.": "Model defaults select the upstream endpoint. Text endpoint normalization converts Chat Completions, Responses and Messages while preserving the client response format. Dedicated image, audio and embedding endpoints keep their own routing.",
+    "Route preview": "Route preview",
+    "Preview uses saved channel settings and does not call the upstream.": "Preview uses saved channel settings and does not call the upstream.",
+    "Client endpoint": "Client endpoint",
+    "Upstream endpoint": "Upstream endpoint",
+    "Failed to preview model route": "Failed to preview model route",
     "Channel priority": "Channel priority",
     "Upstream target": "Upstream target",
     "Mapping rule": "Mapping rule",

@@ -184,6 +184,7 @@ import {
 import { ParamOverrideEditorDialog } from '../dialogs/param-override-editor-dialog'
 import { StatusCodeRiskDialog } from '../dialogs/status-code-risk-dialog'
 import { ModelMappingEditor } from '../model-mapping-editor'
+import { ChannelRoutePreview } from './channel-route-preview'
 import { RenewChannelSettings } from './renew-channel-settings'
 import {
   ChannelAdvancedSection,
@@ -3760,6 +3761,9 @@ export function ChannelMutateDrawer({
                           </div>
 
                           <RenewChannelSettings form={form} />
+                          <ChannelRoutePreview
+                            channelId={channelId ?? undefined}
+                          />
                           {channelId && (
                             <ChannelModelEndpointsSection
                               channelId={channelId}

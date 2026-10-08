@@ -357,6 +357,9 @@ export interface ResponseModelInfo {
 }
 
 export interface ChannelAttempt {
+  client_endpoint?: string
+  upstream_endpoint?: string
+  route_source?: string
   channel_id: number
   channel_name: string
   priority: number

@@ -72,3 +72,12 @@ func TestShouldUseModelDefaultTextEndpointForResponses(t *testing.T) {
 	require.Equal(t, constant.EndpointTypeAnthropic, endpoint)
 	require.False(t, ShouldUseModelDefaultResponsesForRelay(info))
 }
+
+func TestNormalizedProtocolDecisionUsesRequestSnapshot(t *testing.T) {
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+		RouteEndpoint: constant.EndpointTypeOpenAIResponse, RouteOverridden: true, ProtocolNormalized: true,
+	}}
+	// Even an unrelated later administrative toggle must not change an already
+	// selected request's protocol. No live registry read is required here.
+	require.True(t, ShouldUseModelDefaultResponsesForRelay(info))
+}

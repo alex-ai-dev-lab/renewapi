@@ -1,5 +1,12 @@
 {
   "translation": {
+    "Normalize text requests to model default endpoints": "将文本请求统一转换到模型默认端点",
+    "Model defaults select the upstream endpoint. Text endpoint normalization converts Chat Completions, Responses and Messages while preserving the client response format. Dedicated image, audio and embedding endpoints keep their own routing.": "模型默认端点决定上游使用的接口。启用文本端点整流后，Chat Completions、Responses 和 Messages 会相互转换，返回格式仍与客户端一致。图片、音频和向量等专用接口保持各自路由。",
+    "Route preview": "路由预览",
+    "Preview uses saved channel settings and does not call the upstream.": "使用已保存的渠道配置预览，不会调用上游。",
+    "Client endpoint": "客户端端点",
+    "Upstream endpoint": "上游端点",
+    "Failed to preview model route": "模型路由预览失败",
     "Channel priority": "渠道优先级",
     "Upstream target": "实际上游模型",
     "Mapping rule": "映射规则",

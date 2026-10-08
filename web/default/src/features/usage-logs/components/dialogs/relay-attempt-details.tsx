@@ -59,6 +59,14 @@ export function RelayAttemptDetails(props: {
                 {t('Upstream target')}: <code>{attempt.upstream_model}</code>
               </p>
             )}
+            {attempt.upstream_endpoint && (
+              <p className='break-all'>
+                {t('Protocol')}: <code>{attempt.client_endpoint}</code>
+                {' → '}
+                <code>{attempt.upstream_endpoint}</code>
+                {attempt.route_source && ` (${attempt.route_source})`}
+              </p>
+            )}
             {attempt.mapping_rule_id && (
               <p className='text-muted-foreground break-all'>
                 {t('Mapping rule')}: <code>{attempt.mapping_rule_id}</code>

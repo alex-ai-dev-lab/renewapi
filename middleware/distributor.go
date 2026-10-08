@@ -250,6 +250,14 @@ func Distribute() func(c *gin.Context) {
 					}
 					if channel == nil {
 						service.SetModelRouteOutcome(c, service.ModelRouteOutcomeRouteUnavailable)
+						if model.LOG_DB != nil && common.GetContextKeyInt(c, constant.ContextKeyUserId) > 0 {
+							requestIsStream := modelRequest.RoutingRequest != nil && modelRequest.RoutingRequest.IsStream(c)
+							model.RecordErrorLog(c, common.GetContextKeyInt(c, constant.ContextKeyUserId), 0, clientModel,
+								c.GetString("token_name"), fmt.Sprintf("No eligible channel for model %s under group %s", modelRequest.Model, usingGroup),
+								common.GetContextKeyInt(c, constant.ContextKeyTokenId), 0, requestIsStream, usingGroup, map[string]any{
+									"request_path": c.Request.URL.Path, "admin_info": map[string]any{"stage": "channel_selection", "client_endpoint": c.Request.URL.Path},
+								})
+						}
 						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
 						return
 					}
@@ -996,6 +1004,7 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	common.SetContextKey(c, constant.ContextKeyChannelRouteEndpoint, string(routeDecision.Endpoint))
 	common.SetContextKey(c, constant.ContextKeyChannelRouteSource, string(routeDecision.Source))
 	common.SetContextKey(c, constant.ContextKeyChannelRouteOverridden, routeDecision.Overridden)
+	common.SetContextKey(c, constant.ContextKeyProtocolNormalized, routeDecision.Normalized)
 	common.SetContextKey(c, constant.ContextKeyChannelCreateTime, channel.CreatedTime)
 	common.SetContextKey(c, constant.ContextKeyChannelSetting, channel.GetSetting())
 	common.SetContextKey(c, constant.ContextKeyChannelOtherSetting, channel.GetOtherSettings())

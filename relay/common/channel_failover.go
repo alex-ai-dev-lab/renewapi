@@ -12,6 +12,9 @@ const MaxChannelSwitches = 5
 const ChannelFailoverContextKey = "relay_channel_failover"
 
 type ChannelAttemptRecord struct {
+	ClientEndpoint    string         `json:"client_endpoint,omitempty"`
+	UpstreamEndpoint  string         `json:"upstream_endpoint,omitempty"`
+	RouteSource       string         `json:"route_source,omitempty"`
 	UpstreamModel     string         `json:"upstream_model,omitempty"`
 	MappingRuleID     string         `json:"mapping_rule_id,omitempty"`
 	ChannelID         int            `json:"channel_id"`

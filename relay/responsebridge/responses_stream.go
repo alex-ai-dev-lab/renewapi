@@ -26,6 +26,7 @@ type toolState struct {
 }
 
 type ResponsesStreamEmitter struct {
+	Attempt        int
 	ResponseID     string
 	MessageID      string
 	Model          string
@@ -43,8 +44,12 @@ type ResponsesStreamEmitter struct {
 }
 
 func getEmitter(c *gin.Context, info *relaycommon.RelayInfo, chunk *dto.ChatCompletionsStreamResponse) *ResponsesStreamEmitter {
+	attempt := 0
+	if info != nil && info.Failover != nil {
+		attempt = info.Failover.AttemptCount
+	}
 	if existing, ok := c.Get(emitterContextKey); ok {
-		if emitter, ok := existing.(*ResponsesStreamEmitter); ok {
+		if emitter, ok := existing.(*ResponsesStreamEmitter); ok && emitter.Attempt == attempt {
 			return emitter
 		}
 	}
@@ -73,6 +78,7 @@ func getEmitter(c *gin.Context, info *relaycommon.RelayInfo, chunk *dto.ChatComp
 		created = common.GetTimestamp()
 	}
 	emitter := &ResponsesStreamEmitter{
+		Attempt:     attempt,
 		ResponseID:  responseID,
 		MessageID:   "msg_" + strings.TrimPrefix(responseID, "resp_"),
 		Model:       model,

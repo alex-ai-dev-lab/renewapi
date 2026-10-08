@@ -15,6 +15,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/openaicompat"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/QuantumNous/new-api/types"
@@ -137,6 +138,24 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	antipoison.ApplyClaudeAnswerEnvelope(info, request)
 	antipoison.CaptureClaudeToolPolicy(info, request)
 	applyClaudeAntiPoisonRequest(c, info, request)
+
+	if info.ProtocolNormalized && service.ShouldUseModelDefaultResponsesForRelay(info) {
+		responsesReq, convertErr := openaicompat.ClaudeRequestToResponsesRequest(request)
+		if convertErr != nil {
+			return types.NewErrorWithStatusCode(convertErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		// Keep the original client protocol while sharing the validated Responses
+		// transport, semantic commit gate, and original billing session.
+		usage, relayErr := responsesRequestViaCompatible(c, info, adaptor, responsesReq)
+		if relayErr != nil {
+			return relayErr
+		}
+		if stagingErr := helper.ValidateStreamStaging(c); stagingErr != nil {
+			return stagingErr
+		}
+		service.PostTextConsumeQuota(c, info, usage, nil)
+		return nil
+	}
 
 	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&

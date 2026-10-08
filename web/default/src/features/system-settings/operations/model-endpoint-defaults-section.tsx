@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Plus, Save, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -75,6 +75,7 @@ type ModelEndpointDefaultEntry = {
 
 type ParsedModelEndpointDefaults = {
   enabled: boolean
+  normalize_text_endpoints: boolean
   entries: ModelEndpointDefaultEntry[]
 }
 
@@ -133,26 +134,27 @@ const endpointPathMap: Record<EndpointType, string> = {
   'openai-video': '/v1/videos',
 }
 
-const defaultSupportedEndpointsByDefault: Record<EndpointType, EndpointType[]> = {
-  openai: ['openai', 'openai-response', 'openai-response-compact'],
-  'openai-response': ['openai', 'openai-response', 'openai-response-compact'],
-  'openai-response-compact': [
-    'openai',
-    'openai-response',
-    'openai-response-compact',
-  ],
-  anthropic: ['anthropic', 'openai'],
-  gemini: ['gemini', 'openai'],
-  'image-generation': ['image-generation', 'image-edits'],
-  'image-edits': ['image-edits'],
-  embeddings: ['embeddings'],
-  'audio-speech': ['audio-speech'],
-  'audio-transcription': ['audio-transcription', 'audio-translation'],
-  'audio-translation': ['audio-transcription', 'audio-translation'],
-  'jina-rerank': ['jina-rerank'],
-  moderations: ['moderations'],
-  'openai-video': ['openai-video'],
-}
+const defaultSupportedEndpointsByDefault: Record<EndpointType, EndpointType[]> =
+  {
+    openai: ['openai', 'openai-response', 'openai-response-compact'],
+    'openai-response': ['openai', 'openai-response', 'openai-response-compact'],
+    'openai-response-compact': [
+      'openai',
+      'openai-response',
+      'openai-response-compact',
+    ],
+    anthropic: ['anthropic', 'openai'],
+    gemini: ['gemini', 'openai'],
+    'image-generation': ['image-generation', 'image-edits'],
+    'image-edits': ['image-edits'],
+    embeddings: ['embeddings'],
+    'audio-speech': ['audio-speech'],
+    'audio-transcription': ['audio-transcription', 'audio-translation'],
+    'audio-translation': ['audio-transcription', 'audio-translation'],
+    'jina-rerank': ['jina-rerank'],
+    moderations: ['moderations'],
+    'openai-video': ['openai-video'],
+  }
 
 function uniqueEndpoints(values: EndpointType[]): EndpointType[] {
   const seen = new Set<EndpointType>()
@@ -171,7 +173,9 @@ function normalizeSupportedEndpoints(
   supported: EndpointType[]
 ): EndpointType[] {
   const normalized = uniqueEndpoints(
-    supported.length > 0 ? supported : defaultSupportedEndpointsByDefault[defaultEndpoint]
+    supported.length > 0
+      ? supported
+      : defaultSupportedEndpointsByDefault[defaultEndpoint]
   )
   if (!normalized.includes(defaultEndpoint)) {
     normalized.unshift(defaultEndpoint)
@@ -195,7 +199,11 @@ function defaultEntry(id: number): ModelEndpointDefaultEntry {
     pattern: '',
     channel_type: 1,
     default_endpoint: 'openai',
-    supported_endpoints: ['openai', 'openai-response', 'openai-response-compact'],
+    supported_endpoints: [
+      'openai',
+      'openai-response',
+      'openai-response-compact',
+    ],
     fallback_endpoint: 'openai',
     auto_correct: true,
   }
@@ -205,12 +213,13 @@ function parseModelEndpointDefaults(
   value: string
 ): ParsedModelEndpointDefaults {
   if (!value) {
-    return { enabled: false, entries: [] }
+    return { enabled: false, normalize_text_endpoints: false, entries: [] }
   }
 
   try {
     const parsed = JSON.parse(value) as {
       enabled?: boolean
+      normalize_text_endpoints?: boolean
       entries?: Array<{
         match_type?: string
         pattern?: string
@@ -224,6 +233,7 @@ function parseModelEndpointDefaults(
     const rawEntries = Array.isArray(parsed.entries) ? parsed.entries : []
     return {
       enabled: Boolean(parsed.enabled),
+      normalize_text_endpoints: parsed.normalize_text_endpoints === true,
       entries: rawEntries.map((item, index) => {
         const entry = defaultEntry(index + 1)
         const defaultEndpoint =
@@ -253,7 +263,7 @@ function parseModelEndpointDefaults(
       }),
     }
   } catch {
-    return { enabled: false, entries: [] }
+    return { enabled: false, normalize_text_endpoints: false, entries: [] }
   }
 }
 
@@ -274,17 +284,24 @@ export function ModelEndpointDefaultsSection({
     [defaultValue]
   )
   const [isEnabled, setIsEnabled] = useState(initial.enabled)
+  const [normalizeText, setNormalizeText] = useState(
+    initial.normalize_text_endpoints
+  )
   const [entries, setEntries] = useState<ModelEndpointDefaultEntry[]>(
     initial.entries
   )
   const [hasChanges, setHasChanges] = useState(false)
 
-  useEffect(() => {
-    const next = parseModelEndpointDefaults(defaultValue)
-    setIsEnabled(next.enabled)
-    setEntries(next.entries)
-    setHasChanges(false)
-  }, [defaultValue])
+  const [previousDefaultValue, setPreviousDefaultValue] = useState(defaultValue)
+  if (previousDefaultValue !== defaultValue) {
+    setPreviousDefaultValue(defaultValue)
+    if (!hasChanges) {
+      const next = parseModelEndpointDefaults(defaultValue)
+      setIsEnabled(next.enabled)
+      setNormalizeText(next.normalize_text_endpoints)
+      setEntries(next.entries)
+    }
+  }
 
   const allocateId = () =>
     entries.reduce((max, item) => Math.max(max, item.id), 0) + 1
@@ -359,6 +376,7 @@ export function ModelEndpointDefaultsSection({
   const handleReset = () => {
     const next = parseModelEndpointDefaults(defaultValue)
     setIsEnabled(next.enabled)
+    setNormalizeText(next.normalize_text_endpoints)
     setEntries(next.entries)
     setHasChanges(false)
   }
@@ -366,6 +384,7 @@ export function ModelEndpointDefaultsSection({
   const handleSave = async () => {
     const payload = {
       enabled: isEnabled,
+      normalize_text_endpoints: normalizeText,
       entries: entries
         .map((item) => ({
           match_type: item.match_type,
@@ -396,7 +415,7 @@ export function ModelEndpointDefaultsSection({
       <div className='space-y-4'>
         <p className='text-muted-foreground text-sm'>
           {t(
-            'Configure a route profile for each model family: upstream protocol, default endpoint, supported endpoints, and whether mismatched text endpoints should be corrected internally. Correct client requests are respected; unsupported image, embedding, audio, rerank, and video requests are rejected with a recommended endpoint.'
+            'Model defaults select the upstream endpoint. Text endpoint normalization converts Chat Completions, Responses and Messages while preserving the client response format. Dedicated image, audio and embedding endpoints keep their own routing.'
           )}
         </p>
 
@@ -433,6 +452,15 @@ export function ModelEndpointDefaultsSection({
           />
         </div>
 
+        <SettingsSwitchField
+          checked={normalizeText}
+          onCheckedChange={(checked) => {
+            setNormalizeText(checked)
+            setHasChanges(true)
+          }}
+          label={t('Normalize text requests to model default endpoints')}
+        />
+
         <div className='rounded-md border'>
           <Table>
             <TableHeader>
@@ -441,7 +469,9 @@ export function ModelEndpointDefaultsSection({
                 <TableHead className='min-w-56'>{t('Model pattern')}</TableHead>
                 <TableHead className='w-52'>{t('Protocol')}</TableHead>
                 <TableHead className='w-56'>{t('Default endpoint')}</TableHead>
-                <TableHead className='min-w-72'>{t('Supported endpoints')}</TableHead>
+                <TableHead className='min-w-72'>
+                  {t('Supported endpoints')}
+                </TableHead>
                 <TableHead className='w-64'>{t('Preview path')}</TableHead>
                 <TableHead className='w-44'>{t('Auto-correct')}</TableHead>
                 <TableHead className='w-16'>{t('Actions')}</TableHead>
@@ -462,8 +492,7 @@ export function ModelEndpointDefaultsSection({
                         value={entry.match_type}
                         onValueChange={(value) =>
                           handleChangeEntry(entry.id, {
-                            match_type:
-                              value === 'exact' ? 'exact' : 'prefix',
+                            match_type: value === 'exact' ? 'exact' : 'prefix',
                           })
                         }
                       >
@@ -613,10 +642,7 @@ export function ModelEndpointDefaultsSection({
                           <SelectContent alignItemWithTrigger={false}>
                             <SelectGroup>
                               {entry.supported_endpoints.map((endpoint) => (
-                                <SelectItem
-                                  key={endpoint}
-                                  value={endpoint}
-                                >
+                                <SelectItem key={endpoint} value={endpoint}>
                                   {t(endpointLabel(endpoint))}
                                 </SelectItem>
                               ))}
@@ -628,7 +654,9 @@ export function ModelEndpointDefaultsSection({
                     <TableCell>
                       <div className='space-y-2'>
                         <div className='flex items-center justify-between gap-3'>
-                          <span className='text-sm'>{t('Safe text rewrite')}</span>
+                          <span className='text-sm'>
+                            {t('Safe text rewrite')}
+                          </span>
                           <Switch
                             checked={entry.auto_correct}
                             onCheckedChange={(checked) =>

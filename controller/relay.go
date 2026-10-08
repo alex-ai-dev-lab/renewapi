@@ -592,6 +592,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			relayInfo.ResponseModel = nil
 			relayInfo.ResponsesObservedUsage = nil
 			relayInfo.ReceivedResponseCount = 0
+			relayInfo.SendResponseCount = 0
+			if relayFormat == types.RelayFormatClaude {
+				relayInfo.ClaudeConvertInfo = &relaycommon.ClaudeConvertInfo{LastMessagesType: relaycommon.LastMessageTypeNone}
+			}
 			c.Set(common.UpstreamRequestIdKey, "")
 
 			newAPIError = helper.WithStreamStaging(c, relayInfo, func() *types.NewAPIError {
@@ -1026,6 +1030,11 @@ func maybeFallbackClaudeThinkingToSanitized(c *gin.Context, info *relaycommon.Re
 
 func prepareClaudeThinkingRetryBody(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service.RetryParam, channel *model.Channel) *types.NewAPIError {
 	if c == nil || info == nil || channel == nil || info.RelayFormat != types.RelayFormatClaude {
+		return nil
+	}
+	// Native Claude thinking sanitization must not erase intent before the
+	// dedicated model-default bridge can translate it to Responses reasoning.
+	if common.GetContextKeyBool(c, constant.ContextKeyProtocolNormalized) {
 		return nil
 	}
 	req, ok := info.Request.(*dto.ClaudeRequest)

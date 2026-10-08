@@ -584,7 +584,7 @@ func shouldForceCodexIdentity(info *common.RelayInfo, upstreamURL string) bool {
 	if strings.Contains(path, "/v1/messages") ||
 		strings.Contains(path, "/anthropic/v1/messages") ||
 		info.GetFinalRequestRelayFormat() == types.RelayFormatClaude ||
-		info.RelayFormat == types.RelayFormatClaude {
+		(info.RelayFormat == types.RelayFormatClaude && !info.ProtocolNormalized) {
 		return false
 	}
 	switch info.GetFinalRequestRelayFormat() {
@@ -606,10 +606,24 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 		return nil, fmt.Errorf("get request url failed: %w", err)
 	}
 	logger.LogDebug(c, "fullRequestURL: %s", fullRequestURL)
+	if info.Failover != nil && len(info.Failover.AttemptRecords) > 0 {
+		record := &info.Failover.AttemptRecords[len(info.Failover.AttemptRecords)-1]
+		record.ClientEndpoint = c.Request.URL.Path
+		record.RouteSource = info.RouteSource
+		if parsed, parseErr := url.Parse(fullRequestURL); parseErr == nil {
+			record.UpstreamEndpoint = parsed.EscapedPath()
+		}
+	}
 
 	// 应用客户端标识符注入
+	identityPath := c.Request.URL.Path
+	if info.ProtocolNormalized {
+		if parsed, parseErr := url.Parse(fullRequestURL); parseErr == nil {
+			identityPath = parsed.Path
+		}
+	}
 	processedBody, newContentLength, identityHeaders, identityErr := service.ApplyClientIdentityToRequestBodyWithOptions(
-		c.Request.URL.Path,
+		identityPath,
 		c.Request.Header,
 		requestBody,
 		service.ClientIdentityOptions{

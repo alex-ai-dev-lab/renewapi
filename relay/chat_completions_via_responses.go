@@ -96,6 +96,10 @@ func chatCompletionsViaResponses(c *gin.Context, info *relaycommon.RelayInfo, ad
 	if err != nil {
 		return nil, types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 	}
+	return responsesRequestViaCompatible(c, info, adaptor, responsesReq)
+}
+
+func responsesRequestViaCompatible(c *gin.Context, info *relaycommon.RelayInfo, adaptor channel.Adaptor, responsesReq *dto.OpenAIResponsesRequest) (*dto.Usage, *types.NewAPIError) {
 	clientRequestedStream := info.IsStream
 	if info.ChannelType == constant.ChannelTypeCodex {
 		responsesReq.Stream = common.GetPointer(true)

@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/antipoison"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
@@ -223,7 +224,16 @@ func channelMatchesRetryRequirements(param *RetryParam, channel *model.Channel) 
 		return false
 	}
 	if param.RequireClaudeThinkingSupport && !ChannelSupportsClaudeThinking(channel) {
-		return false
+		decision := model.ResolveModelRouteDecision(channel, param.ModelName)
+		if !decision.Normalized ||
+			!operation_setting.IsTextEndpoint(string(decision.Endpoint)) {
+			return false
+		}
+	}
+	if operation_setting.ModelEndpointNormalizationEnabled() && TextEndpointForClient(param.ClientRelayFormat) != "" {
+		if capability := EvaluateChannelProtocolCapability(channel, param.ModelName, param.ClientRelayFormat, param.Request); !capability.Supported {
+			return false
+		}
 	}
 	if param.ResponsesRequirement != nil && RequiresResponsesCompactionCapability(param.ResponsesRequirement.Kind) {
 		if param.ResponsesDiagnostics != nil {
@@ -295,7 +305,7 @@ func getRandomSatisfiedChannelWithRequirements(param *RetryParam, group string, 
 	if param == nil {
 		return nil, errors.New("retry param is nil")
 	}
-	if !param.RequireClaudeThinkingSupport && !param.RequireOpenAIResponsesSupport && param.ResponsesRequirement == nil {
+	if !param.RequireClaudeThinkingSupport && !param.RequireOpenAIResponsesSupport && param.ResponsesRequirement == nil && !operation_setting.ModelEndpointNormalizationEnabled() {
 		return model.GetRandomSatisfiedChannelExcludingWithPolicy(group, param.ModelName, retry, param.ExcludedChannelIds, param.ProviderRoutingPolicy)
 	}
 	excluded := param.ExcludedChannelIds

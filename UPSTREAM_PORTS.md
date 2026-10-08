@@ -91,4 +91,16 @@ The reviewed range contains 133 commits from the previous audit ref `4e570389dd4
 
 ## 后续完整审计
 
+### 2026-10 三端点整流专项
+
+| 来源 | 判定 | 实际适配与边界 |
+|---|---|---|
+| New API `6370b29424168039e94d40d610191e7d2e65dbf4` 的 `relaykit/relayconvert/internal/claude_messages/to_oai_responses_req.go` 与 `oai_responses/to_claude_messages_req.go` | ADAPT | 直接请求转换适配至 `service/openaicompat`，保留内容顺序、工具 ID/结果、显式零值、图片、并行和思考意图；继续使用本项目 DTO、common JSON 边界和账务/保护层。AGPL-3.0 来源头保留，不引入整个 relaykit。 |
+| Sub2API `5fc0e486c3f6a8a191b8bd140f39b60457f611cf` | REFERENCE | 对照工具历史、system 和媒体处理；不采用其模型重映射、默认预算抬高或订阅分组规则。 |
+| CLIProxyAPI `0f96f568e4dbf6f84ad7399a74b78344c5eac7e6` | ADAPT / REFERENCE | 参考并行工具与事件生命周期测试，修复首块多工具、禁止并行丢失及跨尝试输出状态；预算到 effort 使用本项目明确的级别映射，不复制身份伪装或跨供应商签名规则。 |
+| Bifrost `dfa57061c46793d1229885dcf7c54ef1e74b754b` | REFERENCE | 对照 Anthropic Responses 转换和供应商能力例外；保留本项目适配器与能力筛选，不引入其 SDK。 |
+| LiteLLM `d8c0e2c7153d82234ec46f0231bf9b9714e7d52a` | REFERENCE | 对照 Messages/Responses 参数和 reasoning 映射；不增加 Python 运行时或复制自动处理外部签名的默认策略。 |
+
+本轮仅是指定协议范围的源码专项审阅，没有更新顶部全量上游审计基线。实施决策见 ADR-016，验收和发布记录见三端点整流任务。
+
 Run `scripts/check-upstream.ps1` or `scripts/check-upstream.sh`. The scripts read `Audited-Upstream-Ref`, list only later upstream commits, and refuse merge/rebase while histories remain unrelated. After review, add each imported or rejected item here and advance the audited ref only when the complete range has been classified.

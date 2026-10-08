@@ -100,6 +100,9 @@ function buildDetailSegments(
   t: (key: string, opts?: Record<string, unknown>) => string,
   isAdmin: boolean
 ): DetailSegment[] {
+  if (isAdmin && log.type === 5 && other?.admin_info?.real_error) {
+    return [{ text: other.admin_info.real_error, danger: true }]
+  }
   const segments = buildTypeDetailSegments(log, other, t)
   // Quota saturation is a rare, admin-only anomaly marker; surface it first
   // and in danger styling so it stands out on the related billing log. The

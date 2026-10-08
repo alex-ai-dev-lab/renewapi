@@ -190,6 +190,7 @@ const (
 // ModelRouteDecision is the single source of truth for the effective upstream
 // adaptor and endpoint selected for a channel/model pair.
 type ModelRouteDecision struct {
+	Normalized     bool                  `json:"normalized"`
 	ChannelType    int                   `json:"channel_type"`
 	BaseURL        string                `json:"base_url"`
 	Endpoint       constant.EndpointType `json:"endpoint"`
@@ -231,10 +232,41 @@ func globalRouteProfile(channel *Channel, modelName string) (operation_setting.M
 		return operation_setting.ModelEndpointRouteProfile{}, false
 	}
 	target := constant.EndpointType(strings.TrimSpace(profile.DefaultEndpoint))
+	if profile.NormalizeTextEndpoints && UsesDefaultTextProtocol(channel, target) {
+		// Generic aggregators speak the selected wire protocol, regardless of the
+		// provider hint attached to a model family (for example Gemini via Chat).
+		if channel.Type == constant.ChannelTypeOpenAI || channel.Type == constant.ChannelTypeAnthropic {
+			profile.ChannelType = constant.ChannelTypeOpenAI
+			if target == constant.EndpointTypeAnthropic {
+				profile.ChannelType = constant.ChannelTypeAnthropic
+			}
+		} else {
+			profile.ChannelType = channel.Type
+		}
+		return profile, true
+	}
 	if !ChannelAllowsModelProtocolOverrideTarget(channel, target) {
 		return operation_setting.ModelEndpointRouteProfile{}, false
 	}
 	return profile, true
+}
+
+// UsesDefaultTextProtocol keeps provider-specific credentials/URLs intact. Only
+// generic aggregators switch adaptors; native providers retain their adaptor.
+func UsesDefaultTextProtocol(channel *Channel, target constant.EndpointType) bool {
+	if channel == nil || !operation_setting.IsTextEndpoint(string(target)) {
+		return false
+	}
+	switch channel.Type {
+	case constant.ChannelTypeOpenAI, constant.ChannelTypeAnthropic:
+		return true
+	case constant.ChannelTypeCodex:
+		return target == constant.EndpointTypeOpenAIResponse
+	case constant.ChannelTypeAzure:
+		return target == constant.EndpointTypeOpenAI || target == constant.EndpointTypeOpenAIResponse
+	default:
+		return target == EndpointTypeForChannelType(channel.Type)
+	}
 }
 
 // ResolveModelRouteDecision applies explicit per-model rows first, then an
@@ -254,6 +286,7 @@ func ResolveModelRouteDecision(channel *Channel, modelName string) ModelRouteDec
 	ep := GetModelEndpoint(channel.Id, modelName)
 	if ep == nil {
 		if profile, ok := globalRouteProfile(channel, modelName); ok {
+			decision.Normalized = profile.NormalizeTextEndpoints && UsesDefaultTextProtocol(channel, constant.EndpointType(profile.DefaultEndpoint))
 			decision.ChannelType = profile.ChannelType
 			decision.Endpoint = constant.EndpointType(profile.DefaultEndpoint)
 			decision.Source = ModelRouteSourceGlobal
@@ -273,6 +306,7 @@ func ResolveModelRouteDecision(channel *Channel, modelName string) ModelRouteDec
 		decision.ChannelType = *ep.ChannelType
 		decision.Endpoint = EndpointTypeForChannelType(decision.ChannelType)
 	} else if profile, ok := globalRouteProfile(channel, modelName); ok {
+		decision.Normalized = profile.NormalizeTextEndpoints && UsesDefaultTextProtocol(channel, constant.EndpointType(profile.DefaultEndpoint))
 		decision.ChannelType = profile.ChannelType
 		decision.Endpoint = constant.EndpointType(profile.DefaultEndpoint)
 		decision.MatchedType = profile.MatchType

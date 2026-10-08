@@ -82,6 +82,7 @@ type ChannelMeta struct {
 	RouteEndpoint        constant.EndpointType
 	RouteSource          string
 	RouteOverridden      bool
+	ProtocolNormalized   bool
 	IsModelMapped        bool
 	SupportStreamOptions bool // 是否支持流式选项
 }
@@ -287,6 +288,7 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 		RouteEndpoint:        constant.EndpointType(common.GetContextKeyString(c, constant.ContextKeyChannelRouteEndpoint)),
 		RouteSource:          common.GetContextKeyString(c, constant.ContextKeyChannelRouteSource),
 		RouteOverridden:      common.GetContextKeyBool(c, constant.ContextKeyChannelRouteOverridden),
+		ProtocolNormalized:   common.GetContextKeyBool(c, constant.ContextKeyProtocolNormalized),
 		IsModelMapped:        false,
 		SupportStreamOptions: false,
 	}

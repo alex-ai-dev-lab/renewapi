@@ -54,6 +54,7 @@ const (
 	ContextKeyChannelRouteEndpoint              ContextKey = "channel_route_endpoint"
 	ContextKeyChannelRouteSource                ContextKey = "channel_route_source"
 	ContextKeyChannelRouteOverridden            ContextKey = "channel_route_overridden"
+	ContextKeyProtocolNormalized                ContextKey = "protocol_normalized"
 	ContextKeyProviderRoutingPolicy             ContextKey = "provider_routing_policy"
 
 	ContextKeyAutoGroup           ContextKey = "auto_group"

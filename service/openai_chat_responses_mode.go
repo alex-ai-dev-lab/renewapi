@@ -5,8 +5,10 @@ import (
 
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/service/openaicompat"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
 
 func ShouldChatCompletionsUseResponsesPolicy(policy model_setting.ChatCompletionsToResponsesPolicy, channelID int, channelType int, model string) bool {
@@ -22,7 +24,16 @@ func ShouldChatCompletionsUseResponsesForChannel(channelID int, channelType int,
 }
 
 func ForcedModelDefaultEndpointForRelay(info *relaycommon.RelayInfo) (constant.EndpointType, bool) {
-	if info == nil || info.ChannelMeta == nil || !info.RouteOverridden || info.RouteEndpoint == "" || !info.ChannelSetting.AllowModelProtocolOverride {
+	if info == nil || info.ChannelMeta == nil || !info.RouteOverridden || info.RouteEndpoint == "" {
+		return "", false
+	}
+	if info.ProtocolNormalized && operation_setting.IsTextEndpoint(string(info.RouteEndpoint)) {
+		if info.RelayMode == relayconstant.RelayModeResponsesCompact {
+			return "", false
+		}
+		return info.RouteEndpoint, true
+	}
+	if !info.ChannelSetting.AllowModelProtocolOverride {
 		return "", false
 	}
 	targetAllowed := false

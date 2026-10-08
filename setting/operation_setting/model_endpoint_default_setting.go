@@ -36,19 +36,22 @@ type ModelEndpointDefaultEntry struct {
 // model names to a default route profile regardless of the serving channel's own
 // type. Per-channel per-model overrides still take precedence.
 type ModelEndpointDefaults struct {
-	Enabled bool                        `json:"enabled"`
-	Entries []ModelEndpointDefaultEntry `json:"entries"`
+	Enabled bool `json:"enabled"`
+	// Explicit rollout switch: legacy registries retain their old opt-in behavior.
+	NormalizeTextEndpoints bool                        `json:"normalize_text_endpoints"`
+	Entries                []ModelEndpointDefaultEntry `json:"entries"`
 }
 
 // ModelEndpointRouteProfile is the normalized, effective profile for a model.
 type ModelEndpointRouteProfile struct {
-	MatchType          string   `json:"match_type"`
-	Pattern            string   `json:"pattern"`
-	ChannelType        int      `json:"channel_type"`
-	DefaultEndpoint    string   `json:"default_endpoint"`
-	SupportedEndpoints []string `json:"supported_endpoints"`
-	FallbackEndpoint   string   `json:"fallback_endpoint"`
-	AutoCorrect        bool     `json:"auto_correct"`
+	NormalizeTextEndpoints bool
+	MatchType              string   `json:"match_type"`
+	Pattern                string   `json:"pattern"`
+	ChannelType            int      `json:"channel_type"`
+	DefaultEndpoint        string   `json:"default_endpoint"`
+	SupportedEndpoints     []string `json:"supported_endpoints"`
+	FallbackEndpoint       string   `json:"fallback_endpoint"`
+	AutoCorrect            bool     `json:"auto_correct"`
 }
 
 // ModelEndpointDecision describes how a model/profile treats a client endpoint.
@@ -292,7 +295,9 @@ func ResolveModelDefaultProfile(modelName string) (ModelEndpointRouteProfile, bo
 		return ModelEndpointRouteProfile{}, false
 	}
 	if entry, ok := matchModelEndpointEntryLocked(name); ok {
-		return normalizeModelEndpointProfile(name, entry), true
+		profile := normalizeModelEndpointProfile(name, entry)
+		profile.NormalizeTextEndpoints = modelEndpointDefaults.NormalizeTextEndpoints
+		return profile, true
 	}
 	return ModelEndpointRouteProfile{}, false
 }
@@ -339,6 +344,11 @@ func ResolveModelEndpointDecision(modelName, requestedEndpoint string) (ModelEnd
 		decision.Reason = "no endpoint requested"
 		return decision, true
 	}
+	if profile.NormalizeTextEndpoints && IsTextEndpoint(requested) && IsTextEndpoint(profile.DefaultEndpoint) {
+		decision.AutoCorrected = requested != profile.DefaultEndpoint
+		decision.Reason = "model default endpoint normalization"
+		return decision, true
+	}
 	if endpointInList(requested, profile.SupportedEndpoints) {
 		decision.EffectiveEndpoint = requested
 		decision.Reason = "requested endpoint supported"
@@ -358,6 +368,21 @@ func ResolveModelEndpointDecision(modelName, requestedEndpoint string) (ModelEnd
 	}
 	decision.Reason = "unsupported endpoint for model"
 	return decision, true
+}
+
+func ModelEndpointNormalizationEnabled() bool {
+	modelEndpointDefaultsLock.RLock()
+	defer modelEndpointDefaultsLock.RUnlock()
+	return modelEndpointDefaults.Enabled && modelEndpointDefaults.NormalizeTextEndpoints
+}
+
+func IsTextEndpoint(value string) bool {
+	switch constant.EndpointType(value) {
+	case constant.EndpointTypeOpenAI, constant.EndpointTypeOpenAIResponse, constant.EndpointTypeAnthropic:
+		return true
+	default:
+		return false
+	}
 }
 
 func matchModelEndpointEntryLocked(name string) (ModelEndpointDefaultEntry, bool) {

@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/openrouter"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/reasonmap"
+	"github.com/QuantumNous/new-api/service/openaicompat"
 	"github.com/samber/lo"
 )
 
@@ -88,6 +89,27 @@ func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.Re
 	}
 	openAIRequest.Tools = openAITools
 	openAIRequest.ToolChoice = convertClaudeToolChoiceToOpenAI(claudeRequest.ToolChoice)
+	if info.ProtocolNormalized {
+		effort, err := openaicompat.ClaudeReasoningEffort(&claudeRequest)
+		if err != nil {
+			return nil, err
+		}
+		openAIRequest.ReasoningEffort = effort
+		format, err := openaicompat.ClaudeOutputJSONFormat(&claudeRequest)
+		if err != nil {
+			return nil, err
+		}
+		if format != nil {
+			body, err := common.Marshal(format)
+			if err != nil {
+				return nil, err
+			}
+			openAIRequest.ResponseFormat = &dto.ResponseFormat{Type: "json_schema", JsonSchema: body}
+		}
+	}
+	if choice, err := common.Any2Type[dto.ClaudeToolChoice](claudeRequest.ToolChoice); err == nil && choice.DisableParallelToolUse {
+		openAIRequest.ParallelTooCalls = common.GetPointer(false)
+	}
 
 	// Convert messages
 	openAIMessages := make([]dto.Message, 0)
@@ -159,7 +181,10 @@ func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.Re
 					mediaMessages = append(mediaMessages, message)
 				case "image":
 					// Handle image conversion (base64 to URL or keep as is)
-					imageData := fmt.Sprintf("data:%s;base64,%s", mediaMsg.Source.MediaType, mediaMsg.Source.Data)
+					imageData := openaicompat.ClaudeSourceURL(mediaMsg.Source)
+					if imageData == "" {
+						return nil, fmt.Errorf("image source is required")
+					}
 					//textContent += fmt.Sprintf("[Image: %s]", imageData)
 					mediaMessage := dto.MediaContent{
 						Type:     "image_url",
@@ -203,7 +228,7 @@ func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.Re
 				openAIMessage.SetToolCalls(toolCalls)
 			}
 
-			if len(mediaMessages) > 0 && len(toolCalls) == 0 {
+			if len(mediaMessages) > 0 {
 				openAIMessage.SetMediaContent(mediaMessages)
 			}
 		}
@@ -379,40 +404,39 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 			info.ClaudeConvertInfo.LastMessagesType = relaycommon.LastMessageTypeTools
 			info.ClaudeConvertInfo.ToolCallBaseIndex = 0
 			info.ClaudeConvertInfo.ToolCallMaxIndexOffset = 0
-			var toolCall dto.ToolCallResponse
-			if len(openAIResponse.Choices) > 0 && len(openAIResponse.Choices[0].Delta.ToolCalls) > 0 {
-				toolCall = openAIResponse.Choices[0].Delta.ToolCalls[0]
-			} else {
-				first := openAIResponse.GetFirstToolCall()
-				if first != nil {
-					toolCall = *first
-				} else {
-					toolCall = dto.ToolCallResponse{}
+			for i, toolCall := range openAIResponse.Choices[0].Delta.ToolCalls {
+				offset := i
+				if toolCall.Index != nil {
+					offset = *toolCall.Index
+				}
+				if offset > info.ClaudeConvertInfo.ToolCallMaxIndexOffset {
+					info.ClaudeConvertInfo.ToolCallMaxIndexOffset = offset
+				}
+				resp := &dto.ClaudeResponse{
+					Type: "content_block_start",
+					ContentBlock: &dto.ClaudeMediaMessage{
+						Id:    toolCall.ID,
+						Type:  "tool_use",
+						Name:  toolCall.Function.Name,
+						Input: map[string]interface{}{},
+					},
+				}
+				resp.SetIndex(offset)
+				claudeResponses = append(claudeResponses, resp)
+				// 首块包含工具 delta，则追加 input_json_delta
+				if toolCall.Function.Arguments != "" {
+					idx := offset
+					claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
+						Index: &idx,
+						Type:  "content_block_delta",
+						Delta: &dto.ClaudeMediaMessage{
+							Type:        "input_json_delta",
+							PartialJson: &toolCall.Function.Arguments,
+						},
+					})
 				}
 			}
-			resp := &dto.ClaudeResponse{
-				Type: "content_block_start",
-				ContentBlock: &dto.ClaudeMediaMessage{
-					Id:    toolCall.ID,
-					Type:  "tool_use",
-					Name:  toolCall.Function.Name,
-					Input: map[string]interface{}{},
-				},
-			}
-			resp.SetIndex(0)
-			claudeResponses = append(claudeResponses, resp)
-			// 首块包含工具 delta，则追加 input_json_delta
-			if toolCall.Function.Arguments != "" {
-				idx := 0
-				claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
-					Index: &idx,
-					Type:  "content_block_delta",
-					Delta: &dto.ClaudeMediaMessage{
-						Type:        "input_json_delta",
-						PartialJson: &toolCall.Function.Arguments,
-					},
-				})
-			}
+
 		} else {
 
 		}

@@ -74,6 +74,7 @@ import {
 } from '../lib'
 import { parseUpstreamUpdateMeta } from '../lib/upstream-update-utils'
 import type { Channel } from '../types'
+import { ChannelModelIcons } from './channel-model-icons'
 import { ChannelRowActionsLayoutContext } from './channel-row-actions-context'
 import { useChannels } from './channels-provider'
 import { DataTableRowActions } from './data-table-row-actions'
@@ -890,25 +891,13 @@ export function useChannelsColumns(
       {
         accessorKey: 'models',
         header: t('Models'),
-        meta: { mobileHidden: true },
+        meta: { mobileOrder: 2 },
         cell: ({ row }) => {
           const models = row.getValue('models') as string
           const modelArray = parseModelsList(models)
-          return (
-            <BadgeListCell
-              items={modelArray.map((model) => (
-                <StatusBadge
-                  key={model}
-                  label={model}
-                  autoColor={model}
-                  size='sm'
-                  className='font-mono'
-                />
-              ))}
-            />
-          )
+          return <ChannelModelIcons models={modelArray} />
         },
-        size: 200,
+        size: 180,
         enableSorting: false,
       },
 

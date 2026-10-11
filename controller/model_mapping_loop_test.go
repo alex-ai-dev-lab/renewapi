@@ -181,7 +181,8 @@ func TestRelayMappedCandidatesMainLoop(t *testing.T) {
 				router.ServeHTTP(recorder, req)
 				perfmetrics.WaitForPendingSamples()
 				if tc.failed {
-					require.Equal(t, 503, recorder.Code, recorder.Body.String())
+					require.Equal(t, 404, recorder.Code, recorder.Body.String())
+					require.Contains(t, recorder.Body.String(), "model_not_found")
 				} else {
 					require.Equal(t, 200, recorder.Code, recorder.Body.String())
 				}

@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { z } from 'zod'
+import { t } from 'i18next'
 import {
   CHANNEL_STATUS,
   ERROR_MESSAGES,
@@ -247,6 +248,31 @@ export const channelFormSchema = z
     anti_poison_canary_echo_enabled: z.boolean().optional(),
     anti_poison_shape_check_enabled: z.boolean().optional(),
     requires_codex_identity: z.enum(['auto', 'true', 'false']).optional(),
+    responses_request_profile: z
+      .enum(['auto', 'responses', 'codex'])
+      .optional(),
+    responses_supports_max_output_tokens: z
+      .enum(['auto', 'true', 'false'])
+      .optional(),
+    upstream_param_override: z
+      .string()
+      .optional()
+      .refine(
+        (value) => {
+          if (!value?.trim()) return true
+          try {
+            const parsed: unknown = JSON.parse(value)
+            return (
+              parsed !== null &&
+              typeof parsed === 'object' &&
+              !Array.isArray(parsed)
+            )
+          } catch {
+            return false
+          }
+        },
+        { message: t('Must be a JSON object') }
+      ),
     supports_claude_thinking: z.enum(['auto', 'true', 'false']).optional(),
     auto_test_interval: z.number().optional(),
     auto_test_retry_count: z.number().optional(),
@@ -411,6 +437,9 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   anti_poison_canary_echo_enabled: false,
   anti_poison_shape_check_enabled: true,
   requires_codex_identity: 'auto',
+  responses_request_profile: 'auto',
+  responses_supports_max_output_tokens: 'auto',
+  upstream_param_override: '',
   supports_claude_thinking: 'auto',
   auto_test_interval: 0,
   auto_test_retry_count: 2,
@@ -484,6 +513,9 @@ export function transformChannelToFormDefaults(
     | 'anti_poison_canary_echo_enabled'
     | 'anti_poison_shape_check_enabled'
     | 'requires_codex_identity'
+    | 'responses_request_profile'
+    | 'responses_supports_max_output_tokens'
+    | 'upstream_param_override'
     | 'supports_claude_thinking'
     | 'auto_test_interval'
     | 'auto_test_retry_count'
@@ -526,6 +558,9 @@ export function transformChannelToFormDefaults(
     anti_poison_canary_echo_enabled: false,
     anti_poison_shape_check_enabled: true,
     requires_codex_identity: 'auto',
+    responses_request_profile: 'auto',
+    responses_supports_max_output_tokens: 'auto',
+    upstream_param_override: '',
     supports_claude_thinking: 'auto',
     auto_test_interval: 0,
     auto_test_retry_count: 2,
@@ -619,6 +654,16 @@ export function transformChannelToFormDefaults(
           typeof parsed.requires_codex_identity === 'boolean'
             ? (String(parsed.requires_codex_identity) as CodexIdentityMode)
             : 'auto',
+        responses_request_profile: parsed.responses_request_profile || 'auto',
+        responses_supports_max_output_tokens:
+          typeof parsed.responses_supports_max_output_tokens === 'boolean'
+            ? (String(parsed.responses_supports_max_output_tokens) as
+                | 'true'
+                | 'false')
+            : 'auto',
+        upstream_param_override: parsed.upstream_param_override
+          ? JSON.stringify(parsed.upstream_param_override, null, 2)
+          : '',
         supports_claude_thinking:
           typeof parsed.supports_claude_thinking === 'boolean'
             ? (String(
@@ -793,6 +838,20 @@ function buildSettingJSON(formData: ChannelFormValues): string {
     settingObj.requires_codex_identity = true
   } else if (formData.requires_codex_identity === 'false') {
     settingObj.requires_codex_identity = false
+  }
+  settingObj.responses_request_profile =
+    formData.responses_request_profile || 'auto'
+  if (
+    formData.responses_supports_max_output_tokens !== 'auto' &&
+    formData.responses_supports_max_output_tokens !== undefined
+  ) {
+    settingObj.responses_supports_max_output_tokens =
+      formData.responses_supports_max_output_tokens === 'true'
+  }
+  if (formData.upstream_param_override?.trim()) {
+    settingObj.upstream_param_override = JSON.parse(
+      formData.upstream_param_override
+    )
   }
   if (formData.anti_poison_response_proof_enabled === true) {
     settingObj.anti_poison_response_proof_enabled = true

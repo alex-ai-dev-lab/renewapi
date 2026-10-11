@@ -128,6 +128,7 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
               className='size-7 shrink-0'
               onClick={handleCopy}
               disabled={isLoading}
+              aria-label={copyTooltip}
             />
           }
         >

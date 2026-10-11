@@ -157,7 +157,12 @@ function GroupSection(props: GroupSectionProps) {
           <div className='flex items-center gap-2'>
             <CollapsibleTrigger
               render={
-                <Button variant='ghost' size='sm' className='h-6 w-6 p-0' />
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='h-6 w-6 p-0'
+                  aria-label={t('Toggle details')}
+                />
               }
             >
               {open ? (
@@ -176,6 +181,7 @@ function GroupSection(props: GroupSectionProps) {
               variant='ghost'
               size='sm'
               className='h-7 w-7 p-0'
+              aria-label={t('Add')}
               onClick={() => props.onAdd(props.groupName)}
             >
               <Plus className='h-4 w-4' />
@@ -184,6 +190,7 @@ function GroupSection(props: GroupSectionProps) {
               variant='ghost'
               size='sm'
               className='text-destructive-text h-7 w-7 p-0'
+              aria-label={t('Delete')}
               onClick={() => props.onRemoveGroup(props.groupName)}
             >
               <Trash2 className='h-4 w-4' />
@@ -293,6 +300,7 @@ function GroupSection(props: GroupSectionProps) {
                   variant='ghost'
                   size='sm'
                   className='text-destructive-text h-8 w-8 p-0'
+                  aria-label={t('Delete')}
                   onClick={() => props.onRemove(rule._id)}
                 >
                   <Trash2 className='h-4 w-4' />

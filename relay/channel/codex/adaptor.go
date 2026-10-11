@@ -116,13 +116,8 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 	if isCompact {
 		return request, nil
 	}
-	// codex: store must be false
-	request.Store = json.RawMessage("false")
-	// rm max_output_tokens
-	// Codex backend is strict and rejects sampling params such as top_p.
-	request.MaxOutputTokens = nil
-	request.Temperature = nil
-	request.TopP = nil
+	// Shared finalization validates storage and output-limit semantics after
+	// overrides, then completes the Codex request immediately before sending.
 	return request, nil
 }
 

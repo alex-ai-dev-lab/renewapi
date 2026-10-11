@@ -139,7 +139,29 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	antipoison.CaptureClaudeToolPolicy(info, request)
 	applyClaudeAntiPoisonRequest(c, info, request)
 
-	if info.ProtocolNormalized && service.ShouldUseModelDefaultResponsesForRelay(info) {
+	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled &&
+		!info.ChannelSetting.PassThroughBodyEnabled &&
+		(info.ChannelType == constant.ChannelTypeCodex ||
+			service.ShouldChatCompletionsUseResponsesForChannel(info.ChannelId, info.ChannelType, info.ChannelBaseUrl, info.OriginModelName) ||
+			service.ShouldUseModelDefaultResponsesForRelay(info)) {
+		// Preserve legacy input-stage overrides, including declared Responses
+		// extensions, without replaying non-idempotent operations later.
+		inputJSON, inputErr := common.Marshal(request)
+		if inputErr == nil {
+			inputJSON, inputErr = relaycommon.RemoveDisabledFields(inputJSON, info.ChannelOtherSettings, info.ChannelSetting.PassThroughBodyEnabled)
+		}
+		if inputErr == nil {
+			inputJSON, inputErr = relaycommon.ApplyParamOverrideWithRelayInfo(inputJSON, info)
+		}
+		if inputErr != nil {
+			return newAPIErrorFromParamOverride(inputErr)
+		}
+		var overridden dto.ClaudeRequest
+		if inputErr = common.Unmarshal(inputJSON, &overridden); inputErr != nil {
+			return types.NewError(inputErr, types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+		}
+		request = &overridden
+		service.RecordClaudeResponsesConversion(info, request)
 		responsesReq, convertErr := openaicompat.ClaudeRequestToResponsesRequest(request)
 		if convertErr != nil {
 			return types.NewErrorWithStatusCode(convertErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
@@ -150,40 +172,6 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		if relayErr != nil {
 			return relayErr
 		}
-		if stagingErr := helper.ValidateStreamStaging(c); stagingErr != nil {
-			return stagingErr
-		}
-		service.PostTextConsumeQuota(c, info, usage, nil)
-		return nil
-	}
-
-	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled &&
-		!info.ChannelSetting.PassThroughBodyEnabled &&
-		(info.ChannelType == constant.ChannelTypeCodex ||
-			service.ShouldChatCompletionsUseResponsesForChannel(info.ChannelId, info.ChannelType, info.ChannelBaseUrl, info.OriginModelName) ||
-			service.ShouldUseModelDefaultResponsesForRelay(info)) {
-		if service.ShouldUseModelDefaultResponsesForRelay(info) {
-			if capabilityErr := service.ValidateClaudeTextBridgeRequest(request); capabilityErr != nil {
-				return types.NewErrorWithStatusCode(capabilityErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
-			}
-			logger.LogInfo(c, fmt.Sprintf(
-				"channel #%d protocol bridge: client_format=%s upstream_endpoint=%s bridge=claude->responses lossy=false model=%s",
-				info.ChannelId,
-				info.RelayFormat,
-				info.RouteEndpoint,
-				info.OriginModelName,
-			))
-		}
-		openAIRequest, convErr := service.ClaudeToOpenAIRequest(*request, info)
-		if convErr != nil {
-			return types.NewError(convErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-		}
-
-		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, openAIRequest)
-		if newApiErr != nil {
-			return newApiErr
-		}
-
 		if stagingErr := helper.ValidateStreamStaging(c); stagingErr != nil {
 			return stagingErr
 		}

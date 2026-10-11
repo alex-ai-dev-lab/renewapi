@@ -165,7 +165,7 @@ func responsesRequestViaCompatible(c *gin.Context, info *relaycommon.RelayInfo, 
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 
 	httpResp = resp.(*http.Response)
-	upstreamIsStream := (responsesReq.Stream != nil && *responsesReq.Stream) || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
+	upstreamIsStream := c.GetBool("responses_upstream_stream") || (responsesReq.Stream != nil && *responsesReq.Stream) || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
 	if httpResp.StatusCode != http.StatusOK {
 		newApiErr := service.RelayErrorHandler(c.Request.Context(), httpResp, false)
 		service.ResetStatusCode(newApiErr, statusCodeMappingStr)

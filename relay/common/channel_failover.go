@@ -12,23 +12,24 @@ const MaxChannelSwitches = 5
 const ChannelFailoverContextKey = "relay_channel_failover"
 
 type ChannelAttemptRecord struct {
-	ClientEndpoint    string         `json:"client_endpoint,omitempty"`
-	UpstreamEndpoint  string         `json:"upstream_endpoint,omitempty"`
-	RouteSource       string         `json:"route_source,omitempty"`
-	UpstreamModel     string         `json:"upstream_model,omitempty"`
-	MappingRuleID     string         `json:"mapping_rule_id,omitempty"`
-	ChannelID         int            `json:"channel_id"`
-	ChannelName       string         `json:"channel_name"`
-	Priority          int64          `json:"priority"`
-	Attempt           int            `json:"attempt"`
-	SwitchCount       int            `json:"switch_count"`
-	StatusCode        int            `json:"status_code"`
-	RealError         string         `json:"real_error,omitempty"`
-	TimeoutStage      string         `json:"timeout_stage,omitempty"`
-	ElapsedMS         int64          `json:"elapsed_ms"`
-	UpstreamRequestID string         `json:"upstream_request_id,omitempty"`
-	ResponseModel     *ResponseModel `json:"response_model,omitempty"`
-	ObservedUsage     *dto.Usage     `json:"observed_usage,omitempty"`
+	RequestNormalization []string       `json:"request_normalization,omitempty"`
+	ClientEndpoint       string         `json:"client_endpoint,omitempty"`
+	UpstreamEndpoint     string         `json:"upstream_endpoint,omitempty"`
+	RouteSource          string         `json:"route_source,omitempty"`
+	UpstreamModel        string         `json:"upstream_model,omitempty"`
+	MappingRuleID        string         `json:"mapping_rule_id,omitempty"`
+	ChannelID            int            `json:"channel_id"`
+	ChannelName          string         `json:"channel_name"`
+	Priority             int64          `json:"priority"`
+	Attempt              int            `json:"attempt"`
+	SwitchCount          int            `json:"switch_count"`
+	StatusCode           int            `json:"status_code"`
+	RealError            string         `json:"real_error,omitempty"`
+	TimeoutStage         string         `json:"timeout_stage,omitempty"`
+	ElapsedMS            int64          `json:"elapsed_ms"`
+	UpstreamRequestID    string         `json:"upstream_request_id,omitempty"`
+	ResponseModel        *ResponseModel `json:"response_model,omitempty"`
+	ObservedUsage        *dto.Usage     `json:"observed_usage,omitempty"`
 }
 
 // ChannelFailoverState 的生命周期覆盖整个请求，模型、分组和恢复路由不能重置预算。

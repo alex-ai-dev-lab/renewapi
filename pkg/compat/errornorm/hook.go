@@ -29,7 +29,7 @@ func New() *Hook {
 func (h *Hook) Name() string { return "errornorm" }
 
 func (h *Hook) OnClientResponseError(c *gin.Context, info *relaycommon.RelayInfo, err *types.NewAPIError) *types.NewAPIError {
-	if err == nil || !shouldNormalize(info) {
+	if err == nil || types.IsLocalRelayRejection(err) || types.PublicUpstreamModelError(err) != nil || !shouldNormalize(info) {
 		return err
 	}
 	status := err.StatusCode
@@ -99,50 +99,50 @@ func shouldNormalize(info *relaycommon.RelayInfo) bool {
 }
 
 type fixedMessageSet struct {
-	BadRequest            string
-	Unauthorized          string
-	PaymentRequired       string
-	Forbidden             string
-	NotFound              string
-	Conflict              string
-	RequestTooLarge        string
-	UnprocessableEntity    string
-	TooManyRequests        string
-	Timeout               string
-	Overloaded             string
-	ServerError            string
-	ClientError            string
-	Default                string
+	BadRequest          string
+	Unauthorized        string
+	PaymentRequired     string
+	Forbidden           string
+	NotFound            string
+	Conflict            string
+	RequestTooLarge     string
+	UnprocessableEntity string
+	TooManyRequests     string
+	Timeout             string
+	Overloaded          string
+	ServerError         string
+	ClientError         string
+	Default             string
 }
 
 var fixedMessagesByLanguage = map[string]fixedMessageSet{
 	"zh": {
-		BadRequest:         "请求参数错误，请检查模型、消息格式或上下文长度。",
-		Unauthorized:       "鉴权失败，请检查 API Key 或上游凭证。",
-		PaymentRequired:    "余额或账单异常，请检查上游账户额度。",
-		Forbidden:          "权限不足，请检查模型权限、分组权限或地区限制。",
-		NotFound:           "资源不存在，请检查模型名、接口路径或上游地址。",
-		Conflict:           "请求冲突，请稍后重试。",
+		BadRequest:          "请求参数错误，请检查模型、消息格式或上下文长度。",
+		Unauthorized:        "鉴权失败，请检查 API Key 或上游凭证。",
+		PaymentRequired:     "余额或账单异常，请检查上游账户额度。",
+		Forbidden:           "权限不足，请检查模型权限、分组权限或地区限制。",
+		NotFound:            "资源不存在，请检查模型名、接口路径或上游地址。",
+		Conflict:            "请求冲突，请稍后重试。",
 		RequestTooLarge:     "请求体过大，请压缩输入或拆分请求。",
 		UnprocessableEntity: "请求格式可解析但参数组合不被支持。",
 		TooManyRequests:     "请求过于频繁或额度不足，请稍后重试。",
-		Timeout:            "请求超时，请稍后重试或改用流式输出。",
+		Timeout:             "请求超时，请稍后重试或改用流式输出。",
 		Overloaded:          "上游模型过载，请稍后重试。",
 		ServerError:         "上游服务异常，请稍后重试。",
 		ClientError:         "请求无法被上游处理，请检查请求参数和模型权限。",
 		Default:             "上游请求失败，请稍后重试。",
 	},
 	"en": {
-		BadRequest:         "Invalid request. Check the model, message format, or context length.",
-		Unauthorized:       "Authentication failed. Check the API key or upstream credentials.",
-		PaymentRequired:    "Billing or balance issue. Check the upstream account quota.",
-		Forbidden:          "Permission denied. Check model access, group access, or region restrictions.",
-		NotFound:           "Resource not found. Check the model name, endpoint path, or upstream address.",
-		Conflict:           "Request conflict. Please retry later.",
+		BadRequest:          "Invalid request. Check the model, message format, or context length.",
+		Unauthorized:        "Authentication failed. Check the API key or upstream credentials.",
+		PaymentRequired:     "Billing or balance issue. Check the upstream account quota.",
+		Forbidden:           "Permission denied. Check model access, group access, or region restrictions.",
+		NotFound:            "Resource not found. Check the model name, endpoint path, or upstream address.",
+		Conflict:            "Request conflict. Please retry later.",
 		RequestTooLarge:     "Request body is too large. Compress the input or split the request.",
 		UnprocessableEntity: "The request format is valid, but this parameter combination is unsupported.",
 		TooManyRequests:     "Too many requests or insufficient quota. Please retry later.",
-		Timeout:            "Request timed out. Retry later or use streaming output.",
+		Timeout:             "Request timed out. Retry later or use streaming output.",
 		Overloaded:          "The upstream model is overloaded. Please retry later.",
 		ServerError:         "Upstream service error. Please retry later.",
 		ClientError:         "The upstream service could not process the request. Check parameters and model access.",

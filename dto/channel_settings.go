@@ -68,6 +68,12 @@ type ChannelSettings struct {
 
 	// Codex client identity support. When nil, infer from the upstream URL.
 	RequiresCodexIdentity *bool `json:"requires_codex_identity,omitempty"`
+	// Request profile is independent from authentication, URL and client identity.
+	ResponsesRequestProfile string `json:"responses_request_profile,omitempty"`
+	// nil keeps limits on API-key aggregators and follows native Codex behavior.
+	ResponsesSupportsMaxOutputTokens *bool `json:"responses_supports_max_output_tokens,omitempty"`
+	// Explicit target-protocol operations, applied once after conversion.
+	UpstreamParamOverride map[string]any `json:"upstream_param_override,omitempty"`
 
 	// Allows global model defaults to override the upstream protocol/adaptor for
 	// this channel. Off by default so native-protocol channels keep their own
@@ -128,6 +134,11 @@ const (
 func (s *ChannelSettings) ValidateHTTPTransport() error {
 	if s == nil {
 		return nil
+	}
+	switch s.ResponsesRequestProfile {
+	case "", "auto", "responses", "codex":
+	default:
+		return fmt.Errorf("invalid responses_request_profile: %s", s.ResponsesRequestProfile)
 	}
 	protocol := strings.ToLower(strings.TrimSpace(s.HTTPProtocol))
 	switch protocol {

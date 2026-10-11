@@ -15,6 +15,14 @@ func ResponsesRequestToClaudeRequest(req *dto.OpenAIResponsesRequest) (*dto.Clau
 	if req == nil {
 		return nil, fmt.Errorf("Responses request is nil")
 	}
+	if err := rejectExtensions(req.RequestExtensions, "request"); err != nil {
+		return nil, err
+	}
+	if req.Reasoning != nil {
+		if err := rejectExtensions(req.Reasoning.RequestExtensions, "reasoning"); err != nil {
+			return nil, err
+		}
+	}
 	out := &dto.ClaudeRequest{Model: req.Model, Stream: req.Stream, MaxTokens: req.MaxOutputTokens,
 		Temperature: req.Temperature, TopP: req.TopP, Metadata: req.Metadata, ServiceTier: req.ServiceTier}
 	if len(req.Instructions) > 0 {
@@ -27,7 +35,11 @@ func ResponsesRequestToClaudeRequest(req *dto.OpenAIResponsesRequest) (*dto.Clau
 	tools := responsesToolsToChatTools(req.Tools)
 	declarations := make([]any, 0, len(tools))
 	for _, tool := range tools {
-		declarations = append(declarations, map[string]any{"name": tool.Function.Name, "description": tool.Function.Description, "input_schema": tool.Function.Parameters})
+		declaration := map[string]any{"name": tool.Function.Name, "description": tool.Function.Description, "input_schema": tool.Function.Parameters}
+		if tool.Function.Strict != nil {
+			declaration["strict"] = tool.Function.Strict
+		}
+		declarations = append(declarations, declaration)
 	}
 	if len(declarations) > 0 {
 		out.Tools = declarations

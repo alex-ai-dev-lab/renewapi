@@ -27,6 +27,7 @@ type FormatJsonSchema struct {
 // GeneralOpenAIRequest represents a general request structure for OpenAI-compatible APIs.
 // 参数增加规范：无引用的参数必须使用json.RawMessage类型，并添加omitempty标签
 type GeneralOpenAIRequest struct {
+	RequestExtensions
 	Model               string            `json:"model,omitempty"`
 	Messages            []Message         `json:"messages,omitempty"`
 	Prompt              any               `json:"prompt,omitempty"`
@@ -234,6 +235,7 @@ type ToolCallRequest struct {
 }
 
 type FunctionRequest struct {
+	Strict      *bool  `json:"strict,omitempty"`
 	Description string `json:"description,omitempty"`
 	Name        string `json:"name"`
 	Parameters  any    `json:"parameters,omitempty"`
@@ -275,6 +277,7 @@ func (r *GeneralOpenAIRequest) ParseInput() []string {
 }
 
 type Message struct {
+	RequestExtensions
 	Role             string          `json:"role"`
 	Content          any             `json:"content"`
 	Name             *string         `json:"name,omitempty"`
@@ -828,6 +831,7 @@ type WebSearchOptions struct {
 
 // https://platform.openai.com/docs/api-reference/responses/create
 type OpenAIResponsesRequest struct {
+	RequestExtensions
 	Model   string          `json:"model"`
 	Input   json.RawMessage `json:"input,omitempty"`
 	Include json.RawMessage `json:"include,omitempty"`
@@ -953,6 +957,7 @@ func (r *OpenAIResponsesRequest) GetToolsMap() []map[string]any {
 }
 
 type Reasoning struct {
+	RequestExtensions
 	Effort  string `json:"effort,omitempty"`
 	Summary string `json:"summary,omitempty"`
 }

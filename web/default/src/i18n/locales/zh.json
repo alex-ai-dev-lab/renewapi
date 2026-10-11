@@ -1474,7 +1474,7 @@
     "Create cache": "创建缓存",
     "Create cache ratio": "创建缓存倍率",
     "Create Channel": "创建渠道",
-    "Create Code": "创建代码",
+    "Create Code": "创建兑换码",
     "Create credentials for the root user": "为管理员创建登录凭据",
     "Create deployment": "创建部署",
     "Create Model": "创建模型",
@@ -6884,6 +6884,21 @@
     "Minimum topup amount is {{amount}}": "最低充值金额为 {{amount}}",
     "Open guide": "打开接入指南",
     "Ask an administrator for integration instructions.": "请向管理员获取接入说明。",
-    "Read the API connection instructions and request examples.": "查看 API 接入说明和请求示例。"
-  }
+    "Read the API connection instructions and request examples.": "查看 API 接入说明和请求示例。",
+    "Move up": "上移",
+    "Move down": "下移",
+    "Toggle details": "展开或收起"
+  },
+  "Responses request profile": "Responses 请求规范",
+  "Follow channel type": "跟随渠道类型",
+  "Standard Responses": "通用 Responses",
+  "Codex compatible": "Codex 兼容",
+  "Codex fills required request fields and removes unsupported sampling parameters. API keys and endpoint addresses stay independent.": "Codex 模式自动补全必需字段并移除不支持的采样参数，不改变渠道密钥和端点地址。原生 Codex 渠道始终使用此规范。",
+  "Upstream output token limit": "上游输出 token 上限",
+  "Supported: preserve limit": "支持：保留输出上限",
+  "Unsupported: reject explicit limit": "不支持：明确拒绝带输出上限的请求",
+  "Parameter overrides after protocol conversion": "协议转换后的参数覆盖",
+  "Use the existing operations JSON syntax for target-protocol fields. These operations run once per upstream attempt, after conversion.": "使用现有 operations JSON 语法修改目标协议字段，每次上游尝试在协议转换后执行一次。",
+  "Must be a JSON object": "必须为 JSON 对象",
+  "Not provided by this channel": "本渠道未提供"
 }

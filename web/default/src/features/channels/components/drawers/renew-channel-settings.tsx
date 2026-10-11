@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { MultiSelect } from '@/components/multi-select'
 import { PromptSelector } from '@/features/channel-test-prompts/prompt-selector'
 import { getUserAgents } from '../../api'
@@ -562,6 +563,93 @@ export function RenewChannelSettings({
                 </SelectContent>
               </Select>
             </div>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name='responses_request_profile'
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>{t('Responses request profile')}</FormLabel>
+            <Select
+              value={field.value || 'auto'}
+              onValueChange={(value) => field.onChange(value ?? 'auto')}
+            >
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                <SelectItem value='auto'>{t('Follow channel type')}</SelectItem>
+                <SelectItem value='responses'>
+                  {t('Standard Responses')}
+                </SelectItem>
+                <SelectItem value='codex'>{t('Codex compatible')}</SelectItem>
+              </SelectContent>
+            </Select>
+            <FormDescription>
+              {t(
+                'Codex fills required request fields and removes unsupported sampling parameters. API keys and endpoint addresses stay independent.'
+              )}
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name='responses_supports_max_output_tokens'
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>{t('Upstream output token limit')}</FormLabel>
+            <Select
+              value={field.value || 'auto'}
+              onValueChange={(value) => field.onChange(value ?? 'auto')}
+            >
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                <SelectItem value='auto'>{t('Follow channel type')}</SelectItem>
+                <SelectItem value='true'>
+                  {t('Supported: preserve limit')}
+                </SelectItem>
+                <SelectItem value='false'>
+                  {t('Unsupported: reject explicit limit')}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name='upstream_param_override'
+        render={({ field }) => (
+          <FormItem className='sm:col-span-2'>
+            <FormLabel>
+              {t('Parameter overrides after protocol conversion')}
+            </FormLabel>
+            <FormControl>
+              <Textarea
+                {...field}
+                value={field.value || ''}
+                rows={4}
+                className='font-mono'
+                placeholder='{}'
+              />
+            </FormControl>
+            <FormDescription>
+              {t(
+                'Use the existing operations JSON syntax for target-protocol fields. These operations run once per upstream attempt, after conversion.'
+              )}
+            </FormDescription>
             <FormMessage />
           </FormItem>
         )}

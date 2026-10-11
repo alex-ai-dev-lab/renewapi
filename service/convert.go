@@ -80,6 +80,7 @@ func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.Re
 		openAITool := dto.ToolCallRequest{
 			Type: "function",
 			Function: dto.FunctionRequest{
+				Strict:      claudeTool.Strict,
 				Name:        claudeTool.Name,
 				Description: claudeTool.Description,
 				Parameters:  claudeTool.InputSchema,
@@ -219,6 +220,13 @@ func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.Re
 						mediaContents := mediaMsg.ParseMediaContent()
 						encodeJson, _ := common.Marshal(mediaContents)
 						oaiToolMessage.SetStringContent(string(encodeJson))
+					}
+					if mediaMsg.IsError != nil && *mediaMsg.IsError {
+						failure, err := common.Marshal(map[string]any{"is_error": true, "content": oaiToolMessage.Content})
+						if err != nil {
+							return nil, err
+						}
+						oaiToolMessage.SetStringContent(string(failure))
 					}
 					openAIMessages = append(openAIMessages, oaiToolMessage)
 				}

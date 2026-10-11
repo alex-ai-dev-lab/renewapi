@@ -16,6 +16,7 @@ type ClaudeMetadata struct {
 }
 
 type ClaudeMediaMessage struct {
+	RequestExtensions
 	Type         string               `json:"type,omitempty"`
 	Text         *string              `json:"text,omitempty"`
 	Model        string               `json:"model,omitempty"`
@@ -34,6 +35,7 @@ type ClaudeMediaMessage struct {
 	Input     any    `json:"input,omitempty"`
 	Content   any    `json:"content,omitempty"`
 	ToolUseId string `json:"tool_use_id,omitempty"`
+	IsError   *bool  `json:"is_error,omitempty"`
 }
 
 func (c *ClaudeMediaMessage) SetText(s string) {
@@ -113,6 +115,7 @@ func (m *ClaudeMediaMessage) ToFileSource() types.FileSource {
 }
 
 type ClaudeMessageSource struct {
+	RequestExtensions
 	Type      string `json:"type"`
 	MediaType string `json:"media_type,omitempty"`
 	Data      any    `json:"data,omitempty"`
@@ -120,6 +123,7 @@ type ClaudeMessageSource struct {
 }
 
 type ClaudeMessage struct {
+	RequestExtensions
 	Role    string `json:"role"`
 	Content any    `json:"content"`
 }
@@ -171,6 +175,7 @@ func (c *ClaudeMessage) ParseContent() ([]ClaudeMediaMessage, error) {
 }
 
 type Tool struct {
+	Strict      *bool                  `json:"strict,omitempty"`
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
 	InputSchema map[string]interface{} `json:"input_schema"`
@@ -204,6 +209,7 @@ type ClaudeToolChoice struct {
 }
 
 type ClaudeRequest struct {
+	RequestExtensions
 	Model        string          `json:"model"`
 	Prompt       string          `json:"prompt,omitempty"`
 	System       any             `json:"system,omitempty"`
@@ -446,6 +452,7 @@ func ProcessTools(tools []any) ([]*Tool, []*ClaudeWebSearchTool) {
 }
 
 type Thinking struct {
+	RequestExtensions
 	Type         string `json:"type,omitempty"`
 	BudgetTokens *int   `json:"budget_tokens,omitempty"`
 	// Display controls whether thinking content is returned in the response.

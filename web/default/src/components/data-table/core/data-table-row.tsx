@@ -37,11 +37,13 @@ type DataTableRowProps<TData> = {
 
 type DataTableRowInnerProps<TData> = DataTableRowProps<TData> & {
   isSelected: boolean
+  visibleCells: Cell<TData, unknown>[]
 }
 
 function DataTableRowInner<TData>({
   row,
   isSelected,
+  visibleCells,
   className,
   getColumnClassName,
   cellRenderColumns,
@@ -60,7 +62,7 @@ function DataTableRowInner<TData>({
       )}
       {...rowProps}
     >
-      {row.getVisibleCells().map((cell) => {
+      {visibleCells.map((cell) => {
         const renderedCell = renderCellContent(cell)
 
         return (
@@ -93,6 +95,7 @@ const MemoizedDataTableRow = React.memo(DataTableRowInner, (prev, next) => {
     prev.row === next.row &&
     prev.className === next.className &&
     prev.isSelected === next.isSelected &&
+    prev.visibleCells === next.visibleCells &&
     prev.getColumnClassName === next.getColumnClassName &&
     prev.cellRenderColumns === next.cellRenderColumns
   )
@@ -100,7 +103,11 @@ const MemoizedDataTableRow = React.memo(DataTableRowInner, (prev, next) => {
 
 export function DataTableRow<TData>(props: DataTableRowProps<TData>) {
   return (
-    <MemoizedDataTableRow {...props} isSelected={props.row.getIsSelected()} />
+    <MemoizedDataTableRow
+      {...props}
+      isSelected={props.row.getIsSelected()}
+      visibleCells={props.row.getVisibleCells()}
+    />
   )
 }
 

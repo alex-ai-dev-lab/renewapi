@@ -80,6 +80,7 @@ const (
 	ErrorCodeTruncatedResponse           ErrorCode = "truncated_response"
 	ErrorCodeAwsInvokeError              ErrorCode = "aws_invoke_error"
 	ErrorCodeModelNotFound               ErrorCode = "model_not_found"
+	ErrorCodeModelUnavailable            ErrorCode = "model_unavailable"
 	ErrorCodePromptBlocked               ErrorCode = "prompt_blocked"
 	ErrorCodeRequestGuardBlocked         ErrorCode = "request_guard_blocked"
 	ErrorCodeRequestGuardUnavailable     ErrorCode = "request_guard_unavailable"

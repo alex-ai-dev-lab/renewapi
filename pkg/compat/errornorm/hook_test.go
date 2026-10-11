@@ -12,6 +12,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestActionableErrorsSurviveBothNormalizationStages(t *testing.T) {
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelId: 257}}
+	for _, code := range []types.ErrorCode{types.ErrorCodeInsufficientUserQuota, types.ErrorCodePreConsumeTokenQuotaFailed, types.ErrorCodeInvalidRequest, types.ErrorCodeModelNotFound, types.ErrorCodeRateLimitExceeded} {
+		original := types.NewErrorWithStatusCode(errors.New("local actionable explanation"), code, 400)
+		normalized := New().OnClientResponseError(&gin.Context{}, info, original)
+		public := types.PublicRelayError(normalized)
+		require.Equal(t, code, public.GetErrorCode())
+		require.Equal(t, "local actionable explanation", public.Error())
+	}
+	for _, code := range []string{"model_not_found", "model_unavailable"} {
+		original := types.WithOpenAIError(types.OpenAIError{Code: code, Message: "private-host secret diagnostic"}, 400)
+		public := types.PublicRelayError(New().OnClientResponseError(&gin.Context{}, info, original))
+		require.Equal(t, types.ErrorCode(code), public.GetErrorCode())
+		require.NotContains(t, public.Error(), "private")
+		require.Contains(t, original.Error(), "private")
+	}
+}
+
 func TestHook_OnClientResponseError_ReplacesRelayMessage(t *testing.T) {
 	err := types.NewOpenAIError(
 		errors.New("upstream injected private message"),

@@ -21,6 +21,83 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type normalizationTestAdaptor struct{ Adaptor }
+
+func (normalizationTestAdaptor) GetRequestURL(*relaycommon.RelayInfo) (string, error) {
+	return "http://example.test/v1/responses", nil
+}
+func (normalizationTestAdaptor) SetupRequestHeader(_ *gin.Context, headers *http.Header, _ *relaycommon.RelayInfo) error {
+	headers.Set("Content-Type", "application/json")
+	return nil
+}
+
+type normalizationRoundTripper func(*http.Request) (*http.Response, error)
+
+func (f normalizationRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestFinalBodyReplayAndChannelTestShareNormalization(t *testing.T) {
+	resetAPIRequestHTTPClientState(t)
+	common.OptionMapRWMutex.Lock()
+	if common.OptionMap == nil {
+		common.OptionMap = map[string]string{}
+	}
+	oldIdentity, hadIdentity := common.OptionMap["client_identity_setting"]
+	oldHeaders, hadHeaders := common.OptionMap["header_rule_setting"]
+	common.OptionMap["header_rule_setting"] = `{"enabled":false,"rules":[]}`
+	common.OptionMap["client_identity_setting"] = `{"enabled":true,"codex":{"enabled":true,"mode":"force_global","installation_id":"test-installation"}}`
+	common.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		defer common.OptionMapRWMutex.Unlock()
+		if hadIdentity {
+			common.OptionMap["client_identity_setting"] = oldIdentity
+		} else {
+			delete(common.OptionMap, "client_identity_setting")
+		}
+	})
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		defer common.OptionMapRWMutex.Unlock()
+		if hadHeaders {
+			common.OptionMap["header_rule_setting"] = oldHeaders
+		} else {
+			delete(common.OptionMap, "header_rule_setting")
+		}
+	})
+	for _, channelTest := range []bool{false, true} {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+		info := &relaycommon.RelayInfo{IsChannelTest: channelTest, ChannelMeta: &relaycommon.ChannelMeta{ChannelType: constant.ChannelTypeOpenAI, ChannelSetting: dto.ChannelSettings{ResponsesRequestProfile: "codex", RequiresCodexIdentity: common.GetPointer(true)}}}
+		client, err := service.GetHttpClientWithChannelSettings(info.ChannelSetting)
+		require.NoError(t, err)
+		oldTransport := client.Transport
+		client.Transport = normalizationRoundTripper(func(request *http.Request) (*http.Response, error) {
+			first, err := io.ReadAll(request.Body)
+			require.NoError(t, err)
+			require.NotNil(t, request.GetBody)
+			for range 2 {
+				replayed, err := request.GetBody()
+				require.NoError(t, err)
+				second, err := io.ReadAll(replayed)
+				require.NoError(t, err)
+				require.NoError(t, replayed.Close())
+				require.Equal(t, first, second)
+			}
+			require.EqualValues(t, len(first), request.ContentLength)
+			require.Contains(t, string(first), "reasoning.encrypted_content")
+			require.Contains(t, string(first), "prompt_cache_key")
+			require.Contains(t, string(first), "x-codex-installation-id")
+			return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader([]byte(`{}`))), Request: request}, nil
+		})
+		response, err := DoApiRequest(normalizationTestAdaptor{}, c, info, bytes.NewReader([]byte(`{"model":"test","input":"hi"}`)))
+		client.Transport = oldTransport
+		require.NoError(t, err)
+		require.NoError(t, response.Body.Close())
+	}
+}
+
 func TestDoRequestPropagatesInboundCancellation(t *testing.T) {
 	resetAPIRequestHTTPClientState(t)
 	upstreamCanceled := make(chan struct{})

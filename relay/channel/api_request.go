@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -622,6 +623,18 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 			identityPath = parsed.Path
 		}
 	}
+	if parsed, parseErr := url.Parse(fullRequestURL); parseErr == nil {
+		rawBody, readErr := io.ReadAll(requestBody)
+		if readErr != nil {
+			return nil, fmt.Errorf("read outbound request: %w", readErr)
+		}
+		// Only JSON APIs enter this transport; multipart uses DoFormRequest.
+		finalBody, finalizeErr := service.FinalizeUpstreamJSON(c, info, parsed.Path, rawBody)
+		if finalizeErr != nil {
+			return nil, finalizeErr
+		}
+		requestBody = bytes.NewReader(finalBody)
+	}
 	processedBody, newContentLength, identityHeaders, identityErr := service.ApplyClientIdentityToRequestBodyWithOptions(
 		identityPath,
 		c.Request.Header,
@@ -636,6 +649,21 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 		requestBody = processedBody
 		info.UpstreamRequestBodySize = newContentLength
 	}
+	// Identity and final normalization may both alter bytes. Transparent HTTP
+	// retries must replay exactly the body sent on the first attempt.
+	finalBody, readErr := io.ReadAll(requestBody)
+	if readErr != nil {
+		return nil, fmt.Errorf("read finalized request: %w", readErr)
+	}
+	body, size, getBody, closer, bodyErr := common.NewOutboundJSONBody(finalBody)
+	if bodyErr != nil {
+		return nil, bodyErr
+	}
+	defer closer.Close()
+	requestBody = body
+	info.UpstreamRequestBodySize = size
+	info.UpstreamRequestGetBody = getBody
+	info.RecordUpstreamJSONModel(finalBody)
 
 	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
@@ -646,6 +674,9 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	err = a.SetupRequestHeader(c, &headers, info)
 	if err != nil {
 		return nil, fmt.Errorf("setup request header failed: %w", err)
+	}
+	if c.GetBool("responses_upstream_stream") {
+		headers.Set("Accept", "text/event-stream")
 	}
 	applyDefaultUpstreamUserAgent(req, info)
 	// 在 SetupRequestHeader 之后应用 Header Override，确保用户设置优先级最高

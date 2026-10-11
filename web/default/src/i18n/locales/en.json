@@ -6560,6 +6560,21 @@
     "Minimum topup amount is {{amount}}": "Minimum topup amount is {{amount}}",
     "Open guide": "Open guide",
     "Ask an administrator for integration instructions.": "Ask an administrator for integration instructions.",
-    "Read the API connection instructions and request examples.": "Read the API connection instructions and request examples."
-  }
+    "Read the API connection instructions and request examples.": "Read the API connection instructions and request examples.",
+    "Move up": "Move up",
+    "Move down": "Move down",
+    "Toggle details": "Toggle details"
+  },
+  "Responses request profile": "Responses request profile",
+  "Follow channel type": "Follow channel type",
+  "Standard Responses": "Standard Responses",
+  "Codex compatible": "Codex compatible",
+  "Codex fills required request fields and removes unsupported sampling parameters. API keys and endpoint addresses stay independent.": "Codex fills required request fields and removes unsupported sampling parameters. API keys and endpoint addresses stay independent.",
+  "Upstream output token limit": "Upstream output token limit",
+  "Supported: preserve limit": "Supported: preserve limit",
+  "Unsupported: reject explicit limit": "Unsupported: reject explicit limit",
+  "Parameter overrides after protocol conversion": "Parameter overrides after protocol conversion",
+  "Use the existing operations JSON syntax for target-protocol fields. These operations run once per upstream attempt, after conversion.": "Use the existing operations JSON syntax for target-protocol fields. These operations run once per upstream attempt, after conversion.",
+  "Must be a JSON object": "Must be a JSON object",
+  "Not provided by this channel": "Not provided by this channel"
 }

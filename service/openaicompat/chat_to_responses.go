@@ -110,11 +110,7 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 			}
 
 			if callID == "" {
-				inputItems = append(inputItems, map[string]any{
-					"role":    "user",
-					"content": fmt.Sprintf("[tool_output_missing_call_id] %v", output),
-				})
-				continue
+				return nil, fmt.Errorf("tool output requires tool_call_id for Responses conversion")
 			}
 
 			inputItems = append(inputItems, map[string]any{
@@ -255,14 +251,14 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 		if role == "assistant" {
 			for _, tc := range msg.ParseToolCalls() {
 				if strings.TrimSpace(tc.ID) == "" {
-					continue
+					return nil, fmt.Errorf("tool call id is required")
 				}
 				if tc.Type != "" && tc.Type != "function" {
-					continue
+					return nil, fmt.Errorf("unsupported tool call type %q", tc.Type)
 				}
 				name := strings.TrimSpace(tc.Function.Name)
 				if name == "" {
-					continue
+					return nil, fmt.Errorf("tool call name is required")
 				}
 				inputItems = append(inputItems, map[string]any{
 					"type":      "function_call",
@@ -291,12 +287,16 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 		for _, tool := range req.Tools {
 			switch tool.Type {
 			case "function":
-				tools = append(tools, map[string]any{
+				item := map[string]any{
 					"type":        "function",
 					"name":        tool.Function.Name,
 					"description": tool.Function.Description,
 					"parameters":  tool.Function.Parameters,
-				})
+				}
+				if tool.Function.Strict != nil {
+					item["strict"] = tool.Function.Strict
+				}
+				tools = append(tools, item)
 			default:
 				// Best-effort: keep original tool shape for unknown types.
 				var m map[string]any
@@ -401,11 +401,14 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 		out.MaxOutputTokens = lo.ToPtr(maxOutputTokens)
 	}
 
+	if err := copyChatResponsesFields(req, out); err != nil {
+		return nil, err
+	}
 	if req.ReasoningEffort != "" {
-		out.Reasoning = &dto.Reasoning{
-			Effort:  req.ReasoningEffort,
-			Summary: "detailed",
+		if out.Reasoning == nil {
+			out.Reasoning = &dto.Reasoning{Summary: "detailed"}
 		}
+		out.Reasoning.Effort = req.ReasoningEffort
 	}
 
 	return out, nil

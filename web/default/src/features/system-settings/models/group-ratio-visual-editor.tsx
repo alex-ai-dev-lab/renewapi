@@ -457,6 +457,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                             <Button
                               variant='ghost'
                               size='sm'
+                              aria-label={t('Edit')}
                               onClick={() =>
                                 handleSimpleEdit('topupGroupRatio', group)
                               }
@@ -466,6 +467,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                             <Button
                               variant='ghost'
                               size='sm'
+                              aria-label={t('Delete')}
                               onClick={() =>
                                 handleSimpleDelete(
                                   'topupGroupRatio',
@@ -511,7 +513,13 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                       <div className='flex items-center justify-between p-4'>
                         <div className='flex items-center gap-2'>
                           <CollapsibleTrigger
-                            render={<Button variant='ghost' size='sm' />}
+                            render={
+                              <Button
+                                variant='ghost'
+                                size='sm'
+                                aria-label={t('Toggle details')}
+                              />
+                            }
                           >
                             <ChevronDown className='h-4 w-4' />
                           </CollapsibleTrigger>
@@ -528,6 +536,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                           <Button
                             variant='ghost'
                             size='sm'
+                            aria-label={t('Add')}
                             onClick={() =>
                               handleOverrideAdd(userGroupData.userGroup)
                             }
@@ -537,6 +546,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                           <Button
                             variant='ghost'
                             size='sm'
+                            aria-label={t('Delete')}
                             onClick={() =>
                               handleUserGroupDelete(userGroupData.userGroup)
                             }
@@ -570,6 +580,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                                         <Button
                                           variant='ghost'
                                           size='sm'
+                                          aria-label={t('Edit')}
                                           onClick={() =>
                                             handleOverrideEdit(
                                               userGroupData.userGroup,
@@ -582,6 +593,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                                         <Button
                                           variant='ghost'
                                           size='sm'
+                                          aria-label={t('Delete')}
                                           onClick={() =>
                                             handleOverrideDelete(
                                               userGroupData.userGroup,
@@ -638,6 +650,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                       <Button
                         variant='ghost'
                         size='sm'
+                        aria-label={t('Move up')}
                         disabled={index === 0}
                         onClick={() => handleAutoGroupMove(index, 'up')}
                       >
@@ -646,6 +659,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                       <Button
                         variant='ghost'
                         size='sm'
+                        aria-label={t('Move down')}
                         disabled={index === autoGroupsList.length - 1}
                         onClick={() => handleAutoGroupMove(index, 'down')}
                       >
@@ -654,6 +668,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                       <Button
                         variant='ghost'
                         size='sm'
+                        aria-label={t('Delete')}
                         onClick={() => handleAutoGroupDelete(index)}
                       >
                         <Trash2 className='h-4 w-4' />
@@ -893,6 +908,7 @@ function GroupPricingTable({
                     <TableRow key={row._id}>
                       <TableCell>
                         <Input
+                          aria-label={t('Group name')}
                           value={row.name}
                           onChange={(event) =>
                             updateRow(row._id, 'name', event.target.value)
@@ -904,6 +920,7 @@ function GroupPricingTable({
                       </TableCell>
                       <TableCell>
                         <Input
+                          aria-label={t('Ratio')}
                           type='number'
                           min={0}
                           step={0.1}
@@ -927,6 +944,7 @@ function GroupPricingTable({
                       <TableCell>
                         {row.selectable ? (
                           <Input
+                            aria-label={t('Description')}
                             value={row.description}
                             placeholder={t('Group description')}
                             onChange={(event) =>

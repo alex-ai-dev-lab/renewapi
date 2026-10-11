@@ -142,6 +142,9 @@ export interface ChannelSettings {
   anti_poison_canary_echo_enabled?: boolean
   anti_poison_shape_check_enabled?: boolean
   requires_codex_identity?: boolean
+  responses_request_profile?: 'auto' | 'responses' | 'codex'
+  responses_supports_max_output_tokens?: boolean
+  upstream_param_override?: Record<string, unknown>
   supports_claude_thinking?: boolean
 }
 
@@ -480,6 +483,9 @@ export interface ChannelFormData {
   anti_poison_canary_echo_enabled?: boolean
   anti_poison_shape_check_enabled?: boolean
   requires_codex_identity?: 'auto' | 'true' | 'false'
+  responses_request_profile?: 'auto' | 'responses' | 'codex'
+  responses_supports_max_output_tokens?: 'auto' | 'true' | 'false'
+  upstream_param_override?: string
   supports_claude_thinking?: 'auto' | 'true' | 'false'
   auto_test_interval?: number
   auto_test_retry_count?: number

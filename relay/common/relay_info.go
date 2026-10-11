@@ -237,6 +237,9 @@ type RelayInfo struct {
 	BillingRequestInput   *billingexpr.RequestInput
 
 	Request dto.Request
+	// Field paths/actions only; never store prompt values, cache keys or secrets.
+	RequestNormalization      []string
+	GeneratedRequestCacheKeys map[int]string
 
 	// RequestConversionChain records request format conversions in order, e.g.
 	// ["openai", "openai_responses"] or ["openai", "claude"].
@@ -264,6 +267,10 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	info.UpstreamRequestGetBody = nil
 	info.UpstreamWireModel = nil
 	info.ModelMappingRetryBlocked = false
+	info.RequestNormalization = nil
+	info.ParamOverrideAudit = nil
+	c.Set("request_normalization", []string(nil))
+	c.Set("responses_upstream_stream", false)
 
 	info.AntiPoisonConfigCache = nil
 

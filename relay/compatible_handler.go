@@ -96,7 +96,7 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 				return types.NewErrorWithStatusCode(capabilityErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 			}
 			logger.LogInfo(c, fmt.Sprintf(
-				"channel #%d protocol bridge: client_format=%s upstream_endpoint=%s bridge=openai->responses lossy=false model=%s",
+				"channel #%d protocol bridge: client_format=%s upstream_endpoint=%s bridge=openai->responses model=%s",
 				info.ChannelId,
 				info.RelayFormat,
 				info.RouteEndpoint,

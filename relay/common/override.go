@@ -177,6 +177,19 @@ func buildLegacyParamOverride(paramOverride map[string]interface{}) map[string]i
 
 func ApplyParamOverrideWithRelayInfo(jsonData []byte, info *RelayInfo) ([]byte, error) {
 	paramOverride := getParamOverrideMap(info)
+	return applyParamOverrideForStage(jsonData, info, paramOverride)
+}
+
+// ApplyUpstreamParamOverrideWithRelayInfo runs only explicit target-protocol
+// operations. Legacy input operations must never be replayed after conversion.
+func ApplyUpstreamParamOverrideWithRelayInfo(jsonData []byte, info *RelayInfo) ([]byte, error) {
+	if info == nil || info.ChannelMeta == nil {
+		return jsonData, nil
+	}
+	return applyParamOverrideForStage(jsonData, info, info.ChannelSetting.UpstreamParamOverride)
+}
+
+func applyParamOverrideForStage(jsonData []byte, info *RelayInfo, paramOverride map[string]any) ([]byte, error) {
 	if len(paramOverride) == 0 {
 		return jsonData, nil
 	}
@@ -192,12 +205,8 @@ func ApplyParamOverrideWithRelayInfo(jsonData []byte, info *RelayInfo) ([]byte, 
 		return nil, err
 	}
 	syncRuntimeHeaderOverrideFromContext(info, overrideCtx)
-	if info != nil {
-		if recorder != nil {
-			info.ParamOverrideAudit = recorder.lines
-		} else {
-			info.ParamOverrideAudit = nil
-		}
+	if info != nil && recorder != nil {
+		info.ParamOverrideAudit = append(info.ParamOverrideAudit, recorder.lines...)
 	}
 	return result, nil
 }

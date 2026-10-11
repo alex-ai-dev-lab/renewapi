@@ -61,10 +61,13 @@ export function getSuccessRateLevel(rate: number): SuccessRateLevel {
 }
 
 const SUCCESS_RATE_TEXT_CLASS: Record<SuccessRateLevel, string> = {
-  excellent: 'text-emerald-600 dark:text-emerald-400',
-  good: 'text-emerald-500 dark:text-emerald-300',
-  warning: 'text-amber-600 dark:text-amber-400',
-  critical: 'text-red-600 dark:text-red-400',
+  // Dedicated status text inks keep the small numeric labels readable on
+  // both surfaces; hue plus the dot and numeric value still distinguish
+  // the levels.
+  excellent: 'text-success-text',
+  good: 'text-success-text',
+  warning: 'text-warning-text',
+  critical: 'text-destructive-text',
   unknown: 'text-muted-foreground',
 }
 

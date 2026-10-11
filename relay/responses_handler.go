@@ -114,7 +114,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		chatInfo.FinalRequestRelayFormat = ""
 		chatInfo.RequestConversionChain = append(append([]types.RelayFormat(nil), info.RequestConversionChain...), types.RelayFormatOpenAI)
 		logger.LogInfo(c, fmt.Sprintf(
-			"channel #%d protocol bridge: client_format=%s upstream_endpoint=%s bridge=responses->%s lossy=false model=%s",
+			"channel #%d protocol bridge: client_format=%s upstream_endpoint=%s bridge=responses->%s model=%s",
 			info.ChannelId,
 			info.RelayFormat,
 			endpoint,

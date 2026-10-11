@@ -88,6 +88,9 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	}
 
 	adminInfo := make(map[string]interface{})
+	if len(relayInfo.RequestNormalization) > 0 {
+		adminInfo["request_normalization"] = append([]string(nil), relayInfo.RequestNormalization...)
+	}
 	if ctx.Request != nil {
 		if execution := relaycommon.GetResponsesWSExecution(ctx.Request.Context()); execution != nil {
 			adminInfo["transport"] = "responses_websocket"

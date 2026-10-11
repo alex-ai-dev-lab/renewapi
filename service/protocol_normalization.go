@@ -23,6 +23,9 @@ func ValidateNormalizedBridgeRequest(request dto.Request, target constant.Endpoi
 			_, err := openaicompat.ClaudeRequestToResponsesRequest(req)
 			return err
 		}
+		if err := openaicompat.ValidateRequestExtensions(req.RequestExtensions, "request"); err != nil {
+			return err
+		}
 		copy := *req
 		copy.Thinking = nil
 		copy.OutputConfig = nil
@@ -48,6 +51,13 @@ func ValidateNormalizedBridgeRequest(request dto.Request, target constant.Endpoi
 		if target == constant.EndpointTypeOpenAI {
 			return nil
 		}
+		if target == constant.EndpointTypeOpenAIResponse {
+			if _, err := openaicompat.ChatCompletionsRequestToResponsesRequest(req); err != nil {
+				return err
+			}
+		} else if err := openaicompat.ValidateRequestExtensions(req.RequestExtensions, "request"); err != nil {
+			return err
+		}
 		copy := *req
 		copy.Reasoning = nil
 		copy.ReasoningEffort = ""
@@ -71,6 +81,11 @@ func ValidateNormalizedBridgeRequest(request dto.Request, target constant.Endpoi
 		copy.ServiceTier = ""
 		copy.Text = nil
 		copy.Input = nil
+		if target == constant.EndpointTypeOpenAI {
+			copy.PromptCacheKey = nil
+			copy.PromptCacheRetention = nil
+			copy.SafetyIdentifier = nil
+		}
 		if err := validateNormalizedResponsesInput(req.Input); err != nil {
 			return err
 		}

@@ -9,6 +9,22 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+func TestPublicModelCategoriesAndQuotaTrustBoundary(t *testing.T) {
+	local := NewErrorWithStatusCode(errors.New("private-group has no channel"), ErrorCodeModelUnavailable, 503)
+	public := PublicRelayError(local)
+	require.Equal(t, ErrorCodeModelUnavailable, public.GetErrorCode())
+	require.NotContains(t, public.Error(), "private-group")
+	spoof := WithOpenAIError(OpenAIError{Code: string(ErrorCodeInsufficientUserQuota), Message: "upstream-account private balance"}, 402)
+	require.Equal(t, ErrorCodeModelCapacity, PublicRelayError(spoof).GetErrorCode())
+	for _, code := range []string{"model_not_found", "model_unavailable"} {
+		body, err := PublicRelayEvent([]byte(`{"type":"error","event_id":"e1","error":{"code":"` + code + `","message":"private-details"},"debug":"private-details"}`))
+		require.NoError(t, err)
+		require.Equal(t, code, gjson.GetBytes(body, "error.code").String())
+		require.NotContains(t, string(body), "private-details")
+		require.Equal(t, "e1", gjson.GetBytes(body, "event_id").String())
+	}
+}
+
 func TestPublicRelayEventDiscardsUpstreamDebugFields(t *testing.T) {
 	for _, data := range []string{
 		`{"type":"error","event_id":"event_1","stream_id":"main","response_id":"resp_1","error":{"message":"private-upstream","code":"private_plugin"},"debug":{"hostname":"private-upstream","api_key":"private_key"},"message":"private detail"}`,

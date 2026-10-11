@@ -245,7 +245,7 @@ func Distribute() func(c *gin.Context) {
 						//	common.SysError(fmt.Sprintf("渠道不存在：%d", channel.Id))
 						//	message = "数据库一致性已被破坏，请联系管理员"
 						//}
-						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, message, types.ErrorCodeModelNotFound)
+						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, message, types.ErrorCodeGetChannelFailed)
 						return
 					}
 					if channel == nil {
@@ -258,7 +258,7 @@ func Distribute() func(c *gin.Context) {
 									"request_path": c.Request.URL.Path, "admin_info": map[string]any{"stage": "channel_selection", "client_endpoint": c.Request.URL.Path},
 								})
 						}
-						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
+						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelUnavailable)
 						return
 					}
 				}

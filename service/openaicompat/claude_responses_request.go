@@ -18,6 +18,9 @@ func ClaudeRequestToResponsesRequest(req *dto.ClaudeRequest) (*dto.OpenAIRespons
 	if req == nil {
 		return nil, fmt.Errorf("Claude request is nil")
 	}
+	if err := rejectExtensions(req.RequestExtensions, "request", "include", "prompt_cache_key", "client_metadata"); err != nil {
+		return nil, err
+	}
 	input, err := claudeMessagesToResponsesInput(req.Messages)
 	if err != nil {
 		return nil, err
@@ -37,6 +40,9 @@ func ClaudeRequestToResponsesRequest(req *dto.ClaudeRequest) (*dto.OpenAIRespons
 			parts = append(parts, req.GetStringSystem())
 		} else {
 			for _, part := range req.ParseSystem() {
+				if err := rejectExtensions(part.RequestExtensions, "system"); err != nil {
+					return nil, err
+				}
 				if part.Type != "text" {
 					return nil, fmt.Errorf("unsupported system block %q", part.Type)
 				}
@@ -51,6 +57,11 @@ func ClaudeRequestToResponsesRequest(req *dto.ClaudeRequest) (*dto.OpenAIRespons
 	out := &dto.OpenAIResponsesRequest{Model: req.Model, Input: input, Instructions: instructions,
 		Stream: req.Stream, MaxOutputTokens: req.MaxTokens, Temperature: req.Temperature, TopP: req.TopP,
 		Tools: tools, ToolChoice: choice, ParallelToolCalls: parallel, Metadata: req.Metadata, ServiceTier: req.ServiceTier}
+	out.Include = req.ExtraFields["include"]
+	out.PromptCacheKey = req.ExtraFields["prompt_cache_key"]
+	if raw, ok := req.ExtraFields["client_metadata"]; ok {
+		out.ExtraFields = map[string]common.RawMessage{"client_metadata": raw}
+	}
 	if out.MaxOutputTokens == nil {
 		out.MaxOutputTokens = req.MaxTokensToSample
 	}
@@ -60,6 +71,16 @@ func ClaudeRequestToResponsesRequest(req *dto.ClaudeRequest) (*dto.OpenAIRespons
 	}
 	if effort != "" {
 		out.Reasoning = &dto.Reasoning{Effort: effort}
+	}
+	if req.Thinking != nil {
+		if req.Thinking.Display == "summarized" {
+			if out.Reasoning == nil {
+				out.Reasoning = &dto.Reasoning{}
+			}
+			out.Reasoning.Summary = "auto"
+		} else if req.Thinking.Display != "" && req.Thinking.Display != "omitted" {
+			return nil, fmt.Errorf("thinking.display has no supported Responses representation")
+		}
 	}
 	format, err := ClaudeOutputJSONFormat(req)
 	if err != nil {
@@ -95,6 +116,9 @@ func ClaudeReasoningEffort(req *dto.ClaudeRequest) (string, error) {
 	}
 	if req.Thinking == nil {
 		return config.Effort, nil
+	}
+	if err := rejectExtensions(req.Thinking.RequestExtensions, "thinking"); err != nil {
+		return "", err
 	}
 	switch req.Thinking.Type {
 	case "disabled":
@@ -132,6 +156,17 @@ func claudeToolsToResponsesTools(value any) (common.RawMessage, error) {
 	}
 	converted := make([]map[string]any, 0, len(tools))
 	for _, tool := range tools {
+		raw, err := common.Marshal(tool)
+		if err != nil {
+			return nil, err
+		}
+		var fields map[string]common.RawMessage
+		if err := common.Unmarshal(raw, &fields); err != nil {
+			return nil, err
+		}
+		if err := rejectExtensions(dto.RequestExtensions{ExtraFields: fields}, "tools", "type", "name", "description", "input_schema", "strict", "cache_control"); err != nil {
+			return nil, err
+		}
 		kind, _ := tool["type"].(string)
 		if kind != "" && kind != "custom" {
 			return nil, fmt.Errorf("unsupported Claude tool type %q", kind)
@@ -155,9 +190,12 @@ func claudeMessagesToResponsesInput(messages []dto.ClaudeMessage) (common.RawMes
 	input := make([]map[string]any, 0, len(messages))
 	for messageIndex := range messages {
 		message := messages[messageIndex]
+		if err := rejectExtensions(message.RequestExtensions, fmt.Sprintf("messages[%d]", messageIndex)); err != nil {
+			return nil, err
+		}
 		role := strings.TrimSpace(message.Role)
 		if role == "" {
-			continue
+			return nil, fmt.Errorf("messages[%d].role is required", messageIndex)
 		}
 		if message.IsStringContent() {
 			input = append(input, map[string]any{
@@ -185,6 +223,12 @@ func claudeMessagesToResponsesInput(messages []dto.ClaudeMessage) (common.RawMes
 
 		for blockIndex := range blocks {
 			block := blocks[blockIndex]
+			if err := rejectExtensions(block.RequestExtensions, fmt.Sprintf("messages[%d].content[%d]", messageIndex, blockIndex)); err != nil {
+				return nil, err
+			}
+			if err := validateClaudeSource(block); err != nil {
+				return nil, err
+			}
 			switch block.Type {
 			case "thinking":
 				// Responses summaries returned through Messages are not Anthropic
@@ -214,10 +258,7 @@ func claudeMessagesToResponsesInput(messages []dto.ClaudeMessage) (common.RawMes
 				}
 			case "document":
 				if source := ClaudeSourceURL(block.Source); source != "" {
-					contentParts = append(contentParts, map[string]any{
-						"type":      "input_file",
-						"file_data": source,
-					})
+					contentParts = append(contentParts, claudeDocumentPart(block.Source, source))
 				}
 			case "tool_use":
 				flushContent()
@@ -239,6 +280,15 @@ func claudeMessagesToResponsesInput(messages []dto.ClaudeMessage) (common.RawMes
 				output, err := claudeToolResultToResponsesOutput(block.Content)
 				if err != nil {
 					return nil, fmt.Errorf("messages[%d].content[%d].content: %w", messageIndex, blockIndex, err)
+				}
+				if block.IsError != nil && *block.IsError {
+					// Responses has no is_error flag; retain failure semantics in
+					// the tool output rather than presenting a failed tool as success.
+					raw, err := common.Marshal(map[string]any{"is_error": true, "content": output})
+					if err != nil {
+						return nil, err
+					}
+					output = string(raw)
 				}
 				input = append(input, map[string]any{
 					"type":    "function_call_output",
@@ -304,6 +354,12 @@ func claudeToolResultToResponsesOutput(content any) (any, error) {
 	}
 	parts := make([]map[string]any, 0, len(blocks))
 	for _, block := range blocks {
+		if err := rejectExtensions(block.RequestExtensions, "tool_result.content"); err != nil {
+			return nil, err
+		}
+		if err := validateClaudeSource(block); err != nil {
+			return nil, err
+		}
 		switch block.Type {
 		case "text", "input_text":
 			parts = append(parts, map[string]any{"type": "input_text", "text": block.GetText()})
@@ -313,8 +369,10 @@ func claudeToolResultToResponsesOutput(content any) (any, error) {
 			}
 		case "document":
 			if source := ClaudeSourceURL(block.Source); source != "" {
-				parts = append(parts, map[string]any{"type": "input_file", "file_data": source})
+				parts = append(parts, claudeDocumentPart(block.Source, source))
 			}
+		default:
+			return nil, fmt.Errorf("unsupported tool_result content block %q", block.Type)
 		}
 	}
 	if len(parts) == 0 {
@@ -340,10 +398,39 @@ func ClaudeSourceURL(source *dto.ClaudeMessageSource) string {
 	return fmt.Sprintf("data:%s;base64,%s", source.MediaType, data)
 }
 
+func validateClaudeSource(block dto.ClaudeMediaMessage) error {
+	if block.Source != nil {
+		if err := rejectExtensions(block.Source.RequestExtensions, "content.source"); err != nil {
+			return err
+		}
+	}
+	if block.Type == "image" || block.Type == "document" {
+		if block.Source == nil || (block.Source.Type != "base64" && block.Source.Type != "url") || ClaudeSourceURL(block.Source) == "" {
+			return fmt.Errorf("%s source requires supported base64 data or URL", block.Type)
+		}
+	}
+	return nil
+}
+
+func claudeDocumentPart(source *dto.ClaudeMessageSource, data string) map[string]any {
+	key := "file_data"
+	if source.Type == "url" {
+		key = "file_url"
+	}
+	return map[string]any{"type": "input_file", key: data}
+}
+
 // ClaudeOutputJSONFormat normalizes the shared JSON-schema representation.
 func ClaudeOutputJSONFormat(req *dto.ClaudeRequest) (map[string]any, error) {
 	if len(req.OutputConfig) == 0 {
 		return nil, nil
+	}
+	var fields map[string]common.RawMessage
+	if err := common.Unmarshal(req.OutputConfig, &fields); err != nil {
+		return nil, err
+	}
+	if err := rejectExtensions(dto.RequestExtensions{ExtraFields: fields}, "output_config", "format", "effort"); err != nil {
+		return nil, err
 	}
 	var config struct {
 		Format map[string]any `json:"format"`

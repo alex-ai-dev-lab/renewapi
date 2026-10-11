@@ -1162,7 +1162,7 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		return nil, types.NewError(fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）: %s", selectGroup, info.OriginModelName, err.Error()), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
 	if channel == nil {
-		return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		return nil, types.NewErrorWithStatusCode(fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName), types.ErrorCodeModelUnavailable, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
 	}
 
 	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
@@ -1935,6 +1935,9 @@ func recordRelayErrorLog(c *gin.Context, riskChannelId int, err *types.NewAPIErr
 	}
 	adminInfo := make(map[string]interface{})
 	adminInfo["use_channel"] = c.GetStringSlice("use_channel")
+	if actions := c.GetStringSlice("request_normalization"); len(actions) > 0 {
+		adminInfo["request_normalization"] = actions
+	}
 	adminInfo["real_error"] = common.RedactErrorCredentials(err.Error(), common.GetContextKeyString(c, constant.ContextKeyChannelKey))
 	if state, ok := c.Get(relaycommon.ChannelFailoverContextKey); ok {
 		adminInfo["attempts"] = state.(*relaycommon.ChannelFailoverState).AttemptRecords

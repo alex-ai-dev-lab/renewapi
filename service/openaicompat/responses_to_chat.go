@@ -22,6 +22,9 @@ func ResponsesRequestToChatCompletionsRequestWithMapping(req *dto.OpenAIResponse
 	if strings.TrimSpace(req.Model) == "" {
 		return nil, ResponsesBridgeToolMapping{}, errors.New("model is required")
 	}
+	if err := rejectExtensions(req.RequestExtensions, "request"); err != nil {
+		return nil, ResponsesBridgeToolMapping{}, err
+	}
 	prepared, mapping, err := PrepareResponsesRequestForTextBridge(req)
 	if err != nil {
 		return nil, ResponsesBridgeToolMapping{}, err
@@ -29,15 +32,22 @@ func ResponsesRequestToChatCompletionsRequestWithMapping(req *dto.OpenAIResponse
 	req = prepared
 
 	out := &dto.GeneralOpenAIRequest{
-		Model:         req.Model,
-		Stream:        req.Stream,
-		StreamOptions: req.StreamOptions,
-		Temperature:   req.Temperature,
-		TopP:          req.TopP,
-		User:          req.User,
-		Metadata:      req.Metadata,
-		Store:         req.Store,
-		Reasoning:     reasoningToRaw(req.Reasoning),
+		Model:                req.Model,
+		Stream:               req.Stream,
+		StreamOptions:        req.StreamOptions,
+		Temperature:          req.Temperature,
+		TopP:                 req.TopP,
+		User:                 req.User,
+		Metadata:             req.Metadata,
+		Store:                req.Store,
+		Reasoning:            reasoningToRaw(req.Reasoning),
+		PromptCacheRetention: req.PromptCacheRetention,
+		SafetyIdentifier:     req.SafetyIdentifier,
+	}
+	if len(req.PromptCacheKey) > 0 {
+		if err := common.Unmarshal(req.PromptCacheKey, &out.PromptCacheKey); err != nil {
+			return nil, ResponsesBridgeToolMapping{}, fmt.Errorf("invalid prompt_cache_key: %w", err)
+		}
 	}
 	out.FrequencyPenalty, err = responsesRawFloat(req.FrequencyPenalty)
 	if err != nil {
@@ -234,9 +244,14 @@ func responsesToolsToChatTools(raw json.RawMessage) []dto.ToolCallRequest {
 		if toolType != "function" {
 			continue
 		}
+		var strict *bool
+		if value, ok := tool["strict"].(bool); ok {
+			strict = &value
+		}
 		out = append(out, dto.ToolCallRequest{
 			Type: "function",
 			Function: dto.FunctionRequest{
+				Strict:      strict,
 				Name:        common.Interface2String(tool["name"]),
 				Description: common.Interface2String(tool["description"]),
 				Parameters:  tool["parameters"],

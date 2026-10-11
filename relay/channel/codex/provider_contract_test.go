@@ -35,8 +35,9 @@ func TestCodexProviderGoldenContract(t *testing.T) {
 	converted, err := a.ConvertOpenAIResponsesRequest(c, info, dto.OpenAIResponsesRequest{Input: []byte("\"hello\""), Temperature: &zero, TopP: &zero, MaxOutputTokens: &max})
 	require.NoError(t, err)
 	got := converted.(dto.OpenAIResponsesRequest)
-	require.JSONEq(t, "false", string(got.Store))
-	require.Nil(t, got.Temperature)
-	require.Nil(t, got.TopP)
-	require.Nil(t, got.MaxOutputTokens)
+	// Leave explicit values intact until final validation after overrides.
+	require.Empty(t, got.Store)
+	require.Equal(t, &zero, got.Temperature)
+	require.Equal(t, &zero, got.TopP)
+	require.Equal(t, &max, got.MaxOutputTokens)
 }

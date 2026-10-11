@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
@@ -32,16 +33,81 @@ var bridgeProtocols = []bridgeProtocol{
 }
 
 func TestModelDefaultProtocolMatrixTwoTurnTools(t *testing.T) {
-	runDefaultProtocolMatrix(t, false)
+	runDefaultProtocolMatrix(t, false, false)
 }
 
 func TestModelDefaultProtocolMatrixReasoningAndImages(t *testing.T) {
-	runDefaultProtocolMatrix(t, true)
+	runDefaultProtocolMatrix(t, true, false)
 }
 
-func runDefaultProtocolMatrix(t *testing.T, rich bool) {
+func TestCodexProfileMatrixTwoTurnTools(t *testing.T) {
+	runDefaultProtocolMatrix(t, true, true)
+}
+
+func TestCodexProfileFailoverRestoresStandardNonStreamRequest(t *testing.T) {
+	db := setupEmptyStreamRecoveryDB(t)
+	seedRecoveryPrincipal(t, db)
+	old := operation_setting.ModelEndpointDefaults2JsonString()
+	t.Cleanup(func() { require.NoError(t, operation_setting.UpdateModelEndpointDefaultsByJsonString(old)) })
+	require.NoError(t, operation_setting.UpdateModelEndpointDefaultsByJsonString(fmt.Sprintf(`{"enabled":true,"normalize_text_endpoints":true,"entries":[{"match_type":"exact","pattern":"%s","channel_type":1,"default_endpoint":"openai-response"}]}`, failoverTestModel)))
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		var req map[string]any
+		if err := common.Unmarshal(body, &req); err != nil {
+			t.Error(err)
+			return
+		}
+		if calls.Add(1) == 1 {
+			require.Equal(t, true, req["stream"])
+			require.NotNil(t, req["include"])
+			w.WriteHeader(502)
+			_, _ = io.WriteString(w, `{"error":{"message":"synthetic failure"}}`)
+			return
+		}
+		require.Equal(t, false, req["stream"])
+		require.Equal(t, 0.5, req["temperature"])
+		require.Nil(t, req["include"])
+		require.Nil(t, req["prompt_cache_key"])
+		writeBridgeFixture(t, w, "openai-response", false, 2)
+	}))
+	t.Cleanup(server.Close)
+	for i := 0; i < 2; i++ {
+		channel := recoveryIntegrationChannel(9890+i, "codex-failover", server.URL, int64(100-i), failoverTestModel)
+		if i == 0 {
+			channel.SetSetting(dto.ChannelSettings{ResponsesRequestProfile: "codex"})
+		}
+		require.NoError(t, db.Create(channel).Error)
+		require.NoError(t, channel.AddAbilities(nil))
+	}
+	model.InitChannelCache()
+	router, _, _ := recoveryIntegrationRouter("codex-standard-failover")
+	router.POST("/v1/chat/completions", middleware.Distribute(), func(c *gin.Context) { Relay(c, types.RelayFormatOpenAI) })
+	body, err := common.Marshal(map[string]any{"model": failoverTestModel, "stream": false, "temperature": 0.5, "messages": []any{map[string]any{"role": "user", "content": "hi"}}})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, 200, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), "All tools completed")
+	require.EqualValues(t, 2, calls.Load())
+	var user model.User
+	require.NoError(t, db.First(&user, 1).Error)
+	require.Equal(t, 1, user.RequestCount)
+	perfmetrics.WaitForPendingSamples()
+}
+
+func runDefaultProtocolMatrix(t *testing.T, rich, codex bool) {
 	for _, client := range bridgeProtocols {
 		for _, upstream := range bridgeProtocols {
+			if codex && upstream.endpoint != "openai-response" {
+				continue
+			}
 			for _, stream := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s_to_%s_stream_%t", client.endpoint, upstream.endpoint, stream), func(t *testing.T) {
 					db := setupEmptyStreamRecoveryDB(t)
@@ -88,16 +154,43 @@ func runDefaultProtocolMatrix(t *testing.T, rich bool) {
 						}
 						if rich {
 							require.Contains(t, string(body), bridgePixel)
+							if client.endpoint == "anthropic" && upstream.endpoint == "anthropic" {
+								for _, native := range []string{"future_native", "future_budget", "opaque-native-signature", "cache_control", "1h"} {
+									require.Contains(t, string(body), native)
+								}
+							}
 							if upstream.endpoint == "anthropic" {
 								require.NotNil(t, request["thinking"])
 							} else {
 								require.True(t, request["reasoning"] != nil || request["reasoning_effort"] != nil)
 							}
 						}
-						writeBridgeFixture(t, w, upstream.endpoint, stream, turn)
+						if codex {
+							require.Equal(t, true, request["stream"])
+							require.Equal(t, false, request["store"])
+							require.NotEmpty(t, request["prompt_cache_key"])
+							require.Equal(t, "client-session-key", request["prompt_cache_key"])
+							require.Equal(t, []any{"file_search_call.results", "reasoning.encrypted_content"}, request["include"])
+							require.Nil(t, request["temperature"])
+							require.Nil(t, request["top_p"])
+							require.EqualValues(t, 2200, request["max_output_tokens"])
+							require.Equal(t, "text/event-stream", r.Header.Get("Accept"))
+							require.Equal(t, "once", request["instructions"])
+							require.NotNil(t, request["client_metadata"])
+						}
+						writeBridgeFixture(t, w, upstream.endpoint, stream || codex, turn)
 					}))
 					t.Cleanup(server.Close)
 					channel := recoveryIntegrationChannel(9851, "protocol-matrix", server.URL, 100, failoverTestModel)
+					if codex {
+						channel.SetSetting(dto.ChannelSettings{
+							ResponsesRequestProfile: "codex", RequiresCodexIdentity: common.GetPointer(true),
+							UpstreamParamOverride: map[string]any{"operations": []any{map[string]any{"path": "instructions", "mode": "set", "value": "", "keep_origin": true}, map[string]any{"path": "instructions", "mode": "append", "value": "once"}}},
+						})
+						// Legacy rules must survive source DTO parsing and must not run twice.
+						override := `{"operations":[{"path":"include","mode":"set","value":["file_search_call.results"]}]}`
+						channel.ParamOverride = &override
+					}
 					require.NoError(t, db.Create(channel).Error)
 					require.NoError(t, channel.AddAbilities(nil))
 					model.InitChannelCache()
@@ -109,6 +202,18 @@ func runDefaultProtocolMatrix(t *testing.T, rich bool) {
 						payload := bridgeClientRequest(client.endpoint, stream, turn)
 						if rich {
 							enrichBridgeClientRequest(payload, client.endpoint)
+							if client.endpoint == "anthropic" && upstream.endpoint == "anthropic" {
+								payload["future_native"] = map[string]any{"enabled": false}
+								payload["thinking"].(map[string]any)["future_budget"] = 0
+								payload["system"] = []any{map[string]any{"type": "text", "text": "system instruction", "cache_control": map[string]any{"type": "ephemeral", "ttl": "1h"}}}
+								messages := payload["messages"].([]any)
+								payload["messages"] = append(messages, map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "thinking", "thinking": "visible note", "signature": "opaque-native-signature"}}})
+							}
+						}
+						if codex {
+							payload["prompt_cache_key"] = "client-session-key"
+							payload["temperature"] = 0.0
+							payload["top_p"] = 0.5
 						}
 						body, err := common.Marshal(payload)
 						require.NoError(t, err)

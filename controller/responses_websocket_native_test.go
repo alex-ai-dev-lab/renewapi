@@ -33,6 +33,39 @@ func writeResponsesWSNativeSuccess(conn *websocket.Conn, stream, id, text string
 	return nil
 }
 
+func TestResponsesWSNativeCodexRequestProfile(t *testing.T) {
+	db := setupEmptyStreamRecoveryDB(t)
+	captured := make(chan []byte, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			return
+		}
+		captured <- data
+		_ = writeResponsesWSNativeSuccess(conn, gjson.GetBytes(data, "stream_id").String(), "codex_ws_1", "hello")
+	}))
+	t.Cleanup(upstream.Close)
+	channel := recoveryIntegrationChannel(8599, "codex-profile-ws", upstream.URL, 100, failoverTestModel)
+	channel.SetSetting(dto.ChannelSettings{ResponsesWebSocket: true, ResponsesRequestProfile: "codex", RequiresCodexIdentity: common.GetPointer(true)})
+	require.NoError(t, db.Create(channel).Error)
+	require.NoError(t, channel.AddAbilities(nil))
+	conn := dialResponsesWSTest(t, responsesWSTestGateway(t, db))
+	sendResponsesWSTest(t, conn, map[string]any{"type": "response.create", "stream_id": "main", "model": failoverTestModel, "input": "hi", "temperature": 0})
+	_, terminal := readResponsesWSTerminal(t, conn)
+	require.Equal(t, "response.completed", terminal.Get("type").String(), terminal.Raw)
+	data := <-captured
+	require.Contains(t, string(data), "reasoning.encrypted_content")
+	require.NotEmpty(t, gjson.GetBytes(data, "prompt_cache_key").String())
+	require.Equal(t, "false", gjson.GetBytes(data, "store").Raw)
+	require.False(t, gjson.GetBytes(data, "temperature").Exists())
+	require.Equal(t, "input_text", gjson.GetBytes(data, "input.0.content.0.type").String())
+}
+
 func TestResponsesWSNativeReuseContinuationIdleReaderAndScope(t *testing.T) {
 	db := setupEmptyStreamRecoveryDB(t)
 	var handshakes atomic.Int32

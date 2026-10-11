@@ -45,6 +45,12 @@ docker compose -f compose.yaml ps
 上游，并在旧连接排空后停止原容器。对已有浏览器页面，需保留旧哈希静态分包，
 避免切换后懒加载失败；代理配置语法应按服务器实际版本验证。
 
+蓝绿实例必须同时使用独立的 Compose project、container name 和本机端口。
+只修改容器名称仍会让 `compose up` 重建同一 project/service 的旧实例。
+启动前比对旧容器的 `com.docker.compose.project` 标签，显式传入新的 `-p`，
+并执行 `docker compose --dry-run ... up`，确认计划不会停止或重建旧容器。
+从候选启动之前就持续监测原入口；出现失败立即停止启动操作并恢复旧服务。
+
 SQLite WAL 数据库应使用在线 backup API 制作一致副本，不直接复制运行中的
 单个 `.db` 文件。隔离副本的属主须与容器 PUID/PGID 一致。还需检查现有
 `VERSION` 环境变量是否覆盖二进制版本，升级时保持其与产品版本一致。

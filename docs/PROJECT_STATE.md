@@ -2,10 +2,10 @@
 
 更新日期：2026-10-11。源码和验证状态以当前 Git 提交为准，本文不代表生产部署状态。
 
-## v1.4.0 发布准备
+## v1.4.1 发布准备
 
 本地源码增加独立渠道请求规范和目标协议覆盖阶段，补齐 Chat/Responses/Messages → Codex 最终出站字段，保留原生扩展及 Claude 工具失败语义；模型/余额等可解释错误保留明确分类。恢复渠道模型厂商图标和 OpenAI/Claude 优先顺序，修复列可见性变化时表格行缓存未更新。
-用户已授权提交、Actions 发布、服务器代理下载和热切换，成功后清理本次备份；进度见[部署任务](../tasks/active/2026-10-deploy-v1.4.0.md)。规则与兼容边界见 [ADR-017](decisions/017-codex-request-profile-and-public-errors.md)，实现和验收见[任务记录](../tasks/archive/2026-10-codex-normalization-and-channel-icons.md)。
+v1.4.0 完整发布通过，候选验证发现缓存键长度边界，正在准备 v1.4.1；部署脚本项目冲突曾导致约 3 分半中断，已恢复旧实例并修正。用户已授权提交、Actions 发布、代理下载和切换，成功后清理本次备份；进度见[部署任务](../tasks/active/2026-10-deploy-v1.4.0.md)。规则与兼容边界见 [ADR-017](decisions/017-codex-request-profile-and-public-errors.md)，实现和验收见[任务记录](../tasks/archive/2026-10-codex-normalization-and-channel-icons.md)。
 
 ## UI 复查修复（纳入 v1.4.0）
 

@@ -54,7 +54,9 @@ func generatedCodexCacheKey(c *gin.Context, info *relaycommon.RelayInfo) string 
 		session = uuid.NewString()
 	}
 	hash := sha256.Sum256([]byte(fmt.Sprintf("renewapi-codex\x00%d\x00%d\x00%s", info.UserId, info.ChannelId, session)))
-	key := "renewapi-" + hex.EncodeToString(hash[:])
+	// Responses providers cap prompt_cache_key at 64 characters. The hash
+	// already namespaces the user/channel/session; a textual prefix exceeds it.
+	key := hex.EncodeToString(hash[:])
 	info.GeneratedRequestCacheKeys[info.ChannelId] = key
 	return key
 }

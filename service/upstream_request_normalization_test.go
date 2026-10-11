@@ -37,6 +37,8 @@ func TestFinalizeCodexFieldsAndScope(t *testing.T) {
 	require.True(t, c.GetBool("responses_upstream_stream"))
 	require.NotContains(t, info.RequestNormalization, "synthetic-session")
 	key := gjson.GetBytes(final, "prompt_cache_key").String()
+	require.NotEmpty(t, key)
+	require.LessOrEqual(t, len(key), 64, "generated cache keys must fit the upstream request limit")
 	for _, next := range []*relaycommon.RelayInfo{info, normalizationInfo()} {
 		retried, err := FinalizeUpstreamJSON(c, next, "/v1/responses", body)
 		require.NoError(t, err)

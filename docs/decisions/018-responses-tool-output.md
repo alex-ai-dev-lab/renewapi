@@ -39,4 +39,4 @@ Responses → Messages 也必须先经过共享工具声明提升和命名空间
 客户端操作工具识别针对原生 SSE；不代表所有新工具均支持 Chat/Claude 转换或非流式 DTO。
 跨协议安全桥已有的能力拒绝与 Anti-Poison 策略继续适用。本次没有扩展工具执行权限。
 新增失败复现与回归覆盖混合输出、调用身份、完成事件回退、custom input 与空流负例。
-详细证据及命令见 tasks/active/2026-10-custom-tool-stream.md。
+详细证据及命令见 tasks/archive/2026-10-custom-tool-stream.md。

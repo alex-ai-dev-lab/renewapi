@@ -72,6 +72,9 @@ func ValidateNormalizedBridgeRequest(request dto.Request, target constant.Endpoi
 		}
 		return ValidateChatTextBridgeRequest(&copy)
 	case *dto.OpenAIResponsesRequest:
+		if err := openaicompat.ValidateResponsesBridgeParameters(req, target); err != nil {
+			return err
+		}
 		if target == constant.EndpointTypeOpenAIResponse {
 			return nil
 		}
@@ -86,9 +89,15 @@ func ValidateNormalizedBridgeRequest(request dto.Request, target constant.Endpoi
 			copy.PromptCacheRetention = nil
 			copy.SafetyIdentifier = nil
 		}
-		if err := validateNormalizedResponsesInput(req.Input); err != nil {
+		prepared, _, err := openaicompat.PrepareResponsesRequestForTextBridge(req)
+		if err != nil {
 			return err
 		}
+		if err := validateNormalizedResponsesInput(prepared.Input); err != nil {
+			return err
+		}
+		copy.Tools = prepared.Tools
+		copy.ToolChoice = prepared.ToolChoice
 		return ValidateResponsesTextBridgeRequest(&copy)
 	default:
 		return fmt.Errorf("request type %T cannot use the three text endpoint bridge", request)

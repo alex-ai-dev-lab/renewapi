@@ -16,13 +16,37 @@ import (
 )
 
 func TestOaiResponsesToChatStreamDoesNotDuplicateTerminalToolCall(t *testing.T) {
+	testResponsesToChatStreamToolCall(t, "", "delta")
+}
+
+func TestOaiResponsesToChatStreamPreservesTextAndToolCall(t *testing.T) {
+	testResponsesToChatStreamToolCall(t, "Checking now.", "delta")
+}
+
+func TestOaiResponsesToChatStreamRestoresTerminalToolArguments(t *testing.T) {
+	for _, mode := range []string{"terminal_only", "terminal_suffix"} {
+		t.Run(mode, func(t *testing.T) {
+			testResponsesToChatStreamToolCall(t, "Checking now.", mode)
+		})
+	}
+}
+
+func testResponsesToChatStreamToolCall(t *testing.T, text, mode string) {
+	t.Helper()
 	body := strings.Join([]string{
+		`data: {"type":"response.output_text.delta","delta":"` + text + `"}`,
 		`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}`,
 		`data: {"type":"response.function_call_arguments.delta","output_index":0,"item_id":"fc_1","delta":"{\"q\":\"x\"}"}`,
 		`data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{\"q\":\"x\"}"}],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`,
 		`data: [DONE]`,
 		``,
 	}, "\n")
+	if mode == "terminal_only" {
+		lines := strings.Split(body, "\n")
+		body = strings.Join(append(lines[:1], lines[3:]...), "\n")
+	} else if mode == "terminal_suffix" {
+		body = strings.Replace(body, `"delta":"{\"q\":\"x\"}"`, `"delta":"{\"q\":"`, 1)
+	}
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
@@ -61,6 +85,10 @@ func TestOaiResponsesToChatStreamDoesNotDuplicateTerminalToolCall(t *testing.T) 
 	}
 	require.Equal(t, map[int]bool{0: true}, indexes)
 	require.Equal(t, `{"q":"x"}`, arguments.String())
+	if text != "" {
+		require.Contains(t, recorder.Body.String(), text)
+	}
+	require.Contains(t, recorder.Body.String(), `"finish_reason":"tool_calls"`)
 }
 
 func TestOaiResponsesToChatStreamRejectsMissingTerminalAfterPartialOutput(t *testing.T) {

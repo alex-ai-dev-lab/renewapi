@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BrandImage } from '@/components/brand-image'
@@ -35,7 +36,10 @@ export function AuthLayout({ children, dark = false }: AuthLayoutProps) {
 
   return (
     <div
-      className={`relative grid min-h-svh max-w-none${dark ? 'snowapi-auth-shell' : ''}`}
+      className={cn(
+        'relative grid min-h-svh max-w-none',
+        dark && 'snowapi-auth-shell'
+      )}
     >
       <Link
         to='/'

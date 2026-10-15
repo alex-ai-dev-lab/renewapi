@@ -66,6 +66,9 @@ func EvaluateChannelProtocolCapability(channel *model.Channel, modelName string,
 			}
 			req, _ := request.(*dto.OpenAIResponsesRequest)
 			if req != nil {
+				if err := openaicompat.ValidateResponsesBridgeParameters(req, target); err != nil {
+					return unsupportedCapability(target, "responses->"+string(target), err.Error())
+				}
 				if err := ValidateResponsesTextBridgeRequest(req); err != nil {
 					return unsupportedCapability(target, "responses->"+string(target), err.Error())
 				}

@@ -1,5 +1,15 @@
 # Upstream Port Ledger
 
+## 2026-10-15 API 调用与 SSE 专项参考
+
+| GitHub 来源 | 处置 | 本地结果 |
+| --- | --- | --- |
+| OpenAI Go SDK `036df078239cbc51259a7f4e4015e340d4790fb3`，`packages/ssestream/ssestream.go` | ADAPTED | 参考事件边界合并多行 data 的行为；本地统一至 helper.SSEScanner，保留既有无空行兼容、取消/首语义期限和缓冲上限，不引入 SDK。 |
+| OpenAI Python SDK `e71d781ac5e7b3f365ac130bf338baaf13ae720d`，`_streaming.py` 与 `lib/streaming/responses/_responses.py` | ADAPTED | 对照多行解码与完成快照/工具身份处理；本地工具快照共用后缀合并逻辑并拒绝冲突，不移植其对象模型或增加运行时。 |
+| New API `718a4e7f9751c5bf1958747cd0c2c895e2b937d4`，`relay/helper/stream_scanner.go` | NOT_APPLICABLE | 仍逐行处理，不能解决本次多行 JSON 复现；保留本地可靠性和生命周期机制。 |
+
+本节仅登记指定文件的行为参考，不推进下方全量审计基线。当前为未提交本地改动；验证见工具流任务。
+
 Audited-Upstream-Ref: 58d4e9bd3bb035df8ea235dd682ccc8a45d0332a
 
 Upstream release at audit time: `v1.0.0-rc.24` plus post-release `main`

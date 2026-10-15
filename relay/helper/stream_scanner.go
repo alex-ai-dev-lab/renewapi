@@ -275,7 +275,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 
 	wg.Add(1)
 	common.RelayCtxGo(ctx, func() {
-		pendingEventType := ""
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				err := fmt.Errorf("scanner panic: %v", recovered)
@@ -288,46 +287,28 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			wg.Done()
 		}()
 
-		for scanner.Scan() {
+		frames := newSSEScanner(scanner, func(line string) bool {
 			select {
 			case <-abortCh:
-				return
+				return false
 			case <-ctx.Done():
-				return
+				return false
 			case <-c.Request.Context().Done():
 				recordContextEnd()
 				abort()
-				return
+				return false
 			default:
 			}
-
 			notifyActivity()
-			line := scanner.Text()
 			logger.LogDebug(c, "stream scanner data: %s", line)
-			if strings.HasPrefix(line, "[DONE]") {
+			return true
+		})
+		for frames.Scan() {
+			data := frames.Text()
+			if data == "[DONE]" {
 				info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonDone, nil)
 				return
 			}
-			if eventType, ok := ParseSSEField(line, "event"); ok {
-				pendingEventType = eventType
-				continue
-			}
-			data, ok := ParseSSEField(line, "data")
-			if !ok {
-				if strings.TrimSpace(line) == "" {
-					pendingEventType = ""
-				}
-				continue
-			}
-			if data == "" {
-				continue
-			}
-			if strings.HasPrefix(data, "[DONE]") {
-				info.StreamStatus.SetTransportEnd(relaycommon.StreamEndReasonDone, nil)
-				return
-			}
-			data = applySSEEventTypeFallback(data, pendingEventType)
-			pendingEventType = ""
 			info.StreamStatus.ObserveRawFrame()
 			info.ReceivedResponseCount++
 			select {
@@ -343,7 +324,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			}
 		}
 
-		if err := scanner.Err(); err != nil && err != io.EOF {
+		if err := frames.Err(); err != nil && err != io.EOF {
 			if ctx.Err() != nil {
 				return
 			}

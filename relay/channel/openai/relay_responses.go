@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -181,20 +180,16 @@ func aggregateCompactionResponsesStreamRaw(resp *http.Response) ([]byte, *dto.Us
 	items := make(map[int][]byte)
 	totalBytes := 0
 	var completed []byte
-	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, helper.InitialScannerBufferSize), helper.DefaultMaxScannerBufferSize)
+	scanner := helper.NewSSEScanner(resp.Body)
 	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if !bytes.HasPrefix(line, []byte("data:")) {
-			continue
-		}
-		data := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
-		if len(data) == 0 || bytes.Equal(data, []byte("[DONE]")) {
+		data := []byte(scanner.Text())
+		if len(data) == 0 || string(data) == "[DONE]" {
 			continue
 		}
 		if !gjson.ValidBytes(data) {
 			return nil, nil, types.NewOpenAIError(fmt.Errorf("invalid responses SSE JSON"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 		}
+
 		typ := gjson.GetBytes(data, "type").String()
 		switch typ {
 		case dto.ResponsesOutputTypeItemAdded, dto.ResponsesOutputTypeItemDone:
@@ -278,25 +273,12 @@ func aggregateResponsesStreamToResponse(c *gin.Context, info *relaycommon.RelayI
 		outputText      strings.Builder
 		functionCallMap = make(map[string]dto.ResponsesOutput)
 		functionCallSeq []string
+		callIDByItemID  = make(map[string]string)
 	)
 
-	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, helper.InitialScannerBufferSize), helper.DefaultMaxScannerBufferSize)
+	scanner := helper.NewSSEScanner(resp.Body)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if data == "" || data == "[DONE]" {
-			continue
-		}
-		if strings.HasPrefix(data, "event:") {
-			continue
-		}
-		if strings.HasPrefix(data, "data:") {
-			data = strings.TrimSpace(strings.TrimPrefix(data, "data:"))
-		}
+		data := scanner.Text()
 		if data == "" || data == "[DONE]" {
 			continue
 		}
@@ -309,7 +291,7 @@ func aggregateResponsesStreamToResponse(c *gin.Context, info *relaycommon.RelayI
 		case "response.output_text.delta":
 			outputText.WriteString(streamResp.Delta)
 		case dto.ResponsesOutputTypeItemAdded, dto.ResponsesOutputTypeItemDone:
-			if streamResp.Item == nil || streamResp.Item.Type != "function_call" {
+			if streamResp.Item == nil || (streamResp.Item.Type != "function_call" && streamResp.Item.Type != "custom_tool_call") {
 				break
 			}
 			callID := strings.TrimSpace(streamResp.Item.CallId)
@@ -319,21 +301,47 @@ func aggregateResponsesStreamToResponse(c *gin.Context, info *relaycommon.RelayI
 			if callID == "" {
 				break
 			}
+			if streamResp.Item.ID != "" {
+				callIDByItemID[streamResp.Item.ID] = callID
+			}
 			if _, exists := functionCallMap[callID]; !exists {
 				functionCallSeq = append(functionCallSeq, callID)
 			}
 			functionCallMap[callID] = *streamResp.Item
-		case "response.function_call_arguments.delta":
+		case "response.function_call_arguments.delta", "response.function_call_arguments.done",
+			"response.custom_tool_call_input.delta", "response.custom_tool_call_input.done":
 			callID := strings.TrimSpace(streamResp.ItemID)
+			if canonical := callIDByItemID[callID]; canonical != "" {
+				callID = canonical
+			}
 			if callID == "" {
 				break
 			}
 			item := functionCallMap[callID]
-			item.Type = "function_call"
 			item.CallId = callID
-			args := dto.ResponsesArgumentsString(item.Arguments) + streamResp.Delta
-			if argsData, marshalErr := common.Marshal(args); marshalErr == nil {
-				item.Arguments = argsData
+			if strings.HasPrefix(streamResp.Type, "response.custom_tool_call_input.") {
+				item.Type = "custom_tool_call"
+				input := ""
+				if item.Input != nil {
+					input = *item.Input
+				}
+				if streamResp.Type == "response.custom_tool_call_input.done" {
+					if streamResp.Input != nil {
+						input = *streamResp.Input
+					}
+				} else {
+					input += streamResp.Delta
+				}
+				item.Input = &input
+			} else {
+				item.Type = "function_call"
+				args := dto.ResponsesArgumentsString(item.Arguments) + streamResp.Delta
+				if streamResp.Type == "response.function_call_arguments.done" && len(streamResp.Arguments) > 0 {
+					args = dto.ResponsesArgumentsString(streamResp.Arguments)
+				}
+				if argsData, marshalErr := common.Marshal(args); marshalErr == nil {
+					item.Arguments = argsData
+				}
 			}
 			if _, exists := functionCallMap[callID]; !exists {
 				functionCallSeq = append(functionCallSeq, callID)
@@ -436,10 +444,8 @@ func buildFallbackResponsesResponse(c *gin.Context, info *relaycommon.RelayInfo,
 	resp := &dto.OpenAIResponsesResponse{ID: helper.GetResponseID(c), Object: "response", CreatedAt: int(common.GetTimestamp()), Model: model}
 	if text != "" {
 		resp.Output = []dto.ResponsesOutput{{Type: "message", Role: "assistant", Status: "completed", Content: []dto.ResponsesOutputContent{{Type: "output_text", Text: text}}}}
-		return resp
 	}
 	if len(functionCallMap) > 0 {
-		resp.Output = make([]dto.ResponsesOutput, 0, len(functionCallSeq))
 		seen := make(map[string]bool, len(functionCallSeq))
 		for _, callID := range functionCallSeq {
 			if seen[callID] {

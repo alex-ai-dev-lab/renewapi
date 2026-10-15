@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 )
 
@@ -33,7 +34,36 @@ func ValidateRequestExtensions(extra dto.RequestExtensions, path string, allowed
 	return rejectExtensions(extra, path, allowed...)
 }
 
+// ValidateResponsesBridgeParameters rejects parameters whose response or request
+// semantics the destination bridge cannot retain. Native forwarding is unaffected.
+func ValidateResponsesBridgeParameters(req *dto.OpenAIResponsesRequest, target constant.EndpointType) error {
+	if req == nil || target == constant.EndpointTypeOpenAIResponse {
+		return nil
+	}
+	if req.TopLogProbs != nil {
+		return fmt.Errorf("Responses field top_logprobs is not supported by the %s response bridge", target)
+	}
+	if target == constant.EndpointTypeAnthropic {
+		for _, field := range []struct {
+			name string
+			raw  common.RawMessage
+		}{
+			{"frequency_penalty", req.FrequencyPenalty},
+			{"presence_penalty", req.PresencePenalty},
+			{"prompt_cache_options", req.PromptCacheOptions},
+		} {
+			if len(field.raw) > 0 && string(field.raw) != "null" {
+				return fmt.Errorf("Responses field %s cannot be represented by Messages", field.name)
+			}
+		}
+	}
+	return nil
+}
+
 func copyChatResponsesFields(req *dto.GeneralOpenAIRequest, out *dto.OpenAIResponsesRequest) error {
+	if req.TopLogProbs != nil || req.LogProbs != nil && *req.LogProbs {
+		return fmt.Errorf("Chat logprobs are not supported by the Responses response bridge")
+	}
 	if err := rejectExtensions(req.RequestExtensions, "request", "include", "client_metadata", "prompt_cache_options"); err != nil {
 		return err
 	}

@@ -23,6 +23,15 @@ func ResponsesRequestToChatCompletionsRequestForContext(c *gin.Context, req *dto
 	return out, nil
 }
 
+func ResponsesRequestToClaudeRequestForContext(c *gin.Context, req *dto.OpenAIResponsesRequest) (*dto.ClaudeRequest, error) {
+	out, mapping, err := openaicompat.ResponsesRequestToClaudeRequestWithMapping(req)
+	if err != nil {
+		return nil, err
+	}
+	openaicompat.SetResponsesBridgeToolMapping(c, mapping)
+	return out, nil
+}
+
 func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesResponse, id string) (*dto.OpenAITextResponse, *dto.Usage, error) {
 	return openaicompat.ResponsesResponseToChatCompletionsResponse(resp, id)
 }

@@ -18,6 +18,7 @@ func TestAggregateCompactionResponsesStreamRawRestoresUnknownItem(t *testing.T) 
 		`data: {"type":"response.completed","response":{"id":"resp_1","object":"response.compaction","output":[],"usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}`,
 		"",
 	}, "\n\n")
+	stream = strings.ReplaceAll(stream, "data: {", "data: {\ndata: ")
 	resp := &http.Response{Body: io.NopCloser(strings.NewReader(stream))}
 	body, usage, relayErr := aggregateCompactionResponsesStreamRaw(resp)
 	require.Nil(t, relayErr)

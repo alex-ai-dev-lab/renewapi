@@ -15,7 +15,6 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/service/openaicompat"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/types"
 
@@ -80,7 +79,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			)
 		}
 		if endpoint == appconstant.EndpointTypeAnthropic && info.ProtocolNormalized {
-			claudeReq, convErr := openaicompat.ResponsesRequestToClaudeRequest(request)
+			claudeReq, convErr := service.ResponsesRequestToClaudeRequestForContext(c, request)
 			if convErr != nil {
 				return types.NewErrorWithStatusCode(convErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 			}

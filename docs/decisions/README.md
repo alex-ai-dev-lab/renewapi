@@ -17,3 +17,4 @@ Current decisions:
 - [ADR-009：Responses WebSocket 与逐轮隔离](009-responses-websocket.md)
 - [ADR-010：统一检查与 Releases 离线镜像分发](010-releases-only-distribution.md)
 - [ADR-015：默认前端唯一构建与语义色边界](015-default-frontend-and-semantic-colors.md)
+- [ADR-018：Responses 工具输出与首语义识别](018-responses-tool-output.md)

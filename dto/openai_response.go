@@ -359,6 +359,7 @@ type ResponsesOutput struct {
 	Name             string                   `json:"name,omitempty"`
 	Namespace        string                   `json:"namespace,omitempty"`
 	Arguments        json.RawMessage          `json:"arguments,omitempty"`
+	Input            *string                  `json:"input,omitempty"`
 	EncryptedContent json.RawMessage          `json:"encrypted_content,omitempty"`
 }
 
@@ -403,6 +404,7 @@ const (
 // ResponsesStreamResponse 用于处理 /v1/responses 流式响应
 type ResponsesStreamResponse struct {
 	Arguments json.RawMessage          `json:"arguments,omitempty"`
+	Input     *string                  `json:"input,omitempty"`
 	Type      string                   `json:"type"`
 	Error     *types.OpenAIError       `json:"error,omitempty"`
 	Status    *int                     `json:"status,omitempty"`

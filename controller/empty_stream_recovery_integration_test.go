@@ -299,6 +299,7 @@ func setupEmptyStreamRecoveryDB(t *testing.T) *gorm.DB {
 		&model.ChannelModelStatus{}, &model.ChannelModelCapability{}, &model.ModelEndpoint{},
 		&model.BillingLedger{}, &model.BillingOutbox{}, &model.Option{}, &model.Task{}, &model.Midjourney{},
 		&model.Log{},
+		&model.UserSubscription{},
 	))
 	model.DB, model.LOG_DB = db, db
 	model.InitOptionMap()

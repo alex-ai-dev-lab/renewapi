@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 )
 
@@ -18,6 +19,9 @@ func ResponsesRequestToChatCompletionsRequest(req *dto.OpenAIResponsesRequest) (
 func ResponsesRequestToChatCompletionsRequestWithMapping(req *dto.OpenAIResponsesRequest) (*dto.GeneralOpenAIRequest, ResponsesBridgeToolMapping, error) {
 	if req == nil {
 		return nil, ResponsesBridgeToolMapping{}, errors.New("request is nil")
+	}
+	if err := ValidateResponsesBridgeParameters(req, constant.EndpointTypeOpenAI); err != nil {
+		return nil, ResponsesBridgeToolMapping{}, err
 	}
 	if strings.TrimSpace(req.Model) == "" {
 		return nil, ResponsesBridgeToolMapping{}, errors.New("model is required")
@@ -43,6 +47,9 @@ func ResponsesRequestToChatCompletionsRequestWithMapping(req *dto.OpenAIResponse
 		Reasoning:            reasoningToRaw(req.Reasoning),
 		PromptCacheRetention: req.PromptCacheRetention,
 		SafetyIdentifier:     req.SafetyIdentifier,
+	}
+	if len(req.PromptCacheOptions) > 0 {
+		out.ExtraFields = map[string]common.RawMessage{"prompt_cache_options": req.PromptCacheOptions}
 	}
 	if len(req.PromptCacheKey) > 0 {
 		if err := common.Unmarshal(req.PromptCacheKey, &out.PromptCacheKey); err != nil {
@@ -370,7 +377,7 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 	created := resp.CreatedAt
 
 	var toolCalls []dto.ToolCallResponse
-	if text == "" && len(resp.Output) > 0 {
+	if len(resp.Output) > 0 {
 		for _, out := range resp.Output {
 			if out.Type != "function_call" {
 				continue
@@ -402,7 +409,6 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 	}
 	if len(toolCalls) > 0 {
 		msg.SetToolCalls(toolCalls)
-		msg.Content = ""
 	}
 
 	out := &dto.OpenAITextResponse{

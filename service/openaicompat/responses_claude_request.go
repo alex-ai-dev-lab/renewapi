@@ -8,10 +8,28 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 )
 
 func ResponsesRequestToClaudeRequest(req *dto.OpenAIResponsesRequest) (*dto.ClaudeRequest, error) {
+	out, _, err := ResponsesRequestToClaudeRequestWithMapping(req)
+	return out, err
+}
+
+func ResponsesRequestToClaudeRequestWithMapping(req *dto.OpenAIResponsesRequest) (*dto.ClaudeRequest, ResponsesBridgeToolMapping, error) {
+	if err := ValidateResponsesBridgeParameters(req, constant.EndpointTypeAnthropic); err != nil {
+		return nil, ResponsesBridgeToolMapping{}, err
+	}
+	prepared, mapping, err := PrepareResponsesRequestForTextBridge(req)
+	if err != nil {
+		return nil, ResponsesBridgeToolMapping{}, err
+	}
+	out, err := responsesPreparedRequestToClaudeRequest(prepared)
+	return out, mapping, err
+}
+
+func responsesPreparedRequestToClaudeRequest(req *dto.OpenAIResponsesRequest) (*dto.ClaudeRequest, error) {
 	if req == nil {
 		return nil, fmt.Errorf("Responses request is nil")
 	}

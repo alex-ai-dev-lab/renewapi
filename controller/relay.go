@@ -399,6 +399,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil
 	relayInfo.Failover = relaycommon.NewChannelFailoverState()
+	attemptBaseline := relayInfo.SnapshotAttempt()
 	c.Set(relaycommon.ChannelFailoverContextKey, relayInfo.Failover)
 	service.SetRelaySemanticSuccess(c, false)
 	maxRetryTimes := compatRelayRetryBudget(relayInfo, relayFormat)
@@ -509,6 +510,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				newAPIError = types.NewErrorWithStatusCode(c.Request.Context().Err(), types.ErrorCodeBadResponse, 499, types.ErrOptionWithSkipRetry())
 				return
 			}
+			relayInfo.RestoreAttempt(attemptBaseline)
 			// 兼容钩子和模型路由不能重新加入本请求已经尝试过的渠道。
 			for channelID := range relayInfo.Failover.AttemptedChannelIDs {
 				retryParam.ExcludedChannelIds[channelID] = true
@@ -588,6 +590,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			if !began {
 				break
 			}
+			resetRelayAttemptGuards(c, relayInfo)
 			relayInfo.StreamStatus = nil
 			relayInfo.ResponseModel = nil
 			relayInfo.ResponsesObservedUsage = nil

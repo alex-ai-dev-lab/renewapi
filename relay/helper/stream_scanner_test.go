@@ -43,6 +43,22 @@ func setupStreamTest(t *testing.T, body io.Reader) (*gin.Context, *http.Response
 	return c, resp, info
 }
 
+func TestStreamScannerHandler_MultilineJSONFrame(t *testing.T) {
+	for _, ending := range []string{"\n\ndata: [DONE]\n", "\n"} {
+		t.Run(fmt.Sprintf("ending_%q", ending), func(t *testing.T) {
+			body := "event: response.output_text.delta\r\n: heartbeat\r\ndata: {\r\ndata:   \"delta\": \"hello\"\r\ndata: }" + ending
+			c, resp, info := setupStreamTest(t, strings.NewReader(body))
+			var events []string
+			StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+				events = append(events, data)
+			})
+			require.Len(t, events, 1)
+			require.JSONEq(t, `{"type":"response.output_text.delta","delta":"hello"}`, events[0])
+			require.Equal(t, 1, info.ReceivedResponseCount)
+		})
+	}
+}
+
 func buildSSEBody(n int) string {
 	var b strings.Builder
 	for i := 0; i < n; i++ {

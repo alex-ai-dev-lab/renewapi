@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"net/http"
@@ -112,6 +113,7 @@ func runDefaultProtocolMatrix(t *testing.T, rich, codex bool) {
 				t.Run(fmt.Sprintf("%s_to_%s_stream_%t", client.endpoint, upstream.endpoint, stream), func(t *testing.T) {
 					db := setupEmptyStreamRecoveryDB(t)
 					seedRecoveryPrincipal(t, db)
+					require.NoError(t, db.Model(&model.Token{}).Where("id = ?", 1).Update("key", "matrixapikey").Error)
 					old := operation_setting.ModelEndpointDefaults2JsonString()
 					t.Cleanup(func() { require.NoError(t, operation_setting.UpdateModelEndpointDefaultsByJsonString(old)) })
 					profile := fmt.Sprintf(`{"enabled":true,"normalize_text_endpoints":true,"entries":[{"match_type":"exact","pattern":"%s","channel_type":1,"default_endpoint":"%s","supported_endpoints":["openai","openai-response","anthropic"]}]}`, failoverTestModel, upstream.endpoint)
@@ -178,7 +180,20 @@ func runDefaultProtocolMatrix(t *testing.T, rich, codex bool) {
 							require.Equal(t, "once", request["instructions"])
 							require.NotNil(t, request["client_metadata"])
 						}
-						writeBridgeFixture(t, w, upstream.endpoint, stream || codex, turn)
+						if codex && turn == 1 {
+							// Some compatible upstreams only include tool calls in the
+							// terminal snapshot. Exercise the entire authenticated chain.
+							fixture := httptest.NewRecorder()
+							writeBridgeFixture(t, fixture, upstream.endpoint, true, turn)
+							w.Header().Set("Content-Type", "text/event-stream")
+							for _, frame := range strings.Split(fixture.Body.String(), "\n\n") {
+								if strings.Contains(frame, `"type":"response.created"`) || strings.Contains(frame, `"type":"response.completed"`) {
+									_, _ = io.WriteString(w, frame+"\n\n")
+								}
+							}
+						} else {
+							writeBridgeFixture(t, w, upstream.endpoint, stream || codex, turn)
+						}
 					}))
 					t.Cleanup(server.Close)
 					channel := recoveryIntegrationChannel(9851, "protocol-matrix", server.URL, 100, failoverTestModel)
@@ -195,9 +210,19 @@ func runDefaultProtocolMatrix(t *testing.T, rich, codex bool) {
 					require.NoError(t, channel.AddAbilities(nil))
 					model.InitChannelCache()
 					for turn := 1; turn <= 2; turn++ {
-						router, _, _ := recoveryIntegrationRouter(fmt.Sprintf("matrix-%s-%s-%t-%d", client.endpoint, upstream.endpoint, stream, turn))
-						if client.path != "/v1/responses" {
-							router.POST(client.path, middleware.Distribute(), func(c *gin.Context) { Relay(c, client.format) })
+						router := gin.New()
+						router.Use(middleware.DecompressRequestMiddleware(), middleware.BodyStorageCleanup())
+						router.Use(func(c *gin.Context) {
+							c.Set(common.RequestIdKey, fmt.Sprintf("matrix-%s-%s-%t-%d", client.endpoint, upstream.endpoint, stream, turn))
+							c.Next()
+						})
+						router.Use(middleware.TokenAuth(), middleware.TokenRequestLimit(), middleware.ModelRequestRateLimit())
+						router.POST(client.path, middleware.Distribute(), func(c *gin.Context) { Relay(c, client.format) })
+						if turn == 1 {
+							unauthorized := httptest.NewRecorder()
+							router.ServeHTTP(unauthorized, httptest.NewRequest(http.MethodPost, client.path, strings.NewReader(`{}`)))
+							require.Equal(t, http.StatusUnauthorized, unauthorized.Code)
+							require.Zero(t, calls.Load())
 						}
 						payload := bridgeClientRequest(client.endpoint, stream, turn)
 						if rich {
@@ -217,8 +242,25 @@ func runDefaultProtocolMatrix(t *testing.T, rich, codex bool) {
 						}
 						body, err := common.Marshal(payload)
 						require.NoError(t, err)
+						if turn == 2 {
+							var compressed bytes.Buffer
+							writer := gzip.NewWriter(&compressed)
+							_, err = writer.Write(body)
+							require.NoError(t, err)
+							require.NoError(t, writer.Close())
+							body = compressed.Bytes()
+						}
 						req := httptest.NewRequest(http.MethodPost, client.path, bytes.NewReader(body))
 						req.Header.Set("Content-Type", "application/json")
+						if turn == 2 {
+							req.Header.Set("Content-Encoding", "gzip")
+						}
+						if client.endpoint == "anthropic" {
+							req.Header.Set("x-api-key", "sk-matrixapikey")
+							req.Header.Set("anthropic-version", "2023-06-01")
+						} else {
+							req.Header.Set("Authorization", "Bearer sk-matrixapikey")
+						}
 						w := httptest.NewRecorder()
 						router.ServeHTTP(w, req)
 						require.Equal(t, 200, w.Code, w.Body.String())
@@ -355,7 +397,8 @@ func writeBridgeFixture(t *testing.T, w http.ResponseWriter, protocol string, st
 		emit(map[string]any{"type": "response.created", "response": map[string]any{"id": "resp_matrix", "model": failoverTestModel}})
 		for i, item := range output {
 			m := item.(map[string]any)
-			emit(map[string]any{"type": "response.output_item.added", "output_index": i, "item": m})
+			initial := map[string]any{"type": m["type"], "id": m["id"], "call_id": m["call_id"], "name": m["name"], "arguments": ""}
+			emit(map[string]any{"type": "response.output_item.added", "output_index": i, "item": initial})
 			if turn == 1 {
 				emit(map[string]any{"type": "response.function_call_arguments.delta", "item_id": m["id"], "output_index": i, "delta": m["arguments"]})
 			} else {

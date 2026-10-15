@@ -162,7 +162,6 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 	var (
 		usage       = &dto.Usage{}
-		outputText  strings.Builder
 		usageText   strings.Builder
 		sentStart   bool
 		sentStop    bool
@@ -319,10 +318,6 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		if callID == "" {
 			return true
 		}
-		if outputText.Len() > 0 {
-			// Prefer streaming assistant text over tool calls to match non-stream behavior.
-			return true
-		}
 		if !sendStartIfNeeded() {
 			return false
 		}
@@ -341,7 +336,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		if info.RelayFormat == types.RelayFormatClaude && argsDelta != "" {
 			argsDelta = ""
 		}
-		if name == "" && argsDelta == "" {
+		if argsDelta == "" && (name == "" || toolCallNameSent[callID]) {
 			sawToolCall = true
 			return true
 		}
@@ -373,6 +368,46 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			usageText.WriteString(argsDelta)
 		}
 		return true
+	}
+
+	// Item, arguments.done and terminal snapshots all carry cumulative arguments.
+	// Merge them once so terminal fallback cannot duplicate streamed JSON.
+	syncToolCall := func(callID, name, arguments string) bool {
+		if name != "" {
+			toolCallNameByID[callID] = name
+			if info.AntiPoisonGuardPrefix != "" && !antiPoisonToolSeen[callID] {
+				antiPoisonToolSeen[callID] = true
+				antiPoisonTools = append(antiPoisonTools, name)
+			}
+		}
+		delta := ""
+		if arguments != "" {
+			previous := toolCallArgsByID[callID]
+			if !strings.HasPrefix(arguments, previous) {
+				streamErr = types.NewOpenAIError(fmt.Errorf("inconsistent completed tool arguments"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+				return false
+			}
+			delta = arguments[len(previous):]
+			toolCallArgsByID[callID] = arguments
+		}
+		return sendToolCallDelta(callID, name, delta)
+	}
+
+	syncToolItem := func(item *dto.ResponsesOutput) bool {
+		if item == nil || item.Type != "function_call" {
+			return true
+		}
+		itemID, callID := strings.TrimSpace(item.ID), strings.TrimSpace(item.CallId)
+		if callID == "" {
+			callID = itemID
+		}
+		if callID == "" {
+			return true
+		}
+		if itemID != "" {
+			toolCallCanonicalIDByItemID[itemID] = callID
+		}
+		return syncToolCall(callID, strings.TrimSpace(item.Name), item.ArgumentsString())
 	}
 
 	flushClaudeToolCallArguments := func() bool {
@@ -503,7 +538,6 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 					sr.Stop(streamErr)
 					return
 				}
-				outputText.WriteString(delta)
 				usageText.WriteString(delta)
 				chunk := &dto.ChatCompletionsStreamResponse{
 					Id:      responseId,
@@ -526,49 +560,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			}
 
 		case "response.output_item.added", "response.output_item.done":
-			if streamResp.Item == nil {
-				break
-			}
-			if streamResp.Item.Type != "function_call" {
-				break
-			}
-
-			itemID := strings.TrimSpace(streamResp.Item.ID)
-			callID := strings.TrimSpace(streamResp.Item.CallId)
-			if callID == "" {
-				callID = itemID
-			}
-			if itemID != "" && callID != "" {
-				toolCallCanonicalIDByItemID[itemID] = callID
-			}
-			name := strings.TrimSpace(streamResp.Item.Name)
-			if name != "" {
-				toolCallNameByID[callID] = name
-				if info.AntiPoisonGuardPrefix != "" {
-					key := callID
-					if key == "" {
-						key = name
-					}
-					if !antiPoisonToolSeen[key] {
-						antiPoisonToolSeen[key] = true
-						antiPoisonTools = append(antiPoisonTools, name)
-					}
-				}
-			}
-
-			newArgs := streamResp.Item.ArgumentsString()
-			prevArgs := toolCallArgsByID[callID]
-			argsDelta := ""
-			if newArgs != "" {
-				if strings.HasPrefix(newArgs, prevArgs) {
-					argsDelta = newArgs[len(prevArgs):]
-				} else {
-					argsDelta = newArgs
-				}
-				toolCallArgsByID[callID] = newArgs
-			}
-
-			if !sendToolCallDelta(callID, name, argsDelta) {
+			if !syncToolItem(streamResp.Item) {
 				sr.Stop(streamErr)
 				return
 			}
@@ -594,18 +586,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			if callID == "" {
 				callID = itemID
 			}
-			arguments := dto.ResponsesArgumentsString(streamResp.Arguments)
-			previous := toolCallArgsByID[callID]
-			if arguments == "" || callID == "" {
-				break
-			}
-			if !strings.HasPrefix(arguments, previous) {
-				streamErr = types.NewOpenAIError(fmt.Errorf("inconsistent completed tool arguments"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
-				sr.Stop(streamErr)
-				return
-			}
-			toolCallArgsByID[callID] = arguments
-			if delta := arguments[len(previous):]; delta != "" && !sendToolCallDelta(callID, "", delta) {
+			if callID != "" && !syncToolCall(callID, "", dto.ResponsesArgumentsString(streamResp.Arguments)) {
 				sr.Stop(streamErr)
 				return
 			}
@@ -642,22 +623,11 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 						usage.CompletionTokenDetails.ReasoningTokens = streamResp.Response.Usage.CompletionTokenDetails.ReasoningTokens
 					}
 				}
-				if info.AntiPoisonGuardPrefix != "" {
-					for _, out := range streamResp.Response.Output {
-						if out.Type == "function_call" && strings.TrimSpace(out.Name) != "" {
-							name := strings.TrimSpace(out.Name)
-							key := strings.TrimSpace(out.CallId)
-							if key == "" {
-								key = strings.TrimSpace(out.ID)
-							}
-							if key == "" {
-								key = name
-							}
-							if !antiPoisonToolSeen[key] {
-								antiPoisonToolSeen[key] = true
-								antiPoisonTools = append(antiPoisonTools, name)
-							}
-						}
+				// Recover tool output omitted from intermediate events.
+				for i := range streamResp.Response.Output {
+					if !syncToolItem(&streamResp.Response.Output[i]) {
+						sr.Stop(streamErr)
+						return
 					}
 				}
 			}
@@ -689,7 +659,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 				if info.RelayFormat == types.RelayFormatClaude && info.ClaudeConvertInfo != nil {
 					info.ClaudeConvertInfo.Usage = usage
 				}
-				finishReason := service.ResponsesFinishReason(streamResp.Response, sawToolCall && outputText.Len() == 0)
+				finishReason := service.ResponsesFinishReason(streamResp.Response, sawToolCall)
 				stop := helper.GenerateStopResponse(responseId, createAt, model, finishReason)
 				if !sendChatChunk(stop) {
 					sr.Stop(streamErr)
@@ -744,7 +714,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			info.ClaudeConvertInfo.Usage = usage
 		}
 		finishReason := "stop"
-		if sawToolCall && outputText.Len() == 0 {
+		if sawToolCall {
 			finishReason = "tool_calls"
 		}
 		stop := helper.GenerateStopResponse(responseId, createAt, model, finishReason)

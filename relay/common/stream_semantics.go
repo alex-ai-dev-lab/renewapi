@@ -31,11 +31,19 @@ func ClassifyStreamPayload(data string) StreamFrameMeaning {
 	}
 	switch typ {
 	case "response.output_text.delta", "response.refusal.delta", "response.reasoning_text.delta",
-		"response.reasoning_summary_text.delta", "response.function_call_arguments.delta",
+		"response.reasoning_summary_text.delta", "response.function_call_arguments.delta", "response.custom_tool_call_input.delta",
 		"response.audio.delta", "response.output_audio.delta", "response.audio_transcript.delta":
 		m.Semantic = nonemptyStreamValue(r.Get("delta"))
 	case "response.image_generation_call.partial_image":
 		m.Semantic = nonemptyStreamValue(r.Get("partial_image_b64"))
+	case "response.output_text.done":
+		m.Semantic = nonemptyStreamValue(r.Get("text"))
+	case "response.refusal.done":
+		m.Semantic = nonemptyStreamValue(r.Get("refusal"))
+	case "response.function_call_arguments.done":
+		m.Semantic = nonemptyStreamValue(r.Get("arguments"))
+	case "response.custom_tool_call_input.done":
+		m.Semantic = nonemptyStreamValue(r.Get("input"))
 	case "response.output_item.added", "response.output_item.done":
 		m.Semantic = streamOutputItem(r.Get("item"))
 	case "response.completed", "response.incomplete":
@@ -95,8 +103,14 @@ func streamChatMessage(r gjson.Result) bool {
 
 func streamOutputItem(r gjson.Result) bool {
 	switch r.Get("type").String() {
-	case "function_call", "tool_use":
+	case "function_call", "custom_tool_call", "tool_use":
 		return nonemptyStreamValue(r.Get("name"))
+	case "computer_call", "local_shell_call":
+		return nonemptyStreamValue(r.Get("action.type"))
+	case "shell_call":
+		return len(r.Get("action.commands").Array()) > 0
+	case "apply_patch_call":
+		return nonemptyStreamValue(r.Get("operation.type"))
 	case "compaction", "context_compaction", "compaction_summary":
 		return nonemptyStreamValue(r.Get("encrypted_content"))
 	case "image_generation_call":

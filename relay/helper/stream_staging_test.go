@@ -21,6 +21,12 @@ func TestStreamStagingCommitsOnlySemanticOutput(t *testing.T) {
 		{"claude", `{"type":"message_start"}`, `{"type":"content_block_delta","delta":{"type":"text_delta","text":"hello"}}`, `{"type":"message_stop"}`},
 		{"gemini", `{"candidates":[{"content":{"role":"model"}}]}`, `{"candidates":[{"content":{"parts":[{"text":"hello"}]}}]}`, `{"candidates":[{"finishReason":"STOP"}]}`},
 		{"tool", `{"type":"response.created"}`, `{"type":"response.output_item.added","item":{"type":"function_call","name":"search","call_id":"call_one"}}`, `{"type":"response.completed"}`},
+		{"custom_tool", `{"type":"response.created"}`, `{"type":"response.output_item.added","item":{"type":"custom_tool_call","name":"emit","call_id":"call_one","input":""}}`, `{"type":"response.completed"}`},
+		{"custom_tool_delta", `{"type":"response.created"}`, `{"type":"response.custom_tool_call_input.delta","delta":"hello"}`, `{"type":"response.completed"}`},
+		{"custom_tool_terminal", `{"type":"response.created"}`, `{"type":"response.completed","response":{"output":[{"type":"custom_tool_call","name":"emit","input":"hello"}]}}`, "[DONE]"},
+		{"computer_tool", `{"type":"response.created"}`, `{"type":"response.output_item.added","item":{"type":"computer_call","call_id":"call_one","action":{"type":"screenshot"}}}`, `{"type":"response.completed"}`},
+		{"shell_tool", `{"type":"response.created"}`, `{"type":"response.output_item.added","item":{"type":"shell_call","call_id":"call_one","action":{"commands":["pwd"]}}}`, `{"type":"response.completed"}`},
+		{"tool_arguments_done", `{"type":"response.created"}`, `{"type":"response.function_call_arguments.done","arguments":"{}"}`, `{"type":"response.completed"}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			r := httptest.NewRecorder()

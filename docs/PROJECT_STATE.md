@@ -1,18 +1,18 @@
 # RenewAPI 当前项目状态
 
-更新日期：2026-10-17。源码和验证状态以当前 Git 提交为准，本文不代表生产部署状态。
+更新日期：2026-10-17。源码状态以当前 Git 提交为准，生产镜像与验收范围以对应部署归档为准。
 
-## v1.5.0 发布准备
+## v1.5.0 已发布上线
 
-用户已授权提交全部已验收修复，通过 GitHub Actions 构建到 Releases，服务器代理下载并无缝切换，验证成功后清理本次中间文件及备份。产品版本更新为 v1.5.0；先通过源码提交完整门禁，再创建不可变产品标签。服务器实际状态、加列迁移、旧连接排空及清理范围记录于[发布任务](../tasks/active/2026-10-deploy-v1.5.0.md)，完成前不视为已发布或上线。
+正式 [v1.5.0](https://github.com/alex-ai-dev-lab/renewapi/releases/tag/renewapi-v1.5.0) 已发布并上线，产品源码 `7cd988595a317c7c79c1c551273a17853f7939d6`。[主分支](https://github.com/alex-ai-dev-lab/renewapi/actions/runs/39020424377)及[正式标签](https://github.com/alex-ai-dev-lab/renewapi/actions/runs/39021051946)完整门禁通过，双架构镜像及 QA 附件已发布。首轮 main 的 Codex 测试替身拦截客户端不匹配，已修正后重新通过门禁，未放宽断言。服务器代理下载、摘要/镜像身份验证、SQLite 加列迁移、独立 Compose 切换及清理完成；候选与公网 14 项真实 API 验收、最长 102.55 秒长流及 495 轮持续监测/19 次切换探测通过。异常、验证边界和清理清单见[发布归档](../tasks/archive/2026-10-deploy-v1.5.0.md)。
 
-## 模块协作复审（未发布）
+## 模块协作复审（随 v1.5.0 已发布）
 
-复审修复 4 项既有运行时缺口：HTTP 客户端重建竞态、长窗口预算提前清理、Redis/内存并发槽释放错配、两分钟长请求并发预算过期；另消除 MiniMax 测试竞态。普通/分片 H2/SSRF 在途响应重建测试、槽位续租/取消/终态释放、全仓 Go 测试/vet/build 及 common/service/middleware/relay/controller race 通过；前端 237 测试、类型、构建和改动文件 lint 通过。全量前端 lint 仍有未修改文件的 31 errors/19 warnings。冷限流 key 当前为 168 B/op，原性能报告中的 152 是上一阶段结果。Redis 新槽位协议发布前需排空旧在途请求；没有本轮真实 Redis 集群、外部三库或生产验收。范围与证据见[复审报告](audits/2026-10-integration-review.md)、[任务归档](../tasks/archive/2026-10-integration-review.md)及 ADR-021。原修复保留，未提交、推送或部署。
+复审修复 4 项既有运行时缺口：HTTP 客户端重建竞态、长窗口预算提前清理、Redis/内存并发槽释放错配、两分钟长请求并发预算过期；另消除 MiniMax 测试竞态。普通/分片 H2/SSRF 在途响应重建测试、槽位续租/取消/终态释放、全仓 Go 测试/vet/build 及 common/service/middleware/relay/controller race 通过；前端 237 测试、类型、构建和改动文件 lint 通过。全量前端 lint 仍有未修改文件的 31 errors/19 warnings。冷限流 key 当前为 168 B/op，原性能报告中的 152 是上一阶段结果。Redis 新槽位协议升级需排空旧在途请求；发布门禁已补齐四版本外部数据库验证，生产 SQLite 实例已验收，但生产未配置 Redis，本轮未验收真实 Redis 集群。范围与阶段证据见[复审报告](audits/2026-10-integration-review.md)、[任务归档](../tasks/archive/2026-10-integration-review.md)及 ADR-021，发布验收见上方归档。
 
-## 后端性能与调用体验升级（未发布）
+## 后端性能与调用体验升级（随 v1.5.0 已发布）
 
-已实施 RawMessage 批量独立复制、JSON 无变化快返/局部重建、限流按需存储/LRU 清理、请求内工具索引、独立 HTTP 长流 H2 探活，并新增 HTTP attempt 取消后关闭响应，保留父请求重试及 WS 复用。三轮局部基准：1 MiB 复制 59.686ms→0.1164ms，1,000 轮工具历史转换 6.031s→12.119ms，冷限流 key 当阶段分配 245,785→152 B/op（后续复审为 168）；不是端到端吞吐或生产延迟。全仓 Go 测试、vet、构建、受影响路径 race 和 reasoning 等价 fuzz 通过。实际行为、额外 7 个候选处置与测试边界见[实施报告](audits/2026-10-performance-upgrade.md)、[任务归档](../tasks/archive/2026-10-performance-upgrade.md)，长期约束见 [ADR-021](decisions/021-relay-performance-and-stream-lifecycle.md)。尚未提交、推送或部署，既有修复全部保留。
+已实施 RawMessage 批量独立复制、JSON 无变化快返/局部重建、限流按需存储/LRU 清理、请求内工具索引、独立 HTTP 长流 H2 探活，并新增 HTTP attempt 取消后关闭响应，保留父请求重试及 WS 复用。三轮局部基准：1 MiB 复制 59.686ms→0.1164ms，1,000 轮工具历史转换 6.031s→12.119ms，冷限流 key 当阶段分配 245,785→152 B/op（后续复审为 168）；不是端到端吞吐或生产延迟。全仓 Go 测试、vet、构建、受影响路径 race 和 reasoning 等价 fuzz 通过。实际行为、额外 7 个候选处置与测试边界见[实施报告](audits/2026-10-performance-upgrade.md)、[任务归档](../tasks/archive/2026-10-performance-upgrade.md)，长期约束见 [ADR-021](decisions/021-relay-performance-and-stream-lifecycle.md)。已随 v1.5.0 提交、发布及部署，既有修复全部保留。
 
 ## 三个参考源后端功能选型（未实施）
 
@@ -22,9 +22,9 @@
 
 已固定 NewAPI / Sub2API / CPA 的 10-17 参考 HEAD，列举近期 291 条非合并提交、保存 49 个候选 patch，形成 13 组待适配行为和一组依赖安全升级建议。已复现 Playground 跨账号本地数据、缓存用量、分组限流、旧成功清冷却、混合流正文及图片/工具转换缺口；Go1.25.1、Linux 构建配置下 govulncheck 有 43 个去重符号可达告警。优先统一升级 Go/相关依赖，再按现有组件最小修复，详见[更新检查报告](audits/2026-10-upstream-update-review.md)与 [处置表](../UPSTREAM_PORTS.md)。本轮只检查并记录候选，没有导入、提交或发布；原全量上游审计基线和上一轮修复验收记录保持不变。
 
-## 合并审计修复（未发布）
+## 合并审计修复（随 v1.5.0 已发布）
 
-在独立工作副本 `repair-20261017` 完成合并修复及尾项复审：28 条已修复验证，MJ 图片按用户确认的公开分享契约保留，没有部分解决或待产品决定项。日志 UI 使用双向游标，旧 API 限制深 OFFSET；off 新请求复用既有持久账本并修复任务重复扣退，默认仍为 shadow。Go 全仓、前端 237 测试、真实三库矩阵/既有完整迁移、24 组独立进程崩溃重启、40 页面/视口及最终 7 项游标浏览器回归通过。逐项结果与量测边界见[复审报告](audits/2026-10-consolidated-repair.md)，设计见 [ADR-020](decisions/020-audit-repair-boundaries.md)，交接见 [修复归档](../tasks/archive/2026-10-consolidated-audit-repair.md)。尚未提交、推送或部署；旧 off 无账本差额不猜测回填，升级先排空旧在途请求，真实 Stripe 渠道验收仍待发布前执行。
+在独立工作副本 `repair-20261017` 完成合并修复及尾项复审：28 条已修复验证，MJ 图片按用户确认的公开分享契约保留，没有部分解决或待产品决定项。日志 UI 使用双向游标，旧 API 限制深 OFFSET；off 新请求复用既有持久账本并修复任务重复扣退，默认仍为 shadow。Go 全仓、前端 237 测试、真实三库矩阵/既有完整迁移、24 组独立进程崩溃重启、40 页面/视口及最终 7 项游标浏览器回归通过。逐项结果与量测边界见[复审报告](audits/2026-10-consolidated-repair.md)，设计见 [ADR-020](decisions/020-audit-repair-boundaries.md)，交接见 [修复归档](../tasks/archive/2026-10-consolidated-audit-repair.md)。已随 v1.5.0 提交、发布及部署；旧 off 无账本差额不猜测回填。未执行真实 Stripe 扣款或退款，真实商户验收仍为独立验证边界。
 
 ## 长流约 60 秒断开修复
 
@@ -102,8 +102,7 @@ UI 第二轮复查修复已随本版部署，覆盖成功率对比度、复制�
 
 ## 当前线上部署
 
-2026-10-15 已上线 v1.4.2，站点 `router.108848.xyz:1443`，容器 `new-api-v1-4-2`，Caddy 上游 3023。源码 `687aa8e2acee4ded9b39bc55237a7f3292e4097f`，正式标签完整门禁通过；环境、会话密钥、挂载及 off 计费模式保留，数据库及 121 条端点规则校验通过。部署、旧实例停止及清理见[部署归档](../tasks/archive/2026-10-deploy-v1.4.2.md)。
-后续真实长流排查发现 Caddy 的一分钟请求体期限会截断响应，已按 ADR-019 单独修复；原短请求验收不能证明长流正常。
+2026-10-17 已上线 v1.5.0，站点 `router.108848.xyz:1443`，容器 `new-api-v1-5-0`，Caddy 上游 `127.0.0.1:3025`。源码 `7cd988595a317c7c79c1c551273a17853f7939d6`，正式标签完整门禁通过；环境、会话密钥、挂载及 off 计费模式保留，数据库、105 个渠道、86 项配置及 121 条端点规则校验通过，healthy、重启 0。保留 ADR-019 的长流配置，公网 Claude 100.77 秒、Responses 102.55 秒均正常终态并成功计费。本次下载包、临时文件、备份及退役容器已清理；旧 v1.4.2 连接排空后停止超时，被 Docker 终止（137，非 OOM），新版本隔离停止验证 exit 0。详见[部署归档](../tasks/archive/2026-10-deploy-v1.5.0.md)。
 
 ## 线上产品复核
 
@@ -163,7 +162,7 @@ UI 第二轮复查修复已随本版部署，覆盖成功率对比度、复制�
 
 ## Billing 与历史任务
 
-代码默认继续为 `BILLING_LEDGER_MODE=shadow`。2026-10-17 审计收尾将 off 新请求接入既有持久账本，补修 shadow/off 异步任务重复扣退路径；此前“off 无跨进程保证”的记录仅描述旧版本。新恢复边界与模式切换条件见 [Billing enforce 说明](billing-ledger-enforce.md)。线上仍运行旧版本及现有 off 配置；升级先排空旧在途请求，在隔离副本验证数据不变，再执行备份与切换，旧无账本差额不自动推算。
+代码默认继续为 `BILLING_LEDGER_MODE=shadow`。2026-10-17 审计收尾将 off 新请求接入既有持久账本，补修 shadow/off 异步任务重复扣退路径；此前“off 无跨进程保证”的记录仅描述旧版本。新恢复边界与模式切换条件见 [Billing enforce 说明](billing-ledger-enforce.md)。线上已升级 v1.5.0 并保留现有 off 配置；隔离副本数据核对、加列迁移与旧实例连接排空已完成，旧无账本差额不自动推算。
 
 历史 RU-A 缺少外部数据库与进程重启证据的状态已由本轮开发验证补齐：实际 MySQL 5.7/8.4、PostgreSQL 9.6/16 Actions，以及 SQLite 独立进程崩溃/恢复。证据以任务及 Billing 文档记录的提交为准。其余旧 UX/性能审计结论未因此自动变成已完成，仍按对应任务的历史证据边界处理。
 

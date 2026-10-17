@@ -14,34 +14,36 @@ import (
 )
 
 func TestBillingReconcilerSurvivesProcessRestart(t *testing.T) {
-	for _, mode := range []string{BillingLedgerModeShadow, BillingLedgerModeEnforce} {
+	for _, mode := range []string{BillingLedgerModeOff, BillingLedgerModeShadow, BillingLedgerModeEnforce} {
 		for _, scenario := range []string{"settle", "refund", "orphan", "uncommitted"} {
-			t.Run(mode+"/"+scenario, func(t *testing.T) {
-				dsn := filepath.Join(t.TempDir(), "restart.db")
-				binary, err := os.Executable()
-				require.NoError(t, err)
-				run := func(phase string) ([]byte, error) {
-					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-					defer cancel()
-					command := exec.CommandContext(ctx, binary, "-test.run=^TestBillingRestartWorker$", "-test.v")
-					for _, entry := range os.Environ() {
-						key := strings.SplitN(entry, "=", 2)[0]
-						if strings.HasPrefix(key, "BILLING_TEST_") || key == "BILLING_LEDGER_MODE" || strings.HasPrefix(key, "RENEWAPI_RESTART_") {
-							continue
+			for _, source := range []string{BillingSourceWallet, BillingSourceSubscription} {
+				t.Run(mode+"/"+scenario+"/"+source, func(t *testing.T) {
+					dsn := filepath.Join(t.TempDir(), "restart.db")
+					binary, err := os.Executable()
+					require.NoError(t, err)
+					run := func(phase string) ([]byte, error) {
+						ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+						defer cancel()
+						command := exec.CommandContext(ctx, binary, "-test.run=^TestBillingRestartWorker$", "-test.v")
+						for _, entry := range os.Environ() {
+							key := strings.SplitN(entry, "=", 2)[0]
+							if strings.HasPrefix(key, "BILLING_TEST_") || key == "BILLING_LEDGER_MODE" || strings.HasPrefix(key, "RENEWAPI_RESTART_") {
+								continue
+							}
+							command.Env = append(command.Env, entry)
 						}
-						command.Env = append(command.Env, entry)
+						command.Env = append(command.Env, "BILLING_TEST_DRIVER=sqlite", "BILLING_TEST_DSN="+dsn,
+							"BILLING_LEDGER_MODE="+mode, "RENEWAPI_RESTART_PHASE="+phase, "RENEWAPI_RESTART_SCENARIO="+scenario, "RENEWAPI_RESTART_SOURCE="+source)
+						return command.CombinedOutput()
 					}
-					command.Env = append(command.Env, "BILLING_TEST_DRIVER=sqlite", "BILLING_TEST_DSN="+dsn,
-						"BILLING_LEDGER_MODE="+mode, "RENEWAPI_RESTART_PHASE="+phase, "RENEWAPI_RESTART_SCENARIO="+scenario)
-					return command.CombinedOutput()
-				}
-				output, err := run("crash")
-				var exitError *exec.ExitError
-				require.ErrorAs(t, err, &exitError, string(output))
-				require.Equal(t, 23, exitError.ExitCode(), string(output))
-				output, err = run("recover")
-				require.NoError(t, err, string(output))
-			})
+					output, err := run("crash")
+					var exitError *exec.ExitError
+					require.ErrorAs(t, err, &exitError, string(output))
+					require.Equal(t, 23, exitError.ExitCode(), string(output))
+					output, err = run("recover")
+					require.NoError(t, err, string(output))
+				})
+			}
 		}
 	}
 }
@@ -54,7 +56,7 @@ func TestBillingRestartWorker(t *testing.T) {
 	}
 	mode, scenario := os.Getenv("BILLING_LEDGER_MODE"), os.Getenv("RENEWAPI_RESTART_SCENARIO")
 	if phase == "crash" {
-		ctx, session := newBillingReliabilitySession(t, mode, BillingSourceWallet)
+		ctx, session := newBillingReliabilitySession(t, mode, os.Getenv("RENEWAPI_RESTART_SOURCE"))
 		switch scenario {
 		case "settle", "refund":
 			failBillingTokenWrites(t)
@@ -94,7 +96,14 @@ func TestBillingRestartWorker(t *testing.T) {
 	} else {
 		require.Equal(t, model.BillingLedgerStateRefunded, ledger.State)
 	}
-	require.Equal(t, 1000-expected, getUserQuota(t, 401))
+	if ledger.FundingSource == BillingSourceSubscription {
+		var sub model.UserSubscription
+		require.NoError(t, model.DB.First(&sub, ledger.SubscriptionID).Error)
+		require.EqualValues(t, expected, sub.AmountUsed)
+		require.Equal(t, 1000, getUserQuota(t, 401))
+	} else {
+		require.Equal(t, 1000-expected, getUserQuota(t, 401))
+	}
 	require.Equal(t, 1000-expected, getTokenRemainQuota(t, 401))
 	require.Equal(t, expected, getTokenUsedQuota(t, 401))
 	var user model.User

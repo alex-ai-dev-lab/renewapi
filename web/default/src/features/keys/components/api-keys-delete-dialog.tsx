@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { handleServerError } from '@/lib/handle-server-error'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,8 +52,8 @@ export function ApiKeysDeleteDialog() {
       } else {
         toast.error(result.message || t(ERROR_MESSAGES.DELETE_FAILED))
       }
-    } catch {
-      toast.error(t(ERROR_MESSAGES.UNEXPECTED))
+    } catch (error) {
+      handleServerError(error)
     } finally {
       setIsDeleting(false)
     }

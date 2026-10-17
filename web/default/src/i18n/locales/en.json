@@ -2792,6 +2792,7 @@
     "No latency data available": "No latency data available",
     "No log entries matched the selected time.": "No log entries matched the selected time.",
     "No logs": "No logs",
+    "Latest logs": "Latest logs",
     "No Logs Found": "No Logs Found",
     "No mappings configured. Click \"Add Row\" to get started.": "No mappings configured. Click \"Add Row\" to get started.",
     "No matches found": "No matches found",
@@ -6563,7 +6564,11 @@
     "Read the API connection instructions and request examples.": "Read the API connection instructions and request examples.",
     "Move up": "Move up",
     "Move down": "Move down",
-    "Toggle details": "Toggle details"
+    "Toggle details": "Toggle details",
+    "Batch creation stopped: {{succeeded}} succeeded, {{failed}} failed, {{unknown}} unknown, {{pending}} not started. Refresh the list before creating more keys.": "Batch creation stopped: {{succeeded}} succeeded, {{failed}} failed, {{unknown}} unknown, {{pending}} not started. Refresh the list before creating more keys.",
+    "Refresh the quote before paying": "Refresh the quote before paying",
+    "Failed to load language. Please try again.": "Failed to load language. Please try again.",
+    "More than {{count}} logs match. Narrow the time range or filters for an exact count.": "More than {{count}} logs match. Narrow the time range or filters for an exact count."
   },
   "Responses request profile": "Responses request profile",
   "Follow channel type": "Follow channel type",

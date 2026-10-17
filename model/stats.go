@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"database/sql"
+	"sort"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -188,15 +189,13 @@ func GetOverviewStatsWithContext(ctx context.Context, startTime time.Time) (*Ove
 	if stats.Trend, err = getTrendData(queryDB, startTime); err != nil {
 		return nil, err
 	}
-	if stats.TopChannels, err = getTopChannels(queryDB, startTime, 10); err != nil {
+	channels, err := getChannelsBy(queryDB, startTime, 0, "total_requests DESC, channel_id ASC")
+	if err != nil {
 		return nil, err
 	}
-	if stats.TopFailChannels, err = getChannelsBy(queryDB, startTime, 8, "error_rate DESC, total_requests DESC"); err != nil {
-		return nil, err
-	}
-	if stats.SlowestChannels, err = getChannelsBy(queryDB, startTime, 8, "avg_first_token DESC, total_requests DESC"); err != nil {
-		return nil, err
-	}
+	stats.TopChannels = channels[:min(10, len(channels))]
+	stats.TopFailChannels = rankChannels(channels, 8, func(c ChannelStat) float64 { return c.ErrorRate })
+	stats.SlowestChannels = rankChannels(channels, 8, func(c ChannelStat) float64 { return c.AvgFirstToken })
 	if stats.TopModels, err = getTopModels(queryDB, startTime, 10); err != nil {
 		return nil, err
 	}
@@ -204,6 +203,20 @@ func GetOverviewStatsWithContext(ctx context.Context, startTime time.Time) (*Ove
 		return nil, err
 	}
 	return stats, nil
+}
+
+func rankChannels(channels []ChannelStat, limit int, score func(ChannelStat) float64) []ChannelStat {
+	result := append([]ChannelStat{}, channels...)
+	sort.Slice(result, func(i, j int) bool {
+		if score(result[i]) != score(result[j]) {
+			return score(result[i]) > score(result[j])
+		}
+		if result[i].TotalRequests != result[j].TotalRequests {
+			return result[i].TotalRequests > result[j].TotalRequests
+		}
+		return result[i].ChannelID < result[j].ChannelID
+	})
+	return result[:min(limit, len(result))]
 }
 
 func GetChannelStats(startTime time.Time) ([]ChannelStat, error) {
@@ -249,8 +262,8 @@ func GetChannelUserStatsWithContext(ctx context.Context, startTime time.Time, ch
 			COUNT(*) AS total_requests,
 			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS success_requests,
 			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS failed_requests,
-			CAST(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS REAL) * 100.0 / COUNT(*) AS success_rate,
-			CAST(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS REAL) * 100.0 / COUNT(*) AS error_rate,
+			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS success_rate,
+			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS error_rate,
 			AVG(` + frtExprFor(queryDB.logDB) + `) AS avg_first_token,
 			AVG(use_time) AS avg_use_time,
 			COALESCE(SUM(quota), 0) AS total_quota,
@@ -359,8 +372,8 @@ func getUsersBy(queryDB statsQuery, startTime time.Time, limit int, orderBy stri
 			COUNT(*) AS total_requests,
 			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS success_requests,
 			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS failed_requests,
-			CAST(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS REAL) * 100.0 / COUNT(*) AS success_rate,
-			CAST(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS REAL) * 100.0 / COUNT(*) AS error_rate,
+			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS success_rate,
+			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS error_rate,
 			AVG(` + frtExprFor(queryDB.logDB) + `) AS avg_first_token,
 			AVG(use_time) AS avg_use_time,
 			COALESCE(SUM(quota), 0) AS total_quota,
@@ -452,9 +465,37 @@ func getTrendData(queryDB statsQuery, startTime time.Time) ([]TrendPoint, error)
 func getTrendDataFiltered(queryDB statsQuery, startTime time.Time, channelID int, modelName string, userID int) ([]TrendPoint, error) {
 	trend := make([]TrendPoint, 0)
 	interval := trendIntervalSeconds(startTime)
+	if startTime.IsZero() {
+		bounds := queryDB.logDB.Model(&Log{}).Where("type IN ?", []int{LogTypeConsume, LogTypeError})
+		if channelID > 0 {
+			bounds = bounds.Where("channel_id = ?", channelID)
+		}
+		if modelName != "" {
+			bounds = bounds.Where("model_name = ?", modelName)
+		}
+		if userID > 0 {
+			bounds = bounds.Where("user_id = ?", userID)
+		}
+		var span struct {
+			First int64
+			Last  int64
+		}
+		if err := bounds.Select("COALESCE(MIN(created_at), 0) AS first, COALESCE(MAX(created_at), 0) AS last").Scan(&span).Error; err != nil {
+			return nil, err
+		}
+		// At most 500 aligned buckets, covering both the oldest and newest record.
+		interval = max(interval, (span.Last-span.First)/499+1)
+	}
+	bucket := "CAST(created_at / ? AS INTEGER) * ?"
+	switch queryDB.logDB.Dialector.Name() {
+	case "mysql":
+		bucket = "CAST(FLOOR(created_at / ?) AS SIGNED) * ?"
+	case "postgres":
+		bucket = "CAST(FLOOR(created_at::numeric / ?) AS BIGINT) * ?"
+	}
 	query := `
 		SELECT
-			(created_at / ?) * ? AS timestamp,
+			` + bucket + ` AS timestamp,
 			COUNT(*) AS requests,
 			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS success,
 			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS failure,
@@ -538,8 +579,8 @@ func getChannelsBy(queryDB statsQuery, startTime time.Time, limit int, orderBy s
 			COUNT(*) AS total_requests,
 			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS success_requests,
 			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS failed_requests,
-			CAST(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS REAL) * 100.0 / COUNT(*) AS success_rate,
-			CAST(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS REAL) * 100.0 / COUNT(*) AS error_rate,
+			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS success_rate,
+			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS error_rate,
 			AVG(` + frtExprFor(queryDB.logDB) + `) AS avg_first_token,
 			AVG(use_time) AS avg_use_time,
 			COALESCE(SUM(quota), 0) AS total_quota,
@@ -554,8 +595,11 @@ func getChannelsBy(queryDB statsQuery, startTime time.Time, limit int, orderBy s
 		query += " AND created_at >= ?"
 		args = append(args, startTime.Unix())
 	}
-	query += " GROUP BY channel_id ORDER BY " + orderBy + " LIMIT ?"
-	args = append(args, limit)
+	query += " GROUP BY channel_id ORDER BY " + orderBy
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
 
 	rows, err := queryDB.logDB.Raw(query, args...).Rows()
 	if err != nil {
@@ -618,8 +662,8 @@ func getTopModels(queryDB statsQuery, startTime time.Time, limit int) ([]ModelSt
 			COUNT(*) AS total_requests,
 			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS success_requests,
 			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS failed_requests,
-			CAST(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS REAL) * 100.0 / COUNT(*) AS success_rate,
-			CAST(SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) AS REAL) * 100.0 / COUNT(*) AS error_rate,
+			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS success_rate,
+			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS error_rate,
 			AVG(` + frtExprFor(queryDB.logDB) + `) AS avg_first_token,
 			AVG(use_time) AS avg_use_time,
 			COALESCE(SUM(quota), 0) AS total_quota,
@@ -765,7 +809,9 @@ func frtExprForAlias(db *gorm.DB, alias string) string {
 	case "mysql":
 		return "CASE WHEN JSON_VALID(" + prefix + "other) THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(" + prefix + "other, '$.frt')) AS DECIMAL(18,3)) ELSE NULL END"
 	case "postgres":
-		return "CAST(SUBSTRING(" + prefix + "other FROM '\"frt\"[[:space:]]*:[[:space:]]*(-?[0-9]+([.][0-9]+)?)') AS DOUBLE PRECISION)"
+		// GORM binds every question mark in Raw SQL, including quoted regexes.
+		// Equivalent bounded quantifiers keep regex syntax out of that binding.
+		return "CAST(SUBSTRING(" + prefix + "other FROM '\"frt\"[[:space:]]*:[[:space:]]*(-{0,1}[0-9]+([.][0-9]+){0,1})') AS DOUBLE PRECISION)"
 	default:
 		return "CASE WHEN json_valid(" + prefix + "other) THEN CAST(json_extract(" + prefix + "other, '$.frt') AS REAL) ELSE NULL END"
 	}

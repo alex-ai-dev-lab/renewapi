@@ -35,7 +35,9 @@ export interface ApiResponse<T = unknown> {
  */
 export type TopupInfoResponse = ApiResponse<TopupInfo>
 export type RedemptionResponse = ApiResponse<number>
-export type AmountResponse = ApiResponse<string>
+export type AmountResponse = ApiResponse<string> & {
+  quote_fingerprint?: string
+}
 export type PaymentResponse = ApiResponse<Record<string, unknown>> & {
   url?: string
 }
@@ -182,6 +184,7 @@ export interface RedemptionRequest {
  * Payment request parameters
  */
 export interface PaymentRequest {
+  quote_fingerprint?: string
   /** Topup amount */
   amount: number
   /** Payment method identifier */

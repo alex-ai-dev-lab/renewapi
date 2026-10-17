@@ -21,11 +21,13 @@ func TokenRequestLimit() gin.HandlerFunc {
 
 		concurrencyLimit := common.GetContextKeyInt(c, constant.ContextKeyTokenConcurrencyLimit)
 		if concurrencyLimit > 0 {
-			if !service.TryAcquireTokenConcurrency(tokenID, concurrencyLimit) {
+			slot, allowed := service.AcquireTokenConcurrency(c.Request.Context(), tokenID, concurrencyLimit)
+			if !allowed {
 				abortWithOpenAiMessage(c, http.StatusTooManyRequests, "token concurrency limit exceeded", types.ErrorCodeRateLimitExceeded)
 				return
 			}
-			defer service.ReleaseTokenConcurrency(tokenID, concurrencyLimit)
+			defer slot.Release()
+			c.Request = c.Request.WithContext(slot.Context)
 		}
 		c.Next()
 	}

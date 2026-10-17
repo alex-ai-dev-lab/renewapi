@@ -1072,7 +1072,7 @@ body[data-snowapi-console='true']
 body[data-snowapi-console='true']
   .snowapi-astryx-content
   [data-visual-region='page-content']
-  > * {
+  > :not([data-bulk-actions]):not([aria-live]) {
   width: 100%;
   min-width: 0;
   max-width: 86rem;

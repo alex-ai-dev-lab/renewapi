@@ -70,7 +70,7 @@ encoded into the product version.
 
 - `channel_test_prompts` 独立保存 Prompt Profile，渠道用 `channel_test_prompt_id` 引用。删除和引用写入共用事务锁，禁止悬空引用；可空唯一槽位保证默认项唯一。迁移为 `channel-test-prompts:v1`，见 [ADR-007](decisions/007-channel-test-prompt-profiles.md)。
 - `options-primary-key:v1` 只修复缺少实际主键的旧 Options 表；SQLite 重建时保留原值、索引、触发器及外键引用，存在歧义数据就停止迁移。定价写入继续使用原有事务和运行时回滚，见 [ADR-008](decisions/008-options-primary-key-migration.md)。
-- Billing 的 reserve/settle/refund 保持既有账本与 outbox 结构。shadow/enforce 使用持久化资金与 Token 事务，enforce 同时拥有统计写入；失败终态由 reconciler 恢复。off 的同步原子退款只保证当前会话重试，不提供跨进程账本恢复。默认仍为 shadow，见 [enforce 验证说明](billing-ledger-enforce.md)。
+- Billing 的 reserve/settle/refund 保持既有账本与 outbox 结构。off/shadow/enforce 的新请求统一使用持久化资金与 Token 事务，失败终态及孤儿预扣由 reconciler 恢复；enforce 同时拥有统计写入，off/shadow 保留兼容统计归属。旧 off 无账本差额不自动推算，升级先排空旧在途请求。默认仍为 shadow，见 [enforce 验证说明](billing-ledger-enforce.md)。
 
 ## Responses WebSocket
 

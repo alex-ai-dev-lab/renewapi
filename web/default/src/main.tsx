@@ -18,18 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
-import { AxiosError, isCancel } from 'axios'
-import {
-  QueryCache,
-  QueryClient,
-  QueryClientProvider,
-} from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
-import i18next from 'i18next'
-import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { bindAccountQueryCache } from '@/lib/account-query-cache'
 import { getStatus } from '@/lib/api'
+import { shouldRetryQuery, getQueryRetryDelay } from '@/lib/api-errors'
 import { installBuildMetadata } from '@/lib/build-metadata'
 import '@/lib/dayjs'
 import { APP_BASE_PATH } from '@/lib/deployment-mode'
@@ -42,7 +36,7 @@ import { RouteLoading } from '@/components/route-loading'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
 import { ThemeProvider } from './context/theme-provider'
-import './i18n/config'
+import { i18nReady } from './i18n/config'
 // Generated Routes
 import { routeTree } from './routeTree.gen'
 // Styles
@@ -58,48 +52,14 @@ applySiteDesign(undefined)
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: (failureCount, error) => {
-        if (isCancel(error)) return false
-        // eslint-disable-next-line no-console
-        if (import.meta.env.DEV) console.log({ failureCount, error })
-
-        if (failureCount >= 0 && import.meta.env.DEV) return false
-        if (failureCount > 3 && import.meta.env.PROD) return false
-
-        return !(
-          error instanceof AxiosError &&
-          [401, 403].includes(error.response?.status ?? 0)
-        )
-      },
+      retry: shouldRetryQuery,
+      retryDelay: getQueryRetryDelay,
       // Keep focused tabs from silently re-running heavy pages like logs.
       refetchOnWindowFocus: false,
       staleTime: 10 * 1000, // 10s
     },
-    mutations: {
-      onError: (error) => {
-        handleServerError(error)
-
-        if (error instanceof AxiosError) {
-          if (error.response?.status === 304) {
-            toast.error(i18next.t('Content not modified!'))
-          }
-        }
-      },
-    },
+    mutations: { onError: handleServerError },
   },
-  queryCache: new QueryCache({
-    onError: (error) => {
-      if (error instanceof AxiosError) {
-        if (error.response?.status === 401) {
-          toast.error(i18next.t('Session expired!'))
-          useAuthStore.getState().auth.reset()
-          const redirect = `${router.history.location.href}`
-          router.navigate({ to: '/sign-in', search: { redirect } })
-        }
-        // Failed page queries keep the current route and editing context.
-      }
-    },
-  }),
 })
 
 // Create a new router instance
@@ -190,18 +150,20 @@ if (!rootElement) {
   }
 })()
 const root = ReactDOM.createRoot(rootElement)
-root.render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <>
-        <ThemeProvider>
-          <FontProvider>
-            <DirectionProvider>
-              <RouterProvider router={router} />
-            </DirectionProvider>
-          </FontProvider>
-        </ThemeProvider>
-      </>
-    </QueryClientProvider>
-  </StrictMode>
+void i18nReady.then(() =>
+  root.render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <>
+          <ThemeProvider>
+            <FontProvider>
+              <DirectionProvider>
+                <RouterProvider router={router} />
+              </DirectionProvider>
+            </FontProvider>
+          </ThemeProvider>
+        </>
+      </QueryClientProvider>
+    </StrictMode>
+  )
 )

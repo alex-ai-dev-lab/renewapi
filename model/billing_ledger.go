@@ -1149,11 +1149,10 @@ func adjustLedgerBalancesTx(tx *gorm.DB, ledger *BillingLedger, delta int64) err
 }
 
 // billingLedgerAppliesBalances is intentionally broader than the enforce
-// accounting-owner check. Shadow remains the default compatibility mode, but
-// its balance legs must still be committed through the durable ledger so a
-// partial funding/token update cannot be hidden by a terminal session flag.
+// accounting-owner check. Off and shadow retain compatibility statistics, but
+// both persist balance legs so restart recovery never depends on session memory.
 func billingLedgerAppliesBalances(mode string) bool {
-	return mode == "shadow" || mode == "enforce"
+	return mode == "off" || mode == "shadow" || mode == "enforce"
 }
 
 func markBillingBalanceComponentsApplied(ledger *BillingLedger) {

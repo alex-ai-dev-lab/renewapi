@@ -22,6 +22,7 @@ import { toIntlLocale } from '@/i18n/languages'
 import i18next, { t } from 'i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { claimErrorNotification } from '@/lib/api-errors'
 import { isRequestCanceled } from '@/lib/request-errors'
 import { SNOW_SHIELD_REQUIRED_EVENT } from '@/features/snow-shield/state'
 
@@ -52,6 +53,9 @@ export const api = axios.create({
     'Cache-Control': 'no-store', // Prevent caching
   },
 })
+// Resolve defaults in one interceptor so an explicitly supplied timeout=0
+// remains distinguishable from Axios's implicit unlimited default.
+delete api.defaults.timeout
 
 // The demo transport has no network fallback, including for unknown endpoints.
 // A compile-time flag keeps fixtures out of the normal production bundle.
@@ -150,10 +154,10 @@ api.interceptors.response.use(
         /* empty */
       }
 
-      if (!skip) {
+      if (!skip && claimErrorNotification(error)) {
         toast.error(t('Session expired!'))
       }
-    } else if (!skip) {
+    } else if (!skip && claimErrorNotification(error)) {
       // Other errors: show error message from response or default
       const msg =
         error?.response?.data?.message || error?.message || t('Request failed')
@@ -209,8 +213,8 @@ api.interceptors.request.use((config) => {
     export: 120_000,
     upload: 300_000,
   }
-  if (!config.timeout && config.timeoutClass)
-    config.timeout = timeoutByClass[config.timeoutClass]
+  if (config.timeout == null)
+    config.timeout = timeoutByClass[config.timeoutClass ?? 'interactive']
   if (
     config.accountScope !== undefined &&
     config.accountScope !== getAccountScope()

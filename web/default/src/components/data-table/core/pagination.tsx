@@ -37,6 +37,15 @@ import {
 type DataTablePaginationProps<TData> = {
   table: Table<TData>
   allowPageJump?: boolean
+  cursor?: CursorPagination
+}
+
+export type CursorPagination = {
+  hasPrevious: boolean
+  hasNext: boolean
+  onPrevious: () => void
+  onNext: () => void
+  busy?: boolean
 }
 
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50, 100] as const
@@ -48,6 +57,7 @@ const PAGE_SIZE_SELECT_ITEMS = PAGE_SIZE_OPTIONS.map((pageSize) => ({
 export function DataTablePagination<TData>({
   table,
   allowPageJump,
+  cursor,
 }: DataTablePaginationProps<TData>) {
   const { t } = useTranslation()
   const pagination = table.getState().pagination
@@ -64,12 +74,14 @@ export function DataTablePagination<TData>({
       style={{ overflowClipMargin: 1 }}
     >
       <div className='flex min-w-0 shrink-0 items-center gap-2 @xl/pagination:gap-3'>
-        <div className='flex shrink-0 items-baseline gap-1.5 text-xs font-medium whitespace-nowrap sm:text-sm'>
-          <span className='text-muted-foreground'>{t('Total:')}</span>
-          <span className='text-foreground tabular-nums'>
-            {totalRows.toLocaleString()}
-          </span>
-        </div>
+        {!cursor && (
+          <div className='flex shrink-0 items-baseline gap-1.5 text-xs font-medium whitespace-nowrap sm:text-sm'>
+            <span className='text-muted-foreground'>{t('Total:')}</span>
+            <span className='text-foreground tabular-nums'>
+              {totalRows.toLocaleString()}
+            </span>
+          </div>
+        )}
 
         <div className='flex shrink-0 items-center gap-1.5 @lg/pagination:gap-2'>
           <p className='text-muted-foreground hidden text-sm font-medium whitespace-nowrap @2xl/pagination:block'>
@@ -78,6 +90,7 @@ export function DataTablePagination<TData>({
           <Select
             items={PAGE_SIZE_SELECT_ITEMS}
             value={`${pageSize}`}
+            disabled={cursor?.busy}
             onValueChange={(value) => {
               table.setPageSize(Number(value))
             }}
@@ -105,14 +118,20 @@ export function DataTablePagination<TData>({
             variant='ghost'
             size='icon'
             className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-8 p-0'
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
+            onClick={() =>
+              cursor ? cursor.onPrevious() : table.previousPage()
+            }
+            disabled={
+              cursor
+                ? cursor.busy || !cursor.hasPrevious
+                : !table.getCanPreviousPage()
+            }
           >
             <span className='sr-only'>{t('Go to previous page')}</span>
             <ChevronLeftIcon className='h-4 w-4' />
           </Button>
           <div className='text-muted-foreground flex min-w-14 items-center justify-center gap-1 text-xs tabular-nums'>
-            {allowPageJump ? (
+            {allowPageJump && !cursor ? (
               <Input
                 key={`${currentPage}-${pageSize}`}
                 aria-label={t('Go to page')}
@@ -145,14 +164,16 @@ export function DataTablePagination<TData>({
             ) : (
               currentPage
             )}
-            <span>/ {Math.max(totalPages, 1)}</span>
+            {!cursor && <span>/ {Math.max(totalPages, 1)}</span>}
           </div>
           <Button
             variant='ghost'
             size='icon'
             className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-8 p-0'
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
+            onClick={() => (cursor ? cursor.onNext() : table.nextPage())}
+            disabled={
+              cursor ? cursor.busy || !cursor.hasNext : !table.getCanNextPage()
+            }
           >
             <span className='sr-only'>{t('Go to next page')}</span>
             <ChevronRightIcon className='h-4 w-4' />

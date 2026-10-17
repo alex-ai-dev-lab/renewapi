@@ -171,6 +171,7 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
               </div>
               <Progress
                 value={percentage}
+                aria-label={`${apiKey.name}: ${t('Remaining:')} ${formatQuota(remaining)} / ${formatQuota(total)}`}
                 className={cn('h-1.5', getQuotaProgressColor(percentage))}
               />
             </TooltipTrigger>

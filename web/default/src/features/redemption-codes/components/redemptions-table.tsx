@@ -136,6 +136,7 @@ export function RedemptionsTable() {
 
   const { table } = useDataTable({
     data: redemptions,
+    getRowId: (row) => String(row.id),
     columns,
     enableRowSelection: true,
     columnFilters,

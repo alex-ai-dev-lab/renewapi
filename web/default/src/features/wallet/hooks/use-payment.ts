@@ -58,6 +58,9 @@ export function usePayment() {
   const [channelClosed, setChannelClosed] = useState(false)
   const activeMonitorRef = useRef<ActivePaymentMonitor | null>(null)
   const quoteRequestRef = useRef(0)
+  const stripeQuoteRef = useRef<{ amount: number; fingerprint: string } | null>(
+    null
+  )
   const processingRef = useRef(false)
 
   const stopActiveMonitor = useCallback((closePopup: boolean) => {
@@ -81,6 +84,7 @@ export function usePayment() {
   const calculatePaymentAmount = useCallback(
     async (topupAmount: number, paymentType: string) => {
       const requestId = ++quoteRequestRef.current
+      stripeQuoteRef.current = null
       if (!Number.isSafeInteger(topupAmount) || topupAmount <= 0) {
         setAmount(0)
         setCalculating(false)
@@ -102,6 +106,12 @@ export function usePayment() {
           if (!Number.isFinite(calculatedAmount) || calculatedAmount <= 0)
             throw new Error('Invalid payment amount')
           setAmount(calculatedAmount)
+          if (isStripePayment(paymentType) && response.quote_fingerprint) {
+            stripeQuoteRef.current = {
+              amount: topupAmount,
+              fingerprint: response.quote_fingerprint,
+            }
+          }
           return calculatedAmount
         }
 
@@ -127,6 +137,13 @@ export function usePayment() {
     ) => {
       if (processingRef.current || activeMonitorRef.current) return false
       if (!Number.isSafeInteger(topupAmount) || topupAmount <= 0) return false
+      if (
+        isStripePayment(paymentType) &&
+        stripeQuoteRef.current?.amount !== topupAmount
+      ) {
+        toast.error(i18next.t('Refresh the quote before paying'))
+        return false
+      }
       processingRef.current = true
       stopActiveMonitor(true)
       const paymentWindow = openPaymentWindow()
@@ -146,6 +163,9 @@ export function usePayment() {
         const response = await request({
           amount,
           payment_method: paymentType,
+          quote_fingerprint: isStripePayment(paymentType)
+            ? stripeQuoteRef.current?.fingerprint
+            : undefined,
         })
 
         if (!isApiSuccess(response)) {

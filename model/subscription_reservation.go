@@ -24,48 +24,52 @@ func AdjustSubscriptionPreConsume(requestId string, userSubscriptionId int, delt
 	}
 
 	return DB.Transaction(func(tx *gorm.DB) error {
-		var record SubscriptionPreConsumeRecord
-		if err := lockForUpdate(tx).
-			Where("request_id = ?", requestId).
-			First(&record).Error; err != nil {
-			return err
-		}
-		if record.Status == "refunded" {
-			return errors.New("subscription pre-consume already refunded")
-		}
-		if record.Status != "consumed" {
-			return fmt.Errorf("invalid subscription pre-consume status: %s", record.Status)
-		}
-		if record.UserSubscriptionId != userSubscriptionId {
-			return fmt.Errorf("subscription pre-consume subscription mismatch: record=%d requested=%d", record.UserSubscriptionId, userSubscriptionId)
-		}
-
-		newPreConsumed := record.PreConsumed + delta
-		if newPreConsumed < 0 {
-			return fmt.Errorf("subscription pre-consume would become negative: current=%d delta=%d", record.PreConsumed, delta)
-		}
-
-		var sub UserSubscription
-		if err := lockForUpdate(tx).
-			Where("id = ?", userSubscriptionId).
-			First(&sub).Error; err != nil {
-			return err
-		}
-		newUsed := sub.AmountUsed + delta
-		if newUsed < 0 {
-			return fmt.Errorf("subscription used would become negative: current=%d delta=%d", sub.AmountUsed, delta)
-		}
-		if delta > 0 && sub.AmountTotal > 0 && newUsed > sub.AmountTotal {
-			return fmt.Errorf("subscription used exceeds total, used=%d total=%d", newUsed, sub.AmountTotal)
-		}
-
-		sub.AmountUsed = newUsed
-		if err := tx.Save(&sub).Error; err != nil {
-			return err
-		}
-		record.PreConsumed = newPreConsumed
-		return tx.Save(&record).Error
+		return adjustSubscriptionPreConsumeTx(tx, requestId, userSubscriptionId, delta)
 	})
+}
+
+func adjustSubscriptionPreConsumeTx(tx *gorm.DB, requestId string, userSubscriptionId int, delta int64) error {
+	var record SubscriptionPreConsumeRecord
+	if err := lockForUpdate(tx).
+		Where("request_id = ?", requestId).
+		First(&record).Error; err != nil {
+		return err
+	}
+	if record.Status == "refunded" {
+		return errors.New("subscription pre-consume already refunded")
+	}
+	if record.Status != "consumed" {
+		return fmt.Errorf("invalid subscription pre-consume status: %s", record.Status)
+	}
+	if record.UserSubscriptionId != userSubscriptionId {
+		return fmt.Errorf("subscription pre-consume subscription mismatch: record=%d requested=%d", record.UserSubscriptionId, userSubscriptionId)
+	}
+
+	newPreConsumed := record.PreConsumed + delta
+	if newPreConsumed < 0 {
+		return fmt.Errorf("subscription pre-consume would become negative: current=%d delta=%d", record.PreConsumed, delta)
+	}
+
+	var sub UserSubscription
+	if err := lockForUpdate(tx).
+		Where("id = ?", userSubscriptionId).
+		First(&sub).Error; err != nil {
+		return err
+	}
+	newUsed := sub.AmountUsed + delta
+	if newUsed < 0 {
+		return fmt.Errorf("subscription used would become negative: current=%d delta=%d", sub.AmountUsed, delta)
+	}
+	if delta > 0 && sub.AmountTotal > 0 && newUsed > sub.AmountTotal {
+		return fmt.Errorf("subscription used exceeds total, used=%d total=%d", newUsed, sub.AmountTotal)
+	}
+
+	sub.AmountUsed = newUsed
+	if err := tx.Save(&sub).Error; err != nil {
+		return err
+	}
+	record.PreConsumed = newPreConsumed
+	return tx.Save(&record).Error
 }
 
 // RefundSubscriptionPreConsumeReservation is the request-scoped legacy refund

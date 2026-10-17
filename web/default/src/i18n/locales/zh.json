@@ -3085,6 +3085,7 @@
     "No latency data available": "暂无延迟数据",
     "No log entries matched the selected time.": "没有日志条目匹配所选时间。",
     "No logs": "暂无日志",
+    "Latest logs": "最新日志",
     "No Logs Found": "未找到日志",
     "No mappings configured. Click \"Add Row\" to get started.": "未配置映射。点击 \"添加行\" 开始。",
     "No matches found": "未找到匹配项",
@@ -6887,7 +6888,11 @@
     "Read the API connection instructions and request examples.": "查看 API 接入说明和请求示例。",
     "Move up": "上移",
     "Move down": "下移",
-    "Toggle details": "展开或收起"
+    "Toggle details": "展开或收起",
+    "Batch creation stopped: {{succeeded}} succeeded, {{failed}} failed, {{unknown}} unknown, {{pending}} not started. Refresh the list before creating more keys.": "批量创建已中止：成功 {{succeeded}} 个、失败 {{failed}} 个、结果未知 {{unknown}} 个、未开始 {{pending}} 个。继续创建前请先刷新列表。",
+    "Refresh the quote before paying": "请先刷新报价再支付",
+    "Failed to load language. Please try again.": "语言加载失败，请重试。",
+    "More than {{count}} logs match. Narrow the time range or filters for an exact count.": "匹配日志超过 {{count}} 条，请缩小时间范围或筛选条件以获取精确数量。"
   },
   "Responses request profile": "Responses 请求规范",
   "Follow channel type": "跟随渠道类型",

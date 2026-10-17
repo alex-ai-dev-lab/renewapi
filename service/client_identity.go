@@ -1,9 +1,9 @@
 package service
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,7 +42,7 @@ func ApplyClientIdentityToRequestWithOptions(path string, headers http.Header, b
 
 	// 尝试解析 JSON
 	var payload map[string]interface{}
-	if err := json.Unmarshal(body, &payload); err != nil {
+	if err := common.Unmarshal(body, &payload); err != nil {
 		// 无效 JSON，不处理
 		return body, false, nil
 	}
@@ -76,7 +76,7 @@ func ApplyClientIdentityToRequestWithOptions(path string, headers http.Header, b
 	}
 
 	// 重新序列化 JSON
-	modifiedBody, err := json.Marshal(payload)
+	modifiedBody, err := common.Marshal(payload)
 	if err != nil {
 		common.SysLog("client identity: failed to marshal modified body: " + err.Error())
 		return body, false, err
@@ -236,7 +236,7 @@ func applyClaudeIdentity(headers http.Header, payload map[string]interface{}, cf
 		case string:
 			// 尝试解析 JSON 字符串
 			var parsed map[string]interface{}
-			if err := json.Unmarshal([]byte(v), &parsed); err == nil && parsed != nil {
+			if err := common.Unmarshal([]byte(v), &parsed); err == nil && parsed != nil {
 				userObj = parsed
 			} else {
 				// 无效 JSON，保存为 legacy
@@ -267,7 +267,7 @@ func applyClaudeIdentity(headers http.Header, payload map[string]interface{}, cf
 	}
 
 	// 编码回 JSON 字符串
-	encoded, err := json.Marshal(userObj)
+	encoded, err := common.Marshal(userObj)
 	if err != nil {
 		common.SysLog("client identity: failed to marshal claude user_id: " + err.Error())
 		return false
@@ -402,18 +402,17 @@ func ApplyClientIdentityToRequestBodyWithOptions(path string, headers http.Heade
 		return body, 0, nil, err
 	}
 
+	modifiedBody, headerPatch, err := ApplyClientIdentityToRequestBytesWithOptions(path, headers, bodyBytes, options)
+	return bytes.NewReader(modifiedBody), int64(len(modifiedBody)), headerPatch, err
+}
+
+func ApplyClientIdentityToRequestBytesWithOptions(path string, headers http.Header, body []byte, options ClientIdentityOptions) ([]byte, http.Header, error) {
 	originalHeaders := headers.Clone()
-
-	// 应用标识符
-	modifiedBody, changed, err := ApplyClientIdentityToRequestWithOptions(path, headers, bodyBytes, options)
-	headerPatch := changedIdentityHeaders(originalHeaders, headers)
+	modified, changed, err := ApplyClientIdentityToRequestWithOptions(path, headers, body, options)
 	if err != nil || !changed {
-		// 恢复原始 body
-		return strings.NewReader(string(bodyBytes)), int64(len(bodyBytes)), headerPatch, err
+		modified = body
 	}
-
-	// 返回修改后的 body
-	return strings.NewReader(string(modifiedBody)), int64(len(modifiedBody)), headerPatch, nil
+	return modified, changedIdentityHeaders(originalHeaders, headers), err
 }
 
 func changedIdentityHeaders(before, after http.Header) http.Header {

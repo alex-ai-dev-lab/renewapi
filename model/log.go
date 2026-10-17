@@ -358,45 +358,14 @@ func GetAllLogsWithContext(ctx context.Context, logType int, startTimestamp int6
 }
 
 func getAllLogs(ctx context.Context, logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string, logTypes ...int) (logs []*Log, total int64, err error) {
-	var tx *gorm.DB
-	if logType == LogTypeUnknown {
-		tx = LOG_DB.WithContext(ctx)
-	} else {
-		tx = LOG_DB.WithContext(ctx).Where("logs.type = ?", logType)
+	if startIdx < 0 || startIdx > LogSearchCountLimit {
+		return nil, 0, ErrLogOffsetLimit
 	}
-
-	if len(logTypes) > 0 {
-		tx = tx.Where("logs.type IN ?", logTypes)
-	}
-
-	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", modelName); err != nil {
+	tx, err := logQuery(ctx, LogQueryFilter{LogType: logType, LogTypes: logTypes, StartTimestamp: startTimestamp, EndTimestamp: endTimestamp, ModelName: modelName, Username: username, TokenName: tokenName, Channel: channel, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId})
+	if err != nil {
 		return nil, 0, err
 	}
-	if tx, err = applyExplicitLogTextFilter(tx, "logs.username", username); err != nil {
-		return nil, 0, err
-	}
-	if tokenName != "" {
-		tx = tx.Where("logs.token_name = ?", tokenName)
-	}
-	if requestId != "" {
-		tx = tx.Where("logs.request_id = ?", requestId)
-	}
-	if upstreamRequestId != "" {
-		tx = tx.Where("logs.upstream_request_id = ?", upstreamRequestId)
-	}
-	if startTimestamp != 0 {
-		tx = tx.Where("logs.created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("logs.created_at <= ?", endTimestamp)
-	}
-	if channel != 0 {
-		tx = tx.Where("logs.channel_id = ?", channel)
-	}
-	if group != "" {
-		tx = tx.Where("logs."+logGroupCol+" = ?", group)
-	}
-	err = tx.Model(&Log{}).Count(&total).Error
+	total, err = countLogsBounded(ctx, tx)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -405,6 +374,14 @@ func getAllLogs(ctx context.Context, logType int, startTimestamp int64, endTimes
 		return nil, 0, err
 	}
 
+	if err := enrichLogChannels(ctx, logs); err != nil {
+		return nil, 0, err
+	}
+	return logs, total, nil
+}
+
+func enrichLogChannels(ctx context.Context, logs []*Log) error {
+	var err error
 	channelIds := types.NewSet[int]()
 	for _, log := range logs {
 		if log.ChannelId != 0 {
@@ -433,7 +410,7 @@ func getAllLogs(ctx context.Context, logType int, startTimestamp int64, endTimes
 		} else {
 			// Bulk query channels from DB
 			if err = DB.WithContext(ctx).Table("channels").Select("id, name").Where("id IN ?", channelIds.Items()).Find(&channels).Error; err != nil {
-				return logs, total, err
+				return err
 			}
 		}
 		channelMap := make(map[int]string, len(channels))
@@ -445,10 +422,10 @@ func getAllLogs(ctx context.Context, logType int, startTimestamp int64, endTimes
 		}
 	}
 
-	return logs, total, err
+	return nil
 }
 
-const logSearchCountLimit = 10000
+const LogSearchCountLimit = 10000
 
 func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
 	return getUserLogs(context.Background(), userId, logType, startTimestamp, endTimestamp, modelName, tokenName, startIdx, num, group, requestId, upstreamRequestId)
@@ -459,42 +436,16 @@ func GetUserLogsWithContext(ctx context.Context, userId int, logType int, startT
 }
 
 func getUserLogs(ctx context.Context, userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string, logTypes ...int) (logs []*Log, total int64, err error) {
-	var tx *gorm.DB
-	if logType == LogTypeUnknown {
-		tx = LOG_DB.WithContext(ctx).Where("logs.user_id = ?", userId)
-	} else {
-		tx = LOG_DB.WithContext(ctx).Where("logs.user_id = ? and logs.type = ?", userId, logType)
+	if startIdx < 0 || startIdx > LogSearchCountLimit {
+		return nil, 0, ErrLogOffsetLimit
 	}
-
-	if len(logTypes) > 0 {
-		tx = tx.Where("logs.type IN ?", logTypes)
-	}
-
-	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", modelName); err != nil {
+	tx, err := logQuery(ctx, LogQueryFilter{UserID: userId, LogType: logType, LogTypes: logTypes, StartTimestamp: startTimestamp, EndTimestamp: endTimestamp, ModelName: modelName, TokenName: tokenName, Group: group, RequestID: requestId, UpstreamRequestID: upstreamRequestId})
+	if err != nil {
 		return nil, 0, err
 	}
-	if tokenName != "" {
-		tx = tx.Where("logs.token_name = ?", tokenName)
-	}
-	if requestId != "" {
-		tx = tx.Where("logs.request_id = ?", requestId)
-	}
-	if upstreamRequestId != "" {
-		tx = tx.Where("logs.upstream_request_id = ?", upstreamRequestId)
-	}
-	if startTimestamp != 0 {
-		tx = tx.Where("logs.created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("logs.created_at <= ?", endTimestamp)
-	}
-	if group != "" {
-		tx = tx.Where("logs."+logGroupCol+" = ?", group)
-	}
-	err = tx.Model(&Log{}).Limit(logSearchCountLimit).Count(&total).Error
+	total, err = countLogsBounded(ctx, tx)
 	if err != nil {
-		common.SysError("failed to count user logs: " + err.Error())
-		return nil, 0, errors.New("查询日志失败")
+		return nil, 0, err
 	}
 	err = tx.Order("logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
@@ -607,21 +558,41 @@ func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelNa
 
 func DeleteOldLog(ctx context.Context, targetTimestamp int64, limit int) (int64, error) {
 	var total int64 = 0
+	if limit <= 0 {
+		return 0, errors.New("log deletion batch size must be positive")
+	}
+	limit = min(limit, 500)
 
 	for {
 		if nil != ctx.Err() {
 			return total, ctx.Err()
 		}
 
-		result := LOG_DB.Where("created_at < ?", targetTimestamp).Limit(limit).Delete(&Log{})
-		if nil != result.Error {
-			return total, result.Error
+		var ids []int
+		var removed int64
+		err := LOG_DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := tx.Model(&Log{}).Where("created_at < ?", targetTimestamp).
+				Order("created_at ASC, id ASC").Limit(limit).Pluck("id", &ids).Error; err != nil {
+				return err
+			}
+			if len(ids) == 0 {
+				return nil
+			}
+			result := tx.Where("id IN ? AND created_at < ?", ids, targetTimestamp).Delete(&Log{})
+			removed = result.RowsAffected
+			return result.Error
+		})
+		if err != nil {
+			return total, err
 		}
-
-		total += result.RowsAffected
-
-		if result.RowsAffected < int64(limit) {
+		total += removed
+		if len(ids) < limit {
 			break
+		}
+		select {
+		case <-ctx.Done():
+			return total, ctx.Err()
+		case <-time.After(time.Millisecond):
 		}
 	}
 

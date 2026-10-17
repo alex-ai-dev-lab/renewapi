@@ -113,4 +113,68 @@ The reviewed range contains 133 commits from the previous audit ref `4e570389dd4
 
 本轮仅是指定协议范围的源码专项审阅，没有更新顶部全量上游审计基线。实施决策见 ADR-016，验收和发布记录见三端点整流任务。
 
+### 2026-10-17 NewAPI / Sub2API / CPA 更新检查（候选，未导入）
+
+固定参考：NewAPI `3e2ce2c8856e32ca7054d673f8cd059ae466e80c`；Sub2API `b0a02a3304a0a78cdd003ddda1dd23ba02c03084`；CPA `911f49cbd49f4fe2516979754a7488a3fd14fe64`。本轮列举近期 291 条非合并提交、保存 49 个候选 patch，定向核对下列行为，没有扩大顶部完整历史审计基线。详细定位、复现、优先级和适配验收见 [更新检查报告](docs/audits/2026-10-upstream-update-review.md)。本表的 DEFERRED 表示已经识别但尚未实现；不是修复完成或已发布。
+
+| 来源 / 行为 | 判定 | 本地处置 |
+| --- | --- | --- |
+| NewAPI `06dd76a`，Playground 按账号隔离 | DEFERRED | U01；合成 A→退出→B 复现仍读到 A 消息；需统一存储命名空间及账号变更后的流/状态清理。 |
+| NewAPI `1b63c28`，Claude 零值和缓存-only | DEFERRED | U02；复现普通 input 被补入 1200；需适配现有缓存语义和持久账本，不能整段覆盖计费。 |
+| NewAPI `45fbb14`，分组独立限流 | DEFERRED | U03；内存及 miniredis 均串桶；仅修 key 作用域，保留 reservation/语义归还。 |
+| CPA `35af74f`，旧成功清新冷却 | DEFERRED | U04；模型层复现冷却被清零；用跨实例可用的状态版本/CAS，保留合法探活。 |
+| NewAPI `5ac7562`，混合 reasoning+正文 | DEFERRED | U05；首块和后续块都复现正文丢失，接现有 Claude 内容块生命周期。 |
+| NewAPI `ff36846`、`13c8e90`，图片双向转换 | DEFERRED | U06；detail 丢失和反向 image_url 字符串均复现；能力化处理新版 detail，不改 MJ 公开分享契约。 |
+| CPA `59930ba`，工具 incomplete→is_error | DEFERRED | U07；可选状态被忽略；仅传播显式失败信号，复用反向包装。 |
+| NewAPI `767a82b`，多行 beta | DEFERRED | U08；Header.Get 只转发第一行；适配 Header.Values 及已有覆盖规则。 |
+| NewAPI `767a82b` 的原生 thinking 扩展 | ALREADY_PRESENT | RequestExtensions 已保留 block_binding/未知字段；原生序列化复现通过，不增重复 DTO。 |
+| NewAPI `09109ec`，容器资源哨兵 | DEFERRED | U09；静态确认宿主机口径、无连续样本/新鲜度；需真实容器验收，不在请求中增加采样。 |
+| NewAPI `ca2cae6`、Sub2API `bdfe215c`，Responses 完整性 | DEFERRED | U10；本地 reasoning/summary 缺口更大；SSE 已有时间及序号，仅补实际不足，保留透传边界。 |
+| NewAPI `a0bf6a8`、`718a4e7`，Vertex 项目及多区域 | DEFERRED | U11；可选项目配置缺失、us host 错误；保留 Express/JSON 凭据模式。 |
+| NewAPI `c10780e` / `4b13d93`，Gemini schema | DEFERRED | U12；优先后续能力化无损方案，不单独移植早期有损删除；const/oneOf 丢失已复现。 |
+| NewAPI `b892a6b`，chunk 加载恢复 | DEFERRED | U13；适配当前错误页的一次恢复和真实 HTTP 状态，不新增第二层异常处理。 |
+| NewAPI `3fe394c`、Sub2API `c61f6eba`，依赖安全升级 | DEFERRED | 本地 Go1.25.1/Linux 符号扫描有 43 个去重可达告警；Go、websocket、x/net 及配套 x/* 按一致版本集合升级并重新验收。 |
+| NewAPI `ba0e478`、CPA `7795de1`、TLS 握手限时 | ALREADY_PRESENT | 本地已保留 Claude→Chat 请求文本/工具，复用 SSEScanner 和有界 TLSHandshakeTimeout；相关既有回归通过，不能据此认为 U05 已覆盖。 |
+| Sub2API `d19265dd` composite OAuth 凭据错投 | NOT_APPLICABLE | 补丁依赖其平台账号池/composite 入口；本地按 channel/adaptor 选上游，不引入该架构。 |
+| 整套前端/插件/账号池、自动 binding 注入、静态价格替换 | SKIPPED | 本轮不导入其产品架构与默认策略，保留本地安全、路由、价格同步和品牌边界。 |
+
+### 2026-10-17 后端功能选型（未实施，排除 UI）
+
+沿用上节固定三仓 HEAD，额外保存 24 个功能 patch，定向核对入选路径；不扩大完整历史审计基线。此处 DEFERRED 仅表示已提出适配候选，未导入、验收或发布。完整价值、现有覆盖、最小实施与验证要求见[功能评估](docs/audits/2026-10-backend-feature-opportunities.md)，与上节缺陷更新检查分开维护。
+
+| 来源 / 功能 | 判定 | RenewAPI 最小增量 |
+| --- | --- | --- |
+| CPA `58c0f6a` / `aeec5e9` / `03a3cfe` / `77fd91e`，客户端工具搜索 | DEFERRED | F01；接现有协议桥接与能力筛选，Claude 原生 deferred/reference 与 Gemini 函数桥接分别声明；不引入工具执行服务。 |
+| Sub2API `6624947b` / `ae2735cd` / `901a0439` / `5a25507d`，额度采集与窗口调度 | DEFERRED | F02；从已有 Codex 查询扩展为凭据级快照和候选过滤，采集去重；不重复建设冷却和粘连系统。 |
+| NewAPI `04c597b`，regex 条件 | DEFERRED | F03；现有 regex_replace 不等于条件匹配，仅扩现有条件比较。 |
+| Sub2API `6f9b02f1`，Vertex 发布方模型发现 | DEFERRED | F04；复用 service account、模型获取和更新任务；列表不等于推理授权。 |
+| Sub2API `d5a802f8`，Gemini cachedContents | DEFERRED | F05；新增资源归属/凭据绑定/TTL/存储费生命周期，不重复现有缓存引用 DTO。 |
+| NewAPI `63cecab` / `7de10f2`，聚合上游余额 | DEFERRED | F06；余额查询策略支持 Sub2API/NewAPI，有限/无限/未知分开；owner quota 另行逐 key 授权，不自动扩权。 |
+| NewAPI `d032204`，AWS Mantle | DEFERRED | F07；AWS adaptor 加显式 Messages 模式，复用 Claude 响应与现有 HTTP 客户端。 |
+| CPA `7fcbdf8` / `16d9888`，搜索事件与引用 | DEFERRED | F08；优先 Gemini→Responses，复用流/工具用量通路，补迟到来源及字符索引。 |
+| 本地 Codex OAuth、会话粘连、Responses WS/compaction、模型 metadata | ALREADY_PRESENT | 按实际增量实施上述候选，不把已有能力重新列为升级。 |
+| CPA `2bc236d`，Claude 自有压缩 capsule | DEFERRED | 不采用默认丢弃外部 capsule；自有摘要格式、密钥、多实例及计费契约需独立设计，首批不做。 |
+| CPA `2d5351b`，Vertex Interactions | DEFERRED | 条件候选，已核对 native executor 入口/流/鉴权；资源归属和状态续接另做专项设计，不视为已移植。 |
+
+### 2026-10-17 后端性能适配（未发布）
+
+沿用固定三仓 HEAD，前轮保存 15 个性能候选 patch，本轮适配以下五项并检查 7 个额外候选，新增 HTTP 响应生命周期优化。详见[实施与验证报告](docs/audits/2026-10-performance-upgrade.md)、[ADR-021](docs/decisions/021-relay-performance-and-stream-lifecycle.md)；原[性能评估](docs/audits/2026-10-upstream-performance-opportunities.md)作为选型时证据保留。不推进完整历史审计基线。
+
+| 来源 / 性能方向 | 判定 | 本地结论 |
+| --- | --- | --- |
+| NewAPI `2cf177a`，RawMessage 批量深拷贝 | ADAPT | P1；`common/copy.go` 独立字节复制；嵌套/指针/零值/隔离回归通过，正式三轮 1 MiB 复制 59.686ms→0.1164ms。 |
+| Sub2API `7e627318` / `61e1afdd` / `379db191`，大 JSON 按改动重建 | ADAPT | P2；reasoning 局部拼接及桥接无操作快返，复杂/异常输入保留原转换；等价 fuzz 162,428 次通过。 |
+| NewAPI `d3874db`，限流按需分配与 LRU 清理 | ADAPT | P3；桶内数组按需增长/复用，桶级 LRU；保留 Reserve/Cancel/RequestN/RetryAfter，边界/并发/race 与冷/热 key 基准通过。 |
+| NewAPI `946c730` / CPA `8a6a396`，工具索引 | ADAPT | P4；Claude→Chat 请求内首次命中索引，显式名称/空 ID/乱序回归；1,000 轮局部转换 6.031s→12.119ms。 |
+| Sub2API `81fd8530`，H2 PING | ADAPT | P5；仅 HTTP 长流 profile，每 shard 独立配置，30s/15s 可关闭；真实 H2 静默/无 ACK/代理/HTTP1/缓存回归通过。 |
+| Sub2API `3fdd54ca`，取消后关闭响应 | ADAPT | P6；仅 HTTP attempt，先取消再安全关闭；保留父请求及 WS turn 的既有关闭/复用顺序，并发/race/真实 HTTP/WS 回归通过。 |
+| Sub2API `277aa141` / `d0ed0eac`，终态即时结束/Gemini 传输失败切换 | ALREADY_PRESENT | 本地 `sr.Done/Stop` 与统一 DoRequestFailed/failover 已覆盖对应行为；不重复增加终态/重试机制。 |
+| Sub2API `9be9c0b6` / `e652f6e2`、CPA `1dffddf` | NOT_APPLICABLE / REFERENCE | 本地无相同账号 session 槽/额度监控器；身份注入已用解码 map；具体差异与已有释放逻辑见实施报告。 |
+| NewAPI `219c9e0`，公共内容 ETag/匿名 session | DEFERRED | 包含面板客户端配套，本轮排除 UI，不作为推理性能适配。 |
+| Sub2API `a9514a68` / `18d483c2` / `ca9b4d73`，统计/历史共享 | ALREADY_PRESENT / REFERENCE | 本地已具备合并概览聚合与 WS 正文共享，非相同架构的完整等价实现；剩余序列化开销归 P2，不套用上游 O(T²) 结论。 |
+
+### 2026-10-17 性能适配后的模块协作复审
+
+本地复审补修客户端重建竞态、长窗口预算清理，以及 Redis/内存并发槽释放错配和长请求租约过期，另消除 MiniMax 测试竞态。这些为 RenewAPI 既有调用链缺口，没有新增上游来源或推进完整审计基线；其余 DEFERRED 功能/依赖项仍未导入。源码、测试、性能成本及发布前排空旧并发槽协议的要求见[复审报告](docs/audits/2026-10-integration-review.md)、ADR-021。
+
 Run `scripts/check-upstream.ps1` or `scripts/check-upstream.sh`. The scripts read `Audited-Upstream-Ref`, list only later upstream commits, and refuse merge/rebase while histories remain unrelated. After review, add each imported or rejected item here and advance the audited ref only when the complete range has been classified.

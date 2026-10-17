@@ -313,6 +313,8 @@ export function ChannelsTable() {
   // React Table instance
   const { table } = useDataTable({
     data: channels,
+    getRowId: (row) =>
+      isTagAggregateRow(row) ? `tag:${row.tag ?? ''}` : `channel:${row.id}`,
     columns,
     totalCount,
     sorting,

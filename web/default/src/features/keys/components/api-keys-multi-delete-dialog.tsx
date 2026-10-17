@@ -20,6 +20,7 @@ import { useState } from 'react'
 import type { Table } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { handleServerError } from '@/lib/handle-server-error'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { batchDeleteApiKeys } from '../api'
 import { ERROR_MESSAGES } from '../constants'
@@ -57,8 +58,8 @@ export function ApiKeysMultiDeleteDialog<TData>({
       } else {
         toast.error(result.message || t(ERROR_MESSAGES.BATCH_DELETE_FAILED))
       }
-    } catch {
-      toast.error(t(ERROR_MESSAGES.UNEXPECTED))
+    } catch (error) {
+      handleServerError(error)
     } finally {
       setIsDeleting(false)
     }

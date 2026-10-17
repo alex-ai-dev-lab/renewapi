@@ -162,6 +162,7 @@ export function DataTableBulkActions<TData>({
       <div
         ref={toolbarRef}
         role='toolbar'
+        data-bulk-actions='true'
         aria-label={t('Bulk actions: {{entity}}', { entity: entityName })}
         aria-describedby='bulk-actions-description'
         tabIndex={-1}

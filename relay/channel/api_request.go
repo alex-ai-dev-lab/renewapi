@@ -1,10 +1,10 @@
 package channel
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	rootcommon "github.com/QuantumNous/new-api/common"
 	"io"
 	"net/http"
 	"net/url"
@@ -606,7 +606,7 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	if err != nil {
 		return nil, fmt.Errorf("get request url failed: %w", err)
 	}
-	logger.LogDebug(c, "fullRequestURL: %s", fullRequestURL)
+	logger.LogDebug(c, "upstream endpoint: %s", rootcommon.SafeLogURL(fullRequestURL))
 	if info.Failover != nil && len(info.Failover.AttemptRecords) > 0 {
 		record := &info.Failover.AttemptRecords[len(info.Failover.AttemptRecords)-1]
 		record.ClientEndpoint = c.Request.URL.Path
@@ -623,38 +623,33 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 			identityPath = parsed.Path
 		}
 	}
+	finalBody, readErr := io.ReadAll(requestBody)
+	if readErr != nil {
+		return nil, fmt.Errorf("read outbound request: %w", readErr)
+	}
 	if parsed, parseErr := url.Parse(fullRequestURL); parseErr == nil {
-		rawBody, readErr := io.ReadAll(requestBody)
-		if readErr != nil {
-			return nil, fmt.Errorf("read outbound request: %w", readErr)
-		}
 		// Only JSON APIs enter this transport; multipart uses DoFormRequest.
-		finalBody, finalizeErr := service.FinalizeUpstreamJSON(c, info, parsed.Path, rawBody)
+		normalized, finalizeErr := service.FinalizeUpstreamJSON(c, info, parsed.Path, finalBody)
 		if finalizeErr != nil {
 			return nil, finalizeErr
 		}
-		requestBody = bytes.NewReader(finalBody)
+		finalBody = normalized
 	}
-	processedBody, newContentLength, identityHeaders, identityErr := service.ApplyClientIdentityToRequestBodyWithOptions(
+	processedBody, identityHeaders, identityErr := service.ApplyClientIdentityToRequestBytesWithOptions(
 		identityPath,
 		c.Request.Header,
-		requestBody,
+		finalBody,
 		service.ClientIdentityOptions{
 			ForceCodexIdentity: shouldForceCodexIdentity(info, fullRequestURL),
 		},
 	)
 	if identityErr != nil {
 		logger.LogError(c, fmt.Sprintf("client identity injection failed: %s", identityErr.Error()))
-	} else if newContentLength > 0 && processedBody != nil {
-		requestBody = processedBody
-		info.UpstreamRequestBodySize = newContentLength
+	} else {
+		finalBody = processedBody
 	}
 	// Identity and final normalization may both alter bytes. Transparent HTTP
 	// retries must replay exactly the body sent on the first attempt.
-	finalBody, readErr := io.ReadAll(requestBody)
-	if readErr != nil {
-		return nil, fmt.Errorf("read finalized request: %w", readErr)
-	}
 	body, size, getBody, closer, bodyErr := common.NewOutboundJSONBody(finalBody)
 	if bodyErr != nil {
 		return nil, bodyErr
@@ -701,7 +696,7 @@ func DoFormRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBod
 	if err != nil {
 		return nil, fmt.Errorf("get request url failed: %w", err)
 	}
-	logger.LogDebug(c, "fullRequestURL: %s", fullRequestURL)
+	logger.LogDebug(c, "upstream endpoint: %s", rootcommon.SafeLogURL(fullRequestURL))
 	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("new request failed: %w", err)
@@ -851,7 +846,9 @@ func DoRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	return doRequest(c, req, info)
 }
 func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http.Response, error) {
-	client, err := service.GetHttpClientWithChannelSettings(info.ChannelSetting)
+	options := service.HTTPClientOptionsFromChannelSettings(info.ChannelSetting)
+	options.LongStream = info.IsStream || c.GetBool("responses_upstream_stream")
+	client, err := service.GetHttpClientWithOptions(options)
 	if err != nil {
 		return nil, fmt.Errorf("new http client failed: %w", err)
 	}
@@ -879,16 +876,25 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	if c != nil && c.Request != nil {
 		req = req.WithContext(c.Request.Context())
 	}
+	var cancel context.CancelFunc
 	var resp *http.Response
 	execution := common.GetResponsesWSExecution(req.Context())
 	if execution != nil && execution.Transport != nil && info.ChannelSetting.ResponsesWebSocket && info.IsStream && !info.IsChannelTest &&
 		info.GetFinalRequestRelayFormat() == types.RelayFormatOpenAIResponses {
 		resp, err = execution.Transport.RoundTrip(req, info, execution)
 	} else {
+		// HTTP attempts own cancellation; WebSocket turns manage their own close
+		// order so a completed turn can return its connection to the session.
+		var ctx context.Context
+		ctx, cancel = context.WithCancel(req.Context())
+		req = req.WithContext(ctx)
 		resp, err = client.Do(req)
 	}
 	if err != nil {
-		logger.LogError(c, "do request failed: "+err.Error())
+		if cancel != nil {
+			cancel()
+		}
+		logger.LogError(c, "do request failed: "+rootcommon.RedactErrorCredentials(err.Error(), info.ApiKey))
 		msg := "upstream error: do request failed"
 		if service.IsTLSVerificationRawError(err) {
 			msg = upstreamTLSCompatibilityHint(msg)
@@ -896,13 +902,27 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		return nil, types.NewError(fmt.Errorf("%s: %w", msg, err), types.ErrorCodeDoRequestFailed)
 	}
 	if resp == nil {
+		if cancel != nil {
+			cancel()
+		}
 		return nil, errors.New("resp is nil")
+	}
+	if cancel != nil {
+		if resp.Body == nil {
+			cancel()
+		} else {
+			resp.Body = rootcommon.NewCancelOnCloseBody(resp.Body, cancel)
+		}
 	}
 
 	service.CaptureUpstreamRequestID(c, resp.Header)
 
-	_ = req.Body.Close()
-	_ = c.Request.Body.Close()
+	if req.Body != nil {
+		_ = req.Body.Close()
+	}
+	if c.Request.Body != nil {
+		_ = c.Request.Body.Close()
+	}
 	return resp, nil
 }
 

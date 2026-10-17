@@ -34,7 +34,7 @@ import {
   type DataTablePinnedColumn,
   type DataTableRenderRowHelpers,
 } from '../core/data-table-view'
-import { DataTablePagination } from '../core/pagination'
+import { DataTablePagination, type CursorPagination } from '../core/pagination'
 import {
   DATA_TABLE_VIEW_MODES,
   useDataTableViewMode,
@@ -56,6 +56,7 @@ export type DataTablePageToolbarProps<TData> = Omit<
 
 export type DataTablePageProps<TData> = {
   allowPageJump?: boolean
+  cursorPagination?: CursorPagination
   /**
    * TanStack Table instance returned from `useReactTable`.
    */
@@ -399,6 +400,7 @@ function renderPagination<TData>(
     <DataTablePagination
       table={props.table}
       allowPageJump={props.allowPageJump}
+      cursor={props.cursorPagination}
     />
   )
 

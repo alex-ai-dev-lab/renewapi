@@ -48,6 +48,7 @@ func authHelper(c *gin.Context, minRole int) {
 	id := session.Get("id")
 	status := session.Get("status")
 	useAccessToken := false
+	var groupValue interface{}
 	if username == nil {
 		// Check access token
 		accessToken := c.Request.Header.Get("Authorization")
@@ -90,6 +91,7 @@ func authHelper(c *gin.Context, minRole int) {
 			role = user.Role
 			id = user.Id
 			status = user.Status
+			groupValue = user.Group
 			useAccessToken = true
 		} else {
 			c.JSON(http.StatusUnauthorized, gin.H{
@@ -139,20 +141,18 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
-	// session 里的 status 是登录那一瞬的快照。封禁用户只会失效用户缓存，不会动 session，
-	// 所以只信 session 会让被封号的人持旧会话继续访问直到 session 过期。
-	// 这里以用户缓存为权威源重新校验；缓存/DB 不可用时必须 fail closed，
-	// 不能把可能已经失效的 session 快照当成授权依据。
-	if userCache, cacheErr := model.GetUserCache(userIdInt); cacheErr == nil {
-		statusInt = userCache.Status
-	} else {
-		common.SysLog(fmt.Sprintf("authHelper GetUserCache error for user %d: %v", userIdInt, cacheErr))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
-		})
-		c.Abort()
-		return
+	if !useAccessToken {
+		user, authErr := model.GetUserAuthorization(c.Request.Context(), userIdInt)
+		if authErr != nil {
+			code := http.StatusInternalServerError
+			message := i18n.MsgDatabaseError
+			if errors.Is(authErr, gorm.ErrRecordNotFound) {
+				code, message = http.StatusUnauthorized, i18n.MsgAuthNotLoggedIn
+			}
+			c.AbortWithStatusJSON(code, gin.H{"success": false, "message": common.TranslateMessage(c, message)})
+			return
+		}
+		username, role, statusInt, groupValue = user.Username, user.Role, user.Status, user.Group
 	}
 	if statusInt == common.UserStatusDisabled {
 		c.JSON(http.StatusForbidden, gin.H{
@@ -190,16 +190,6 @@ func authHelper(c *gin.Context, minRole int) {
 	}
 	// 防止不同newapi版本冲突，导致数据不通用
 	c.Header("Auth-Version", authVersionFingerprint)
-	// access token 路径下根本没有 session，session.Get("group") 永远是 nil，
-	// 于是下游从 c.Get("group") 拿到空分组。这里在缺失时从用户缓存补齐。
-	groupValue := session.Get("group")
-	if groupValue == nil {
-		if userCache, cacheErr := model.GetUserCache(userIdInt); cacheErr == nil {
-			groupValue = userCache.Group
-		} else {
-			common.SysLog(fmt.Sprintf("authHelper resolve group failed for user %d: %v", userIdInt, cacheErr))
-		}
-	}
 	c.Set("username", username)
 	c.Set("role", role)
 	c.Set("id", id)

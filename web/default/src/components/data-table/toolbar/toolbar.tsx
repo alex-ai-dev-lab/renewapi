@@ -19,12 +19,12 @@ For commercial licensing, please contact support@quantumnous.com
 import * as React from 'react'
 import { useState, type ReactNode } from 'react'
 import type { Table } from '@tanstack/react-table'
-import { useDebounce } from '@/hooks'
 import { ChevronDown, Loader2, X as Cross2Icon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useDebouncedFilterInput } from '../hooks/use-debounced-filter-input'
 import { DataTableFacetedFilter } from './faceted-filter'
 import { DataTableViewOptions } from './view-options'
 
@@ -39,11 +39,6 @@ type FilterDef = {
     count?: number
   }[]
   singleSelect?: boolean
-}
-
-type SearchDraft = {
-  baseValue: string
-  value: string
 }
 
 export type DataTableToolbarProps<TData> = {
@@ -152,7 +147,6 @@ export type DataTableToolbarProps<TData> = {
 export function DataTableToolbar<TData>(props: DataTableToolbarProps<TData>) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
-  const [isSearchComposing, setIsSearchComposing] = useState(false)
 
   const filters = props.filters ?? []
   const hasExpandable = props.expandable != null
@@ -168,16 +162,6 @@ export function DataTableToolbar<TData>(props: DataTableToolbarProps<TData>) {
     ? ((props.table.getColumn(props.searchKey)?.getFilterValue() as string) ??
       '')
     : ((props.table.getState().globalFilter as string | undefined) ?? '')
-
-  const [searchDraft, setSearchDraft] = useState<SearchDraft | null>(null)
-  const activeSearchDraft =
-    searchDraft &&
-    (isSearchComposing || searchDraft.baseValue === currentSearchValue)
-      ? searchDraft
-      : null
-  const searchValue = activeSearchDraft?.value ?? currentSearchValue
-  const searchDebounceMs = Math.max(0, props.searchDebounceMs ?? 0)
-  const debouncedSearchValue = useDebounce(searchValue, searchDebounceMs)
 
   const commitSearchValue = React.useCallback(
     (value: string) => {
@@ -195,59 +179,19 @@ export function DataTableToolbar<TData>(props: DataTableToolbarProps<TData>) {
     [currentSearchValue, props.searchKey, props.table]
   )
 
-  React.useEffect(() => {
-    if (
-      searchDebounceMs <= 0 ||
-      isSearchComposing ||
-      debouncedSearchValue !== searchValue
-    ) {
-      return
-    }
-
-    commitSearchValue(debouncedSearchValue)
-  }, [
+  const search = useDebouncedFilterInput(
+    currentSearchValue,
     commitSearchValue,
-    debouncedSearchValue,
-    isSearchComposing,
-    searchDebounceMs,
-    searchValue,
-  ])
-
-  const queueSearchValue = (value: string) => {
-    if (searchDebounceMs <= 0) {
-      commitSearchValue(value)
-    }
-  }
-
-  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value
-    setSearchDraft({ baseValue: currentSearchValue, value })
-
-    if (!isSearchComposing) {
-      queueSearchValue(value)
-    }
-  }
-
-  const handleSearchCompositionStart = () => {
-    setIsSearchComposing(true)
-  }
-
-  const handleSearchCompositionEnd = (
-    event: React.CompositionEvent<HTMLInputElement>
-  ) => {
-    setIsSearchComposing(false)
-    const value = event.currentTarget.value
-    setSearchDraft({ baseValue: currentSearchValue, value })
-    queueSearchValue(value)
-  }
+    Math.max(0, props.searchDebounceMs ?? 0)
+  )
 
   const searchInput = (
     <Input
       placeholder={placeholder}
-      value={searchValue}
-      onChange={handleSearchChange}
-      onCompositionStart={handleSearchCompositionStart}
-      onCompositionEnd={handleSearchCompositionEnd}
+      value={search.inputValue}
+      onChange={search.onChange}
+      onCompositionStart={search.onCompositionStart}
+      onCompositionEnd={search.onCompositionEnd}
       className='w-full sm:w-[200px] lg:w-[240px]'
     />
   )
@@ -272,8 +216,7 @@ export function DataTableToolbar<TData>(props: DataTableToolbarProps<TData>) {
   )
 
   const handleReset = () => {
-    setIsSearchComposing(false)
-    setSearchDraft(null)
+    search.resetInput()
     props.table.resetColumnFilters()
     props.table.setGlobalFilter('')
     props.onReset?.()

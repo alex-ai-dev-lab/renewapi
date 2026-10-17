@@ -194,5 +194,9 @@ export async function fetchUsageLogs(
     isAdmin,
   })
   params.types = USAGE_LOG_VIEW_TYPES[logView].join(',')
-  return isAdmin ? await getAllLogs(params) : await getUserLogs(params)
+  params.pagination = 'cursor'
+  params.cursor = config.cursor
+  return isAdmin
+    ? await getAllLogs(params, config.signal)
+    : await getUserLogs(params, config.signal)
 }

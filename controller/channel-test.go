@@ -124,7 +124,7 @@ func sanitizeTestPayload(b []byte) string {
 	if len(s) > maxLen {
 		s = s[:maxLen] + "...(truncated)"
 	}
-	return common.MaskSensitiveInfo(s)
+	return common.RedactErrorCredentials(common.MaskSensitiveInfo(s))
 }
 
 func resolveTestMaxTokens(fallback uint) uint {
@@ -253,7 +253,8 @@ func testChannelWithRequestContext(ctx context.Context, channel *model.Channel, 
 		}
 	}
 	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
+	capture := &limitedTestCapture{ResponseRecorder: w, limit: 256 << 10}
+	c, _ := gin.CreateTestContext(capture)
 
 	testModel = strings.TrimSpace(testModel)
 	if testModel == "" {
@@ -745,6 +746,10 @@ func testChannelWithRequestContext(ctx context.Context, channel *model.Channel, 
 		}
 	}
 	usageA, respErr := adaptor.DoResponse(c, httpResp, info)
+	if capture.exceeded {
+		return testResult{context: c, localErr: common.ErrUpstreamBodyTooLarge,
+			newAPIError: types.NewOpenAIError(common.ErrUpstreamBodyTooLarge, types.ErrorCodeReadResponseBodyFailed, http.StatusBadGateway)}
+	}
 	if respErr != nil {
 		return testResult{
 			context:     c,
@@ -900,9 +905,35 @@ func readTestResponseBody(body io.ReadCloser, isStream bool) ([]byte, error) {
 	defer func() { _ = body.Close() }()
 	const maxStreamLogBytes = 256 << 10
 	if isStream {
-		return io.ReadAll(io.LimitReader(body, maxStreamLogBytes))
+		return common.ReadUpstreamBody(body, maxStreamLogBytes)
 	}
-	return io.ReadAll(body)
+	return common.ReadUpstreamBody(body, maxStreamLogBytes)
+}
+
+type limitedTestCapture struct {
+	*httptest.ResponseRecorder
+	limit    int
+	exceeded bool
+}
+
+func (w *limitedTestCapture) Write(p []byte) (int, error) {
+	available := w.limit - w.Body.Len()
+	if len(p) > available {
+		w.exceeded = true
+		_, _ = w.ResponseRecorder.Write(p[:max(0, available)])
+		return 0, common.ErrUpstreamBodyTooLarge
+	}
+	return w.ResponseRecorder.Write(p)
+}
+
+func (w *limitedTestCapture) WriteString(s string) (int, error) {
+	available := max(0, w.limit-w.Body.Len())
+	if len(s) > available {
+		w.exceeded = true
+		_, _ = w.ResponseRecorder.WriteString(s[:available])
+		return 0, common.ErrUpstreamBodyTooLarge
+	}
+	return w.ResponseRecorder.WriteString(s)
 }
 
 func extractCompactionItemFromJSON(body []byte) json.RawMessage {

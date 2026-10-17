@@ -2550,6 +2550,7 @@
     "No latency data available": "レイテンシデータがありません",
     "No log entries matched the selected time.": "選択した時間に一致するログエントリはありません。",
     "No logs": "ログがありません",
+    "Latest logs": "最新のログ",
     "No Logs Found": "ログが見つかりません",
     "No mappings configured. Click \"Add Row\" to get started.": "マッピングが設定されていません。「行を追加」をクリックして開始してください。",
     "No matches found": "一致するものが見つかりません",
@@ -6122,6 +6123,10 @@
     "Your profile shows account identity and preferences. Change the interface language and light/dark theme there; this does not change API model output. Daily check-in is available only when enabled by the site. Automatic Access generates a separate management token, documented below. Deleting your account is destructive: stop integrations and save any records you need before confirming. Logging out is the safe choice when you only want to end a browser session.": "プロフィールではアカウント情報、表示言語、明暗テーマを確認・変更できます。API の出力言語は変わりません。毎日のチェックインはサイトが有効にした場合のみ表示されます。自動アクセスは下記の管理用トークンを発行します。アカウント削除前に連携を止め、必要な記録を保存してください。ブラウザーの利用を終えるだけなら削除ではなくログアウトします。",
     "Your subscription benefits are now active. Enjoy what comes next.": "サブスクリプション特典が有効になりました。新たな体験をお楽しみください。",
     "Your use of an upstream model may also be subject to that provider’s terms and policies. SnowAPI does not control upstream services and cannot guarantee that every model or endpoint will remain available.": "アップストリーム モデルの使用には、そのプロバイダーの規約とポリシーが適用される場合もあります。 SnowAPI はアップストリーム サービスを制御しないため、すべてのモデルまたはエンドポイントが引き続き利用可能であることを保証できません。",
-    "Your wallet balance and subscription allowance are different budgets. Adding wallet funds does not automatically purchase a plan. Enter a whole-number recharge amount or choose a preset, then select an available payment method and review its final amount and currency. Gateway exchange rates can make this different from the displayed USD amount. If a channel is closed, it cannot be used. Check order history and the updated balance before making a second payment.": "ウォレット残高とプランの利用枠は別です。チャージしてもプランは自動購入されません。整数の金額またはプリセットを選び、利用可能な支払方法で最終金額と通貨を確認します。ゲートウェイの換算率により USD 表示とは異なる場合があります。停止中の手段は利用できません。再度支払う前に履歴と残高を確認してください。"
+    "Your wallet balance and subscription allowance are different budgets. Adding wallet funds does not automatically purchase a plan. Enter a whole-number recharge amount or choose a preset, then select an available payment method and review its final amount and currency. Gateway exchange rates can make this different from the displayed USD amount. If a channel is closed, it cannot be used. Check order history and the updated balance before making a second payment.": "ウォレット残高とプランの利用枠は別です。チャージしてもプランは自動購入されません。整数の金額またはプリセットを選び、利用可能な支払方法で最終金額と通貨を確認します。ゲートウェイの換算率により USD 表示とは異なる場合があります。停止中の手段は利用できません。再度支払う前に履歴と残高を確認してください。",
+    "Batch creation stopped: {{succeeded}} succeeded, {{failed}} failed, {{unknown}} unknown, {{pending}} not started. Refresh the list before creating more keys.": "一括作成を中止しました：成功 {{succeeded}} 件、失敗 {{failed}} 件、結果不明 {{unknown}} 件、未開始 {{pending}} 件。続行する前に一覧を更新してください。",
+    "Refresh the quote before paying": "お支払い前に見積もりを更新してください",
+    "Failed to load language. Please try again.": "言語を読み込めませんでした。もう一度お試しください。",
+    "More than {{count}} logs match. Narrow the time range or filters for an exact count.": "一致するログが {{count}} 件を超えています。正確な件数を取得するには、期間や条件を絞り込んでください。"
   }
 }

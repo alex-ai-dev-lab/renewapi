@@ -205,6 +205,8 @@ func SetRelayRouter(router *gin.Engine) {
 }
 
 func registerMjRouterGroup(relayMjRouter *gin.RouterGroup) {
+	// Public image sharing is intentional (ADR-020); submission/task APIs below
+	// remain authenticated. Never put an API key into a shared image URL.
 	relayMjRouter.GET("/image/:id", relay.RelayMidjourneyImage)
 	relayMjRouter.Use(middleware.TokenAuth(), middleware.TokenRequestLimit(), middleware.Distribute())
 	{

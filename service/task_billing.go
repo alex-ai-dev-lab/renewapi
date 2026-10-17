@@ -179,20 +179,20 @@ func FinalizeTaskBillingTransition(ctx context.Context, task *model.Task, fromSt
 		if desired == model.BillingLedgerDesiredSettle {
 			task.Quota = int(ledger.AppliedQuota)
 		}
-		if ledger.Mode == BillingLedgerModeEnforce {
-			model.InvalidateBillingBalanceCaches(task.UserId, task.PrivateData.TokenId)
-			delta := target - preConsumed
-			if desired == model.BillingLedgerDesiredRefund {
-				recordTaskBillingAdjustment(task, model.LogTypeRefund, preConsumed, reason, preConsumed, 0, clamps...)
-			} else if delta != 0 {
-				logType, logQuota := model.LogTypeConsume, delta
-				if delta < 0 {
-					logType, logQuota = model.LogTypeRefund, -delta
-				}
-				recordTaskBillingAdjustment(task, logType, logQuota, reason, preConsumed, target, clamps...)
+		// Every new ledger owns balance writes, even when compatibility code
+		// still owns statistics. Never apply its funding/token delta twice.
+		model.InvalidateBillingBalanceCaches(task.UserId, task.PrivateData.TokenId)
+		delta := target - preConsumed
+		if desired == model.BillingLedgerDesiredRefund {
+			recordTaskBillingAdjustment(task, model.LogTypeRefund, preConsumed, reason, preConsumed, 0, clamps...)
+		} else if delta != 0 {
+			logType, logQuota := model.LogTypeConsume, delta
+			if delta < 0 {
+				logType, logQuota = model.LogTypeRefund, -delta
 			}
-			return true, nil
+			recordTaskBillingAdjustment(task, logType, logQuota, reason, preConsumed, target, clamps...)
 		}
+		return true, nil
 	}
 
 	delta := target - preConsumed
@@ -244,13 +244,11 @@ func FinalizeMidjourneyBillingTransition(ctx context.Context, task *model.Midjou
 		task.BillingLedgerID = ledger.ID
 		task.BillingState = ledger.State
 		task.BillingVersion = ledger.Version
-		if ledger.Mode == BillingLedgerModeEnforce {
-			model.InvalidateBillingBalanceCaches(task.UserId, ledger.TokenID)
-			if desired == model.BillingLedgerDesiredRefund && preConsumed > 0 {
-				recordMidjourneyBillingAdjustment(task, ledger.TokenID, model.LogTypeRefund, preConsumed, reason)
-			}
-			return true, nil
+		model.InvalidateBillingBalanceCaches(task.UserId, ledger.TokenID)
+		if desired == model.BillingLedgerDesiredRefund && preConsumed > 0 {
+			recordMidjourneyBillingAdjustment(task, ledger.TokenID, model.LogTypeRefund, preConsumed, reason)
 		}
+		return true, nil
 	}
 	if desired == model.BillingLedgerDesiredRefund && preConsumed > 0 {
 		if task.BillingSource == BillingSourceSubscription {

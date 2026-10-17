@@ -43,7 +43,7 @@ func VideoProxy(c *gin.Context) {
 	userID := c.GetInt("id")
 	task, exists, err := model.GetByTaskId(userID, taskID)
 	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to query task %s: %s", taskID, err.Error()))
+		logger.LogError(c.Request.Context(), common.RedactErrorCredentials(fmt.Sprintf("Failed to query task %s: %s", taskID, err.Error())))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to query task")
 		return
 	}
@@ -60,7 +60,7 @@ func VideoProxy(c *gin.Context) {
 
 	channel, err := model.CacheGetChannel(task.ChannelId)
 	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to get channel for task %s: %s", taskID, err.Error()))
+		logger.LogError(c.Request.Context(), common.RedactErrorCredentials(fmt.Sprintf("Failed to get channel for task %s: %s", taskID, err.Error())))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to retrieve channel information")
 		return
 	}
@@ -81,7 +81,7 @@ func VideoProxy(c *gin.Context) {
 		client, err = service.GetHttpClientWithOptions(clientOptions)
 	}
 	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to create proxy client for task %s: %s", taskID, err.Error()))
+		logger.LogError(c.Request.Context(), common.RedactErrorCredentials(fmt.Sprintf("Failed to create proxy client for task %s: %s", taskID, err.Error()), task.PrivateData.Key, channel.Key))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to create proxy client")
 		return
 	}
@@ -90,7 +90,7 @@ func VideoProxy(c *gin.Context) {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "", nil)
 	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to create request: %s", err.Error()))
+		logger.LogError(c.Request.Context(), common.RedactErrorCredentials(fmt.Sprintf("Failed to create request: %s", err.Error()), task.PrivateData.Key, channel.Key))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to create proxy request")
 		return
 	}
@@ -99,13 +99,13 @@ func VideoProxy(c *gin.Context) {
 	case constant.ChannelTypeGemini:
 		apiKey := task.PrivateData.Key
 		if apiKey == "" {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("Missing stored API key for Gemini task %s", taskID))
+			logger.LogError(c.Request.Context(), common.RedactErrorCredentials(fmt.Sprintf("Missing stored API key for Gemini task %s", taskID), task.PrivateData.Key, channel.Key))
 			videoProxyError(c, http.StatusInternalServerError, "server_error", "API key not stored for task")
 			return
 		}
 		videoURL, err = getGeminiVideoURL(channel, task, apiKey)
 		if err != nil {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to resolve Gemini video URL for task %s: %s", taskID, err.Error()))
+			logger.LogError(c.Request.Context(), common.RedactErrorCredentials(fmt.Sprintf("Failed to resolve Gemini video URL for task %s: %s", taskID, err.Error()), task.PrivateData.Key, channel.Key))
 			videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to resolve Gemini video URL")
 			return
 		}
@@ -113,7 +113,7 @@ func VideoProxy(c *gin.Context) {
 	case constant.ChannelTypeVertexAi:
 		videoURL, err = getVertexVideoURL(channel, task)
 		if err != nil {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to resolve Vertex video URL for task %s: %s", taskID, err.Error()))
+			logger.LogError(c.Request.Context(), common.RedactErrorCredentials(fmt.Sprintf("Failed to resolve Vertex video URL for task %s: %s", taskID, err.Error()), task.PrivateData.Key, channel.Key))
 			videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to resolve Vertex video URL")
 			return
 		}
@@ -127,14 +127,14 @@ func VideoProxy(c *gin.Context) {
 
 	videoURL = strings.TrimSpace(videoURL)
 	if videoURL == "" {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Video URL is empty for task %s", taskID))
+		logger.LogError(c.Request.Context(), common.RedactErrorCredentials(fmt.Sprintf("Video URL is empty for task %s", taskID), task.PrivateData.Key, channel.Key))
 		videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to fetch video content")
 		return
 	}
 
 	if strings.HasPrefix(videoURL, "data:") {
 		if err := writeVideoDataURL(c, videoURL); err != nil {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to decode video data URL for task %s: %s", taskID, err.Error()))
+			logger.LogError(c.Request.Context(), common.RedactErrorCredentials(fmt.Sprintf("Failed to decode video data URL for task %s: %s", taskID, err.Error()), task.PrivateData.Key, channel.Key))
 			videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to fetch video content")
 		}
 		return
@@ -148,28 +148,28 @@ func VideoProxy(c *gin.Context) {
 		validateErr = common.ValidateURLWithFetchSetting(videoURL, fetchSetting.EnableSSRFProtection, fetchSetting.AllowPrivateIp, fetchSetting.DomainFilterMode, fetchSetting.IpFilterMode, fetchSetting.DomainList, fetchSetting.IpList, fetchSetting.AllowedPorts, fetchSetting.ApplyIPFilterForDomain)
 	}
 	if validateErr != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Video URL blocked for task %s: %v", taskID, validateErr))
-		videoProxyError(c, http.StatusForbidden, "server_error", fmt.Sprintf("request blocked: %v", validateErr))
+		logger.LogError(c.Request.Context(), common.RedactErrorCredentials(fmt.Sprintf("Video URL blocked for task %s: %v", taskID, validateErr), task.PrivateData.Key, channel.Key))
+		videoProxyError(c, http.StatusForbidden, "server_error", common.RedactErrorCredentials(fmt.Sprintf("request blocked: %v", validateErr), task.PrivateData.Key, channel.Key))
 		return
 	}
 
 	req.URL, err = url.Parse(videoURL)
 	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to parse URL %s: %s", videoURL, err.Error()))
+		logger.LogError(c.Request.Context(), common.RedactErrorCredentials(fmt.Sprintf("Failed to parse URL %s: %s", videoURL, err.Error()), task.PrivateData.Key, channel.Key))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to create proxy request")
 		return
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to fetch video from %s: %s", videoURL, err.Error()))
+		logger.LogError(c.Request.Context(), common.RedactErrorCredentials(fmt.Sprintf("Failed to fetch video from %s: %s", videoURL, err.Error()), task.PrivateData.Key, channel.Key))
 		videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to fetch video content")
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Upstream returned status %d for %s", resp.StatusCode, videoURL))
+		logger.LogError(c.Request.Context(), common.RedactErrorCredentials(fmt.Sprintf("Upstream returned status %d for %s", resp.StatusCode, videoURL), task.PrivateData.Key, channel.Key))
 		videoProxyError(c, http.StatusBadGateway, "server_error",
 			fmt.Sprintf("Upstream service returned status %d", resp.StatusCode))
 		return
@@ -178,7 +178,7 @@ func VideoProxy(c *gin.Context) {
 	copyVideoResponseHeaders(c, resp.Header)
 	c.Writer.WriteHeader(resp.StatusCode)
 	if _, err = io.Copy(c.Writer, resp.Body); err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to stream video content: %s", err.Error()))
+		logger.LogError(c.Request.Context(), common.RedactErrorCredentials(fmt.Sprintf("Failed to stream video content: %s", err.Error()), task.PrivateData.Key, channel.Key))
 	}
 }
 

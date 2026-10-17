@@ -21,15 +21,16 @@ import { getRouteApi } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
-import { useTableUrlState } from '@/hooks/use-table-url-state'
+import { Button } from '@/components/ui/button'
 import {
   DataTablePage,
   DataTableRow,
   useDataTable,
 } from '@/components/data-table'
 import { DEFAULT_LOGS_DATA, LOG_TYPE_ENUM } from '../constants'
+import { useLogCursorPagination } from '../hooks/use-log-cursor-pagination'
 import { parseLogOther } from '../lib/format'
 import { fetchUsageLogs } from '../lib/utils'
 import type { UsageLogView } from '../types'
@@ -62,37 +63,23 @@ export function UsageLogsTable({ logView }: UsageLogsTableProps) {
   const { isAdminView: isAdmin } = useLogsViewScope()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const searchParams = route.useSearch()
+  const viewerID = useAuthStore((state) => state.auth.user?.id)
 
   const {
     columnFilters,
     onColumnFiltersChange,
     pagination,
     onPaginationChange,
-    ensurePageInRange,
-  } = useTableUrlState({
-    search: route.useSearch(),
+    cursor,
+    ready,
+    move,
+    reset,
+  } = useLogCursorPagination({
+    search: searchParams,
     navigate: route.useNavigate(),
-    pagination: { defaultPage: 1, defaultPageSize: isMobile ? 20 : 100 },
-    globalFilter: { enabled: false },
-    columnFilters: [
-      { columnId: 'model_name', searchKey: 'model', type: 'string' as const },
-      { columnId: 'token_name', searchKey: 'token', type: 'string' as const },
-      { columnId: 'group', searchKey: 'group', type: 'string' as const },
-      ...(isAdmin
-        ? [
-            {
-              columnId: 'channel',
-              searchKey: 'channel',
-              type: 'string' as const,
-            },
-            {
-              columnId: 'username',
-              searchKey: 'username',
-              type: 'string' as const,
-            },
-          ]
-        : []),
-    ],
+    scope: `${viewerID}:${isAdmin}:${logView}`,
+    isAdmin,
+    defaultPageSize: isMobile ? 20 : 100,
   })
 
   const {
@@ -104,15 +91,18 @@ export function UsageLogsTable({ logView }: UsageLogsTableProps) {
   } = useQuery({
     queryKey: [
       'logs',
+      viewerID,
       logView,
       isAdmin,
+      cursor,
       pagination.pageIndex + 1,
       pagination.pageSize,
       columnFilters,
       searchParams,
       t,
     ],
-    queryFn: async () => {
+    enabled: ready,
+    queryFn: async ({ signal }) => {
       const result = await fetchUsageLogs({
         logView,
         isAdmin,
@@ -120,26 +110,17 @@ export function UsageLogsTable({ logView }: UsageLogsTableProps) {
         pageSize: pagination.pageSize,
         searchParams,
         columnFilters,
+        cursor,
+        signal,
       })
 
-      if (!result?.success) {
-        toast.error(result?.message || t('Failed to load logs'))
-        throw new Error(result?.message || 'Failed to load logs')
-      }
-
       return result.data || DEFAULT_LOGS_DATA
-    },
-    placeholderData: (previousData, previousQuery) => {
-      if (previousQuery?.queryKey[1] === logView) {
-        return previousData
-      }
-      return undefined
     },
   })
 
   const logs = data?.items || []
   const columns = useCommonLogsColumns(isAdmin)
-  const isLoadingData = isLoading || (isFetching && !data)
+  const isLoadingData = !ready || isLoading || (isFetching && !data)
 
   const { table } = useDataTable({
     data: logs as unknown as Record<string, unknown>[],
@@ -158,8 +139,7 @@ export function UsageLogsTable({ logView }: UsageLogsTableProps) {
     onColumnFiltersChange,
     manualPagination: true,
     manualFiltering: true,
-    totalCount: data?.total || 0,
-    ensurePageInRange,
+    pageCount: -1,
   })
 
   return (
@@ -167,6 +147,24 @@ export function UsageLogsTable({ logView }: UsageLogsTableProps) {
       error={queryError}
       onRetry={() => void retryQuery()}
       table={table}
+      cursorPagination={{
+        busy: isFetching || !ready,
+        hasPrevious: !!(
+          data &&
+          'previous_cursor' in data &&
+          data.previous_cursor
+        ),
+        hasNext: !!(data && 'next_cursor' in data && data.next_cursor),
+        onPrevious: () =>
+          move(
+            data && 'previous_cursor' in data
+              ? data.previous_cursor
+              : undefined,
+            -1
+          ),
+        onNext: () =>
+          move(data && 'next_cursor' in data ? data.next_cursor : undefined, 1),
+      }}
       columns={columns as ColumnDef<Record<string, unknown>>[]}
       isLoading={isLoadingData}
       isFetching={isFetching}
@@ -180,7 +178,16 @@ export function UsageLogsTable({ logView }: UsageLogsTableProps) {
         '[&_[data-slot=table]]:text-[13px] [&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[13px] [&_[data-slot=table]_th_*]:text-[13px]'
       )}
       mobile={<UsageLogsMobileList table={table} isLoading={isLoadingData} />}
-      toolbar={<CommonLogsFilterBar table={table} />}
+      toolbar={
+        <>
+          <CommonLogsFilterBar table={table} />
+          {cursor && (
+            <Button variant='outline' size='sm' onClick={reset}>
+              {t('Latest logs')}
+            </Button>
+          )}
+        </>
+      }
       renderRow={(row) => {
         const logType = (row.original as Record<string, unknown>).type as
           | number

@@ -1,9 +1,11 @@
 package openaicompat
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -59,14 +61,25 @@ func PrepareResponsesRequestForTextBridge(req *dto.OpenAIResponsesRequest) (*dto
 	if err != nil {
 		return nil, ResponsesBridgeToolMapping{}, err
 	}
-	rewriteNamespaceQualifiedCalls(input, mapping.NamespaceTools)
+	if raw, ok := input.(json.RawMessage); ok && len(mapping.NamespaceTools) != 0 {
+		if err := common.Unmarshal(raw, &input); err != nil {
+			return nil, ResponsesBridgeToolMapping{}, fmt.Errorf("invalid Responses input: %w", err)
+		}
+	}
+	if len(mapping.NamespaceTools) != 0 {
+		rewriteNamespaceQualifiedCalls(input, mapping.NamespaceTools)
+	}
 	if err := normalizeResponsesBridgeToolChoice(prepared, flattened, mapping.NamespaceTools); err != nil {
 		return nil, ResponsesBridgeToolMapping{}, err
 	}
 
-	prepared.Input, err = common.Marshal(input)
-	if err != nil {
-		return nil, ResponsesBridgeToolMapping{}, fmt.Errorf("encode Responses bridge input: %w", err)
+	if raw, ok := input.(json.RawMessage); ok {
+		prepared.Input = raw // Already owned by the request copy, and unchanged.
+	} else {
+		prepared.Input, err = common.Marshal(input)
+		if err != nil {
+			return nil, ResponsesBridgeToolMapping{}, fmt.Errorf("encode Responses bridge input: %w", err)
+		}
 	}
 	if len(flattened) == 0 {
 		prepared.Tools = nil
@@ -89,6 +102,9 @@ func effectiveResponsesBridgeTools(toolsRaw, inputRaw json.RawMessage) ([]any, a
 	if len(inputRaw) == 0 || common.GetJsonType(inputRaw) == "string" {
 		var scalar any
 		if len(inputRaw) != 0 {
+			if common.ValidJSON(inputRaw) && utf8.Valid(inputRaw) {
+				return tools, inputRaw, nil
+			}
 			if err := common.Unmarshal(inputRaw, &scalar); err != nil {
 				return nil, nil, fmt.Errorf("invalid Responses input: %w", err)
 			}
@@ -97,6 +113,11 @@ func effectiveResponsesBridgeTools(toolsRaw, inputRaw json.RawMessage) ([]any, a
 	}
 	if common.GetJsonType(inputRaw) != "array" {
 		return nil, nil, fmt.Errorf("Responses input must be a string or array for the text bridge")
+	}
+	// Conservatively bypass decoding the conversation when no additional tools
+	// can occur. Escapes take the decoder path, including escaped type names.
+	if !bytes.Contains(inputRaw, []byte("additional_tools")) && !bytes.ContainsRune(inputRaw, '\\') && common.ValidJSON(inputRaw) && utf8.Valid(inputRaw) {
+		return tools, inputRaw, nil
 	}
 	var input []any
 	if err := common.Unmarshal(inputRaw, &input); err != nil {

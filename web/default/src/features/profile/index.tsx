@@ -17,7 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
+import { getApiErrorMessage } from '@/lib/api-errors'
 import { useStatus } from '@/hooks/use-status'
+import { Button } from '@/components/ui/button'
 import { ContentLoading, ContentReveal } from '@/components/content-loading'
 import { SectionPageLayout } from '@/components/layout'
 import { CheckinCalendarCard } from './components/checkin-calendar-card'
@@ -30,7 +32,7 @@ import { useProfile } from './hooks'
 
 export function Profile() {
   const { t } = useTranslation()
-  const { profile, loading } = useProfile()
+  const { profile, loading, error, fetchProfile } = useProfile()
   const { status } = useStatus()
 
   const checkinEnabled = status?.checkin_enabled === true
@@ -45,6 +47,14 @@ export function Profile() {
       <SectionPageLayout.Title>{t('Profile')}</SectionPageLayout.Title>
       <SectionPageLayout.Content>
         {loading ? <ContentLoading /> : null}
+        {error && (
+          <div role='alert'>
+            <p>{getApiErrorMessage(error, t('Failed to load profile'))}</p>
+            <Button variant='outline' onClick={() => void fetchProfile()}>
+              {t('Retry')}
+            </Button>
+          </div>
+        )}
         {!loading && profile ? (
           <ContentReveal className='flex w-full flex-col gap-4'>
             <ProfileHeader profile={profile} />

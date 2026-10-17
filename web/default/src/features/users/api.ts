@@ -17,7 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { PermissionCatalog } from '@/lib/admin-permissions'
-import { api } from '@/lib/api'
+import { api, type ApiRequestConfig } from '@/lib/api'
+import { unwrapApiResponse } from '@/lib/api-errors'
 import type {
   User,
   GetUsersParams,
@@ -93,9 +94,16 @@ export async function searchUsers(
 /**
  * Get single user by ID
  */
-export async function getUser(id: number): Promise<ApiResponse<User>> {
-  const res = await api.get(`/api/user/${id}`)
-  return res.data
+export async function getUser(
+  id: number,
+  config: ApiRequestConfig = {}
+): Promise<ApiResponse<User>> {
+  const res = await api.get(`/api/user/${id}`, {
+    skipErrorHandler: true,
+    skipBusinessError: true,
+    ...config,
+  })
+  return unwrapApiResponse(res.data)
 }
 
 /**
@@ -104,8 +112,11 @@ export async function getUser(id: number): Promise<ApiResponse<User>> {
 export async function createUser(
   data: UserFormData
 ): Promise<ApiResponse<User>> {
-  const res = await api.post('/api/user/', data)
-  return res.data
+  const res = await api.post('/api/user/', data, {
+    skipErrorHandler: true,
+    skipBusinessError: true,
+  })
+  return unwrapApiResponse(res.data)
 }
 
 /**
@@ -114,8 +125,11 @@ export async function createUser(
 export async function updateUser(
   data: UserFormData & { id: number }
 ): Promise<ApiResponse<Partial<User>>> {
-  const res = await api.put('/api/user/', data)
-  return res.data
+  const res = await api.put('/api/user/', data, {
+    skipErrorHandler: true,
+    skipBusinessError: true,
+  })
+  return unwrapApiResponse(res.data)
 }
 
 /**

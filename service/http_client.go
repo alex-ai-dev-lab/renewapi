@@ -17,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gorilla/websocket"
 
+	"golang.org/x/net/http2"
 	"golang.org/x/net/proxy"
 )
 
@@ -25,6 +26,7 @@ type HTTPClientOptions struct {
 	TLSInsecureSkipVerify bool
 	HTTPProtocol          string
 	HTTP2ConnectionShards int
+	LongStream            bool
 }
 
 type StrictSSRFHTTPClientOptions struct {
@@ -78,6 +80,14 @@ func ValidateSSRFProtectedFetchURL(urlStr string) error {
 }
 
 func InitHttpClient() {
+	proxyClientLock.Lock()
+	defer proxyClientLock.Unlock()
+	initHTTPClientsLocked()
+}
+
+// Constructors do not perform network IO. Publish clients under the same lock
+// as cache lookup/reset so a completed reset cannot be undone by a late miss.
+func initHTTPClientsLocked() {
 	client, err := NewHttpClientWithOptions(HTTPClientOptions{})
 	if err != nil {
 		common.SysError("failed to initialize http client: " + err.Error())
@@ -96,12 +106,16 @@ func InitHttpClient() {
 // GetHttpClient is the general provider client. User-controlled URLs must use
 // GetSSRFProtectedHTTPClient or GetSSRFProtectedHTTPClientWithOptions.
 func GetHttpClient() *http.Client {
+	proxyClientLock.Lock()
+	defer proxyClientLock.Unlock()
 	return httpClient
 }
 
 func GetSSRFProtectedHTTPClient() *http.Client {
 	client, err := GetSSRFProtectedHTTPClientWithOptions(HTTPClientOptions{})
 	if err != nil {
+		proxyClientLock.Lock()
+		defer proxyClientLock.Unlock()
 		return ssrfProtectedHTTPClient
 	}
 	return client
@@ -111,32 +125,7 @@ func GetSSRFProtectedHTTPClientWithOptions(options HTTPClientOptions) (*http.Cli
 	if fetchSetting := system_setting.GetFetchSetting(); fetchSetting == nil || !fetchSetting.EnableSSRFProtection {
 		return GetHttpClientWithOptions(options)
 	}
-	options = normalizeHTTPClientOptions(options)
-	if isDefaultHTTPClientOptions(options) && ssrfProtectedHTTPClient != nil {
-		return ssrfProtectedHTTPClient, nil
-	}
-
-	proxyClientLock.Lock()
-	if client, ok := protectedFetchClients[options]; ok {
-		proxyClientLock.Unlock()
-		return client, nil
-	}
-	proxyClientLock.Unlock()
-
-	client, err := newProtectedFetchHTTPClientWithOptions(options)
-	if err != nil {
-		return nil, err
-	}
-	proxyClientLock.Lock()
-	if existing, ok := protectedFetchClients[options]; ok {
-		proxyClientLock.Unlock()
-		closeHTTPClientIdleConnections(client)
-		return existing, nil
-	}
-	evictHTTPClientIfFull(protectedFetchClients)
-	protectedFetchClients[options] = client
-	proxyClientLock.Unlock()
-	return client, nil
+	return getCachedHTTPClient(options, true)
 }
 
 // NewStrictSSRFHTTPClient creates a protected client whose SSRF policy cannot
@@ -235,34 +224,35 @@ func GetHttpClientWithChannelSettings(settings dto.ChannelSettings) (*http.Clien
 }
 
 func GetHttpClientWithOptions(options HTTPClientOptions) (*http.Client, error) {
-	options = normalizeHTTPClientOptions(options)
-	if isDefaultHTTPClientOptions(options) {
-		if client := GetHttpClient(); client != nil {
-			return client, nil
-		}
-		return NewHttpClientWithOptions(options)
-	}
+	return getCachedHTTPClient(options, false)
+}
 
+func getCachedHTTPClient(options HTTPClientOptions, protected bool) (*http.Client, error) {
+	options = normalizeHTTPClientOptions(options)
 	proxyClientLock.Lock()
-	if client, ok := proxyClients[options]; ok {
-		proxyClientLock.Unlock()
+	defer proxyClientLock.Unlock()
+	cache, defaultClient, create := proxyClients, &httpClient, NewHttpClientWithOptions
+	if protected {
+		cache, defaultClient, create = protectedFetchClients, &ssrfProtectedHTTPClient, newProtectedFetchHTTPClientWithOptions
+	}
+	useDefault := isDefaultHTTPClientOptions(options)
+	if useDefault && *defaultClient != nil {
+		return *defaultClient, nil
+	}
+	if client, ok := cache[options]; ok {
 		return client, nil
 	}
-	proxyClientLock.Unlock()
 
-	client, err := NewHttpClientWithOptions(options)
+	client, err := create(options)
 	if err != nil {
 		return nil, err
 	}
-	proxyClientLock.Lock()
-	if existing, ok := proxyClients[options]; ok {
-		proxyClientLock.Unlock()
-		closeHTTPClientIdleConnections(client)
-		return existing, nil
+	if useDefault {
+		*defaultClient = client
+	} else {
+		evictHTTPClientIfFull(cache)
+		cache[options] = client
 	}
-	evictHTTPClientIfFull(proxyClients)
-	proxyClients[options] = client
-	proxyClientLock.Unlock()
 	return client, nil
 }
 
@@ -279,7 +269,10 @@ func InvalidateHTTPClientOptions(options HTTPClientOptions) {
 }
 
 func InvalidateHTTPClientSettings(settings dto.ChannelSettings) {
-	InvalidateHTTPClientOptions(HTTPClientOptionsFromChannelSettings(settings))
+	options := HTTPClientOptionsFromChannelSettings(settings)
+	InvalidateHTTPClientOptions(options)
+	options.LongStream = true
+	InvalidateHTTPClientOptions(options)
 }
 
 func NewWebSocketDialerWithChannelSettings(settings dto.ChannelSettings) (*websocket.Dialer, error) {
@@ -301,14 +294,6 @@ func evictHTTPClientIfFull(cache map[HTTPClientOptions]*http.Client) {
 func ResetProxyClientCache() {
 	proxyClientLock.Lock()
 	defer proxyClientLock.Unlock()
-	if httpClient != nil {
-		closeHTTPClientIdleConnections(httpClient)
-		httpClient = nil
-	}
-	if ssrfProtectedHTTPClient != nil {
-		closeHTTPClientIdleConnections(ssrfProtectedHTTPClient)
-		ssrfProtectedHTTPClient = nil
-	}
 	for _, client := range proxyClients {
 		closeHTTPClientIdleConnections(client)
 	}
@@ -317,7 +302,7 @@ func ResetProxyClientCache() {
 	}
 	proxyClients = make(map[HTTPClientOptions]*http.Client)
 	protectedFetchClients = make(map[HTTPClientOptions]*http.Client)
-	InitHttpClient()
+	initHTTPClientsLocked()
 }
 
 func closeHTTPClientIdleConnections(client *http.Client) {
@@ -346,6 +331,22 @@ func NewHttpClientWithOptions(options HTTPClientOptions) (*http.Client, error) {
 		roundTripper = newShardedRoundTripper(policy.Shards, func() *http.Transport {
 			return transport.Clone()
 		})
+	}
+	if options.LongStream && policy.Protocol != dto.HTTPProtocolHTTP1 {
+		transports := []*http.Transport{transport}
+		if sharded, ok := roundTripper.(*shardedRoundTripper); ok {
+			transports = nil
+			for _, shard := range sharded.shards {
+				transports = append(transports, shard.(*http.Transport))
+			}
+		}
+		readIdle := time.Duration(common.GetEnvOrDefault("RELAY_H2_READ_IDLE_TIMEOUT", 30)) * time.Second
+		pingTimeout := time.Duration(common.GetEnvOrDefault("RELAY_H2_PING_TIMEOUT", 15)) * time.Second
+		for _, current := range transports {
+			if err := configureLongStreamHTTP2(current, readIdle, pingTimeout); err != nil {
+				return nil, err
+			}
+		}
 	}
 	client := &http.Client{
 		Transport:     roundTripper,
@@ -397,7 +398,25 @@ func normalizeHTTPClientOptions(options HTTPClientOptions) HTTPClientOptions {
 
 func isDefaultHTTPClientOptions(options HTTPClientOptions) bool {
 	return options.Proxy == "" && !options.TLSInsecureSkipVerify &&
-		options.HTTPProtocol == dto.HTTPProtocolAuto && options.HTTP2ConnectionShards == 1
+		options.HTTPProtocol == dto.HTTPProtocolAuto && options.HTTP2ConnectionShards == 1 && !options.LongStream
+}
+
+// Configure only final transports: cloning a configured transport would retain
+// TLSNextProto closures belonging to another HTTP/2 connection pool.
+func configureLongStreamHTTP2(transport *http.Transport, readIdle, pingTimeout time.Duration) error {
+	if readIdle <= 0 {
+		return nil
+	}
+	h2, err := http2.ConfigureTransports(transport)
+	if err != nil {
+		return fmt.Errorf("configure streaming HTTP/2: %w", err)
+	}
+	h2.ReadIdleTimeout = readIdle
+	if pingTimeout <= 0 {
+		pingTimeout = 15 * time.Second
+	}
+	h2.PingTimeout = pingTimeout
+	return nil
 }
 
 func newHTTPTransportWithOptions(options HTTPClientOptions) (*http.Transport, error) {

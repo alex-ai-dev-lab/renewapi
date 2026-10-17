@@ -31,28 +31,57 @@ func buildMaskedTokenResponses(tokens []*model.Token) []*model.Token {
 	return maskedTokens
 }
 
+func tokenStatusFilter(c *gin.Context) ([]int, error) {
+	if c.Query("status") == "" {
+		return nil, nil
+	}
+	var statuses []int
+	for _, value := range strings.Split(c.Query("status"), ",") {
+		status, err := strconv.Atoi(value)
+		if err != nil || status < common.TokenStatusEnabled || status > common.TokenStatusExhausted {
+			return nil, fmt.Errorf("invalid token status: %q", value)
+		}
+		statuses = append(statuses, status)
+	}
+	return statuses, nil
+}
+
 func GetAllTokens(c *gin.Context) {
-	userId := c.GetInt("id")
-	pageInfo := common.GetPageQuery(c)
-	tokens, err := model.GetAllUserTokens(userId, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	statuses, err := tokenStatusFilter(c)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	total, _ := model.CountUserTokens(userId)
+	userId := c.GetInt("id")
+	pageInfo := common.GetPageQuery(c)
+	tokens, err := model.GetAllUserTokens(userId, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), statuses...)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	total, err := model.CountUserTokens(userId, statuses...)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(buildMaskedTokenResponses(tokens))
 	common.ApiSuccess(c, pageInfo)
 }
 
 func SearchTokens(c *gin.Context) {
+	statuses, err := tokenStatusFilter(c)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	userId := c.GetInt("id")
 	keyword := c.Query("keyword")
 	token := c.Query("token")
 
 	pageInfo := common.GetPageQuery(c)
 
-	tokens, total, err := model.SearchUserTokens(userId, keyword, token, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	tokens, total, err := model.SearchUserTokens(userId, keyword, token, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), statuses...)
 	if err != nil {
 		common.ApiError(c, err)
 		return

@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { unwrapApiResponse } from '@/lib/api-errors'
 import { buildQueryParams } from './lib/query-params'
 import type {
   GetLogsParams,
@@ -37,7 +38,8 @@ function buildApiPath(endpoint: string, isAdmin: boolean): string {
 async function fetchLogs<T>(
   endpoint: string,
   params: T,
-  isAdmin: boolean
+  isAdmin: boolean,
+  signal?: AbortSignal
 ): Promise<GetLogsResponse> {
   const paramRecord = params as unknown as Record<string, unknown>
   const queryParams = buildQueryParams({
@@ -46,8 +48,13 @@ async function fetchLogs<T>(
     ...params,
   })
   const path = buildApiPath(endpoint, isAdmin)
-  const res = await api.get(`${path}?${queryParams}`)
-  return res.data
+  // The admin list is registered at /api/log/; avoid Gin's extra redirect.
+  const listPath = isAdmin ? `${path}/` : path
+  const res = await api.get(`${listPath}?${queryParams}`, {
+    signal,
+    skipErrorHandler: true,
+  })
+  return unwrapApiResponse(res.data)
 }
 
 async function fetchLogStats<T>(
@@ -67,12 +74,13 @@ async function fetchLogStats<T>(
 // Common Log APIs
 // ============================================================================
 
-export const getAllLogs = (params: GetLogsParams = {}) =>
-  fetchLogs('/api/log', params, true)
+export const getAllLogs = (params: GetLogsParams = {}, signal?: AbortSignal) =>
+  fetchLogs('/api/log', params, true, signal)
 
 export const getUserLogs = (
-  params: Omit<GetLogsParams, 'username' | 'channel'> = {}
-) => fetchLogs('/api/log', params, false)
+  params: Omit<GetLogsParams, 'username' | 'channel'> = {},
+  signal?: AbortSignal
+) => fetchLogs('/api/log', params, false, signal)
 
 export const getLogStats = (params: GetLogStatsParams = {}) =>
   fetchLogStats('/api/log', params, true)

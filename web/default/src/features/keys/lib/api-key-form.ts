@@ -37,7 +37,7 @@ export function getApiKeyFormSchema(t: TFunction) {
       allow_ips: z.string().optional(),
       group: z.string().optional(),
       cross_group_retry: z.boolean().optional(),
-      tokenCount: z.number().min(1).optional(),
+      tokenCount: z.number().int().min(1).max(100).optional(),
     })
     .superRefine((data, ctx) => {
       if (data.unlimited_quota) {

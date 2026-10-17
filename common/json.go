@@ -14,6 +14,10 @@ func Unmarshal(data []byte, v any) error {
 	return json.Unmarshal(data, v)
 }
 
+func ValidJSON(data []byte) bool {
+	return json.Valid(data)
+}
+
 func UnmarshalJsonStr(data string, v any) error {
 	return json.Unmarshal(StringToByteSlice(data), v)
 }

@@ -213,19 +213,7 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 		return nil
 	}
 
-	if err := s.reserveFunding(delta); err != nil {
-		return err
-	}
-	if err := s.reserveToken(delta); err != nil {
-		s.rollbackFundingReserve(delta)
-		return err
-	}
-
-	s.preConsumedQuota += delta
-	s.tokenConsumed += delta
-	s.extraReserved += delta
-	s.syncRelayInfo()
-	return nil
+	return errors.New("billing reservation requires a persistent ledger")
 }
 
 // ---------------------------------------------------------------------------
@@ -246,66 +234,31 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 		logger.LogInfo(c, fmt.Sprintf("用户 %d 需要预扣费 %s (funding=%s)", s.relayInfo.UserId, logger.FormatQuota(effectiveQuota), s.funding.Source()))
 	}
 
-	if s.ledgerMode != BillingLedgerModeOff {
-		channelID := common.GetContextKeyInt(c, constant.ContextKeyChannelId)
-		if s.relayInfo.ChannelMeta != nil && s.relayInfo.ChannelMeta.ChannelId > 0 {
-			channelID = s.relayInfo.ChannelMeta.ChannelId
-		}
-		reservation, err := model.ReserveBillingLedger(model.BillingReservation{
-			RequestID: s.relayInfo.RequestId, Kind: "request", Mode: s.ledgerMode,
-			FundingSource: s.funding.Source(), UserID: s.relayInfo.UserId,
-			TokenID: s.relayInfo.TokenId, ChannelID: channelID,
-			Quota: int64(effectiveQuota), TokenUnlimited: s.relayInfo.TokenUnlimited,
-			Playground: s.relayInfo.IsPlayground, ApplyBalances: true,
-		})
-		if err != nil {
-			return billingReservationError(err)
-		}
-		if reservation.AlreadyReserved {
-			return types.NewErrorWithStatusCode(errors.New("duplicate billing request id"), types.ErrorCodeInvalidRequest, http.StatusConflict, types.ErrOptionWithSkipRetry())
-		}
-		s.ledgerID = reservation.Ledger.ID
-		s.preConsumedQuota = effectiveQuota
-		s.tokenConsumed = effectiveQuota
-		s.applyLedgerReservation(reservation)
-		s.syncRelayInfo()
-		model.InvalidateBillingBalanceCaches(s.relayInfo.UserId, s.relayInfo.TokenId)
-		return nil
+	// All modes share the existing durable balance ledger. Off keeps legacy
+	// statistics ownership; it no longer disables crash recovery.
+	channelID := common.GetContextKeyInt(c, constant.ContextKeyChannelId)
+	if s.relayInfo.ChannelMeta != nil && s.relayInfo.ChannelMeta.ChannelId > 0 {
+		channelID = s.relayInfo.ChannelMeta.ChannelId
 	}
-
-	// Explicit off mode keeps the legacy compatibility path. The default
-	// shadow mode is handled by the durable reservation above.
-	// ---- 1) 预扣令牌额度 ----
-	if effectiveQuota > 0 {
-		if err := PreConsumeTokenQuota(s.relayInfo, effectiveQuota); err != nil {
-			return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
-		}
-		s.tokenConsumed = effectiveQuota
+	reservation, err := model.ReserveBillingLedger(model.BillingReservation{
+		RequestID: s.relayInfo.RequestId, Kind: "request", Mode: s.ledgerMode,
+		FundingSource: s.funding.Source(), UserID: s.relayInfo.UserId,
+		TokenID: s.relayInfo.TokenId, ChannelID: channelID,
+		Quota: int64(effectiveQuota), TokenUnlimited: s.relayInfo.TokenUnlimited,
+		Playground: s.relayInfo.IsPlayground, ApplyBalances: true,
+	})
+	if err != nil {
+		return billingReservationError(err)
 	}
-
-	// ---- 2) 预扣资金来源 ----
-	if err := s.funding.PreConsume(effectiveQuota); err != nil {
-		// 预扣费失败，回滚令牌额度
-		if s.tokenConsumed > 0 && !s.relayInfo.IsPlayground {
-			if rollbackErr := model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, s.tokenConsumed); rollbackErr != nil {
-				common.SysLog(fmt.Sprintf("error rolling back token quota (userId=%d, tokenId=%d, amount=%d, fundingErr=%s): %s",
-					s.relayInfo.UserId, s.relayInfo.TokenId, s.tokenConsumed, err.Error(), rollbackErr.Error()))
-			}
-			s.tokenConsumed = 0
-		}
-		// TODO: model 层应定义哨兵错误（如 ErrNoActiveSubscription），用 errors.Is 替代字符串匹配
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "no active subscription") || strings.Contains(errMsg, "subscription quota insufficient") {
-			return types.NewErrorWithStatusCode(fmt.Errorf("订阅额度不足或未配置订阅: %s", errMsg), types.ErrorCodeInsufficientUserQuota, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
-		}
-		return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+	if reservation.AlreadyReserved {
+		return types.NewErrorWithStatusCode(errors.New("duplicate billing request id"), types.ErrorCodeInvalidRequest, http.StatusConflict, types.ErrOptionWithSkipRetry())
 	}
-
+	s.ledgerID = reservation.Ledger.ID
 	s.preConsumedQuota = effectiveQuota
-
-	// ---- 同步 RelayInfo 兼容字段 ----
+	s.tokenConsumed = effectiveQuota
+	s.applyLedgerReservation(reservation)
 	s.syncRelayInfo()
-
+	model.InvalidateBillingBalanceCaches(s.relayInfo.UserId, s.relayInfo.TokenId)
 	return nil
 }
 
@@ -314,7 +267,7 @@ func (s *BillingSession) ownsLedgerAccounting() bool {
 }
 
 func (s *BillingSession) usesPersistentBalanceLedger() bool {
-	return s != nil && s.ledgerID != 0 && s.ledgerMode != BillingLedgerModeOff
+	return s != nil && s.ledgerID != 0
 }
 
 func (s *BillingSession) settleWithTask(task *model.Task, actualQuota int) error {
@@ -429,55 +382,6 @@ func (s *BillingSession) applyLedgerReservation(result *model.BillingReservation
 			}
 		}
 	}
-}
-
-func (s *BillingSession) reserveFunding(delta int) error {
-	switch funding := s.funding.(type) {
-	case *WalletFunding:
-		if err := model.DecreaseUserQuota(funding.userId, delta, false); err != nil {
-			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
-		}
-		funding.consumed += delta
-		return nil
-	case *SubscriptionFunding:
-		if err := model.AdjustSubscriptionPreConsume(funding.requestId, funding.subscriptionId, int64(delta)); err != nil {
-			return types.NewErrorWithStatusCode(
-				fmt.Errorf("订阅额度不足或未配置订阅: %s", err.Error()),
-				types.ErrorCodeInsufficientUserQuota,
-				http.StatusForbidden,
-				types.ErrOptionWithSkipRetry(),
-				types.ErrOptionWithNoRecordErrorLog(),
-			)
-		}
-		return nil
-	default:
-		return types.NewError(fmt.Errorf("unsupported funding source: %s", s.funding.Source()), types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
-	}
-}
-
-func (s *BillingSession) rollbackFundingReserve(delta int) {
-	switch funding := s.funding.(type) {
-	case *WalletFunding:
-		if err := model.IncreaseUserQuota(funding.userId, delta, false); err != nil {
-			common.SysLog("error rolling back wallet funding reserve: " + err.Error())
-		} else {
-			funding.consumed -= delta
-		}
-	case *SubscriptionFunding:
-		if err := model.AdjustSubscriptionPreConsume(funding.requestId, funding.subscriptionId, -int64(delta)); err != nil {
-			common.SysLog("error rolling back subscription funding reserve: " + err.Error())
-		}
-	}
-}
-
-func (s *BillingSession) reserveToken(delta int) error {
-	if delta <= 0 || s.relayInfo.IsPlayground {
-		return nil
-	}
-	if err := PreConsumeTokenQuota(s.relayInfo, delta); err != nil {
-		return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
-	}
-	return nil
 }
 
 // shouldTrust 统一信任额度检查，适用于钱包和订阅。

@@ -16,12 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { AxiosError, isCancel } from 'axios'
 import i18next from 'i18next'
 import { toast } from 'sonner'
+import { claimErrorNotification, getApiErrorMessage } from './api-errors'
+import { isRequestCanceled } from './request-errors'
 
 export function handleServerError(error: unknown) {
-  if (isCancel(error)) return
+  if (isRequestCanceled(error) || !claimErrorNotification(error)) return
   // eslint-disable-next-line no-console
   console.log(error)
 
@@ -36,9 +37,5 @@ export function handleServerError(error: unknown) {
     errMsg = i18next.t('Content not found.')
   }
 
-  if (error instanceof AxiosError) {
-    errMsg = error.response?.data.title
-  }
-
-  toast.error(errMsg)
+  toast.error(getApiErrorMessage(error, errMsg))
 }

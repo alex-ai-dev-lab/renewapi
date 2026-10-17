@@ -10,14 +10,17 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-const tokenLimitWindow = time.Minute
+const (
+	tokenLimitWindow              = time.Minute
+	tokenConcurrencyLeaseDuration = 2 * time.Minute
+	tokenConcurrencyRenewInterval = 30 * time.Second
+)
 
 var (
 	tokenLimitMu          sync.Mutex
 	tokenLimitCounters    = map[string]*tokenLimitCounter{}
 	tokenConcurrencyMu    sync.Mutex
 	tokenConcurrencyCount = map[int]int{}
-	tokenConcurrencyRedis = map[int]int{}
 	tokenRateLimitScript  = redis.NewScript(`
 local value = redis.call('INCRBY', KEYS[1], ARGV[1])
 if redis.call('TTL', KEYS[1]) < 0 then
@@ -30,23 +33,32 @@ end
 return 1
 `)
 	tokenConcurrencyAcquireScript = redis.NewScript(`
-local value = redis.call('INCR', KEYS[1])
-if redis.call('TTL', KEYS[1]) < 0 then
-  redis.call('EXPIRE', KEYS[1], ARGV[2])
-end
-if value > tonumber(ARGV[1]) then
-  redis.call('DECR', KEYS[1])
+local clock = redis.call('TIME')
+local now = clock[1] * 1000 + math.floor(clock[2] / 1000)
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now)
+if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[1]) then
   return 0
 end
+redis.call('ZADD', KEYS[1], now + tonumber(ARGV[2]), ARGV[3])
+redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[2]) * 2)
 return 1
 `)
 	tokenConcurrencyReleaseScript = redis.NewScript(`
-local current = tonumber(redis.call('GET', KEYS[1]) or '0')
-if current <= 1 then
+redis.call('ZREM', KEYS[1], ARGV[1])
+if redis.call('ZCARD', KEYS[1]) == 0 then
   redis.call('UNLINK', KEYS[1])
+end
+return 1
+`)
+	tokenConcurrencyRenewScript = redis.NewScript(`
+if not redis.call('ZSCORE', KEYS[1], ARGV[1]) then
   return 0
 end
-return redis.call('DECR', KEYS[1])
+local clock = redis.call('TIME')
+local now = clock[1] * 1000 + math.floor(clock[2] / 1000)
+redis.call('ZADD', KEYS[1], 'XX', now + tonumber(ARGV[2]), ARGV[1])
+redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[2]) * 2)
+return 1
 `)
 )
 
@@ -66,19 +78,32 @@ func CheckAndRecordTokenTPM(tokenID int, limit int, tokens int) bool {
 	return checkAndRecordTokenLimit(tokenLimitKey("tpm", tokenID), limit, tokens)
 }
 
-func TryAcquireTokenConcurrency(tokenID int, limit int) bool {
+// TokenConcurrencySlot owns one request's slot and its cancellation context.
+// Release is idempotent and always uses the backend that granted this slot.
+type TokenConcurrencySlot struct {
+	Context context.Context
+	release func()
+	client  *redis.Client
+	key, id string
+}
+
+func (s *TokenConcurrencySlot) Release() { s.release() }
+
+func AcquireTokenConcurrency(ctx context.Context, tokenID int, limit int) (*TokenConcurrencySlot, bool) {
 	if tokenID <= 0 || limit <= 0 {
-		return true
+		return &TokenConcurrencySlot{Context: ctx, release: func() {}}, true
 	}
-	if common.RedisEnabled && common.RDB != nil {
-		ok, err := tryAcquireTokenConcurrencyRedis(tokenID, limit)
+	if client := common.RDB; common.RedisEnabled && client != nil {
+		slot := &TokenConcurrencySlot{client: client, key: tokenConcurrencyKey(tokenID), id: common.GetUUID()}
+		opCtx, cancel := common.RedisOperationContext(ctx)
+		acquired, err := tokenConcurrencyAcquireScript.Run(opCtx, client, []string{slot.key}, limit, tokenConcurrencyLeaseDuration.Milliseconds(), slot.id).Int()
+		cancel()
 		if err == nil {
-			if ok {
-				tokenConcurrencyMu.Lock()
-				tokenConcurrencyRedis[tokenID]++
-				tokenConcurrencyMu.Unlock()
+			if acquired != 1 {
+				return nil, false
 			}
-			return ok
+			slot.startRenewal(ctx, tokenConcurrencyRenewInterval)
+			return slot, true
 		}
 		common.SysError(fmt.Sprintf("token concurrency redis failed, fallback to memory: %v", err))
 	}
@@ -86,22 +111,13 @@ func TryAcquireTokenConcurrency(tokenID int, limit int) bool {
 	defer tokenConcurrencyMu.Unlock()
 	current := tokenConcurrencyCount[tokenID]
 	if current >= limit {
-		return false
+		return nil, false
 	}
 	tokenConcurrencyCount[tokenID] = current + 1
-	return true
+	return &TokenConcurrencySlot{Context: ctx, release: sync.OnceFunc(func() { releaseTokenConcurrencyMemory(tokenID) })}, true
 }
 
-func ReleaseTokenConcurrency(tokenID int, limit int) {
-	if tokenID <= 0 || limit <= 0 {
-		return
-	}
-	if common.RedisEnabled && common.RDB != nil && releaseTokenConcurrencyRedisMarker(tokenID) {
-		if err := releaseTokenConcurrencyRedis(tokenID); err != nil {
-			common.SysError(fmt.Sprintf("token concurrency redis release failed: %v", err))
-		}
-		return
-	}
+func releaseTokenConcurrencyMemory(tokenID int) {
 	tokenConcurrencyMu.Lock()
 	defer tokenConcurrencyMu.Unlock()
 	if current := tokenConcurrencyCount[tokenID]; current > 1 {
@@ -117,7 +133,6 @@ func ResetTokenLimitForTest() {
 	tokenLimitMu.Unlock()
 	tokenConcurrencyMu.Lock()
 	tokenConcurrencyCount = map[int]int{}
-	tokenConcurrencyRedis = map[int]int{}
 	tokenConcurrencyMu.Unlock()
 }
 
@@ -169,40 +184,57 @@ func checkAndRecordTokenLimitRedis(key string, limit int, amount int) (bool, err
 	return allowed == 1, err
 }
 
-func tryAcquireTokenConcurrencyRedis(tokenID int, limit int) (bool, error) {
-	ctx, cancel := common.RedisOperationContext(context.Background())
+func (s *TokenConcurrencySlot) renew(ctx context.Context) (bool, error) {
+	ctx, stop := context.WithTimeout(ctx, tokenConcurrencyRenewInterval/2)
+	defer stop()
+	ctx, cancel := common.RedisOperationContext(ctx)
 	defer cancel()
-	key := tokenConcurrencyKey(tokenID)
-	acquired, err := tokenConcurrencyAcquireScript.Run(
-		ctx,
-		common.RDB,
-		[]string{key},
-		limit,
-		int((2*time.Minute)/time.Second),
-	).Int()
-	return acquired == 1, err
+	renewed, err := tokenConcurrencyRenewScript.Run(ctx, s.client, []string{s.key}, s.id, tokenConcurrencyLeaseDuration.Milliseconds()).Int()
+	return renewed == 1, err
 }
 
-func releaseTokenConcurrencyRedis(tokenID int) error {
-	ctx, cancel := common.RedisOperationContext(context.Background())
-	defer cancel()
-	key := tokenConcurrencyKey(tokenID)
-	return tokenConcurrencyReleaseScript.Run(ctx, common.RDB, []string{key}).Err()
-}
-
-func releaseTokenConcurrencyRedisMarker(tokenID int) bool {
-	tokenConcurrencyMu.Lock()
-	defer tokenConcurrencyMu.Unlock()
-	current := tokenConcurrencyRedis[tokenID]
-	if current <= 0 {
-		return false
-	}
-	if current == 1 {
-		delete(tokenConcurrencyRedis, tokenID)
-	} else {
-		tokenConcurrencyRedis[tokenID] = current - 1
-	}
-	return true
+func (s *TokenConcurrencySlot) startRenewal(parent context.Context, interval time.Duration) {
+	ctx, cancel := context.WithCancel(parent)
+	s.Context = ctx
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		lastRenewed := time.Now()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				renewed, err := s.renew(ctx)
+				if ctx.Err() != nil {
+					return
+				}
+				if err != nil {
+					common.SysError(fmt.Sprintf("token concurrency renewal failed: %v", err))
+					// Stop before the lease expires if Redis remains unavailable.
+					if time.Since(lastRenewed) < tokenConcurrencyLeaseDuration-tokenConcurrencyRenewInterval {
+						continue
+					}
+				} else if renewed {
+					lastRenewed = time.Now()
+					continue
+				}
+				cancel()
+				return
+			}
+		}
+	}()
+	s.release = sync.OnceFunc(func() {
+		cancel()
+		<-done
+		opCtx, stop := common.RedisOperationContext(context.Background())
+		defer stop()
+		if err := tokenConcurrencyReleaseScript.Run(opCtx, s.client, []string{s.key}, s.id).Err(); err != nil {
+			common.SysError(fmt.Sprintf("token concurrency redis release failed: %v", err))
+		}
+	})
 }
 
 func tokenLimitKey(kind string, tokenID int) string {
@@ -210,5 +242,5 @@ func tokenLimitKey(kind string, tokenID int) string {
 }
 
 func tokenConcurrencyKey(tokenID int) string {
-	return fmt.Sprintf("token_limit:concurrency:%d", tokenID)
+	return fmt.Sprintf("token_limit:concurrency:v2:%d", tokenID)
 }

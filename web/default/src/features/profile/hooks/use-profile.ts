@@ -16,48 +16,39 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import i18next from 'i18next'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
+import { handleServerError } from '@/lib/handle-server-error'
 import { getUserProfile, updateUserProfile, updateUserSettings } from '../api'
-import type {
-  UserProfile,
-  UpdateUserRequest,
-  UpdateUserSettingsRequest,
-} from '../types'
+import type { UpdateUserRequest, UpdateUserSettingsRequest } from '../types'
 
 // ============================================================================
 // Profile Hook
 // ============================================================================
 
 export function useProfile() {
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [loading, setLoading] = useState(true)
+  const userId = useAuthStore((state) => state.auth.user?.id)
+  const query = useQuery({
+    queryKey: ['profile', userId],
+    queryFn: ({ signal }) => getUserProfile({ signal }),
+    staleTime: 30_000,
+  })
+  const profile = query.data?.data ?? null
+  const loading = query.isPending
   const [updating, setUpdating] = useState(false)
 
-  // Fetch user profile (with optional silent mode)
-  const fetchProfile = useCallback(async (silent = false) => {
-    try {
-      if (!silent) {
-        setLoading(true)
-      }
-      const response = await getUserProfile()
+  const refetchProfile = query.refetch
 
-      if (response.success && response.data) {
-        setProfile(response.data)
-      }
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to fetch profile:', error)
-      if (!silent) {
-        toast.error(i18next.t('Failed to load profile'))
-      }
-    } finally {
-      if (!silent) {
-        setLoading(false)
-      }
-    }
-  }, [])
+  // Fetch user profile (with optional silent mode)
+  const fetchProfile = useCallback(
+    async (_silent = false) => {
+      await refetchProfile()
+    },
+    [refetchProfile]
+  )
 
   // Refresh profile silently (without loading state)
   const refreshProfile = useCallback(async () => {
@@ -82,7 +73,7 @@ export function useProfile() {
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error('Failed to update profile:', error)
-        toast.error(i18next.t('Failed to update profile'))
+        handleServerError(error)
         return false
       } finally {
         setUpdating(false)
@@ -109,7 +100,7 @@ export function useProfile() {
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error('Failed to update settings:', error)
-        toast.error(i18next.t('Failed to update settings'))
+        handleServerError(error)
         return false
       } finally {
         setUpdating(false)
@@ -118,24 +109,10 @@ export function useProfile() {
     [refreshProfile]
   )
 
-  // Initial fetch
-  useEffect(() => {
-    let cleanup: (() => void) | undefined
-    const timer = setTimeout(() => {
-      const effectCleanup = (() => {
-        fetchProfile()
-      })()
-      if (typeof effectCleanup === 'function') cleanup = effectCleanup
-    }, 0)
-    return () => {
-      clearTimeout(timer)
-      cleanup?.()
-    }
-  }, [fetchProfile])
-
   return {
     profile,
     loading,
+    error: query.error,
     updating,
     fetchProfile,
     refreshProfile,

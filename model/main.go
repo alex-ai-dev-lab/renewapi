@@ -326,6 +326,7 @@ func mainSchemaMigrationDefinitions() []schemaMigrationDefinition {
 		{Key: "core-schema:v1", Revision: "2026-07-28.1", Apply: migrateCoreSchemaV1},
 		{Key: "billing-ledger:v1", Revision: "2026-07-28.1", Apply: migrateBillingLedgerV1},
 		{Key: "billing-ledger:v2", Revision: "2026-08-17.1", Apply: migrateBillingLedgerV2},
+		{Key: "payment-snapshots:v1", Revision: "2026-10-17.1", Apply: migratePaymentSnapshotsV1},
 		{Key: "channel-config:v1", Revision: "2026-07-28.1", Apply: migrateChannelConfigV1},
 		{Key: "channel-test-prompts:v1", Revision: "2026-09-23.1", Apply: migrateChannelTestPromptsV1},
 		{Key: "options-primary-key:v1", Revision: "2026-09-23.1", Apply: migrateOptionsPrimaryKeyV1},

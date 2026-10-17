@@ -32,6 +32,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { encodeChannelConnectionInfo } from '@/lib/channel-connection-info'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
+import { handleServerError } from '@/lib/handle-server-error'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenuItem,
@@ -123,8 +124,8 @@ export function DataTableRowActions<TData>({
       } else {
         toast.error(result.message || t(ERROR_MESSAGES.STATUS_UPDATE_FAILED))
       }
-    } catch {
-      toast.error(t(ERROR_MESSAGES.UNEXPECTED))
+    } catch (error) {
+      handleServerError(error)
     } finally {
       setIsTogglingStatus(false)
     }

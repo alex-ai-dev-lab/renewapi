@@ -73,4 +73,43 @@ describe('request cancellation error handling', () => {
 
     expect(toastError).not.toHaveBeenCalled()
   })
+
+  test('Axios and mutation handler notify the same error once', async () => {
+    const error = new axios.AxiosError('one failure', 'ERR_NETWORK')
+    await expect(
+      api.post('/test', {}, { adapter: rejectAdapter(error) })
+    ).rejects.toBe(error)
+    handleServerError(error)
+    expect(toastError).toHaveBeenCalledTimes(1)
+  })
+
+  test('resolves default, class and explicit timeout precedence', async () => {
+    for (const [config, expected] of [
+      [{}, 30_000],
+      [{ timeoutClass: 'background' as const }, 60_000],
+      [{ timeoutClass: 'upload' as const }, 300_000],
+      [{ timeout: 1234, timeoutClass: 'upload' as const }, 1234],
+      [{ timeout: 0, timeoutClass: 'upload' as const }, 0],
+    ] as const) {
+      let timeout: number | undefined
+      await api.post(
+        '/timeout-test',
+        {},
+        {
+          ...config,
+          adapter: async (resolved) => {
+            timeout = resolved.timeout
+            return {
+              config: resolved,
+              data: { success: true },
+              status: 200,
+              statusText: 'OK',
+              headers: {},
+            }
+          },
+        }
+      )
+      expect(timeout).toBe(expected)
+    }
+  })
 })

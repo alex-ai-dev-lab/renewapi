@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -398,6 +399,15 @@ func GetUserById(id int, selectAll bool) (*User, error) {
 	} else {
 		err = DB.Omit("password").First(&user, "id = ?", id).Error
 	}
+	return &user, err
+}
+
+// GetUserAuthorization loads one authoritative panel identity snapshot. Session
+// role/status and cache TTL must not delay permission revocation.
+func GetUserAuthorization(ctx context.Context, id int) (*User, error) {
+	var user User
+	err := DB.WithContext(ctx).Select("id", "username", "role", "status", "group").
+		First(&user, "id = ?", id).Error
 	return &user, err
 }
 

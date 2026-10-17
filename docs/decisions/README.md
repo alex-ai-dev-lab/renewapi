@@ -18,3 +18,6 @@ Current decisions:
 - [ADR-010：统一检查与 Releases 离线镜像分发](010-releases-only-distribution.md)
 - [ADR-015：默认前端唯一构建与语义色边界](015-default-frontend-and-semantic-colors.md)
 - [ADR-018：Responses 工具输出与首语义识别](018-responses-tool-output.md)
+
+- [ADR-020：审计修复的授权、支付与状态边界](020-audit-repair-boundaries.md)
+- [ADR-021：请求复制、限流存储与长流生命周期](021-relay-performance-and-stream-lifecycle.md)

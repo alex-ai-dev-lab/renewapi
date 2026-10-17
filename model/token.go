@@ -81,10 +81,24 @@ func (token *Token) GetIpLimits() []string {
 	return ipLimits
 }
 
-func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {
+func userTokensQuery(userId int, statuses []int) *gorm.DB {
+	query := DB.Model(&Token{}).Where("user_id = ?", userId)
+	if len(statuses) > 0 {
+		query = query.Where("status IN ?", statuses)
+	}
+	return query
+}
+
+func GetAllUserTokens(userId int, startIdx int, num int, statuses ...int) ([]*Token, error) {
+	if num <= 0 || num > searchHardLimit {
+		num = searchHardLimit
+	}
+	if startIdx < 0 {
+		startIdx = 0
+	}
 	var tokens []*Token
 	var err error
-	err = DB.Where("user_id = ?", userId).Order("id desc").Limit(num).Offset(startIdx).Find(&tokens).Error
+	err = userTokensQuery(userId, statuses).Order("id desc").Limit(num).Offset(startIdx).Find(&tokens).Error
 	return tokens, err
 }
 
@@ -127,7 +141,7 @@ func sanitizeLikePattern(input string) (string, error) {
 
 const searchHardLimit = 100
 
-func SearchUserTokens(userId int, keyword string, token string, offset int, limit int) (tokens []*Token, total int64, err error) {
+func SearchUserTokens(userId int, keyword string, token string, offset int, limit int, statuses ...int) (tokens []*Token, total int64, err error) {
 	// model 层强制截断
 	if limit <= 0 || limit > searchHardLimit {
 		limit = searchHardLimit
@@ -154,7 +168,7 @@ func SearchUserTokens(userId int, keyword string, token string, offset int, limi
 		}
 	}
 
-	baseQuery := DB.Model(&Token{}).Where("user_id = ?", userId)
+	baseQuery := userTokensQuery(userId, statuses)
 
 	// 非空才加 LIKE 条件，空则跳过（不过滤该字段）
 	if keyword != "" {
@@ -172,8 +186,8 @@ func SearchUserTokens(userId int, keyword string, token string, offset int, limi
 		baseQuery = baseQuery.Where(commonKeyCol+" LIKE ? ESCAPE '!'", tokenPattern)
 	}
 
-	// 先查匹配总数（用于分页，受 maxTokens 上限保护，避免全表 COUNT）
-	err = baseQuery.Limit(maxTokens).Count(&total).Error
+	// Pagination reports the exact matching total; LIMIT on COUNT would not bound scans.
+	err = baseQuery.Session(&gorm.Session{}).Count(&total).Error
 	if err != nil {
 		common.SysError("failed to count search tokens: " + err.Error())
 		return nil, 0, errors.New("搜索令牌失败")
@@ -453,9 +467,9 @@ func decreaseTokenQuota(id int, key string, quota int) (err error) {
 }
 
 // CountUserTokens returns total number of tokens for the given user, used for pagination
-func CountUserTokens(userId int) (int64, error) {
+func CountUserTokens(userId int, statuses ...int) (int64, error) {
 	var total int64
-	err := DB.Model(&Token{}).Where("user_id = ?", userId).Count(&total).Error
+	err := userTokensQuery(userId, statuses).Count(&total).Error
 	return total, err
 }
 

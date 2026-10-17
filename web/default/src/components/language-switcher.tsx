@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useEffect } from 'react'
+import { changeInterfaceLanguage } from '@/i18n/config'
 import {
   INTERFACE_LANGUAGE_OPTIONS,
   normalizeInterfaceLanguage,
@@ -24,6 +25,7 @@ import {
 import { LanguageCircleIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -49,7 +51,12 @@ export function LanguageSwitcher() {
   const handleChangeLanguage = useCallback(
     async (code: string) => {
       const normalizedCode = normalizeInterfaceLanguage(code)
-      await i18n.changeLanguage(normalizedCode)
+      try {
+        if (!(await changeInterfaceLanguage(normalizedCode))) return
+      } catch {
+        toast.error(t('Failed to load language. Please try again.'))
+        return
+      }
       if (user) {
         try {
           await api.put('/api/user/self', { language: normalizedCode })
@@ -58,7 +65,7 @@ export function LanguageSwitcher() {
         }
       }
     },
-    [i18n, user]
+    [t, user]
   )
 
   return (

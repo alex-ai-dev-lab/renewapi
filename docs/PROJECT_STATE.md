@@ -1,6 +1,30 @@
 # RenewAPI 当前项目状态
 
-更新日期：2026-10-15。源码和验证状态以当前 Git 提交为准，本文不代表生产部署状态。
+更新日期：2026-10-17。源码和验证状态以当前 Git 提交为准，本文不代表生产部署状态。
+
+## v1.5.0 发布准备
+
+用户已授权提交全部已验收修复，通过 GitHub Actions 构建到 Releases，服务器代理下载并无缝切换，验证成功后清理本次中间文件及备份。产品版本更新为 v1.5.0；先通过源码提交完整门禁，再创建不可变产品标签。服务器实际状态、加列迁移、旧连接排空及清理范围记录于[发布任务](../tasks/active/2026-10-deploy-v1.5.0.md)，完成前不视为已发布或上线。
+
+## 模块协作复审（未发布）
+
+复审修复 4 项既有运行时缺口：HTTP 客户端重建竞态、长窗口预算提前清理、Redis/内存并发槽释放错配、两分钟长请求并发预算过期；另消除 MiniMax 测试竞态。普通/分片 H2/SSRF 在途响应重建测试、槽位续租/取消/终态释放、全仓 Go 测试/vet/build 及 common/service/middleware/relay/controller race 通过；前端 237 测试、类型、构建和改动文件 lint 通过。全量前端 lint 仍有未修改文件的 31 errors/19 warnings。冷限流 key 当前为 168 B/op，原性能报告中的 152 是上一阶段结果。Redis 新槽位协议发布前需排空旧在途请求；没有本轮真实 Redis 集群、外部三库或生产验收。范围与证据见[复审报告](audits/2026-10-integration-review.md)、[任务归档](../tasks/archive/2026-10-integration-review.md)及 ADR-021。原修复保留，未提交、推送或部署。
+
+## 后端性能与调用体验升级（未发布）
+
+已实施 RawMessage 批量独立复制、JSON 无变化快返/局部重建、限流按需存储/LRU 清理、请求内工具索引、独立 HTTP 长流 H2 探活，并新增 HTTP attempt 取消后关闭响应，保留父请求重试及 WS 复用。三轮局部基准：1 MiB 复制 59.686ms→0.1164ms，1,000 轮工具历史转换 6.031s→12.119ms，冷限流 key 当阶段分配 245,785→152 B/op（后续复审为 168）；不是端到端吞吐或生产延迟。全仓 Go 测试、vet、构建、受影响路径 race 和 reasoning 等价 fuzz 通过。实际行为、额外 7 个候选处置与测试边界见[实施报告](audits/2026-10-performance-upgrade.md)、[任务归档](../tasks/archive/2026-10-performance-upgrade.md)，长期约束见 [ADR-021](decisions/021-relay-performance-and-stream-lifecycle.md)。尚未提交、推送或部署，既有修复全部保留。
+
+## 三个参考源后端功能选型（未实施）
+
+按用户纠正，本轮独立评估可引入的后端新功能，排除前端 UI。保存 24 个功能候选 patch，核对入选生产路径与本地覆盖，提出工具搜索/延迟加载、额度窗口调度、正则条件、Vertex 模型发现、Gemini 显式缓存、聚合站余额、Mantle、搜索引用转换 8 项候选。优先小功能，再实施工具与调度；已有 OAuth、粘连、WS、压缩及 metadata 同步不重复引入。详见[功能评估](audits/2026-10-backend-feature-opportunities.md)和[任务归档](../tasks/archive/2026-10-backend-feature-review.md)。仅更新文档，尚无新功能代码、提交或发布；下方缺陷检查保持为独立材料。
+
+## 三个参考源更新检查（待适配）
+
+已固定 NewAPI / Sub2API / CPA 的 10-17 参考 HEAD，列举近期 291 条非合并提交、保存 49 个候选 patch，形成 13 组待适配行为和一组依赖安全升级建议。已复现 Playground 跨账号本地数据、缓存用量、分组限流、旧成功清冷却、混合流正文及图片/工具转换缺口；Go1.25.1、Linux 构建配置下 govulncheck 有 43 个去重符号可达告警。优先统一升级 Go/相关依赖，再按现有组件最小修复，详见[更新检查报告](audits/2026-10-upstream-update-review.md)与 [处置表](../UPSTREAM_PORTS.md)。本轮只检查并记录候选，没有导入、提交或发布；原全量上游审计基线和上一轮修复验收记录保持不变。
+
+## 合并审计修复（未发布）
+
+在独立工作副本 `repair-20261017` 完成合并修复及尾项复审：28 条已修复验证，MJ 图片按用户确认的公开分享契约保留，没有部分解决或待产品决定项。日志 UI 使用双向游标，旧 API 限制深 OFFSET；off 新请求复用既有持久账本并修复任务重复扣退，默认仍为 shadow。Go 全仓、前端 237 测试、真实三库矩阵/既有完整迁移、24 组独立进程崩溃重启、40 页面/视口及最终 7 项游标浏览器回归通过。逐项结果与量测边界见[复审报告](audits/2026-10-consolidated-repair.md)，设计见 [ADR-020](decisions/020-audit-repair-boundaries.md)，交接见 [修复归档](../tasks/archive/2026-10-consolidated-audit-repair.md)。尚未提交、推送或部署；旧 off 无账本差额不猜测回填，升级先排空旧在途请求，真实 Stripe 渠道验收仍待发布前执行。
 
 ## 长流约 60 秒断开修复
 
@@ -139,7 +163,7 @@ UI 第二轮复查修复已随本版部署，覆盖成功率对比度、复制�
 
 ## Billing 与历史任务
 
-代码默认继续为 `BILLING_LEDGER_MODE=shadow`。旧审计描述的 shadow 异步退款问题在本轮基线已有持久化事务实现，因此未重复实现。off 仍不提供跨进程补偿保证；shadow/enforce 的切换条件见 [Billing enforce 说明](billing-ledger-enforce.md)。线上维护保留现有 `off` 配置，版本升级迁移须先在隔离副本验证数据不变，再执行备份与切换。
+代码默认继续为 `BILLING_LEDGER_MODE=shadow`。2026-10-17 审计收尾将 off 新请求接入既有持久账本，补修 shadow/off 异步任务重复扣退路径；此前“off 无跨进程保证”的记录仅描述旧版本。新恢复边界与模式切换条件见 [Billing enforce 说明](billing-ledger-enforce.md)。线上仍运行旧版本及现有 off 配置；升级先排空旧在途请求，在隔离副本验证数据不变，再执行备份与切换，旧无账本差额不自动推算。
 
 历史 RU-A 缺少外部数据库与进程重启证据的状态已由本轮开发验证补齐：实际 MySQL 5.7/8.4、PostgreSQL 9.6/16 Actions，以及 SQLite 独立进程崩溃/恢复。证据以任务及 Billing 文档记录的提交为准。其余旧 UX/性能审计结论未因此自动变成已完成，仍按对应任务的历史证据边界处理。
 

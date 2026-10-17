@@ -154,6 +154,14 @@ func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.Re
 			}
 		}
 	}
+	// Record the first match, including empty IDs/names, just as the historical
+	// SearchToolNameByToolCallId scan did. Resolve forward references after parsing.
+	toolNames := make(map[string]string)
+	type unnamedToolResult struct {
+		index int
+		id    string
+	}
+	var unnamedToolResults []unnamedToolResult
 	for _, claudeMessage := range claudeRequest.Messages {
 		openAIMessage := dto.Message{
 			Role: claudeMessage.Role,
@@ -172,6 +180,9 @@ func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.Re
 			mediaMessages := make([]dto.MediaContent, 0, len(contents))
 
 			for _, mediaMsg := range contents {
+				if _, exists := toolNames[mediaMsg.Id]; !exists {
+					toolNames[mediaMsg.Id] = mediaMsg.Name
+				}
 				switch mediaMsg.Type {
 				case "text", "input_text":
 					message := dto.MediaContent{
@@ -206,7 +217,7 @@ func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.Re
 					// Add tool result as a separate message
 					toolName := mediaMsg.Name
 					if toolName == "" {
-						toolName = claudeRequest.SearchToolNameByToolCallId(mediaMsg.ToolUseId)
+						unnamedToolResults = append(unnamedToolResults, unnamedToolResult{index: len(openAIMessages), id: mediaMsg.ToolUseId})
 					}
 					oaiToolMessage := dto.Message{
 						Role:       "tool",
@@ -245,6 +256,9 @@ func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.Re
 		}
 	}
 
+	for _, result := range unnamedToolResults {
+		*openAIMessages[result.index].Name = toolNames[result.id]
+	}
 	openAIMessages = mergeConsecutiveAssistantToolUseMessages(openAIMessages)
 	openAIRequest.Messages = openAIMessages
 

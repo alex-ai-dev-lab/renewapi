@@ -22,7 +22,6 @@ import { getRouteApi } from '@tanstack/react-router'
 import type { Table as TanstackTable } from '@tanstack/react-table'
 import { Database } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
@@ -48,7 +47,6 @@ import {
   API_KEY_STATUS,
   API_KEY_STATUS_OPTIONS,
   API_KEY_STATUSES,
-  ERROR_MESSAGES,
 } from '../constants'
 import type { ApiKey } from '../types'
 import { ApiKeyCell } from './api-keys-cells'
@@ -226,43 +224,44 @@ export function ApiKeysTable() {
     columnId: '_tokenSearch',
     onColumnFiltersChange,
   })
+  const statuses =
+    (columnFilters.find((filter) => filter.id === 'status')?.value as
+      | string[]
+      | undefined) ?? []
   const shouldSearch = Boolean(globalFilter?.trim() || tokenFilter.trim())
 
   // Fetch data with React Query
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: [
       'keys',
       pagination.pageIndex + 1,
       pagination.pageSize,
       globalFilter,
       tokenFilter,
+      statuses,
       refreshTrigger,
     ],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const result = shouldSearch
-        ? await searchApiKeys({
-            keyword: globalFilter,
-            token: tokenFilter,
-            p: pagination.pageIndex + 1,
-            size: pagination.pageSize,
-          })
-        : await getApiKeys({
-            p: pagination.pageIndex + 1,
-            size: pagination.pageSize,
-          })
-
-      if (!result.success) {
-        toast.error(
-          result.message ||
-            t(
-              shouldSearch
-                ? ERROR_MESSAGES.SEARCH_FAILED
-                : ERROR_MESSAGES.LOAD_FAILED
-            )
-        )
-        return { items: [], total: 0 }
-      }
+        ? await searchApiKeys(
+            {
+              status: statuses,
+              keyword: globalFilter,
+              token: tokenFilter,
+              p: pagination.pageIndex + 1,
+              size: pagination.pageSize,
+            },
+            { signal }
+          )
+        : await getApiKeys(
+            {
+              status: statuses,
+              p: pagination.pageIndex + 1,
+              size: pagination.pageSize,
+            },
+            { signal }
+          )
 
       return {
         items: result.data?.items || [],
@@ -276,6 +275,7 @@ export function ApiKeysTable() {
 
   const { table } = useDataTable({
     data: apiKeys,
+    getRowId: (row) => String(row.id),
     columns,
     enableRowSelection: true,
     initialColumnVisibility: {
@@ -295,6 +295,7 @@ export function ApiKeysTable() {
     onGlobalFilterChange,
     onColumnFiltersChange,
     manualPagination: true,
+    manualFiltering: true,
     totalCount: data?.total || 0,
     ensurePageInRange,
   })
@@ -303,6 +304,8 @@ export function ApiKeysTable() {
     <DataTablePage
       table={table}
       columns={columns}
+      error={error}
+      onRetry={() => void refetch()}
       isLoading={isLoading}
       isFetching={isFetching}
       emptyTitle={t('No API Keys Found')}

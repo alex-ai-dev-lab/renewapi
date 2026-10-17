@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stripe/stripe-go/v81"
 	"github.com/stripe/stripe-go/v81/checkout/session"
+	"github.com/stripe/stripe-go/v81/price"
 	"github.com/thanhpk/randstr"
 )
 
@@ -71,18 +72,6 @@ func subscriptionRequestStripePayWithCheckout(
 		return
 	}
 
-	if plan.MaxPurchasePerUser > 0 {
-		count, err := model.CountUserSubscriptionsByPlan(userId, plan.Id)
-		if err != nil {
-			common.ApiError(c, err)
-			return
-		}
-		if count >= int64(plan.MaxPurchasePerUser) {
-			common.ApiErrorMsg(c, "已达到该套餐购买上限")
-			return
-		}
-	}
-
 	reference := fmt.Sprintf("sub-stripe-ref-%d-%d-%s", user.Id, time.Now().UnixMilli(), randstr.String(4))
 	referenceId := "sub_ref_" + common.Sha1([]byte(reference))
 
@@ -96,17 +85,22 @@ func subscriptionRequestStripePayWithCheckout(
 		CreateTime:      time.Now().Unix(),
 		Status:          common.TopUpStatusPending,
 	}
+	minor, err := model.CurrencyMinorAmount(plan.PriceAmount, plan.Currency)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	order.PaymentSnapshot = model.PaymentSnapshot{QuoteVersion: 1, Currency: strings.ToLower(plan.Currency),
+		ExpectedMinor: minor, Quantity: 1, CheckoutPriceID: plan.StripePriceId, PaymentState: "unpaid"}
 	if err := order.Insert(); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建订单失败"})
+		common.ApiError(c, err)
 		return
 	}
 
 	payLink, err := createCheckout(referenceId, user.StripeCustomer, user.Email, plan.StripePriceId)
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe 订阅支付链接创建失败 trade_no=%s plan_id=%d error=%q", referenceId, plan.Id, err.Error()))
-		order.Status = common.TopUpStatusFailed
-		order.CompleteTime = common.GetTimestamp()
-		if updateErr := order.Update(); updateErr != nil {
+		if updateErr := model.DB.Model(order).Where("status = ? AND payment_state = ?", common.TopUpStatusPending, "unpaid").Updates(map[string]any{"payment_state": "checkout_unknown", "fulfillment_error": "Checkout creation result unknown; reconcile before retrying"}).Error; updateErr != nil {
 			logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe 订阅订单标记失败状态失败 trade_no=%s plan_id=%d error=%q", referenceId, plan.Id, updateErr.Error()))
 		}
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "拉起支付失败"})
@@ -123,6 +117,17 @@ func subscriptionRequestStripePayWithCheckout(
 
 func genStripeSubscriptionLink(referenceId string, customerId string, email string, priceId string) (string, error) {
 	stripe.Key = setting.StripeApiSecret
+	order := model.GetSubscriptionOrderByTradeNo(referenceId)
+	if order == nil || order.QuoteVersion == 0 {
+		return "", fmt.Errorf("subscription quote missing")
+	}
+	configuredPrice, err := price.Get(order.CheckoutPriceID, nil)
+	if err != nil {
+		return "", err
+	}
+	if configuredPrice.UnitAmount != order.ExpectedMinor || !strings.EqualFold(string(configuredPrice.Currency), order.Currency) {
+		return "", fmt.Errorf("Stripe Price does not match subscription quote")
+	}
 
 	params := &stripe.CheckoutSessionParams{
 		ClientReferenceID: stripe.String(referenceId),
@@ -130,12 +135,13 @@ func genStripeSubscriptionLink(referenceId string, customerId string, email stri
 		CancelURL:         stripe.String(paymentReturnPath("/console/topup")),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
-				Price:    stripe.String(priceId),
+				Price:    stripe.String(order.CheckoutPriceID),
 				Quantity: stripe.Int64(1),
 			},
 		},
 		Mode: stripe.String(string(stripe.CheckoutSessionModeSubscription)),
 	}
+	params.SetIdempotencyKey(referenceId)
 
 	if "" == customerId {
 		if "" != email {
@@ -148,6 +154,9 @@ func genStripeSubscriptionLink(referenceId string, customerId string, email stri
 
 	result, err := session.New(params)
 	if err != nil {
+		return "", err
+	}
+	if err := model.BindStripeCheckout(referenceId, result.ID); err != nil {
 		return "", err
 	}
 	return result.URL, nil

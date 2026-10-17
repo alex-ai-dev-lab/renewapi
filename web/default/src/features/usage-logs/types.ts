@@ -246,6 +246,8 @@ export interface LogStatistics {
 // ============================================================================
 
 export interface GetLogsParams {
+  pagination?: 'cursor'
+  cursor?: string
   p?: number
   page_size?: number
   type?: number
@@ -266,8 +268,12 @@ export interface GetLogsResponse {
   message?: string
   data?: {
     items: UsageLog[]
-    total: number
-    page: number
+    total?: number
+    total_capped?: boolean
+    pagination?: 'cursor'
+    next_cursor?: string
+    previous_cursor?: string
+    page?: number
     page_size: number
   }
 }
@@ -299,6 +305,8 @@ export interface GetLogStatsResponse {
  * Configuration for fetching usage logs
  */
 export interface FetchLogsConfig {
+  cursor?: string
+  signal?: AbortSignal
   logView: UsageLogView
   isAdmin: boolean
   page: number

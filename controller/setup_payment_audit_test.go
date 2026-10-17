@@ -296,7 +296,7 @@ func TestStripeTopUpPersistsPendingOrderBeforeCheckout(t *testing.T) {
 	}
 }
 
-func TestStripeTopUpMarksOrderFailedWhenCheckoutFails(t *testing.T) {
+func TestStripeTopUpKeepsUnknownCheckoutPending(t *testing.T) {
 	setupControllerAuditTestDB(t)
 	configureStripeTopUpAuditTest(t)
 	user := createPaymentAuditUser(t)
@@ -311,8 +311,8 @@ func TestStripeTopUpMarksOrderFailedWhenCheckoutFails(t *testing.T) {
 	if err := model.DB.First(&topUp).Error; err != nil {
 		t.Fatalf("failed to read topup after checkout failure: %v", err)
 	}
-	if topUp.Status != common.TopUpStatusFailed {
-		t.Fatalf("topup status = %q, want %q", topUp.Status, common.TopUpStatusFailed)
+	if topUp.Status != common.TopUpStatusPending || topUp.PaymentState != "checkout_unknown" {
+		t.Fatalf("unknown checkout must remain pending: %+v", topUp)
 	}
 	if !strings.Contains(response.Body.String(), "拉起支付失败") || strings.Contains(response.Body.String(), upstreamSecret) {
 		t.Fatalf("checkout error was not sanitized: %s", response.Body.String())
@@ -371,7 +371,7 @@ func TestStripeSubscriptionPersistsPendingOrderBeforeCheckout(t *testing.T) {
 	}
 }
 
-func TestStripeSubscriptionMarksOrderFailedWhenCheckoutFails(t *testing.T) {
+func TestStripeSubscriptionKeepsUnknownCheckoutReservation(t *testing.T) {
 	setupControllerAuditTestDB(t)
 	configureStripeSubscriptionAuditTest(t)
 	user := createPaymentAuditUser(t)
@@ -395,8 +395,8 @@ func TestStripeSubscriptionMarksOrderFailedWhenCheckoutFails(t *testing.T) {
 	if err := model.DB.First(&order).Error; err != nil {
 		t.Fatalf("failed to read subscription order after checkout failure: %v", err)
 	}
-	if order.Status != common.TopUpStatusFailed {
-		t.Fatalf("subscription order status = %q, want %q", order.Status, common.TopUpStatusFailed)
+	if order.Status != common.TopUpStatusPending || order.PaymentState != "checkout_unknown" {
+		t.Fatalf("unknown checkout must retain its reservation: %+v", order)
 	}
 	if !strings.Contains(response.Body.String(), "拉起支付失败") || strings.Contains(response.Body.String(), upstreamSecret) {
 		t.Fatalf("subscription checkout error was not sanitized: %s", response.Body.String())

@@ -66,7 +66,8 @@ func PrepareAsyncTaskBilling(relayInfo *relaycommon.RelayInfo, platform constant
 }
 
 // SettleBillingAndInsertTask atomically settles persistent-ledger billing and
-// persists the local async task. Explicit off mode retains the legacy path.
+// persists the local async task in every mode. Older ledgerless tasks retain
+// their compatibility path and are never reconstructed from guessed balances.
 func SettleBillingAndInsertTask(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuota int, task *model.Task) error {
 	if relayInfo == nil || task == nil {
 		return fmt.Errorf("billing relay info or task is nil")

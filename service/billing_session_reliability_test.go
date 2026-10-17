@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http/httptest"
@@ -122,7 +123,7 @@ func TestBillingSessionSettleFailureDoesNotPartiallyApply(t *testing.T) {
 }
 
 func TestBillingSessionFailedReserveKeepsLiveReservation(t *testing.T) {
-	for _, mode := range []string{BillingLedgerModeShadow, BillingLedgerModeEnforce} {
+	for _, mode := range []string{BillingLedgerModeOff, BillingLedgerModeShadow, BillingLedgerModeEnforce} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, session := newBillingReliabilitySession(t, mode, BillingSourceWallet)
 			remove := failBillingTokenWrites(t)
@@ -209,7 +210,7 @@ func TestBillingSessionReconcilePreservesSuccessfulChannel(t *testing.T) {
 }
 
 func TestBillingSessionZeroReservationFinalizesRefund(t *testing.T) {
-	for _, mode := range []string{BillingLedgerModeShadow, BillingLedgerModeEnforce} {
+	for _, mode := range []string{BillingLedgerModeOff, BillingLedgerModeShadow, BillingLedgerModeEnforce} {
 		t.Run(mode, func(t *testing.T) {
 			truncate(t)
 			t.Setenv("BILLING_LEDGER_MODE", mode)
@@ -225,6 +226,60 @@ func TestBillingSessionZeroReservationFinalizesRefund(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, model.BillingLedgerStateRefunded, ledger.State)
 			require.Equal(t, 1000, getUserQuota(t, 401))
+		})
+	}
+}
+
+func TestPersistentTaskTerminalTransitionsNeverApplyBalancesTwice(t *testing.T) {
+	for _, mode := range []string{BillingLedgerModeOff, BillingLedgerModeShadow, BillingLedgerModeEnforce} {
+		for _, source := range []string{BillingSourceWallet, BillingSourceSubscription} {
+			for _, failed := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/failed=%t", mode, source, failed), func(t *testing.T) {
+					ctx, session := newBillingReliabilitySession(t, mode, source)
+					info := session.relayInfo
+					info.Billing = session
+					task := &model.Task{TaskID: "off-durable-task", UserId: 401, ChannelId: 401, Status: model.TaskStatusSubmitted, Quota: 300}
+					task.PrivateData.TokenId = 401
+					task.PrivateData.BillingSource = source
+					task.PrivateData.SubscriptionId = info.SubscriptionId
+					require.NoError(t, SettleBillingAndInsertTask(ctx, info, 300, task))
+					target := 200
+					task.Status = model.TaskStatusSuccess
+					if failed {
+						task.Status = model.TaskStatusFailure
+						target = 0
+					}
+					won, err := FinalizeTaskBillingTransition(context.Background(), task, model.TaskStatusSubmitted, target, "terminal test")
+					require.NoError(t, err)
+					require.True(t, won)
+					assertBillingReliabilityBalances(t, session, target)
+					won, err = FinalizeTaskBillingTransition(context.Background(), task, model.TaskStatusSubmitted, target, "duplicate")
+					require.NoError(t, err)
+					require.False(t, won)
+					assertBillingReliabilityBalances(t, session, target)
+				})
+			}
+		}
+	}
+}
+
+func TestPersistentMidjourneyFailureRefundsOnce(t *testing.T) {
+	for _, mode := range []string{BillingLedgerModeOff, BillingLedgerModeShadow, BillingLedgerModeEnforce} {
+		t.Run(mode, func(t *testing.T) {
+			ctx, session := newBillingReliabilitySession(t, mode, BillingSourceWallet)
+			info := session.relayInfo
+			info.Billing = session
+			task := &model.Midjourney{MjId: "public-durable-mj", UserId: 401, ChannelId: 401, TokenID: 401, Quota: 300, Status: string(model.TaskStatusSubmitted)}
+			require.NoError(t, SettleBillingAndInsertMidjourney(ctx, info, 300, task))
+			task.Status = string(model.TaskStatusFailure)
+			won, err := FinalizeMidjourneyBillingTransition(context.Background(), task, string(model.TaskStatusSubmitted), "terminal test")
+			require.NoError(t, err)
+			require.True(t, won)
+			assertBillingReliabilityBalances(t, session, 0)
+			won, err = FinalizeMidjourneyBillingTransition(context.Background(), task, string(model.TaskStatusSubmitted), "duplicate")
+			require.NoError(t, err)
+			require.False(t, won)
+			assertBillingReliabilityBalances(t, session, 0)
 		})
 	}
 }

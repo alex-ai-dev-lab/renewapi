@@ -124,12 +124,18 @@ func TestTokenConcurrencyMemoryLimit(t *testing.T) {
 	}()
 
 	ResetTokenLimitForTest()
-	require.True(t, TryAcquireTokenConcurrency(7, 1))
-	require.False(t, TryAcquireTokenConcurrency(7, 1))
-	ReleaseTokenConcurrency(7, 1)
-	require.True(t, TryAcquireTokenConcurrency(7, 1))
-	ReleaseTokenConcurrency(7, 1)
-	require.True(t, TryAcquireTokenConcurrency(7, 0))
+	slot, allowed := AcquireTokenConcurrency(context.Background(), 7, 1)
+	require.True(t, allowed)
+	_, allowed = AcquireTokenConcurrency(context.Background(), 7, 1)
+	require.False(t, allowed)
+	slot.Release()
+	slot.Release()
+	slot, allowed = AcquireTokenConcurrency(context.Background(), 7, 1)
+	require.True(t, allowed)
+	slot.Release()
+	slot, allowed = AcquireTokenConcurrency(context.Background(), 7, 0)
+	require.True(t, allowed)
+	slot.Release()
 }
 
 func TestTokenRateLimitRedisUsesOneAtomicRoundTrip(t *testing.T) {
@@ -151,17 +157,130 @@ func TestTokenRateLimitRedisUsesOneAtomicRoundTrip(t *testing.T) {
 func TestTokenConcurrencyRedisAcquireAndReleaseUseOneAtomicRoundTrip(t *testing.T) {
 	server, counter := setupTokenLimitRedisTest(t)
 
-	require.True(t, TryAcquireTokenConcurrency(23, 1))
+	slot, allowed := AcquireTokenConcurrency(context.Background(), 23, 1)
+	require.True(t, allowed)
+	t.Cleanup(slot.Release)
 	counter.reset()
-	require.False(t, TryAcquireTokenConcurrency(23, 1))
+	_, allowed = AcquireTokenConcurrency(context.Background(), 23, 1)
+	require.False(t, allowed)
 	require.Equal(t, 1, counter.value())
-	value, err := server.Get(tokenConcurrencyKey(23))
+	value, err := server.ZMembers(tokenConcurrencyKey(23))
 	require.NoError(t, err)
-	require.Equal(t, "1", value)
+	require.Equal(t, []string{slot.id}, value)
 
 	require.NoError(t, tokenConcurrencyReleaseScript.Load(context.Background(), common.RDB).Err())
 	counter.reset()
-	ReleaseTokenConcurrency(23, 1)
+	slot.Release()
 	require.Equal(t, 1, counter.value())
+	slot.Release()
+	require.Equal(t, 1, counter.value(), "repeated release performed another Redis write")
 	require.False(t, server.Exists(tokenConcurrencyKey(23)))
+}
+
+func TestTokenConcurrencyFallbackDoesNotReleaseRedisRequest(t *testing.T) {
+	server, _ := setupTokenLimitRedisTest(t)
+	redisSlot, allowed := AcquireTokenConcurrency(context.Background(), 31, 2)
+	require.True(t, allowed)
+	t.Cleanup(redisSlot.Release)
+	server.SetError("temporary Redis failure")
+	fallbackSlot, allowed := AcquireTokenConcurrency(context.Background(), 31, 2)
+	require.True(t, allowed)
+	t.Cleanup(fallbackSlot.Release)
+	server.SetError("")
+	fallbackSlot.Release() // The fallback request completes first.
+	value, err := server.ZMembers(tokenConcurrencyKey(31))
+	require.NoError(t, err)
+	require.Equal(t, []string{redisSlot.id}, value, "fallback release removed another request's Redis slot")
+	require.Empty(t, tokenConcurrencyCount)
+}
+
+func TestTokenConcurrencyLongRequestKeepsSlot(t *testing.T) {
+	server, _ := setupTokenLimitRedisTest(t)
+	now := time.Now()
+	server.SetTime(now)
+	slot, allowed := AcquireTokenConcurrency(context.Background(), 32, 1)
+	require.True(t, allowed)
+	t.Cleanup(slot.Release)
+	server.FastForward(time.Minute)
+	server.SetTime(now.Add(time.Minute))
+	renewed, err := slot.renew(context.Background())
+	require.NoError(t, err)
+	require.True(t, renewed)
+	server.FastForward(61 * time.Second)
+	server.SetTime(now.Add(121 * time.Second))
+	_, allowed = AcquireTokenConcurrency(context.Background(), 32, 1)
+	require.False(t, allowed, "active long request lost its concurrency budget")
+}
+
+func TestTokenConcurrencyExpiredReleaseCannotRemoveReplacement(t *testing.T) {
+	server, _ := setupTokenLimitRedisTest(t)
+	now := time.Now()
+	server.SetTime(now)
+	old, allowed := AcquireTokenConcurrency(context.Background(), 33, 1)
+	require.True(t, allowed)
+	t.Cleanup(old.Release)
+	server.FastForward(121 * time.Second)
+	server.SetTime(now.Add(121 * time.Second))
+	replacement, allowed := AcquireTokenConcurrency(context.Background(), 33, 1)
+	require.True(t, allowed)
+	t.Cleanup(replacement.Release)
+	renewed, err := old.renew(context.Background())
+	require.NoError(t, err)
+	require.False(t, renewed, "expired lease recreated its slot after replacement")
+	old.Release()
+	members, err := server.ZMembers(tokenConcurrencyKey(33))
+	require.NoError(t, err)
+	require.Equal(t, []string{replacement.id}, members)
+}
+
+func TestTokenConcurrencyReleaseUsesOriginalRedisClient(t *testing.T) {
+	server, _ := setupTokenLimitRedisTest(t)
+	slot, allowed := AcquireTokenConcurrency(context.Background(), 34, 1)
+	require.True(t, allowed)
+	t.Cleanup(slot.Release)
+	client := common.RDB
+	common.RDB = nil
+	common.RedisEnabled = false
+	slot.Release()
+	common.RDB = client
+	common.RedisEnabled = true
+	require.False(t, server.Exists(tokenConcurrencyKey(34)))
+	require.Empty(t, tokenConcurrencyCount)
+}
+
+func TestTokenConcurrencyWorkerRenewsAndCancelsLostLease(t *testing.T) {
+	server, _ := setupTokenLimitRedisTest(t)
+	now := time.Now()
+	server.SetTime(now)
+	slot := &TokenConcurrencySlot{client: common.RDB, key: tokenConcurrencyKey(35), id: "worker"}
+	allowed, err := tokenConcurrencyAcquireScript.Run(context.Background(), slot.client, []string{slot.key}, 1, tokenConcurrencyLeaseDuration.Milliseconds(), slot.id).Int()
+	require.NoError(t, err)
+	require.Equal(t, 1, allowed)
+	initial, err := server.ZScore(slot.key, slot.id)
+	require.NoError(t, err)
+	server.SetTime(now.Add(time.Minute))
+	slot.startRenewal(context.Background(), 5*time.Millisecond)
+	t.Cleanup(slot.Release)
+	require.Eventually(t, func() bool {
+		score, err := server.ZScore(slot.key, slot.id)
+		return err == nil && score > initial
+	}, time.Second, time.Millisecond, "worker did not renew the active slot")
+	server.Del(slot.key)
+	require.Eventually(t, func() bool { return slot.Context.Err() != nil }, time.Second, time.Millisecond,
+		"lost lease did not cancel the request")
+	slot.Release()
+	require.False(t, server.Exists(slot.key), "worker recreated its released lease")
+}
+
+func TestTokenConcurrencyCancelledRequestStillReleasesRedisSlot(t *testing.T) {
+	server, _ := setupTokenLimitRedisTest(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	slot, allowed := AcquireTokenConcurrency(ctx, 36, 1)
+	require.True(t, allowed)
+	t.Cleanup(slot.Release)
+	cancel()
+	slot.Release()
+	require.ErrorIs(t, slot.Context.Err(), context.Canceled)
+	require.False(t, server.Exists(tokenConcurrencyKey(36)))
 }

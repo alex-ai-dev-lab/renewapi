@@ -16,6 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { isRequestCanceled } from './request-errors'
+
+const notifiedErrors = new WeakSet<object>()
+
+export function claimErrorNotification(error: unknown): boolean {
+  if (error === null || typeof error !== 'object') return true
+  if (notifiedErrors.has(error)) return false
+  notifiedErrors.add(error)
+  return true
+}
+
 export type ApiBusinessPayload = {
   success: false
   message?: string
@@ -52,7 +63,35 @@ export function shouldRetryQuery(
   error: unknown
 ): boolean {
   if (error instanceof ApiBusinessError) return false
+  if (isRequestCanceled(error)) return false
+  if (isRecord(error)) {
+    if (['ECONNABORTED', 'ETIMEDOUT'].includes(String(error.code))) return false
+    const response = isRecord(error.response) ? error.response : undefined
+    const status = Number(response?.status)
+    if (status === 429)
+      return (
+        getQueryRetryDelay(failureCount, error) <= 30_000 && failureCount < 2
+      )
+    if (status >= 400 && status < 500) return false
+  }
   return failureCount < 2
+}
+
+export function getQueryRetryDelay(attempt: number, error: unknown): number {
+  if (isRecord(error) && isRecord(error.response)) {
+    const headers = error.response.headers
+    if (isRecord(headers)) {
+      const value = headers['retry-after']
+      if (value !== undefined) {
+        const seconds = Number(value)
+        const delay = Number.isFinite(seconds)
+          ? seconds * 1000
+          : Date.parse(String(value)) - Date.now()
+        if (Number.isFinite(delay)) return Math.max(0, delay)
+      }
+    }
+  }
+  return Math.min(1000 * 2 ** attempt, 30_000)
 }
 
 export function getApiErrorMessage(
@@ -65,7 +104,8 @@ export function getApiErrorMessage(
     const response = isRecord(error.response) ? error.response : undefined
     const responseData =
       response && isRecord(response.data) ? response.data : undefined
-    const message = responseData?.message ?? error.message
+    const message =
+      responseData?.message ?? responseData?.title ?? error.message
     if (typeof message === 'string' && message) return message
   }
 

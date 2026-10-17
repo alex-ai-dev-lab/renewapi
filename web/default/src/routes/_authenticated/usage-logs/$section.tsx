@@ -28,6 +28,8 @@ const usageLogsSearchSchema = z.object({
   filter: z.string().optional(),
   page: z.number().optional().catch(1),
   pageSize: z.number().optional().catch(undefined),
+  cursor: z.string().max(2048).optional().catch(undefined),
+  cursorScope: z.string().optional().catch(undefined),
   category: z.enum(['consume', 'billing', 'other']).optional().catch('consume'),
   model: z.string().optional().catch(''),
   token: z.string().optional().catch(''),

@@ -22,8 +22,14 @@ import { ApiKeys } from '@/features/keys'
 import { API_KEY_STATUS_OPTIONS } from '@/features/keys/constants'
 
 const apiKeySearchSchema = z.object({
-  page: z.number().optional().catch(1),
-  pageSize: z.number().optional().catch(undefined),
+  page: z
+    .number()
+    .int()
+    .min(1)
+    .max(Number.MAX_SAFE_INTEGER)
+    .optional()
+    .catch(1),
+  pageSize: z.number().int().min(1).max(100).optional().catch(undefined),
   status: z
     .array(z.enum(API_KEY_STATUS_OPTIONS.map((s) => s.value as `${number}`)))
     .optional()

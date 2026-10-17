@@ -1,13 +1,14 @@
 package common
 
 import (
-	"math"
+	"container/list"
 	"sync"
 	"time"
 )
 
 type InMemoryRateLimiter struct {
-	store              map[string]*[]rateLimitEntry
+	store              map[string]*rateLimitBucket
+	lru                list.List
 	mutex              sync.Mutex
 	expirationDuration time.Duration
 }
@@ -17,34 +18,87 @@ type rateLimitEntry struct {
 	reservationID string
 }
 
+type rateLimitBucket struct {
+	entries    []rateLimitEntry
+	head       int
+	lastActive time.Time
+	window     int64
+	element    *list.Element
+}
+
+func (b *rateLimitBucket) size() int { return len(b.entries) - b.head }
+
+func (b *rateLimitBucket) expire(now, duration int64) {
+	for b.head < len(b.entries) && now-b.entries[b.head].timestamp >= duration {
+		b.entries[b.head] = rateLimitEntry{}
+		b.head++
+	}
+	if b.head == len(b.entries) {
+		b.entries = b.entries[:0]
+		b.head = 0
+	}
+}
+
+func (b *rateLimitBucket) append(now int64, weight int, reservationID string) {
+	// Reuse expired slots before growing; capacity follows actual traffic.
+	if b.head > 0 && (len(b.entries)+weight > cap(b.entries) || b.head >= len(b.entries)/2) {
+		size := copy(b.entries, b.entries[b.head:])
+		clear(b.entries[size:])
+		b.entries = b.entries[:size]
+		b.head = 0
+	}
+	for range weight {
+		b.entries = append(b.entries, rateLimitEntry{timestamp: now, reservationID: reservationID})
+	}
+}
+
 func (l *InMemoryRateLimiter) Init(expirationDuration time.Duration) {
-	if l.store == nil {
-		l.mutex.Lock()
-		if l.store == nil {
-			l.store = make(map[string]*[]rateLimitEntry)
-			l.expirationDuration = expirationDuration
-			if expirationDuration > 0 {
-				go l.clearExpiredItems()
-			}
-		}
-		l.mutex.Unlock()
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	if l.store != nil {
+		return
+	}
+	l.store = make(map[string]*rateLimitBucket)
+	l.expirationDuration = expirationDuration
+	if expirationDuration > 0 {
+		go l.clearExpiredItems()
 	}
 }
 
 func (l *InMemoryRateLimiter) clearExpiredItems() {
-	for {
-		time.Sleep(l.expirationDuration)
-		l.mutex.Lock()
-		now := time.Now().Unix()
-		for key := range l.store {
-			queue := l.store[key]
-			size := len(*queue)
-			if size == 0 || now-(*queue)[size-1].timestamp > int64(l.expirationDuration.Seconds()) {
-				delete(l.store, key)
-			}
-		}
-		l.mutex.Unlock()
+	ticker := time.NewTicker(l.expirationDuration)
+	defer ticker.Stop()
+	for now := range ticker.C {
+		l.deleteExpiredEntries(now)
 	}
+}
+
+func (l *InMemoryRateLimiter) deleteExpiredEntries(now time.Time) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	if l.expirationDuration <= 0 {
+		return
+	}
+	for oldest := l.lru.Back(); oldest != nil; {
+		previous := oldest.Prev()
+		key := oldest.Value.(string)
+		bucket := l.store[key]
+		if now.Sub(bucket.lastActive) <= l.expirationDuration {
+			return
+		}
+		// The shared limiter serves different windows. An idle bucket can
+		// still contain a live budget longer than the cleanup interval.
+		if bucket.size() == 0 || now.Unix()-bucket.entries[len(bucket.entries)-1].timestamp >= bucket.window {
+			l.removeBucket(key, bucket)
+		}
+		oldest = previous
+	}
+}
+
+// removeBucket requires mutex ownership.
+func (l *InMemoryRateLimiter) removeBucket(key string, bucket *rateLimitBucket) {
+	delete(l.store, key)
+	l.lru.Remove(bucket.element)
 }
 
 // Request parameter duration's unit is seconds
@@ -75,27 +129,21 @@ func (l *InMemoryRateLimiter) reserveN(key string, maxRequestNum int, duration i
 	}
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
-	// [old <-- new]
-	queue, ok := l.store[key]
-	now := time.Now().Unix()
-	if ok {
-		firstValid := 0
-		for firstValid < len(*queue) && now-(*queue)[firstValid].timestamp >= duration {
-			firstValid++
-		}
-		if firstValid > 0 {
-			*queue = (*queue)[firstValid:]
-		}
-		if len(*queue)+weight > maxRequestNum {
-			return false
-		}
+	now := time.Now()
+	bucket, ok := l.store[key]
+	if !ok {
+		bucket = &rateLimitBucket{element: l.lru.PushFront(key)}
+		l.store[key] = bucket
 	} else {
-		s := make([]rateLimitEntry, 0, maxRequestNum)
-		l.store[key] = &s
+		bucket.expire(now.Unix(), duration)
+		l.lru.MoveToFront(bucket.element)
 	}
-	for range weight {
-		*(l.store[key]) = append(*(l.store[key]), rateLimitEntry{timestamp: now, reservationID: reservationID})
+	bucket.lastActive = now
+	bucket.window = duration
+	if weight > maxRequestNum-bucket.size() {
+		return false
 	}
+	bucket.append(now.Unix(), weight, reservationID)
 	return true
 }
 
@@ -107,15 +155,17 @@ func (l *InMemoryRateLimiter) Cancel(key, reservationID string) {
 	}
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
-	queue, ok := l.store[key]
+	bucket, ok := l.store[key]
 	if !ok {
 		return
 	}
-	for i, entry := range *queue {
-		if entry.reservationID == reservationID {
-			*queue = append((*queue)[:i], (*queue)[i+1:]...)
-			if len(*queue) == 0 {
-				delete(l.store, key)
+	for i := bucket.head; i < len(bucket.entries); i++ {
+		if bucket.entries[i].reservationID == reservationID {
+			copy(bucket.entries[i:], bucket.entries[i+1:])
+			bucket.entries[len(bucket.entries)-1] = rateLimitEntry{}
+			bucket.entries = bucket.entries[:len(bucket.entries)-1]
+			if bucket.size() == 0 {
+				l.removeBucket(key, bucket)
 			}
 			return
 		}
@@ -128,25 +178,15 @@ func (l *InMemoryRateLimiter) RetryAfter(key string, duration int64) int64 {
 	}
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
-	queue, ok := l.store[key]
-	if !ok || len(*queue) == 0 {
+	bucket, ok := l.store[key]
+	if !ok {
 		return 1
 	}
 	now := time.Now().Unix()
-	firstValid := 0
-	for firstValid < len(*queue) && now-(*queue)[firstValid].timestamp >= duration {
-		firstValid++
-	}
-	if firstValid > 0 {
-		*queue = (*queue)[firstValid:]
-	}
-	if len(*queue) == 0 {
-		delete(l.store, key)
+	bucket.expire(now, duration)
+	if bucket.size() == 0 {
+		l.removeBucket(key, bucket)
 		return 1
 	}
-	retryAfter := duration - (now - (*queue)[0].timestamp)
-	if retryAfter <= 0 {
-		return 1
-	}
-	return int64(math.Ceil(float64(retryAfter)))
+	return max(1, duration-(now-bucket.entries[bucket.head].timestamp))
 }

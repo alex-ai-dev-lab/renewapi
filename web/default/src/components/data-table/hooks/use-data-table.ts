@@ -38,6 +38,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
+import { useAuthStore } from '@/stores/auth-store'
 
 type DataTableFeatureOptions<TData> = Pick<
   TableOptions<TData>,
@@ -275,6 +276,7 @@ function readColumnSizing(
 }
 
 export function useDataTable<TData>(options: UseDataTableOptions<TData>) {
+  const sessionVersion = useAuthStore((state) => state.auth.sessionVersion)
   const {
     data,
     columns,
@@ -420,6 +422,33 @@ export function useDataTable<TData>(options: UseDataTableOptions<TData>) {
       ? getExpandedRowModel()
       : undefined,
   })
+
+  // Selection is scoped to this page/query; stable IDs still protect refreshes.
+  const selectionScope = JSON.stringify([
+    sessionVersion,
+    pagination,
+    sorting,
+    options.columnFilters,
+    options.globalFilter,
+  ])
+  const previousSelectionScope = React.useRef(selectionScope)
+  React.useEffect(() => {
+    if (previousSelectionScope.current !== selectionScope) {
+      previousSelectionScope.current = selectionScope
+      table.resetRowSelection()
+    }
+  }, [selectionScope, table])
+
+  React.useEffect(() => {
+    const rows = table.getCoreRowModel().rowsById
+    if (Object.keys(rowSelection).some((id) => !rows[id])) {
+      onRowSelectionChange((previous) =>
+        Object.fromEntries(
+          Object.entries(previous).filter(([id]) => !!rows[id])
+        )
+      )
+    }
+  }, [data, rowSelection, onRowSelectionChange, table])
 
   const actualPageCount = table.getPageCount()
   React.useEffect(() => {

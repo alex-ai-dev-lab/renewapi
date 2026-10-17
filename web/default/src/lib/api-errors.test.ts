@@ -20,11 +20,28 @@ import { describe, expect, test } from 'bun:test'
 import {
   ApiBusinessError,
   getApiErrorMessage,
+  getQueryRetryDelay,
   shouldRetryQuery,
   unwrapApiResponse,
 } from './api-errors'
 
 describe('api business error handling', () => {
+  test('retries only recoverable failures within budget', () => {
+    for (const status of [400, 401, 403, 404, 409, 422]) {
+      expect(shouldRetryQuery(0, { response: { status } })).toBe(false)
+    }
+    expect(shouldRetryQuery(0, { code: 'ECONNABORTED' })).toBe(false)
+    expect(shouldRetryQuery(0, { response: { status: 503 } })).toBe(true)
+    expect(shouldRetryQuery(2, { response: { status: 503 } })).toBe(false)
+    expect(
+      shouldRetryQuery(0, {
+        response: { status: 429, headers: { 'retry-after': '120' } },
+      })
+    ).toBe(false)
+    expect(
+      getQueryRetryDelay(0, { response: { headers: { 'retry-after': '2' } } })
+    ).toBe(2000)
+  })
   test('returns successful envelopes unchanged', () => {
     const response = { success: true, data: { value: 1 } }
 

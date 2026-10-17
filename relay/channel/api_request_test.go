@@ -70,10 +70,16 @@ func TestFinalBodyReplayAndChannelTestShareNormalization(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 		info := &relaycommon.RelayInfo{IsChannelTest: channelTest, ChannelMeta: &relaycommon.ChannelMeta{ChannelType: constant.ChannelTypeOpenAI, ChannelSetting: dto.ChannelSettings{ResponsesRequestProfile: "codex", RequiresCodexIdentity: common.GetPointer(true)}}}
-		client, err := service.GetHttpClientWithChannelSettings(info.ChannelSetting)
+		// Codex normalization forces upstream streaming even for a JSON client
+		// request, so interception must use the streaming transport cache entry.
+		options := service.HTTPClientOptionsFromChannelSettings(info.ChannelSetting)
+		options.LongStream = true
+		client, err := service.GetHttpClientWithOptions(options)
 		require.NoError(t, err)
 		oldTransport := client.Transport
+		calls := 0
 		client.Transport = normalizationRoundTripper(func(request *http.Request) (*http.Response, error) {
+			calls++
 			first, err := io.ReadAll(request.Body)
 			require.NoError(t, err)
 			require.NotNil(t, request.GetBody)
@@ -94,6 +100,8 @@ func TestFinalBodyReplayAndChannelTestShareNormalization(t *testing.T) {
 		response, err := DoApiRequest(normalizationTestAdaptor{}, c, info, bytes.NewReader([]byte(`{"model":"test","input":"hi"}`)))
 		client.Transport = oldTransport
 		require.NoError(t, err)
+		require.True(t, c.GetBool("responses_upstream_stream"))
+		require.Equal(t, 1, calls)
 		require.NoError(t, response.Body.Close())
 	}
 }

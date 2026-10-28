@@ -3,6 +3,7 @@ package types
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/tidwall/gjson"
@@ -10,6 +11,32 @@ import (
 
 const PublicModelCapacityMessage = "Selected model is at capacity. Please try a different model."
 const ErrorCodeModelCapacity ErrorCode = "model_capacity"
+const PublicInvalidEncryptedContentMessage = "The encrypted conversation history could not be verified. Please start a new conversation and try again."
+const ErrorCodeInvalidEncryptedContent ErrorCode = "invalid_encrypted_content"
+
+// IsInvalidEncryptedReasoningError identifies a conversation-history failure;
+// the same classification is shared by public errors and channel health.
+func IsInvalidEncryptedReasoningError(err *NewAPIError) bool {
+	return err != nil && isInvalidEncryptedReasoning(string(err.GetErrorCode()), err.Error())
+}
+
+func isInvalidEncryptedReasoning(code, message string) bool {
+	code, message = strings.ToLower(code), strings.ToLower(message)
+	if strings.Contains(code, string(ErrorCodeInvalidEncryptedContent)) ||
+		strings.Contains(message, string(ErrorCodeInvalidEncryptedContent)) {
+		return true
+	}
+	return strings.Contains(message, "encrypted content") &&
+		(strings.Contains(message, "could not be verified") ||
+			strings.Contains(message, "could not be decrypted") ||
+			strings.Contains(message, "could not be parsed"))
+}
+
+func publicInvalidEncryptedContentError() *NewAPIError {
+	return WithOpenAIError(OpenAIError{
+		Message: PublicInvalidEncryptedContentMessage, Type: "invalid_request_error", Code: string(ErrorCodeInvalidEncryptedContent),
+	}, http.StatusBadRequest, ErrOptionWithSkipRetry())
+}
 
 // Only specific structured model codes are classified. Generic HTTP 404,
 // billing failures and free-form provider messages remain private.
@@ -36,7 +63,7 @@ func IsLocalRelayRejection(err *NewAPIError) bool {
 		return false
 	}
 	switch err.GetErrorCode() {
-	case ErrorCodeInvalidRequest, ErrorCodeReadRequestBodyFailed, ErrorCodeBadRequestBody,
+	case ErrorCodeRequestProtocolUnsupported, ErrorCodeInvalidRequest, ErrorCodeReadRequestBodyFailed, ErrorCodeBadRequestBody,
 		ErrorCodeAccessDenied, ErrorCodeInsufficientUserQuota, ErrorCodePreConsumeTokenQuotaFailed,
 		ErrorCodeModelPriceError, ErrorCodeRateLimitExceeded, ErrorCodeConvertRequestFailed,
 		ErrorCodeRequestGuardBlocked, ErrorCodeRequestGuardUnavailable,
@@ -53,11 +80,16 @@ func PublicRelayError(err *NewAPIError) *NewAPIError {
 	if err == nil {
 		return nil
 	}
+	if IsInvalidEncryptedReasoningError(err) {
+		return publicInvalidEncryptedContentError()
+	}
 	if IsLocalRelayRejection(err) {
 		copy := *err
 		// Route diagnostics may contain internal group/channel details. Expose
 		// the actionable category without echoing those details.
 		switch err.GetErrorCode() {
+		case ErrorCodeRequestProtocolUnsupported:
+			copy.SetMessage(PublicRequestProtocolUnsupportedMessage)
 		case ErrorCodeModelNotFound:
 			if err.StatusCode >= 500 {
 				return NewErrorWithStatusCode(fmt.Errorf("Selected model is unavailable. No usable channel is currently available."), ErrorCodeModelUnavailable, http.StatusServiceUnavailable, ErrOptionWithSkipRetry())
@@ -91,7 +123,18 @@ func PublicRelayEvent(data []byte) ([]byte, error) {
 	}
 	public := OpenAIError{Message: PublicModelCapacityMessage, Type: "server_error", Code: string(ErrorCodeModelCapacity)}
 	status := http.StatusServiceUnavailable
+	for _, path := range []string{"error", "response.error", "response.status_details.error"} {
+		field := value.Get(path)
+		if isInvalidEncryptedReasoning(field.Get("code").String(), field.Get("message").String()) {
+			public = publicInvalidEncryptedContentError().ToOpenAIError()
+			status = http.StatusBadRequest
+			break
+		}
+	}
 	for _, path := range []string{"error.code", "response.error.code", "response.status_details.error.code"} {
+		if status == http.StatusBadRequest {
+			break
+		}
 		if modelError := publicUpstreamModelCode(value.Get(path).String()); modelError != nil {
 			public = modelError.ToOpenAIError()
 			status = modelError.StatusCode

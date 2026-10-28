@@ -29,7 +29,7 @@ func New() *Hook {
 func (h *Hook) Name() string { return "errornorm" }
 
 func (h *Hook) OnClientResponseError(c *gin.Context, info *relaycommon.RelayInfo, err *types.NewAPIError) *types.NewAPIError {
-	if err == nil || types.IsLocalRelayRejection(err) || types.PublicUpstreamModelError(err) != nil || !shouldNormalize(info) {
+	if err == nil || types.IsLocalRelayRejection(err) || types.IsInvalidEncryptedReasoningError(err) || types.PublicUpstreamModelError(err) != nil || !shouldNormalize(info) {
 		return err
 	}
 	status := err.StatusCode

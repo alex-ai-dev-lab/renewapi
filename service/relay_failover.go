@@ -13,6 +13,9 @@ func IsRelayFailoverError(err *types.NewAPIError) bool {
 	if err == nil || errors.Is(err, context.Canceled) || err.StatusCode == 499 {
 		return false
 	}
+	if types.IsRequestProtocolUnsupportedError(err) {
+		return true
+	}
 	if types.IsLocalRelayRejection(err) {
 		return false
 	}

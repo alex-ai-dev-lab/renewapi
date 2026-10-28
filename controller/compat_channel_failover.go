@@ -62,7 +62,7 @@ func shouldTrackCompatUpstream5xxFailure(openaiErr *types.NewAPIError) bool {
 	if openaiErr == nil {
 		return false
 	}
-	if service.IsTLSVerificationError(openaiErr) {
+	if service.IsTLSVerificationError(openaiErr) || service.IsInvalidEncryptedReasoningError(openaiErr) {
 		return false
 	}
 	switch openaiErr.StatusCode {

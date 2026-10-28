@@ -44,7 +44,7 @@ func ClaudeRequestToResponsesRequest(req *dto.ClaudeRequest) (*dto.OpenAIRespons
 					return nil, err
 				}
 				if part.Type != "text" {
-					return nil, fmt.Errorf("unsupported system block %q", part.Type)
+					return nil, unsupportedProtocolConversion("unsupported system block %q", part.Type)
 				}
 				parts = append(parts, part.GetText())
 			}
@@ -79,7 +79,7 @@ func ClaudeRequestToResponsesRequest(req *dto.ClaudeRequest) (*dto.OpenAIRespons
 			}
 			out.Reasoning.Summary = "auto"
 		} else if req.Thinking.Display != "" && req.Thinking.Display != "omitted" {
-			return nil, fmt.Errorf("thinking.display has no supported Responses representation")
+			return nil, unsupportedProtocolConversion("thinking.display has no supported Responses representation")
 		}
 	}
 	format, err := ClaudeOutputJSONFormat(req)
@@ -95,10 +95,10 @@ func ClaudeRequestToResponsesRequest(req *dto.ClaudeRequest) (*dto.OpenAIRespons
 	}
 
 	if len(req.ContextManagement) > 0 || len(req.Container) > 0 || len(req.McpServers) > 0 || len(req.OutputFormat) > 0 || len(req.Speed) > 0 {
-		return nil, fmt.Errorf("Claude request contains an extension without a Responses representation")
+		return nil, unsupportedProtocolConversion("Claude request contains an extension without a Responses representation")
 	}
 	if len(req.StopSequences) > 0 || req.TopK != nil {
-		return nil, fmt.Errorf("Claude stop_sequences/top_k are not supported by Responses")
+		return nil, unsupportedProtocolConversion("Claude stop_sequences/top_k are not supported by Responses")
 	}
 	return out, nil
 }
@@ -169,7 +169,7 @@ func claudeToolsToResponsesTools(value any) (common.RawMessage, error) {
 		}
 		kind, _ := tool["type"].(string)
 		if kind != "" && kind != "custom" {
-			return nil, fmt.Errorf("unsupported Claude tool type %q", kind)
+			return nil, unsupportedProtocolConversion("unsupported Claude tool type %q", kind)
 		}
 		name, _ := tool["name"].(string)
 		if strings.TrimSpace(name) == "" {
@@ -235,7 +235,7 @@ func claudeMessagesToResponsesInput(messages []dto.ClaudeMessage) (common.RawMes
 				// signed thinking. Preserve their visible text on a stateless turn;
 				// never reinterpret a foreign signature as Responses ciphertext.
 				if block.Signature != "" {
-					return nil, fmt.Errorf("signed thinking history cannot cross provider protocols")
+					return nil, unsupportedProtocolConversion("signed thinking history cannot cross provider protocols")
 				}
 				if block.Thinking != nil {
 					contentParts = append(contentParts, map[string]any{"type": "output_text", "text": *block.Thinking})
@@ -296,7 +296,7 @@ func claudeMessagesToResponsesInput(messages []dto.ClaudeMessage) (common.RawMes
 					"output":  output,
 				})
 			default:
-				return nil, fmt.Errorf("unsupported Claude history block %q", block.Type)
+				return nil, unsupportedProtocolConversion("unsupported Claude history block %q", block.Type)
 			}
 		}
 		flushContent()
@@ -324,7 +324,7 @@ func claudeToolChoiceToResponses(value any) (common.RawMessage, common.RawMessag
 	case "tool":
 		converted = map[string]any{"type": "function", "name": choice.Name}
 	default:
-		return nil, nil, fmt.Errorf("unsupported Claude tool_choice type %q", choice.Type)
+		return nil, nil, unsupportedProtocolConversion("unsupported Claude tool_choice type %q", choice.Type)
 	}
 	toolChoice, err := common.Marshal(converted)
 	if err != nil {
@@ -372,7 +372,7 @@ func claudeToolResultToResponsesOutput(content any) (any, error) {
 				parts = append(parts, claudeDocumentPart(block.Source, source))
 			}
 		default:
-			return nil, fmt.Errorf("unsupported tool_result content block %q", block.Type)
+			return nil, unsupportedProtocolConversion("unsupported tool_result content block %q", block.Type)
 		}
 	}
 	if len(parts) == 0 {

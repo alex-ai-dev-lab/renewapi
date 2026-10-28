@@ -43,7 +43,7 @@ func RecordChannelModelSuccess(channelID int, group, modelName, endpoint, reques
 
 func RecordChannelModelFailure(params ChannelModelFailureParams) {
 	params.ModelName = strings.TrimSpace(params.ModelName)
-	if params.ChannelId <= 0 || params.ModelName == "" || params.Error == nil {
+	if params.ChannelId <= 0 || params.ModelName == "" || params.Error == nil || IsInvalidEncryptedReasoningError(params.Error) || types.IsRequestProtocolUnsupportedError(params.Error) {
 		return
 	}
 	if !IsRelayFailoverError(params.Error) {

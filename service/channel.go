@@ -74,6 +74,9 @@ func IsAntiPoisonValidationError(err *types.NewAPIError) bool {
 }
 
 func ShouldDisableChannel(err *types.NewAPIError) bool {
+	if IsInvalidEncryptedReasoningError(err) || types.IsRequestProtocolUnsupportedError(err) {
+		return false
+	}
 	if !common.AutomaticDisableChannelEnabled {
 		return false
 	}
@@ -124,6 +127,11 @@ func ShouldDisableChannel(err *types.NewAPIError) bool {
 // error is counted. It never disables a channel on its own; the configured
 // threshold and failure window still gate the actual disable.
 func ShouldCountChannelFailureForDisable(err *types.NewAPIError) bool {
+	// Invalid conversation history must never penalize channel health, even
+	// when administrators count all errors or include every HTTP status.
+	if IsInvalidEncryptedReasoningError(err) || types.IsRequestProtocolUnsupportedError(err) {
+		return false
+	}
 	if !common.AutomaticDisableChannelEnabled || err == nil {
 		return false
 	}
@@ -144,7 +152,7 @@ func ShouldCountChannelFailureForDisable(err *types.NewAPIError) bool {
 }
 
 func IsModelScopedChannelFailureError(err *types.NewAPIError) bool {
-	if err == nil || IsTLSVerificationError(err) {
+	if err == nil || IsTLSVerificationError(err) || IsInvalidEncryptedReasoningError(err) || types.IsRequestProtocolUnsupportedError(err) {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
@@ -190,7 +198,7 @@ func containsAnyModelFailureKeyword(msg string, keywords []string) bool {
 }
 
 func IsChannelFailureError(err *types.NewAPIError) bool {
-	if err == nil {
+	if err == nil || IsInvalidEncryptedReasoningError(err) || types.IsRequestProtocolUnsupportedError(err) {
 		return false
 	}
 	if IsTLSVerificationError(err) {
@@ -217,7 +225,7 @@ func IsChannelFailureError(err *types.NewAPIError) bool {
 }
 
 func IsImmediateChannelDisableError(err *types.NewAPIError) bool {
-	if err == nil || IsTLSVerificationError(err) {
+	if err == nil || IsTLSVerificationError(err) || IsInvalidEncryptedReasoningError(err) || types.IsRequestProtocolUnsupportedError(err) {
 		return false
 	}
 	if IsModelScopedChannelFailureError(err) {

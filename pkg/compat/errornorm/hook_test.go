@@ -28,6 +28,13 @@ func TestActionableErrorsSurviveBothNormalizationStages(t *testing.T) {
 		require.NotContains(t, public.Error(), "private")
 		require.Contains(t, original.Error(), "private")
 	}
+	// Some providers omit the structured code; normalization must preserve the
+	// diagnostic long enough for the public boundary to classify it safely.
+	original := types.NewOpenAIError(errors.New("The encrypted content for item rs_private could not be verified. Reason: Encrypted content item_id did not match the target item id."), types.ErrorCodeBadResponseStatusCode, http.StatusBadRequest)
+	public := types.PublicRelayError(New().OnClientResponseError(&gin.Context{}, info, original))
+	require.Equal(t, types.ErrorCodeInvalidEncryptedContent, public.GetErrorCode())
+	require.Equal(t, types.PublicInvalidEncryptedContentMessage, public.Error())
+	require.Contains(t, original.Error(), "rs_private")
 }
 
 func TestHook_OnClientResponseError_ReplacesRelayMessage(t *testing.T) {

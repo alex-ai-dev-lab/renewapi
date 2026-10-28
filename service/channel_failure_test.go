@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNotImplementedIsModelScopedChannelFailure(t *testing.T) {
@@ -31,6 +33,34 @@ func TestNotImplementedIsModelScopedChannelFailure(t *testing.T) {
 	if ShouldDisableChannel(err) {
 		t.Fatal("not implemented 500 should disable the channel-model, not the whole channel")
 	}
+}
+
+func TestInvalidEncryptedHistoryNeverCountsForChannelDisable(t *testing.T) {
+	oldDisable := common.AutomaticDisableChannelEnabled
+	oldMonitor := *operation_setting.GetMonitorSetting()
+	oldCodes := operation_setting.AutomaticDisableStatusCodesToString()
+	t.Cleanup(func() {
+		common.AutomaticDisableChannelEnabled = oldDisable
+		*operation_setting.GetMonitorSetting() = oldMonitor
+		require.NoError(t, operation_setting.AutomaticDisableStatusCodesFromString(oldCodes))
+	})
+	common.AutomaticDisableChannelEnabled = true
+	require.NoError(t, operation_setting.AutomaticDisableStatusCodesFromString("100-599"))
+	monitor := operation_setting.GetMonitorSetting()
+	monitor.CountAllRelayErrorsForDisable = true
+	monitor.CountSkipRetryErrorsForDisable = true
+	monitor.CountModelScopedErrorsForDisable = true
+	for _, status := range []int{400, 500, 502} {
+		err := types.NewOpenAIError(errors.New("The encrypted content for item rs_private could not be verified. Reason: Encrypted content item_id did not match the target item id."), types.ErrorCodeBadResponseBody, status)
+		require.False(t, ShouldDisableChannel(err))
+		require.False(t, ShouldCountChannelFailureForDisable(err))
+		require.False(t, IsModelScopedChannelFailureError(err))
+		require.False(t, IsImmediateChannelDisableError(err))
+		require.False(t, IsChannelFailureError(err))
+		require.False(t, ShouldRouterCooldownTrackError(err))
+	}
+	// Broad policy still applies to actual upstream failures.
+	require.True(t, ShouldCountChannelFailureForDisable(types.NewOpenAIError(errors.New("upstream unavailable"), types.ErrorCodeBadResponseStatusCode, 503)))
 }
 
 func TestTLSVerificationErrorIsNotChannelFailure(t *testing.T) {

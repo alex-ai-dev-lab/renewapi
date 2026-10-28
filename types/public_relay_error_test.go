@@ -73,3 +73,46 @@ func TestPublicRelayEventWithoutResponseStillHasPublicError(t *testing.T) {
 		require.NotContains(t, string(data), "private")
 	}
 }
+
+func TestInvalidEncryptedHistoryPublicError(t *testing.T) {
+	for _, upstream := range []*NewAPIError{
+		WithOpenAIError(OpenAIError{Code: "invalid_encrypted_content", Message: "private provider ciphertext"}, 400),
+		NewOpenAIError(errors.New("The encrypted content for item rs_private could not be verified. Reason: Encrypted content item_id did not match the target item id."), ErrorCodeBadResponseStatusCode, 400),
+		NewOpenAIError(errors.New("Encrypted content could not be decrypted or parsed: private ciphertext"), ErrorCodeBadResponseBody, 502),
+	} {
+		original := upstream.Error()
+		public := PublicRelayError(upstream)
+		require.Equal(t, http.StatusBadRequest, public.StatusCode)
+		require.Equal(t, ErrorCodeInvalidEncryptedContent, public.GetErrorCode())
+		require.Equal(t, PublicInvalidEncryptedContentMessage, public.Error())
+		require.Equal(t, "invalid_request_error", public.ToOpenAIError().Type)
+		require.Equal(t, PublicInvalidEncryptedContentMessage, public.ToClaudeError().Message)
+		require.True(t, IsSkipRetryError(public))
+		require.Equal(t, original, upstream.Error(), "keep administrator diagnostics")
+		require.Equal(t, PublicInvalidEncryptedContentMessage, PublicRelayError(public).Error())
+	}
+}
+
+func TestInvalidEncryptedHistoryPublicStreamEvent(t *testing.T) {
+	for _, input := range []string{
+		`{"type":"error","event_id":"e1","error":{"code":"invalid_encrypted_content","message":"private ciphertext"},"debug":"private"}`,
+		`{"type":"response.failed","response":{"id":"r1","status":"failed","error":{"code":"bad_response","message":"The encrypted content for rs_private could not be verified. Reason: Encrypted content item_id did not match the target item id."},"metadata":"private"}}`,
+		`{"type":"response.done","response":{"id":"r1","status":"failed","status_details":{"error":{"message":"Encrypted content could not be decrypted or parsed: private"}}}}`,
+	} {
+		public, err := PublicRelayEvent([]byte(input))
+		require.NoError(t, err)
+		require.Contains(t, string(public), PublicInvalidEncryptedContentMessage)
+		require.Contains(t, string(public), string(ErrorCodeInvalidEncryptedContent))
+		require.NotContains(t, string(public), "private")
+		if gjson.GetBytes(public, "type").String() == "error" {
+			require.EqualValues(t, http.StatusBadRequest, gjson.GetBytes(public, "status").Int())
+			require.Equal(t, "e1", gjson.GetBytes(public, "event_id").String())
+		} else {
+			require.Equal(t, "r1", gjson.GetBytes(public, "response.id").String())
+		}
+	}
+	for _, message := range []string{"signature could not be verified", "encrypted content service unavailable", "invalid API key"} {
+		public := PublicRelayError(NewOpenAIError(errors.New(message), ErrorCodeBadResponseStatusCode, 400))
+		require.Equal(t, ErrorCodeModelCapacity, public.GetErrorCode())
+	}
+}

@@ -139,6 +139,7 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	antipoison.CaptureClaudeToolPolicy(info, request)
 	applyClaudeAntiPoisonRequest(c, info, request)
 
+	inputOverridesApplied := false
 	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
 		(info.ChannelType == constant.ChannelTypeCodex ||
@@ -161,22 +162,31 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			return types.NewError(inputErr, types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
 		}
 		request = &overridden
-		service.RecordClaudeResponsesConversion(info, request)
 		responsesReq, convertErr := openaicompat.ClaudeRequestToResponsesRequest(request)
 		if convertErr != nil {
-			return types.NewErrorWithStatusCode(convertErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			if !openaicompat.IsUnsupportedProtocolConversion(convertErr) {
+				return types.NewErrorWithStatusCode(convertErr, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			}
+			if !useNativeClaudeProtocolFallback(c, info) {
+				return types.NewRequestProtocolUnsupportedError(convertErr)
+			}
+			inputOverridesApplied = true
+			adaptor = GetAdaptor(info.ApiType)
+			adaptor.Init(info)
+		} else {
+			service.RecordClaudeResponsesConversion(info, request)
+			// Keep the original client protocol while sharing the validated Responses
+			// transport, semantic commit gate, and original billing session.
+			usage, relayErr := responsesRequestViaCompatible(c, info, adaptor, responsesReq)
+			if relayErr != nil {
+				return relayErr
+			}
+			if stagingErr := helper.ValidateStreamStaging(c); stagingErr != nil {
+				return stagingErr
+			}
+			service.PostTextConsumeQuota(c, info, usage, nil)
+			return nil
 		}
-		// Keep the original client protocol while sharing the validated Responses
-		// transport, semantic commit gate, and original billing session.
-		usage, relayErr := responsesRequestViaCompatible(c, info, adaptor, responsesReq)
-		if relayErr != nil {
-			return relayErr
-		}
-		if stagingErr := helper.ValidateStreamStaging(c); stagingErr != nil {
-			return stagingErr
-		}
-		service.PostTextConsumeQuota(c, info, usage, nil)
-		return nil
 	}
 
 	var requestBody io.Reader
@@ -204,7 +214,7 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 
 		// apply param override
-		if len(info.ParamOverride) > 0 {
+		if !inputOverridesApplied && len(info.ParamOverride) > 0 {
 			jsonData, err = relaycommon.ApplyParamOverrideWithRelayInfo(jsonData, info)
 			if err != nil {
 				return newAPIErrorFromParamOverride(err)

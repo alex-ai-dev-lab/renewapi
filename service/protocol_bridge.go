@@ -40,6 +40,9 @@ func EvaluateChannelProtocolCapability(channel *model.Channel, modelName string,
 				return unsupportedCapability(target, "", "body pass-through conflicts with protocol conversion")
 			}
 			if err := ValidateNormalizedBridgeRequest(request, target); err != nil {
+				if clientFormat == types.RelayFormatClaude && openaicompat.IsUnsupportedProtocolConversion(err) && CanUseNativeClaudeProtocolFallback(channel, decision) {
+					return supportedCapability(constant.EndpointTypeAnthropic, "native", "preserve source features using configured native Messages protocol")
+				}
 				return unsupportedCapability(target, string(TextEndpointForClient(clientFormat))+"->"+string(target), err.Error())
 			}
 			return supportedCapability(target, string(TextEndpointForClient(clientFormat))+"->"+string(target), "model default endpoint normalization")

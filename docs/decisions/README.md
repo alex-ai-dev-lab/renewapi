@@ -21,3 +21,4 @@ Current decisions:
 
 - [ADR-020：审计修复的授权、支付与状态边界](020-audit-repair-boundaries.md)
 - [ADR-021：请求复制、限流存储与长流生命周期](021-relay-performance-and-stream-lifecycle.md)
+- [ADR-022：Claude 扩展字段的协议兼容与渠道故障切换](022-claude-protocol-failover.md)

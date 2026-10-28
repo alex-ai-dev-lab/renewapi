@@ -1,6 +1,26 @@
 # RenewAPI 当前项目状态
 
-更新日期：2026-10-17。源码状态以当前 Git 提交为准，生产镜像与验收范围以对应部署归档为准。
+更新日期：2026-10-28。源码状态以 Git 提交和工作树改动为准，生产镜像与验收范围以对应部署归档为准。
+
+## v1.5.1 发布进行中
+
+用户已授权提交今天的协议故障切换及加密历史修复，经 GitHub Actions 完整门禁发布
+Releases 镜像并在服务器代理下载、预热与热切换，成功后清理本次中间文件和备份。
+当前生产仍为 v1.5.0；过程见[发布任务](../tasks/active/2026-10-deploy-v1.5.1.md)。
+
+## Claude 扩展字段协议故障切换修复（源码，未发布部署）
+
+针对 jlp `/v1/messages` 请求在 Grok 全局 Responses 归一化下因 `defer_loading`、
+`thinking.display`、`context_management` 等字段转换失败而单次失败的问题，已区分
+协议不可表达与 malformed 请求；符合条件的 Anthropic 渠道恢复原生 Messages，显式
+绑定和 Codex 身份保持约束。协议不兼容允许候选切换但不计入渠道健康，最终返回固定
+400 公共提示并保留管理员原始错误。全仓 Go 测试、相关包 vet、全仓 build 通过，
+包含今天的加密历史回归。验证见[任务归档](../tasks/archive/2026-10-claude-protocol-failover.md)
+和 [ADR-022](decisions/022-claude-protocol-failover.md)。本次只改本地源码，线上仍为 v1.5.0。
+
+## 加密会话历史错误提示与渠道计数修复（源码，未发布部署）
+
+针对 #267 的 `invalid_encrypted_content` / item_id 不匹配，将最终返回的 HTTP/流错误映射为固定安全提示，要求用户新建对话；错误规范化保留此分类。共享识别逻辑覆盖统一自动禁用、渠道模型失败计数、兼容 5xx 计数及路由冷却，即使设置为统计全部错误也排除。已有兼容故障切换和管理员原始尝试记录保留。验证与范围见[修复记录](../tasks/archive/2026-10-encrypted-history-channel-health.md)，错误契约见 [ADR-017](decisions/017-codex-request-profile-and-public-errors.md)。本次按用户要求仅改源码，线上仍为 v1.5.0。
 
 ## v1.5.0 已发布上线
 

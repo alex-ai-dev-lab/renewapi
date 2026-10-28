@@ -25,6 +25,9 @@ func TestShouldCompatRetryByError_InvalidEncryptedContent(t *testing.T) {
 	assert.True(t, shouldCompatRetryByError(err))
 	assert.True(t, shouldCompatExcludeChannelForRetry(err))
 	assert.False(t, shouldCompatDisableChannel(err))
+	// Stream parsers may wrap the same upstream error in a 502.
+	err.StatusCode = http.StatusBadGateway
+	assert.False(t, shouldTrackCompatUpstream5xxFailure(err))
 }
 
 func TestShouldCompatRetryByError_ResponsesFunctionCallArgumentsObject(t *testing.T) {

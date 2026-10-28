@@ -130,7 +130,7 @@ func ClearRouterCooldown(channelID int, info *relaycommon.RelayInfo) {
 }
 
 func ShouldRouterCooldownTrackError(err *types.NewAPIError) bool {
-	if err == nil || types.IsSkipRetryError(err) || types.IsClientCanceledError(err) || IsTLSVerificationError(err) {
+	if err == nil || types.IsSkipRetryError(err) || types.IsClientCanceledError(err) || IsTLSVerificationError(err) || IsInvalidEncryptedReasoningError(err) || types.IsRequestProtocolUnsupportedError(err) {
 		return false
 	}
 	if err.GetErrorCode() == types.ErrorCodeDoRequestFailed ||

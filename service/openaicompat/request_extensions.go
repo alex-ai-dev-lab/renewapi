@@ -25,7 +25,7 @@ func rejectExtensions(extra dto.RequestExtensions, path string, allowed ...strin
 	}
 	sort.Strings(names)
 	if len(names) > 0 {
-		return fmt.Errorf("%s.%s has no supported representation in the target protocol", path, names[0])
+		return unsupportedProtocolConversion("%s.%s has no supported representation in the target protocol", path, names[0])
 	}
 	return nil
 }

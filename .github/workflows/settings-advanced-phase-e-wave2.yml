@@ -8,7 +8,8 @@ permissions:
 
 jobs:
   real-backend-wave2:
-    runs-on: ubuntu-latest
+    # Playwright 1.55.0 supports Ubuntu 24.04; ubuntu-latest may advance.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4

@@ -25,6 +25,12 @@ sha256sum --ignore-missing -c CHECKSUMS.txt && docker load -i "$IMAGE_ARCHIVE"
 环境示例已固定该 Release 的 `NEWAPI_IMAGE`。Compose 使用 `pull_policy: never`，
 未导入镜像时会直接失败。
 
+镜像身份检查须区分 OCI manifest digest 与镜像 config digest：containerd 镜像存储
+与经典 Docker 存储导入同一归档时，`docker image inspect .Id` 可能分别报告前者和
+后者。若发布记录与本机 ID 不同，应先验证归档 SHA256，再核对 manifest 对 config
+的引用、config 摘要与本机 ID、RootFS、版本标签及源码 SHA 的完整对应关系；不能仅
+凭 ID 字符串不同判定镜像被替换，也不能跳过身份校验或覆盖发布附件。
+
 首次安装设置随机 `SESSION_SECRET`，先执行数据库迁移，再启动服务。
 已有安装保留原 `.env`、挂载目录及数据库，按[部署说明](deploy.md)完成备份、
 迁移和切换。发布工作流不会部署服务器。

@@ -1,11 +1,13 @@
 # Claude 扩展字段协议故障切换修复
 
-日期：2026-10-28。范围：本地源码，未提交、未发布、未部署。
+日期：2026-10-28。修复已提交，并随 v1.5.1 发布上线；部署验收见
+[发布归档](2026-10-deploy-v1.5.1.md)。
 
 ## 背景
 
-jlp 的 `/v1/messages` 请求携带 `tools.defer_loading`、`thinking.display` 和
-`context_management` 等 Claude 字段。全局模型端点规则把 Grok 4.x 归一化到
+jlp 的 `/v1/messages` 请求日志包含 `tools.defer_loading`、`thinking.display`，
+以及未记录具体字段名的 Claude 扩展不兼容错误；`context_management` 只是测试
+fixture 示例，不能据此认定为用户实际字段。全局模型端点规则把 Grok 4.x 归一化到
 Responses；这些字段没有等价的 Responses 表示。旧实现把转换失败标为
 `SkipRetry`，因此每个请求只尝试一个渠道，并把最终错误公开成容量不足。
 
@@ -33,5 +35,6 @@ Codex profile/identity 保护及单次参数覆盖。相关 `types`、`service/o
 - `go build ./...`、改动 Go 文件 `gofmt -l` 空输出、`git diff --check`。
 
 没有调用真实上游重放 jlp 正文，也没有验证线上哪个渠道支持这些扩展；集成测试使用
-本地 HTTP 服务器与内存 SQLite。线上是否能成功仍取决于兼容渠道的实际可用性。
-现有加密历史修复与其他未提交改动保留；本次无配置或数据库结构迁移。
+本地 HTTP 服务器与内存 SQLite。发布时合成请求已在候选与公网验证：无兼容路径明确
+400、公共提示不泄露字段、管理员原始诊断保留、零扣费且模型失败计数不变。
+线上成功仍取决于兼容渠道的实际可用性。今天的加密历史修复一并保留；无数据库结构变化。

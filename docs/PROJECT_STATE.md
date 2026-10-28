@@ -2,25 +2,30 @@
 
 更新日期：2026-10-28。源码状态以 Git 提交和工作树改动为准，生产镜像与验收范围以对应部署归档为准。
 
-## v1.5.1 发布进行中
+## v1.5.1 已发布上线
 
-用户已授权提交今天的协议故障切换及加密历史修复，经 GitHub Actions 完整门禁发布
-Releases 镜像并在服务器代理下载、预热与热切换，成功后清理本次中间文件和备份。
-当前生产仍为 v1.5.0；过程见[发布任务](../tasks/active/2026-10-deploy-v1.5.1.md)。
+正式 [v1.5.1](https://github.com/alex-ai-dev-lab/renewapi/releases/tag/renewapi-v1.5.1) 已发布上线，
+产品源码 `b268e67984e0707cfde3d260ba6724c93a03eee7`。主分支及正式标签完整 Actions
+门禁通过，双架构镜像及 QA 包已发布；服务器代理下载、身份校验、SQLite 副本验证和
+Caddy 热切换完成。候选/公网共 14 项 API、最长 129.52 秒长流及跨切换请求通过；
+切换专项 19 次探测及全程 588 轮持续监测无失败。初轮浏览器依赖环境、上游过载/EOF
+和旧容器排空后停止超时均如实记录。本次备份、中间文件和退役容器已清理，清理后健康及外网复验通过；
+详见[发布归档](../tasks/archive/2026-10-deploy-v1.5.1.md)。
 
-## Claude 扩展字段协议故障切换修复（源码，未发布部署）
+## Claude 扩展字段协议故障切换修复（随 v1.5.1 已发布）
 
 针对 jlp `/v1/messages` 请求在 Grok 全局 Responses 归一化下因 `defer_loading`、
-`thinking.display`、`context_management` 等字段转换失败而单次失败的问题，已区分
+`thinking.display` 及其他未记录具体字段名的 Claude 扩展转换失败而单次失败的问题，已区分
 协议不可表达与 malformed 请求；符合条件的 Anthropic 渠道恢复原生 Messages，显式
 绑定和 Codex 身份保持约束。协议不兼容允许候选切换但不计入渠道健康，最终返回固定
 400 公共提示并保留管理员原始错误。全仓 Go 测试、相关包 vet、全仓 build 通过，
 包含今天的加密历史回归。验证见[任务归档](../tasks/archive/2026-10-claude-protocol-failover.md)
-和 [ADR-022](decisions/022-claude-protocol-failover.md)。本次只改本地源码，线上仍为 v1.5.0。
+和 [ADR-022](decisions/022-claude-protocol-failover.md)。候选/公网合成协议不兼容请求的
+400、管理员诊断保留、零扣费和健康计数不变已验证；未重放用户正文或承诺上游扩展支持。
 
-## 加密会话历史错误提示与渠道计数修复（源码，未发布部署）
+## 加密会话历史错误提示与渠道计数修复（随 v1.5.1 已发布）
 
-针对 #267 的 `invalid_encrypted_content` / item_id 不匹配，将最终返回的 HTTP/流错误映射为固定安全提示，要求用户新建对话；错误规范化保留此分类。共享识别逻辑覆盖统一自动禁用、渠道模型失败计数、兼容 5xx 计数及路由冷却，即使设置为统计全部错误也排除。已有兼容故障切换和管理员原始尝试记录保留。验证与范围见[修复记录](../tasks/archive/2026-10-encrypted-history-channel-health.md)，错误契约见 [ADR-017](decisions/017-codex-request-profile-and-public-errors.md)。本次按用户要求仅改源码，线上仍为 v1.5.0。
+针对 #267 的 `invalid_encrypted_content` / item_id 不匹配，将最终返回的 HTTP/流错误映射为固定安全提示，要求用户新建对话；错误规范化保留此分类。共享识别逻辑覆盖统一自动禁用、渠道模型失败计数、兼容 5xx 计数及路由冷却，即使设置为统计全部错误也排除。已有兼容故障切换和管理员原始尝试记录保留。验证与范围见[修复记录](../tasks/archive/2026-10-encrypted-history-channel-health.md)，错误契约见 [ADR-017](decisions/017-codex-request-profile-and-public-errors.md)。已随 v1.5.1 部署，未重放用户加密历史。
 
 ## v1.5.0 已发布上线
 
@@ -122,7 +127,14 @@ UI 第二轮复查修复已随本版部署，覆盖成功率对比度、复制�
 
 ## 当前线上部署
 
-2026-10-17 已上线 v1.5.0，站点 `router.108848.xyz:1443`，容器 `new-api-v1-5-0`，Caddy 上游 `127.0.0.1:3025`。源码 `7cd988595a317c7c79c1c551273a17853f7939d6`，正式标签完整门禁通过；环境、会话密钥、挂载及 off 计费模式保留，数据库、105 个渠道、86 项配置及 121 条端点规则校验通过，healthy、重启 0。保留 ADR-019 的长流配置，公网 Claude 100.77 秒、Responses 102.55 秒均正常终态并成功计费。本次下载包、临时文件、备份及退役容器已清理；旧 v1.4.2 连接排空后停止超时，被 Docker 终止（137，非 OOM），新版本隔离停止验证 exit 0。详见[部署归档](../tasks/archive/2026-10-deploy-v1.5.0.md)。
+2026-10-28 已上线 v1.5.1，站点 `router.108848.xyz:1443`，容器 `new-api-v1-5-1`，
+Caddy 上游 `127.0.0.1:3027`，镜像 `renewapi:1.5.1`。源码
+`b268e67984e0707cfde3d260ba6724c93a03eee7`，环境、会话密钥、挂载及 off 计费模式保留；
+SQLite、101 个渠道、86 项配置及 121 条全局端点规则校验通过，healthy、重启 0。
+保留 ADR-019 长流配置，公网 Responses 127.87 秒、跨切换长流 126.50 秒完整结束并
+成功计费。下载包、本次备份、临时脚本及旧容器已清理；旧 v1.5.0 连接归零后停止
+超时，由 Docker 终止（137，非 OOM）。旧浏览器静态资源保留，清理后数据库、入口及
+外网资源复验通过。详见[部署归档](../tasks/archive/2026-10-deploy-v1.5.1.md)。
 
 ## 线上产品复核
 
